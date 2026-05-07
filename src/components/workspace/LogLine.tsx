@@ -344,7 +344,7 @@ export const LogEntryRow = memo(function LogEntryRow({ entry, index, showModelNa
       <div className="flex flex-col shrink-0 w-[105px] mr-2 pt-0.5 items-start">
         <div className="flex flex-row items-center gap-1 w-full pb-1">
           <span className="text-muted-foreground/40">{formatTimestamp(entry.timestamp)}</span>
-          {renderCopyButton(
+          {!isTruncatable && renderCopyButton(
             'text-muted-foreground/40 hover:text-foreground hover:bg-muted p-0.5 rounded opacity-0 group-hover:opacity-100',
           )}
         </div>
@@ -353,6 +353,9 @@ export const LogEntryRow = memo(function LogEntryRow({ entry, index, showModelNa
             className="sticky top-1 z-10 flex items-center gap-1"
             data-log-entry-sticky-actions
           >
+            {renderCopyButton(
+              'text-muted-foreground/70 hover:text-foreground hover:bg-muted bg-background/90 backdrop-blur-sm p-0.5 rounded border border-border/50 shadow-sm opacity-80 hover:opacity-100',
+            )}
             <button
               type="button"
               onClick={() => setIsExpanded(!isExpanded)}

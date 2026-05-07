@@ -509,6 +509,10 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
       return { outcome: isCompleted ? 'completed' : 'pending', detail: `${tokenCount.toLocaleString()} tokens` }
     }
 
+    if (artifact.id === 'coverage-report') {
+      return { outcome: 'completed' }
+    }
+
     if (artifact.id.includes('winner')) {
       const winnerId = council?.winnerId
       return winnerId ? { outcome: 'completed', detail: `winner: ${getModelDisplayName(winnerId)}` } : {}

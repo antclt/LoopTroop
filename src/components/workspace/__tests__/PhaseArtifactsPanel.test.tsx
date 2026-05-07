@@ -1095,7 +1095,9 @@ describe('PhaseArtifactsPanel', () => {
     )
 
     expect(screen.getByRole('button', { name: /PRD Candidate v1/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Coverage Report/i })).toBeInTheDocument()
+    const coverageButton = screen.getByRole('button', { name: /Coverage Report/i })
+    expect(coverageButton).toBeInTheDocument()
+    expect(coverageButton).not.toHaveTextContent(/lines/i)
     expect(screen.queryByText('1 beads')).not.toBeInTheDocument()
     expect(screen.queryByText(/GPT-5\.2/i)).not.toBeInTheDocument()
 
@@ -1144,7 +1146,9 @@ describe('PhaseArtifactsPanel', () => {
     )
 
     expect(screen.getByRole('button', { name: /Implementation Plan v1/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Coverage Report/i })).toBeInTheDocument()
+    const coverageButton = screen.getByRole('button', { name: /Coverage Report/i })
+    expect(coverageButton).toBeInTheDocument()
+    expect(coverageButton).not.toHaveTextContent(/lines/i)
     expect(screen.queryByText(/gpt-5\.2/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Implementation Plan v1/i }))
