@@ -66,6 +66,7 @@ const serverIntegrationTests = [
 
 export default defineConfig({
   resolve: sharedResolve,
+  cacheDir: './.vitest-cache',
   define: {
     __LOOPTROOP_DEV_BACKEND_ORIGIN__: JSON.stringify(getBackendOrigin()),
     __LOOPTROOP_DOCS_ORIGIN__: JSON.stringify(getDocsOrigin()),
