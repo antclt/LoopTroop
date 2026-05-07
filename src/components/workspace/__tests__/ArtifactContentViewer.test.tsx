@@ -1652,6 +1652,12 @@ describe('ArtifactContentViewer', () => {
     expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Validated/ })).toBeInTheDocument()
     const rejectedButton = within(draftGroup).getByRole('button', { name: /gpt-5.2 Rejected/ })
     expect(rejectedButton).toBeEnabled()
+    expect(within(draftGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'gpt-5.2',
+      'Rejected',
+      'Validated',
+    ])
+    expect(within(draftGroup).getByText('Rejected')).toHaveClass('italic')
 
     fireEvent.click(rejectedButton)
 

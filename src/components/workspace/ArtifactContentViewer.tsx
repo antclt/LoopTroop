@@ -229,6 +229,7 @@ interface RawContentVariant {
   disabled?: boolean
   title?: string
   ariaLabel?: string
+  labelClassName?: string
 }
 
 interface ActiveRawContentSource {
@@ -404,7 +405,7 @@ export function WithRawTab({
                                                         )}
                                                       >
                                                         {index === 0 && source.modelId ? <ModelIcon modelId={source.modelId} className="h-3 w-3" /> : null}
-                                                        <span className="min-w-0 truncate">{variantLabel}</span>
+                                                        <span className={cn('min-w-0 truncate', variant.labelClassName)}>{variantLabel}</span>
                                                       </button>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
@@ -3304,6 +3305,7 @@ function buildRejectedRawVariant(
     displayContent: rejectedRawResponse,
     disabled: typeof rejectedRawResponse !== 'string',
     ariaLabel: `${label} Rejected`,
+    labelClassName: 'italic',
     title: typeof rejectedRawResponse === 'string'
       ? `Show rejected pre-retry output from ${label}`
       : `Rejected pre-retry output was not found in logs for ${label}`,
@@ -3329,6 +3331,9 @@ function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: str
       ? `Show raw model output from ${label}`
       : `No exact raw output stored for ${label}`,
   }]
+  if (shouldShowRejected) {
+    variants.push(buildRejectedRawVariant(`draft:${draft.memberId}:rejected`, label, rejectedRawResponse))
+  }
   if (typeof normalizedResponse === 'string') {
     variants.push({
       id: `draft:${draft.memberId}:validated`,
@@ -3338,9 +3343,6 @@ function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: str
       ariaLabel: `${label} Validated`,
       title: `Show validated output from ${label}`,
     })
-  }
-  if (shouldShowRejected) {
-    variants.push(buildRejectedRawVariant(`draft:${draft.memberId}:rejected`, label, rejectedRawResponse))
   }
   return [{
     id: `draft:${draft.memberId}`,
@@ -5688,6 +5690,9 @@ export function ArtifactContent({
             ? `Show raw vote response from ${label}`
             : `No exact raw vote response stored for ${label}`,
         }]
+        if (shouldShowRejected) {
+          variants.push(buildRejectedRawVariant(`voter:${voterId}:rejected`, label, rejectedResponse))
+        }
         if (hasValidatedResponse) {
           variants.push({
             id: `voter:${voterId}:validated`,
@@ -5697,9 +5702,6 @@ export function ArtifactContent({
             ariaLabel: `${label} Validated`,
             title: `Show validated vote scorecard from ${label}`,
           })
-        }
-        if (shouldShowRejected) {
-          variants.push(buildRejectedRawVariant(`voter:${voterId}:rejected`, label, rejectedResponse))
         }
         return {
           id: `voter:${voterId}`,

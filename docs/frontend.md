@@ -163,7 +163,7 @@ Streaming AI upserts are also written to `.ticket/runtime/execution-log.ai.jsonl
 
 Artifact raw tabs show line, character, and tokenizer counts. Coverage report cards intentionally omit line-count details because JSON envelopes and escaped multiline payloads can make a displayed card total misleading.
 
-Council draft and vote raw tabs can also expose a disabled-or-enabled `Rejected` raw variant when structured retry metadata exists. The rejected payload is resolved from existing phase model-output logs, scoped by phase, model, and PRD sub-stage where needed; it is not duplicated into artifact companion payloads. If the log-backed rejected response is unavailable, the button stays unavailable and the artifact processing notice still shows the retry diagnostic excerpt.
+Council draft and vote raw tabs can also expose a disabled-or-enabled italic `Rejected` raw variant before `Validated` when structured retry metadata exists. The rejected payload is resolved from existing phase model-output logs, scoped by phase, model, and PRD sub-stage where needed; it is not duplicated into artifact companion payloads. If the log-backed rejected response is unavailable, the button stays unavailable and the artifact processing notice still shows the retry diagnostic excerpt.
 
 ### Artifact Processing Notices
 
