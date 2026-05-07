@@ -1188,7 +1188,7 @@ function ArtifactInterventionOwnerBreakdown({
 
   return (
     <div className="space-y-2">
-      <div className="text-[11px] font-semibold uppercase tracking-wider opacity-80">Affected Voters</div>
+      <div className="text-[11px] font-semibold uppercase tracking-wider opacity-80">Affected Models</div>
       <div className="space-y-2">
         {owners.map((owner) => (
           <div key={owner.label} className="rounded-md border border-amber-300/60 bg-background/70 px-3 py-2 dark:border-amber-900/50">
@@ -1228,6 +1228,8 @@ function ArtifactProcessingNotice({
   if (!copy) {
     return null
   }
+  const hasOwnerInterventions = Boolean(context?.ownerInterventions?.length)
+  const showOnlyOwnerInterventions = kind === 'vote-aggregate' && hasOwnerInterventions
   const retryDiagnostics = kind === 'vote-aggregate'
     ? []
     : structuredOutput?.retryDiagnostics ?? []
@@ -1244,9 +1246,13 @@ function ArtifactProcessingNotice({
       body={(
         <div className="space-y-3">
           <div className="leading-5">{copy.body}</div>
-          <ArtifactInterventionBreakdown interventions={copy.interventions} />
-          <ArtifactSourceMessages messages={sourceMessages} />
-          <ArtifactRetryDiagnostics diagnostics={retryDiagnostics} />
+          {!showOnlyOwnerInterventions ? (
+            <>
+              <ArtifactInterventionBreakdown interventions={copy.interventions} />
+              <ArtifactSourceMessages messages={sourceMessages} />
+              <ArtifactRetryDiagnostics diagnostics={retryDiagnostics} />
+            </>
+          ) : null}
           {context?.ownerInterventions?.length ? (
             <ArtifactInterventionOwnerBreakdown owners={context.ownerInterventions} />
           ) : null}
@@ -3179,7 +3185,6 @@ function VotingResultsView({ data, showHeader = true }: { data: CouncilResultDat
                   {getCouncilStatusEmoji(getVoterOutcome(voterId), 'scoring')} {getCouncilStatusLabel(getVoterOutcome(voterId), 'scoring')}
                 </span>
               </div>
-              <ArtifactProcessingNotice structuredOutput={voterProcessingNoticeById.get(voterId)} kind="vote" />
               {votes.filter(v => v.voterId === voterId).length === 0 ? (
                 <div className="ml-4 text-muted-foreground italic">
                   {getVoterOutcome(voterId) === 'pending'

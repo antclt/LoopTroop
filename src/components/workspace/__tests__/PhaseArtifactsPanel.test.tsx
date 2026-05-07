@@ -942,12 +942,17 @@ describe('PhaseArtifactsPanel', () => {
     expect(screen.getByText('Score Breakdown')).toBeInTheDocument()
     expect(screen.getByText('LoopTroop adjusted some vote scorecards.')).toBeInTheDocument()
     expect(screen.getByText(/2 interventions across 2 categories/)).toBeInTheDocument()
+    expect(screen.queryByText('Affected Models')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('LoopTroop adjusted some vote scorecards.').closest('button')!)
+    expect(screen.getByText('Affected Models')).toBeInTheDocument()
+    expect(screen.getByText('Malformed scorecard')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText(/Voter Details/i).closest('button')!)
     expect(screen.getAllByText('Presentation Order')).toHaveLength(2)
     expect(screen.getByText(/seed seed-alp/i)).toBeInTheDocument()
     expect(screen.getByText(/seed seed-bet/i)).toBeInTheDocument()
-    expect(screen.getAllByText('LoopTroop adjusted this vote scorecard.')).toHaveLength(2)
+    expect(screen.queryByText('LoopTroop adjusted this vote scorecard.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /Close/i }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

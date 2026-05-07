@@ -705,6 +705,11 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Score Breakdown')).toBeInTheDocument()
     expect(screen.getByText('LoopTroop adjusted some vote scorecards.')).toBeInTheDocument()
     expect(screen.getByText('2 interventions across 2 categories: Wrapper Key, Validation Retry.')).toBeInTheDocument()
+    expect(screen.queryByText('Affected Models')).not.toBeInTheDocument()
+
+    openNotice('LoopTroop adjusted some vote scorecards.')
+    expect(screen.getByText('Affected Models')).toBeInTheDocument()
+    expect(screen.getByText('Malformed scorecard')).toBeInTheDocument()
 
     fireEvent.click(screen.getByText(/Voter Details/i).closest('button')!)
     expect(screen.getAllByText('Presentation Order')).toHaveLength(2)
@@ -712,7 +717,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText(/seed seed-bet/i)).toBeInTheDocument()
     expect(screen.getByText(hasExactTextContent('Draft 1: gpt-5.1-codex'))).toBeInTheDocument()
     expect(screen.getByText(hasExactTextContent('Draft 2: gpt-5.2'))).toBeInTheDocument()
-    expect(screen.getAllByText('LoopTroop adjusted this vote scorecard.')).toHaveLength(2)
+    expect(screen.queryByText('LoopTroop adjusted this vote scorecard.')).not.toBeInTheDocument()
   })
 
   it('keeps legacy string bead guidance working for final bead drafts', () => {
@@ -1567,6 +1572,9 @@ describe('ArtifactContentViewer', () => {
 
     expect(screen.getByText('LoopTroop adjusted some vote scorecards.')).toBeInTheDocument()
     expect(screen.getByText('Cleanup 1')).toBeInTheDocument()
+    openNotice('LoopTroop adjusted some vote scorecards.')
+    expect(screen.getByText('Affected Models')).toBeInTheDocument()
+    expect(screen.getAllByText('voter-a').length).toBeGreaterThan(0)
   })
 
   it('recovers missing PRD Full Answers raw output from phase logs', () => {
@@ -2495,7 +2503,7 @@ describe('ArtifactContentViewer', () => {
     expect(rawPre).toHaveClass('whitespace-pre-wrap', 'overflow-x-hidden')
   })
 
-  it('shows aggregate and per-voter parser notices for voting results', () => {
+  it('shows voting intervention details only in the per-model aggregate breakdown', () => {
     render(
       <ArtifactContent
         artifactId="prd-votes"
@@ -2551,20 +2559,21 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('2 interventions across 2 categories: Reordering, Validation Retry.')).toBeInTheDocument()
     expect(screen.getByText('Cleanup 1')).toBeInTheDocument()
     expect(screen.getByText('Retried 1')).toBeInTheDocument()
+    expect(screen.queryByText('Affected Models')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Retry Attempts/i)).not.toBeInTheDocument()
 
     openNotice('LoopTroop adjusted some vote scorecards.')
-    expect(screen.getByText('Affected Voters')).toBeInTheDocument()
+    expect(screen.getByText('Affected Models')).toBeInTheDocument()
     expect(screen.getAllByText('voter-a').length).toBeGreaterThan(0)
     expect(screen.getAllByText('voter-b').length).toBeGreaterThan(0)
     expect(screen.queryByText(/Raw Source Messages/i)).not.toBeInTheDocument()
     expect(screen.getByText(/Retry Attempts/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Draft 2: score: pending').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Draft 2: score: pending')).toHaveLength(1)
 
     fireEvent.click(screen.getByText(/Voter Details/i).closest('button')!)
-    expect(screen.getAllByText('LoopTroop adjusted this vote scorecard.')).toHaveLength(2)
-    fireEvent.click(screen.getAllByText('LoopTroop adjusted this vote scorecard.')[1]!.closest('button')!)
-    expect(screen.getAllByText(/Retry Attempts/i).length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Draft 2: score: pending').length).toBeGreaterThan(0)
+    expect(screen.queryByText('LoopTroop adjusted this vote scorecard.')).not.toBeInTheDocument()
+    expect(screen.getAllByText(/Retry Attempts/i)).toHaveLength(1)
+    expect(screen.getAllByText('Draft 2: score: pending')).toHaveLength(1)
   })
 
   it('shows a collapsed parser notice for final test results', () => {

@@ -173,6 +173,8 @@ Future artifact companion payloads should persist parser and normalizer interven
 
 Parser repairs and structured retries are artifact processing notices, not coverage warnings. Coverage warnings should stay reserved for unresolved planning gaps, including unresolved contradictions inside the source artifacts when a prompt reports them.
 
+Voting artifacts keep one collapsed aggregate processing notice so scorecard repairs remain visible at the top of the results. Expanding that notice shows the full intervention details grouped by affected voter model only; the normal **Voter Details** scorecard section does not repeat the same notices.
+
 ## Frontend-State Relationship To Workflow Metadata
 
 The frontend does not hardcode the full workflow. Instead, it derives major behavior from `shared/workflowMeta.ts`:
