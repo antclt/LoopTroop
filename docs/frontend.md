@@ -161,6 +161,8 @@ The frontend is built around the assumption that users must be able to inspect p
 
 Streaming AI upserts are also written to `.ticket/runtime/execution-log.ai.jsonl`, a separate AI detail channel that is loaded lazily only for AI and model log views. The backend still does not append those intermediate snapshots to `execution-log.jsonl`; finalized AI rows remain in the normal log for lifecycle history, while the AI detail log preserves prompts, thinking, tool calls, session rows, and latest streaming snapshots for reopening a ticket. Loading that detail channel must not broaden `SYS`, `ERROR`, or `CMD` filters; those tabs classify entries from structured source/audience/kind fields and leading runtime tags, not tag-like strings inside raw model output.
 
+Artifact raw tabs show character and tokenizer counts only. Line counts are intentionally omitted because JSON envelopes and escaped multiline payloads can make a displayed line total misleading, especially for coverage reports.
+
 ### Artifact Processing Notices
 
 Future artifact companion payloads should persist parser and normalizer intervention details in `structuredOutput.interventions`. The collapsed notice stays compact and may include cheap category or rule labels, while the expanded notice treats `interventions` as the display source of truth for exact corrections, before/after examples, rule, category, stage, target, raw validator/parser messages, validation errors, and retry diagnostics.

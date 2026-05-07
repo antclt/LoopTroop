@@ -1257,7 +1257,7 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(within(voterAGroup).getByRole('button', { name: /voter-a$/ }))
 
     expect(within(voterAGroup).getByRole('button', { name: /voter-a$/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByText(`${firstRawResponse.split('\n').length.toLocaleString()} Lines`)).toBeInTheDocument()
+    expect(screen.queryByText(/^\d+ Lines$/)).not.toBeInTheDocument()
     expect(screen.getByText(`${firstRawResponse.length.toLocaleString()} Characters`)).toBeInTheDocument()
     expect(screen.getByText(`${encode(firstRawResponse).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === firstRawResponse)).toBeInTheDocument()

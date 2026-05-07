@@ -280,12 +280,10 @@ function findRawSourceSelection(sources: RawContentSource[], selectionId: string
 
 function RawDisplayStats({ content }: { content: string }) {
   const tokenCount = useMemo(() => encode(content).length, [content])
-  const lineCount = content.split('\n').length
   const charCount = content.length
 
   return (
     <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-wider">
-      <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{lineCount.toLocaleString()} Lines</span>
       <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{charCount.toLocaleString()} Characters</span>
       <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{tokenCount.toLocaleString()} Tokens (GPT-5 tokenizer)</span>
     </div>
