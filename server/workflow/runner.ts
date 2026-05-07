@@ -4,6 +4,10 @@ import type { TicketContext, TicketEvent } from '../machines/types'
 import { isCancellationError } from '../lib/abort'
 import { isMockOpenCodeMode } from '../opencode/factory'
 
+const ERR_DELIBERATION_DATA_LOST = 'Council data lost after restart. Retry to re-run deliberation.'
+const ERR_PRD_DATA_LOST = 'Council data lost after restart. Retry to re-run PRD drafting.'
+const ERR_BEADS_DATA_LOST = 'Council data lost after restart. Retry to re-run beads drafting.'
+
 // Import from phase modules
 import {
   // State
@@ -306,7 +310,7 @@ export function attachWorkflowRunner(
             runningPhases.delete(key)
           })
       } else {
-        sendEvent({ type: 'ERROR', message: 'Council data lost after restart. Retry to re-run deliberation.', codes: ['INTERMEDIATE_DATA_LOST'] })
+        sendEvent({ type: 'ERROR', message: ERR_DELIBERATION_DATA_LOST, codes: ['INTERMEDIATE_DATA_LOST'] })
       }
     } else if (state === 'COMPILING_INTERVIEW') {
       if (phaseIntermediate.has(`${ticketId}:interview`) || tryRecoverPhaseIntermediate(ticketId, context, 'interview', true)) {
@@ -322,7 +326,7 @@ export function attachWorkflowRunner(
             runningPhases.delete(key)
           })
       } else {
-        sendEvent({ type: 'ERROR', message: 'Council data lost after restart. Retry to re-run deliberation.', codes: ['INTERMEDIATE_DATA_LOST'] })
+        sendEvent({ type: 'ERROR', message: ERR_DELIBERATION_DATA_LOST, codes: ['INTERMEDIATE_DATA_LOST'] })
       }
     } else if (state === 'WAITING_INTERVIEW_ANSWERS') {
       // Start PROM4 session if not already running
@@ -378,7 +382,7 @@ export function attachWorkflowRunner(
             runningPhases.delete(key)
           })
       } else {
-        sendEvent({ type: 'ERROR', message: 'Council data lost after restart. Retry to re-run PRD drafting.', codes: ['INTERMEDIATE_DATA_LOST'] })
+        sendEvent({ type: 'ERROR', message: ERR_PRD_DATA_LOST, codes: ['INTERMEDIATE_DATA_LOST'] })
       }
     } else if (state === 'REFINING_PRD') {
       if (phaseIntermediate.has(`${ticketId}:prd`) || tryRecoverPhaseIntermediate(ticketId, context, 'prd', true)) {
@@ -394,7 +398,7 @@ export function attachWorkflowRunner(
             runningPhases.delete(key)
           })
       } else {
-        sendEvent({ type: 'ERROR', message: 'Council data lost after restart. Retry to re-run PRD drafting.', codes: ['INTERMEDIATE_DATA_LOST'] })
+        sendEvent({ type: 'ERROR', message: ERR_PRD_DATA_LOST, codes: ['INTERMEDIATE_DATA_LOST'] })
       }
     } else if (state === 'VERIFYING_PRD_COVERAGE') {
       runningPhases.add(key)
@@ -434,7 +438,7 @@ export function attachWorkflowRunner(
             runningPhases.delete(key)
           })
       } else {
-        sendEvent({ type: 'ERROR', message: 'Council data lost after restart. Retry to re-run beads drafting.', codes: ['INTERMEDIATE_DATA_LOST'] })
+        sendEvent({ type: 'ERROR', message: ERR_BEADS_DATA_LOST, codes: ['INTERMEDIATE_DATA_LOST'] })
       }
     } else if (state === 'REFINING_BEADS') {
       if (phaseIntermediate.has(`${ticketId}:beads`) || tryRecoverPhaseIntermediate(ticketId, context, 'beads', true)) {
@@ -450,7 +454,7 @@ export function attachWorkflowRunner(
             runningPhases.delete(key)
           })
       } else {
-        sendEvent({ type: 'ERROR', message: 'Council data lost after restart. Retry to re-run beads drafting.', codes: ['INTERMEDIATE_DATA_LOST'] })
+        sendEvent({ type: 'ERROR', message: ERR_BEADS_DATA_LOST, codes: ['INTERMEDIATE_DATA_LOST'] })
       }
     } else if (state === 'VERIFYING_BEADS_COVERAGE') {
       runningPhases.add(key)

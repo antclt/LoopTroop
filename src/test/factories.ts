@@ -14,6 +14,8 @@ export const TEST = {
   projectId: 1,
   projectName: 'TestProject',
   shortname: 'TEST',
+  shortnameB: 'TSTB',
+  shortnameC: 'TSTC',
   model: 'test-vendor/test-model',
   implementer: 'test-vendor/test-implementer',
   councilMembers: ['test-vendor/council-a', 'test-vendor/council-b'] as string[],
