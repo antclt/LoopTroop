@@ -344,7 +344,7 @@ export const LogEntryRow = memo(function LogEntryRow({ entry, index, showModelNa
       <div className="flex flex-col shrink-0 w-[105px] mr-2 pt-0.5 items-start">
         <div className="flex flex-row items-center gap-1 w-full pb-1">
           <span className="text-muted-foreground/40">{formatTimestamp(entry.timestamp)}</span>
-          {!isTruncatable && renderCopyButton(
+          {renderCopyButton(
             'text-muted-foreground/40 hover:text-foreground hover:bg-muted p-0.5 rounded opacity-0 group-hover:opacity-100',
           )}
         </div>
@@ -360,9 +360,6 @@ export const LogEntryRow = memo(function LogEntryRow({ entry, index, showModelNa
             >
               {isExpanded ? 'Less' : 'More'}
             </button>
-            {renderCopyButton(
-              'bg-background/90 backdrop-blur-sm text-muted-foreground hover:text-foreground hover:bg-muted p-1 rounded border border-border/50 shadow-sm opacity-80 hover:opacity-100',
-            )}
           </div>
         )}
         {isStreamingUiEntry && (
