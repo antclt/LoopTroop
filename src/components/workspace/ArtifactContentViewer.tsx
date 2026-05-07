@@ -278,12 +278,16 @@ function findRawSourceSelection(sources: RawContentSource[], selectionId: string
   return null
 }
 
-function RawDisplayStats({ content }: { content: string }) {
+function RawDisplayStats({ content, hideLineCount = false }: { content: string; hideLineCount?: boolean }) {
   const tokenCount = useMemo(() => encode(content).length, [content])
+  const lineCount = hideLineCount ? null : content.split('\n').length
   const charCount = content.length
 
   return (
     <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-wider">
+      {lineCount !== null && (
+        <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{lineCount.toLocaleString()} Lines</span>
+      )}
       <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{charCount.toLocaleString()} Characters</span>
       <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{tokenCount.toLocaleString()} Tokens (GPT-5 tokenizer)</span>
     </div>
@@ -307,6 +311,7 @@ export function WithRawTab({
   header,
   notice,
   rawSources,
+  hideRawLineCount = false,
 }: {
   content: string
   structuredLabel: string
@@ -314,6 +319,7 @@ export function WithRawTab({
   header?: React.ReactNode
   notice?: React.ReactNode
   rawSources?: RawContentSource[]
+  hideRawLineCount?: boolean
 }) {
   const [activeTab, setActiveTab] = useState<'structured' | 'raw'>('structured')
   const [activeRawSourceId, setActiveRawSourceId] = useState('all')
@@ -440,7 +446,7 @@ export function WithRawTab({
               })}
             </div>
           )}
-          <RawDisplayStats content={activeRawDisplayContent} />
+          <RawDisplayStats content={activeRawDisplayContent} hideLineCount={hideRawLineCount} />
         </>
       )}
 
@@ -548,14 +554,14 @@ export function RawContentView({ content }: { content: string }) {
   )
 }
 
-function RawContentWithCopy({ content }: { content: string }) {
+function RawContentWithCopy({ content, hideRawLineCount = false }: { content: string; hideRawLineCount?: boolean }) {
   const displayContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
 
   return (
     <div className="min-w-0 max-w-full space-y-3">
       <div className="flex items-center gap-2">
         <CopyButton content={content} />
-        <RawDisplayStats content={displayContent} />
+        <RawDisplayStats content={displayContent} hideLineCount={hideRawLineCount} />
       </div>
       <RawDisplayPre content={displayContent} />
     </div>
@@ -1607,6 +1613,7 @@ function FinalPrdDraftView({
   showDiffTab,
   finalLabel,
   phase,
+  hideRawLineCount = false,
 }: {
   content: string
   header?: React.ReactNode
@@ -1615,15 +1622,16 @@ function FinalPrdDraftView({
   showDiffTab?: boolean
   finalLabel?: string
   phase?: string
+  hideRawLineCount?: boolean
 }) {
   const [activeTab, setActiveTab] = useState<'final' | 'diff' | 'raw'>(defaultTab)
 
   const parsed = parseRefinementArtifact(content)
   const coverageResult = parseCoverageArtifact(content)
-  if (!parsed) return <RawContentWithCopy content={content} />
+  if (!parsed) return <RawContentWithCopy content={content} hideRawLineCount={hideRawLineCount} />
 
   const refinedContent = parsed?.refinedContent ?? ''
-  if (!refinedContent) return <RawContentWithCopy content={content} />
+  if (!refinedContent) return <RawContentWithCopy content={content} hideRawLineCount={hideRawLineCount} />
 
   const domain = isBeads ? 'beads' : 'prd'
   const diffEntries = buildRefinementDiffEntries(content, domain)
@@ -1661,7 +1669,7 @@ function FinalPrdDraftView({
       </div>
       {currentTab === 'raw' ? (
         <div className="min-w-0 max-w-full space-y-3">
-          <RawDisplayStats content={rawDisplayContent} />
+          <RawDisplayStats content={rawDisplayContent} hideLineCount={hideRawLineCount} />
           <RawDisplayPre content={rawDisplayContent} />
         </div>
       ) : currentTab === 'final'
@@ -1702,10 +1710,20 @@ function formatCoverageAffectedItem(item: CoverageGapResolutionData['affectedIte
   return `Bead ${item.id}: ${item.label}`
 }
 
-function CoverageResolutionNotesInner({ content, phase, isBeads = false }: { content: string; phase?: string; isBeads?: boolean }) {
+function CoverageResolutionNotesInner({
+  content,
+  phase,
+  isBeads = false,
+  hideRawLineCount = false,
+}: {
+  content: string
+  phase?: string
+  isBeads?: boolean
+  hideRawLineCount?: boolean
+}) {
   const parsed = parseRefinementArtifact(content)
   const gapResolutions = parsed?.gapResolutions ?? []
-  if (!gapResolutions.length) return <RawContentWithCopy content={content} />
+  if (!gapResolutions.length) return <RawContentWithCopy content={content} hideRawLineCount={hideRawLineCount} />
 
   const candidateVersionLabel = parsed?.candidateVersion
     ? `${isBeads ? 'Implementation Plan' : 'PRD Candidate'} v${parsed.candidateVersion}`
@@ -1836,7 +1854,7 @@ function CoverageTransitionDetailsView({
 
       {resolvedTab === 'notes' && (
         transition.gapResolutions.length > 0
-          ? <CoverageResolutionNotesInner content={artifactContent} phase={phase} isBeads={isBeads} />
+          ? <CoverageResolutionNotesInner content={artifactContent} phase={phase} isBeads={isBeads} hideRawLineCount />
           : (
             <div className="space-y-2">
               {transition.resolutionNotes.map((note, index) => (
@@ -1880,7 +1898,7 @@ function LegacyCoverageReportView({
   const resolvedTab = tabs.find((tab) => tab.key === activeTab)?.key ?? tabs[0]?.key ?? 'audit'
 
   if (tabs.length === 0) {
-    return <RawContentWithCopy content={JSON.stringify({ coverageReviewContent, revisionContent })} />
+    return <RawContentWithCopy content={JSON.stringify({ coverageReviewContent, revisionContent })} hideRawLineCount />
   }
 
   return (
@@ -1911,11 +1929,11 @@ function LegacyCoverageReportView({
         (() => {
           const candidateVersion = revisionPayload?.candidateVersion
           const finalLabel = candidateVersion ? `PRD Candidate v${candidateVersion}` : 'PRD Candidate'
-          return <FinalPrdDraftView content={revisionContent} defaultTab="diff" showDiffTab finalLabel={finalLabel} phase={phase} />
+          return <FinalPrdDraftView content={revisionContent} defaultTab="diff" showDiffTab finalLabel={finalLabel} phase={phase} hideRawLineCount />
         })()
       )}
       {resolvedTab === 'notes' && revisionContent && (
-        <CoverageResolutionNotesInner content={revisionContent} phase={phase} />
+        <CoverageResolutionNotesInner content={revisionContent} phase={phase} hideRawLineCount />
       )}
     </div>
   )
@@ -1997,7 +2015,7 @@ function CoverageReportView({ content, phase }: { content: string; phase?: strin
 
   const coverageResult = parseCoverageArtifact(content)
   if (!coverageResult) {
-    return <RawContentWithCopy content={content} />
+    return <RawContentWithCopy content={content} hideRawLineCount />
   }
 
   return <VersionedCoverageReportView coverageResult={coverageResult} content={content} phase={phase} />
@@ -5422,6 +5440,7 @@ export function ArtifactContent({
         structuredLabel="Summary"
         header={header}
         notice={<ArtifactProcessingNotice structuredOutput={coverageResult?.structuredOutput} kind="coverage" />}
+        hideRawLineCount
       >
         <CoverageResultView content={content} phase={phase} />
       </WithRawTab>

@@ -5,6 +5,7 @@ import { encode } from 'gpt-tokenizer'
 import { deriveStructuredInterventions } from '@shared/structuredInterventions'
 import { ArtifactContent, CollapsibleSection, InterviewAnswersView } from '../ArtifactContentViewer'
 import { buildArtifactProcessingNoticeCopy } from '../artifactProcessingNotice'
+import { buildReadableRawDisplayContent } from '../rawDisplayContent'
 import type { ArtifactStructuredOutputData } from '../phaseArtifactTypes'
 import { LogContext } from '@/context/logContextDef'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
@@ -1018,40 +1019,43 @@ describe('ArtifactContentViewer', () => {
   })
 
   it('hides PRD coverage follow-up questions while preserving gap and termination summaries', () => {
+    const coverageContent = JSON.stringify({
+      winnerId: 'openai/gpt-5.2',
+      response: [
+        'status: gaps',
+        'gaps:',
+        '  - "Missing PRD approval sequencing."',
+        'follow_up_questions:',
+        '  - id: FU01',
+        '    question: "Which approval step should trigger Beads?"',
+        '    phase: PRD',
+      ].join('\n'),
+      hasGaps: true,
+      coverageRunNumber: 2,
+      maxCoveragePasses: 2,
+      limitReached: true,
+      terminationReason: 'coverage_pass_limit_reached',
+      parsed: {
+        status: 'gaps',
+        gaps: ['Missing PRD approval sequencing.'],
+        followUpQuestions: [
+          {
+            id: 'FU01',
+            question: 'Which approval step should trigger Beads?',
+            phase: 'PRD',
+            priority: 'high',
+            rationale: 'PRD coverage should stay diagnostic-only.',
+          },
+        ],
+      },
+    })
+    const coverageDisplayContent = buildReadableRawDisplayContent(coverageContent)
+
     render(
       <ArtifactContent
         artifactId="prd-coverage-result"
         phase="VERIFYING_PRD_COVERAGE"
-        content={JSON.stringify({
-          winnerId: 'openai/gpt-5.2',
-          response: [
-            'status: gaps',
-            'gaps:',
-            '  - "Missing PRD approval sequencing."',
-            'follow_up_questions:',
-            '  - id: FU01',
-            '    question: "Which approval step should trigger Beads?"',
-            '    phase: PRD',
-          ].join('\n'),
-          hasGaps: true,
-          coverageRunNumber: 2,
-          maxCoveragePasses: 2,
-          limitReached: true,
-          terminationReason: 'coverage_pass_limit_reached',
-          parsed: {
-            status: 'gaps',
-            gaps: ['Missing PRD approval sequencing.'],
-            followUpQuestions: [
-              {
-                id: 'FU01',
-                question: 'Which approval step should trigger Beads?',
-                phase: 'PRD',
-                priority: 'high',
-                rationale: 'PRD coverage should stay diagnostic-only.',
-              },
-            ],
-          },
-        })}
+        content={coverageContent}
       />,
     )
 
@@ -1061,6 +1065,12 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Missing PRD approval sequencing.')).toBeInTheDocument()
     expect(screen.queryByText('Follow-up Questions')).not.toBeInTheDocument()
     expect(screen.queryByText('Which approval step should trigger Beads?')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    expect(screen.queryByText(/^\d+ Lines$/)).not.toBeInTheDocument()
+    expect(screen.getByText(`${coverageDisplayContent.length.toLocaleString()} Characters`)).toBeInTheDocument()
+    expect(screen.getByText(`${encode(coverageDisplayContent).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
   })
 
   it('shows a friendly clean summary for PRD coverage results', () => {
@@ -1257,7 +1267,7 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(within(voterAGroup).getByRole('button', { name: /voter-a$/ }))
 
     expect(within(voterAGroup).getByRole('button', { name: /voter-a$/ })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.queryByText(/^\d+ Lines$/)).not.toBeInTheDocument()
+    expect(screen.getByText(`${firstRawResponse.split('\n').length.toLocaleString()} Lines`)).toBeInTheDocument()
     expect(screen.getByText(`${firstRawResponse.length.toLocaleString()} Characters`)).toBeInTheDocument()
     expect(screen.getByText(`${encode(firstRawResponse).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === firstRawResponse)).toBeInTheDocument()
