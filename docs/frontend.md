@@ -161,7 +161,7 @@ The frontend is built around the assumption that users must be able to inspect p
 
 Streaming AI upserts are also written to `.ticket/runtime/execution-log.ai.jsonl`, a separate AI detail channel that is loaded lazily only for AI and model log views. The backend still does not append those intermediate snapshots to `execution-log.jsonl`; finalized AI rows remain in the normal log for lifecycle history, while the AI detail log preserves prompts, thinking, tool calls, session rows, and latest streaming snapshots for reopening a ticket. Loading that detail channel must not broaden `SYS`, `ERROR`, or `CMD` filters; those tabs classify entries from structured source/audience/kind fields and leading runtime tags, not tag-like strings inside raw model output.
 
-Artifact raw tabs show line, character, and tokenizer counts by default. Coverage report cards and coverage report/review raw views intentionally omit line counts because JSON envelopes and escaped multiline payloads can make a displayed line total misleading.
+Artifact raw tabs show line, character, and tokenizer counts. Coverage report cards intentionally omit line-count details because JSON envelopes and escaped multiline payloads can make a displayed card total misleading.
 
 Council draft and vote raw tabs can also expose a disabled-or-enabled `Rejected` raw variant when structured retry metadata exists. The rejected payload is resolved from existing phase model-output logs, scoped by phase, model, and PRD sub-stage where needed; it is not duplicated into artifact companion payloads. If the log-backed rejected response is unavailable, the button stays unavailable and the artifact processing notice still shows the retry diagnostic excerpt.
 

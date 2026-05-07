@@ -1068,7 +1068,7 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
-    expect(screen.queryByText(/^\d+ Lines$/)).not.toBeInTheDocument()
+    expect(screen.getByText(`${coverageDisplayContent.split('\n').length.toLocaleString()} Lines`)).toBeInTheDocument()
     expect(screen.getByText(`${coverageDisplayContent.length.toLocaleString()} Characters`)).toBeInTheDocument()
     expect(screen.getByText(`${encode(coverageDisplayContent).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
   })
