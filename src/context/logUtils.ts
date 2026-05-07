@@ -411,6 +411,10 @@ export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
   next[existingIndex] = {
     ...next[existingIndex],
     ...entry,
+    // Preserve the original start timestamp — streaming upserts and finalize
+    // events carry a fresh server timestamp, but the UI should always display
+    // when the entry first appeared, not when it was last updated.
+    timestamp: next[existingIndex]!.timestamp ?? entry.timestamp,
     streaming: entry.op === 'finalize' ? false : entry.streaming,
   }
   return next

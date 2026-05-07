@@ -59,7 +59,15 @@ export function foldPersistedLogEntries(entries: Record<string, unknown>[]): Rec
 
       foldedStreaming.set(entryId, {
         index: previous.index,
-        entry: { ...previous.entry, ...entry },
+        entry: {
+          ...previous.entry,
+          ...entry,
+          // Preserve the original start timestamp so the UI shows when the
+          // streaming entry first appeared, not when the finalize arrived.
+          timestamp: typeof previous.entry.timestamp === 'string'
+            ? previous.entry.timestamp
+            : entry.timestamp,
+        },
       })
       return
     }

@@ -640,6 +640,72 @@ describe('mergeEntry', () => {
     expect(merged[0]).toBe(first)
   })
 
+  it('preserves original start timestamp when a streaming upsert updates an existing entry', () => {
+    const firstUpsert: LogEntry = {
+      id: 'ses-1:reasoning',
+      entryId: 'ses-1:reasoning',
+      line: 'Planning the approach...',
+      source: 'model:openai/gpt-5.4',
+      status: 'CODING',
+      timestamp: '2026-03-13T10:00:00.000Z',
+      audience: 'ai',
+      kind: 'reasoning',
+      streaming: true,
+      op: 'upsert',
+    }
+    const laterUpsert: LogEntry = {
+      ...firstUpsert,
+      line: 'Planning the approach... Step 2: analyze requirements.',
+      timestamp: '2026-03-13T10:00:02.500Z',
+    }
+
+    const merged = mergeEntry([firstUpsert], laterUpsert)
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      entryId: 'ses-1:reasoning',
+      line: 'Planning the approach... Step 2: analyze requirements.',
+      streaming: true,
+      op: 'upsert',
+      // Original start timestamp must NOT be overwritten by the streaming update
+      timestamp: '2026-03-13T10:00:00.000Z',
+    })
+  })
+
+  it('preserves original start timestamp when a finalize arrives for a streaming entry', () => {
+    const initialUpsert: LogEntry = {
+      id: 'ses-1:text',
+      entryId: 'ses-1:text',
+      line: '[MODEL] Partial model response.',
+      source: 'model:openai/gpt-5.4',
+      status: 'CODING',
+      timestamp: '2026-03-13T10:00:00.000Z',
+      audience: 'ai',
+      kind: 'text',
+      streaming: true,
+      op: 'upsert',
+    }
+    const finalizeEntry: LogEntry = {
+      ...initialUpsert,
+      line: '[MODEL] Full model response, now complete.',
+      timestamp: '2026-03-13T10:00:05.000Z',
+      streaming: false,
+      op: 'finalize',
+    }
+
+    const merged = mergeEntry([initialUpsert], finalizeEntry)
+
+    expect(merged).toHaveLength(1)
+    expect(merged[0]).toMatchObject({
+      entryId: 'ses-1:text',
+      line: '[MODEL] Full model response, now complete.',
+      streaming: false,
+      op: 'finalize',
+      // Original start timestamp must NOT be replaced by the finalize timestamp
+      timestamp: '2026-03-13T10:00:00.000Z',
+    })
+  })
+
   it('dedupes append entries with matching fingerprints', () => {
     const first: LogEntry = {
       id: 'entry-1',

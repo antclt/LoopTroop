@@ -31,6 +31,37 @@ describe('foldPersistedLogEntries', () => {
     expect(folded[0]?.entryId).toBe('session-1:question:req-1:replied')
   })
 
+  it('preserves the original start timestamp when folding streaming upsert+finalize entries', () => {
+    const folded = foldPersistedLogEntries([
+      {
+        timestamp: '2026-04-20T10:00:00.000Z',
+        type: 'model_output',
+        entryId: 'session-1:text',
+        op: 'upsert',
+        streaming: true,
+        content: 'partial',
+      },
+      {
+        timestamp: '2026-04-20T10:00:05.000Z',
+        type: 'model_output',
+        entryId: 'session-1:text',
+        op: 'finalize',
+        streaming: false,
+        content: 'final',
+      },
+    ])
+
+    expect(folded).toHaveLength(1)
+    expect(folded[0]).toMatchObject({
+      entryId: 'session-1:text',
+      op: 'finalize',
+      content: 'final',
+      streaming: false,
+      // Must use the upsert (start) timestamp, not the finalize (end) timestamp
+      timestamp: '2026-04-20T10:00:00.000Z',
+    })
+  })
+
   it('continues to fold streaming entries by entryId', () => {
     const folded = foldPersistedLogEntries([
       {
