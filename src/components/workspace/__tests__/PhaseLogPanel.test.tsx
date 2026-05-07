@@ -234,6 +234,58 @@ describe('PhaseLogPanel', () => {
     expect(screen.queryByText(/Second output/i)).not.toBeInTheDocument()
   })
 
+  it('keeps raw model output out of SYS and ERROR after switching through the AI model tab', () => {
+    const phase = 'VERIFYING_PRD_COVERAGE'
+    const modelId = 'openai/gpt-5.4'
+    const logs: LogEntry[] = [
+      makeLog('sys-coverage', '[SYS] Coverage verification started using winning model.', {
+        status: phase,
+        source: 'system',
+        audience: 'all',
+        kind: 'milestone',
+        modelId,
+      }),
+      makeLog('error-coverage', '[ERROR] Coverage verification failed before parsing.', {
+        status: phase,
+        source: 'error',
+        audience: 'all',
+        kind: 'error',
+      }),
+      makeLog('ai-coverage', [
+        '[MODEL] Coverage audit response',
+        'The string [ERROR] quoted error token is part of the model answer.',
+        '[SYS] quoted system token is also model text.',
+        '[CMD] $ npm test is a suggested command, not an executed command.',
+      ].join('\n'), {
+        status: phase,
+        source: `model:${modelId}`,
+        audience: 'ai',
+        kind: 'text',
+        modelId,
+        sessionId: 'coverage-session-1',
+      }),
+    ]
+
+    renderWithTooltipProvider(<PhaseLogPanel phase={phase} logs={logs} defaultTab="SYS" />)
+
+    expect(screen.getByText(/Coverage verification started/i)).toBeInTheDocument()
+    expect(screen.queryByText(/quoted error token/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'AI > gpt-5.4' }))
+
+    expect(screen.getByText(/quoted error token/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'SYS' }))
+
+    expect(screen.getByText(/Coverage verification started/i)).toBeInTheDocument()
+    expect(screen.queryByText(/quoted error token/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'ERROR' }))
+
+    expect(screen.getByText(/Coverage verification failed before parsing/i)).toBeInTheDocument()
+    expect(screen.queryByText(/quoted error token/i)).not.toBeInTheDocument()
+  })
+
   it('shows canonical raw AI output in ALL while suppressing transcript and summary duplicates', () => {
     const logs: LogEntry[] = [
       {

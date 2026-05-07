@@ -54,6 +54,30 @@ function isCanonicalAiTextEntry(entry: LogEntry): boolean {
     && !isLegacyDerivedSummary(entry)
 }
 
+const AI_DETAIL_OUTPUT_KINDS = new Set(['text', 'prompt', 'reasoning', 'tool', 'step', 'session'])
+const AI_DETAIL_SESSION_KINDS = new Set([...AI_DETAIL_OUTPUT_KINDS, 'error'])
+
+function hasLeadingLogTag(entry: LogEntry, tag: string): boolean {
+  return entry.line.trimStart().startsWith(`[${tag}]`)
+}
+
+function isAiDetailOutput(entry: LogEntry): boolean {
+  return AI_DETAIL_OUTPUT_KINDS.has(entry.kind)
+    && (
+      entry.audience === 'ai'
+      || entry.source === 'opencode'
+      || entry.source.startsWith('model:')
+      || Boolean(entry.sessionId)
+      || Boolean(entry.modelId)
+    )
+}
+
+function isSystemShapedAiDetail(entry: LogEntry): boolean {
+  if (entry.audience !== 'all' || entry.source !== 'system') return false
+  if (entry.sessionId && AI_DETAIL_SESSION_KINDS.has(entry.kind)) return true
+  return Boolean(entry.modelId) && AI_DETAIL_OUTPUT_KINDS.has(entry.kind)
+}
+
 export function getCanonicalLogEntries(entries: LogEntry[]): LogEntry[] {
   const canonicalSessions = new Set<string>()
   const canonicalPhaseModels = new Set<string>()
@@ -77,10 +101,10 @@ export function getCanonicalLogEntries(entries: LogEntry[]): LogEntry[] {
 }
 
 export function getEntryColor(entry: LogEntry): string {
-  if (entry.audience === 'debug' || entry.source === 'debug' || entry.line.includes('[DEBUG]')) return 'text-amber-600'
+  if (entry.audience === 'debug' || entry.source === 'debug' || (hasLeadingLogTag(entry, 'DEBUG') && !isAiDetailOutput(entry))) return 'text-amber-600'
   if (entry.kind === 'tool' || entry.line.includes('[TOOL]')) return 'text-cyan-500'
-  if (entry.kind === 'error' || entry.source === 'error' || entry.line.includes('[ERROR]')) return 'text-red-500'
-  if (entry.line.includes('[CMD]')) return 'text-zinc-500'
+  if (entry.kind === 'error' || entry.source === 'error' || (hasLeadingLogTag(entry, 'ERROR') && !isAiDetailOutput(entry))) return 'text-red-500'
+  if (hasLeadingLogTag(entry, 'CMD')) return 'text-zinc-500'
   if (entry.kind === 'reasoning') return 'text-purple-400'
   if (entry.kind === 'prompt') return 'text-blue-500'
   if (entry.kind === 'text') return 'text-emerald-600'
@@ -211,13 +235,13 @@ export function formatLogLine(entry: LogEntry, showModelName: boolean): Formatte
   }
 }
 
-export const isCommand = (entry: LogEntry) => entry.line.includes('[CMD]')
-export const isSystem = (entry: LogEntry) => entry.audience === 'all' && entry.source === 'system'
+export const isCommand = (entry: LogEntry) => hasLeadingLogTag(entry, 'CMD')
+export const isSystem = (entry: LogEntry) => entry.audience === 'all' && entry.source === 'system' && !isSystemShapedAiDetail(entry)
 
 export function filterEntries(entries: LogEntry[], tab: string): LogEntry[] {
   const canonicalEntries = getCanonicalLogEntries(entries)
-  const isDebug = (entry: LogEntry) => entry.audience === 'debug' || entry.source === 'debug' || entry.line.includes('[DEBUG]')
-  const isError = (entry: LogEntry) => (entry.kind === 'error' || entry.source === 'error' || entry.line.includes('[ERROR]')) && !isBenignGitProbeErrorLine(entry.line)
+  const isDebug = (entry: LogEntry) => entry.audience === 'debug' || entry.source === 'debug' || (hasLeadingLogTag(entry, 'DEBUG') && !isAiDetailOutput(entry))
+  const isError = (entry: LogEntry) => (entry.kind === 'error' || entry.source === 'error' || (hasLeadingLogTag(entry, 'ERROR') && !isAiDetailOutput(entry))) && !isBenignGitProbeErrorLine(entry.line)
   const isPrompt = (entry: LogEntry) => entry.kind === 'prompt'
   const isFromOpenCode = (entry: LogEntry) =>
     entry.audience === 'ai' ||

@@ -1,7 +1,7 @@
 import { createElement, useEffect } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { formatLogLine, LOG_STORAGE_PREFIX, mergeEntry, serverLogCache, SERVER_LOG_REFRESH_EVENT, type LogEntry } from '@/context/logUtils'
+import { formatLogLine, LOG_STORAGE_PREFIX, mergeEntry, normalizeStoredEntry, serverLogCache, SERVER_LOG_REFRESH_EVENT, type LogEntry } from '@/context/logUtils'
 import { LogProvider } from '@/context/LogContext'
 import { useLogs } from '@/context/useLogContext'
 import { createJsonResponse } from '@/test/renderHelpers'
@@ -49,6 +49,48 @@ describe('formatLogLine', () => {
       source: 'model:openai/gpt-5.1-codex',
       audience: 'ai',
     }).line).toBe('[MODEL] phase: discovery')
+  })
+})
+
+describe('normalizeStoredEntry', () => {
+  it('restores legacy cached AI detail rows that are missing source and audience', () => {
+    const restored = normalizeStoredEntry({
+      id: 'legacy-ai-row',
+      entryId: 'legacy-ai-row',
+      line: '[MODEL] cached model output',
+      kind: 'text',
+      modelId: 'openai/gpt-5.4',
+      sessionId: 'session-1',
+      streaming: false,
+      op: 'append',
+    }, 'CODING')
+
+    expect(restored).toMatchObject({
+      source: 'model:openai/gpt-5.4',
+      audience: 'ai',
+      kind: 'text',
+      modelId: 'openai/gpt-5.4',
+      sessionId: 'session-1',
+    })
+  })
+
+  it('keeps model-attributed system milestones system-shaped', () => {
+    const restored = normalizeStoredEntry({
+      id: 'system-model-milestone',
+      entryId: 'system-model-milestone',
+      line: '[SYS] Coverage verification passed.',
+      kind: 'milestone',
+      modelId: 'openai/gpt-5.4',
+      streaming: false,
+      op: 'append',
+    }, 'VERIFYING_PRD_COVERAGE')
+
+    expect(restored).toMatchObject({
+      source: 'system',
+      audience: 'all',
+      kind: 'milestone',
+      modelId: 'openai/gpt-5.4',
+    })
   })
 })
 

@@ -121,6 +121,8 @@ const LOW_VALUE_GIT_PROBE_PATTERNS = [
   ' diff --cached --quiet',
 ] as const
 
+const AI_DETAIL_STORED_KINDS = new Set(['text', 'prompt', 'reasoning', 'tool', 'step', 'session', 'error'])
+
 function stringifyForLine(value: unknown, maxLen = 2000): string {
   if (typeof value === 'string') return value
   if (value == null) return ''
@@ -253,7 +255,10 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
 }
 
 export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: string): LogEntry {
-  const source = String(entry.source ?? 'system')
+  const rawKind = typeof entry.kind === 'string' ? entry.kind : undefined
+  const hasModelIdentity = Boolean(entry.modelId || entry.sessionId)
+  const shouldRestoreAiDetailShape = hasModelIdentity && rawKind != null && AI_DETAIL_STORED_KINDS.has(rawKind)
+  const source = String(entry.source ?? (shouldRestoreAiDetailShape ? (entry.modelId ? `model:${String(entry.modelId)}` : 'opencode') : 'system'))
   const status = String(entry.status ?? fallbackStatus)
   const line = String(entry.line ?? '')
   const timestamp = entry.timestamp ? String(entry.timestamp) : undefined
@@ -264,7 +269,9 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
       ? 'debug'
       : source === 'opencode' || source.startsWith('model:')
         ? 'ai'
-        : 'all'
+        : shouldRestoreAiDetailShape
+          ? 'ai'
+          : 'all'
   const entryId = String(entry.entryId ?? entry.id ?? fallbackEntryId(status, source, timestamp, line))
 
   return {
@@ -276,7 +283,7 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
     ...(timestamp ? { timestamp } : {}),
     ...(fingerprint ? { fingerprint } : {}),
     audience,
-    kind: String(entry.kind ?? (audience === 'ai' ? 'text' : 'milestone')),
+    kind: String(rawKind ?? (audience === 'ai' ? 'text' : 'milestone')),
     ...(entry.modelId ? { modelId: String(entry.modelId) } : {}),
     ...(entry.sessionId ? { sessionId: String(entry.sessionId) } : {}),
     ...(entry.beadId ? { beadId: String(entry.beadId) } : {}),
