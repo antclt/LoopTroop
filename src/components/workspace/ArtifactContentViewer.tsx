@@ -3274,12 +3274,57 @@ function getValidatedVoteResponse(
   return buildValidatedVoteResponseFromVotes(voterId, data)
 }
 
-function buildDraftRawSources(draft: CouncilDraftData): RawContentSource[] | undefined {
+function hasStructuredRetryMetadata(structuredOutput?: ArtifactStructuredOutputData): boolean {
+  return Boolean(
+    (structuredOutput?.autoRetryCount ?? 0) > 0
+    || (structuredOutput?.retryDiagnostics?.length ?? 0) > 0,
+  )
+}
+
+function normalizeRawOutputForComparison(value: string): string {
+  return value.replace(/\s+$/g, '')
+}
+
+function findRejectedRawOutput(history: string[] | undefined, currentRawResponse?: string): string | undefined {
+  if (!history || history.length < 2) return undefined
+
+  if (typeof currentRawResponse === 'string') {
+    const current = normalizeRawOutputForComparison(currentRawResponse)
+    const currentIndex = history
+      .map(normalizeRawOutputForComparison)
+      .lastIndexOf(current)
+    if (currentIndex > 0) return history[currentIndex - 1]
+    if (currentIndex === 0) return undefined
+  }
+
+  return history[history.length - 2]
+}
+
+function buildRejectedRawVariant(
+  id: string,
+  label: string,
+  rejectedRawResponse: string | undefined,
+): RawContentVariant {
+  return {
+    id,
+    label: 'Rejected',
+    content: rejectedRawResponse,
+    displayContent: rejectedRawResponse,
+    disabled: typeof rejectedRawResponse !== 'string',
+    ariaLabel: `${label} Rejected`,
+    title: typeof rejectedRawResponse === 'string'
+      ? `Show rejected pre-retry output from ${label}`
+      : `Rejected pre-retry output was not found in logs for ${label}`,
+  }
+}
+
+function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: string): RawContentSource[] | undefined {
   const rawResponse = draft.rawResponse
   const normalizedResponse = draft.normalizedResponse ?? (
     draft.structuredOutput?.repairApplied && draft.content ? draft.content : undefined
   )
-  if (typeof rawResponse !== 'string' && typeof normalizedResponse !== 'string') return undefined
+  const shouldShowRejected = hasStructuredRetryMetadata(draft.structuredOutput)
+  if (typeof rawResponse !== 'string' && typeof normalizedResponse !== 'string' && !shouldShowRejected) return undefined
   const label = getModelDisplayName(draft.memberId)
   const variants: RawContentVariant[] = [{
     id: `draft:${draft.memberId}:raw`,
@@ -3302,6 +3347,9 @@ function buildDraftRawSources(draft: CouncilDraftData): RawContentSource[] | und
       title: `Show validated output from ${label}`,
     })
   }
+  if (shouldShowRejected) {
+    variants.push(buildRejectedRawVariant(`draft:${draft.memberId}:rejected`, label, rejectedRawResponse))
+  }
   return [{
     id: `draft:${draft.memberId}`,
     label,
@@ -3317,6 +3365,7 @@ function buildDraftRawSources(draft: CouncilDraftData): RawContentSource[] | und
 type DraftRawLogStage = 'draft' | 'full_answers' | 'prd_draft'
 
 type DraftRawLogFallbacks = Record<DraftRawLogStage, Map<string, string>>
+type DraftRawLogHistories = Record<DraftRawLogStage, Map<string, string[]>>
 
 function createEmptyDraftRawLogFallbacks(): DraftRawLogFallbacks {
   return {
@@ -3324,6 +3373,20 @@ function createEmptyDraftRawLogFallbacks(): DraftRawLogFallbacks {
     full_answers: new Map<string, string>(),
     prd_draft: new Map<string, string>(),
   }
+}
+
+function createEmptyDraftRawLogHistories(): DraftRawLogHistories {
+  return {
+    draft: new Map<string, string[]>(),
+    full_answers: new Map<string, string[]>(),
+    prd_draft: new Map<string, string[]>(),
+  }
+}
+
+function appendRawLogHistory(history: Map<string, string[]>, modelId: string, output: string) {
+  const outputs = history.get(modelId) ?? []
+  if (outputs[outputs.length - 1] === output) return
+  history.set(modelId, [...outputs, output])
 }
 
 function stripLogTag(line: string): string {
@@ -3397,11 +3460,41 @@ function buildDraftRawLogFallbacks(logs: LogEntry[], phase?: string): DraftRawLo
   return fallbacks
 }
 
+function buildDraftRawLogHistories(logs: LogEntry[], phase?: string): DraftRawLogHistories {
+  const histories = createEmptyDraftRawLogHistories()
+  const stagesByMember = new Map<string, DraftRawLogStage>()
+
+  for (const log of logs) {
+    updateDraftRawLogStage(stagesByMember, phase, log)
+    if (!log.modelId) continue
+
+    const output = getModelOutputFromLog(log)
+    if (!output) continue
+
+    const stage = stagesByMember.get(log.modelId)
+      ?? (phase === 'DRAFTING_PRD' ? 'prd_draft' : 'draft')
+    appendRawLogHistory(histories[stage], log.modelId, output)
+  }
+
+  return histories
+}
+
 function getDraftRawLogStage(phase?: string, artifactId?: string): DraftRawLogStage {
   if (phase === 'DRAFTING_PRD') {
     return artifactId?.startsWith('prd-fullanswers-member-') ? 'full_answers' : 'prd_draft'
   }
   return 'draft'
+}
+
+function getRejectedDraftRawResponse(
+  draft: CouncilDraftData,
+  phase: string | undefined,
+  artifactId: string | undefined,
+  histories: DraftRawLogHistories,
+): string | undefined {
+  if (!hasStructuredRetryMetadata(draft.structuredOutput)) return undefined
+  const stage = getDraftRawLogStage(phase, artifactId)
+  return findRejectedRawOutput(histories[stage].get(draft.memberId), draft.rawResponse)
 }
 
 function withDraftRawLogFallback(
@@ -3427,6 +3520,29 @@ function withDraftRawLogFallback(
     rawResponse,
     ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
   }
+}
+
+function buildVoteRawLogHistories(logs: LogEntry[], phase?: string): Map<string, string[]> {
+  const histories = new Map<string, string[]>()
+  if (!phase?.includes('VOTING')) return histories
+
+  for (const log of logs) {
+    if (!log.modelId) continue
+    const output = getModelOutputFromLog(log)
+    if (!output) continue
+    appendRawLogHistory(histories, log.modelId, output)
+  }
+
+  return histories
+}
+
+function getRejectedVoteRawResponse(
+  voterId: string,
+  detail: CouncilVoterDetailData | undefined,
+  histories: Map<string, string[]>,
+): string | undefined {
+  if (!hasStructuredRetryMetadata(detail?.structuredOutput)) return undefined
+  return findRejectedRawOutput(histories.get(voterId), detail?.rawResponse)
 }
 
 function getCoverageCandidateLabel(phase?: string, candidateVersion?: number): string {
@@ -5325,14 +5441,32 @@ export function ArtifactContent({
   reportContent?: string | null
 }) {
   const logCtx = useLogs()
+  const loadLogsForPhase = logCtx?.loadLogsForPhase
   const phaseLogs = useMemo(
     () => (phase && logCtx ? logCtx.getLogsForPhase(phase) : []),
     [logCtx, phase],
+  )
+  const hasStructuredRetryInContent = useMemo(
+    () => content.includes('autoRetryCount') || content.includes('retryDiagnostics'),
+    [content],
   )
   const draftRawLogFallbacks = useMemo(
     () => buildDraftRawLogFallbacks(phaseLogs, phase),
     [phaseLogs, phase],
   )
+  const draftRawLogHistories = useMemo(
+    () => buildDraftRawLogHistories(phaseLogs, phase),
+    [phaseLogs, phase],
+  )
+  const voteRawLogHistories = useMemo(
+    () => buildVoteRawLogHistories(phaseLogs, phase),
+    [phaseLogs, phase],
+  )
+
+  useEffect(() => {
+    if (!phase || !hasStructuredRetryInContent) return
+    loadLogsForPhase?.(phase)
+  }, [hasStructuredRetryInContent, loadLogsForPhase, phase])
 
   if (artifactId === 'execution-setup-plan') {
     return (
@@ -5547,6 +5681,8 @@ export function ArtifactContent({
         const detail = voterDetailById.get(voterId)
         const rawResponse = detail?.rawResponse
         const validatedResponse = getValidatedVoteResponse(voterId, councilResult, detail)
+        const rejectedResponse = getRejectedVoteRawResponse(voterId, detail, voteRawLogHistories)
+        const shouldShowRejected = hasStructuredRetryMetadata(detail?.structuredOutput)
         const hasRawResponse = typeof rawResponse === 'string'
         const hasValidatedResponse = typeof validatedResponse === 'string'
         const label = getModelDisplayName(voterId)
@@ -5570,6 +5706,9 @@ export function ArtifactContent({
             ariaLabel: `${label} Validated`,
             title: `Show validated vote scorecard from ${label}`,
           })
+        }
+        if (shouldShowRejected) {
+          variants.push(buildRejectedRawVariant(`voter:${voterId}:rejected`, label, rejectedResponse))
         }
         return {
           id: `voter:${voterId}`,
@@ -5630,7 +5769,12 @@ export function ArtifactContent({
           structuredLabel="Winner"
           header={header}
           notice={<ArtifactProcessingNotice structuredOutput={noticeOutput} kind={noticeKind} status={winnerDraft?.outcome ?? 'completed'} />}
-          rawSources={winnerDraft ? buildDraftRawSources(winnerDraft) : undefined}
+          rawSources={winnerDraft
+            ? buildDraftRawSources(
+                winnerDraft,
+                getRejectedDraftRawResponse(winnerDraft, phase, artifactId, draftRawLogHistories),
+              )
+            : undefined}
         >
           {structured || <RawContentView content={winnerContent} />}
         </WithRawTab>
@@ -5707,7 +5851,10 @@ export function ArtifactContent({
                 content={draft.content}
                 structuredLabel="Draft"
                 notice={<ArtifactProcessingNotice structuredOutput={noticeOutput} kind={getCouncilDraftNoticeKind({ isFullAnswers, isInterview, isPrd, isBeads })} context={noticeContext} status={draft.outcome} />}
-                rawSources={buildDraftRawSources(draft)}
+                rawSources={buildDraftRawSources(
+                  draft,
+                  getRejectedDraftRawResponse(draft, phase, artifactId, draftRawLogHistories),
+                )}
               >
                 {structured}
               </WithRawTab>
@@ -5741,7 +5888,12 @@ export function ArtifactContent({
             structuredLabel="Draft"
             header={header}
             notice={<ArtifactProcessingNotice structuredOutput={noticeOutput} kind={noticeKind} context={noticeContext} status={draft?.outcome ?? 'completed'} />}
-            rawSources={draft ? buildDraftRawSources(draft) : undefined}
+            rawSources={draft
+              ? buildDraftRawSources(
+                  draft,
+                  getRejectedDraftRawResponse(draft, phase, artifactId, draftRawLogHistories),
+                )
+              : undefined}
           >
             {structured}
           </WithRawTab>

@@ -1284,6 +1284,65 @@ describe('ArtifactContentViewer', () => {
     expect(writeTextMock).toHaveBeenLastCalledWith(firstNormalizedResponse)
   })
 
+  it('shows rejected vote raw output from logs when a vote needed a structured retry', () => {
+    const voterId = 'vendor/voter-a'
+    const rejectedRawResponse = 'I think Draft 1 is best, but here is prose instead of YAML.'
+    const acceptedRawResponse = 'draft_scores:\n  Draft 1:\n    total_score: 91'
+    const validatedResponse = 'draft_scores:\n  Draft 1:\n    total_score: 91\n'
+    const content = JSON.stringify({
+      drafts: [
+        { memberId: 'vendor/draft-a', outcome: 'completed', content: 'draft-a' },
+      ],
+      votes: [
+        {
+          voterId,
+          draftId: 'vendor/draft-a',
+          totalScore: 91,
+          scores: [{ category: 'Coverage of requirements', score: 19 }],
+        },
+      ],
+      voterOutcomes: {
+        [voterId]: 'completed',
+      },
+      voterDetails: [
+        {
+          voterId,
+          rawResponse: acceptedRawResponse,
+          normalizedResponse: validatedResponse,
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Vote scorecard output required a structured retry',
+          }),
+        },
+      ],
+      winnerId: 'vendor/draft-a',
+      isFinal: true,
+    })
+    const logs = [
+      makeLogEntry(`[MODEL] ${rejectedRawResponse}`, { modelId: voterId, source: `model:${voterId}`, audience: 'ai', kind: 'text' }),
+      makeLogEntry(`[MODEL] ${acceptedRawResponse}`, { modelId: voterId, source: `model:${voterId}`, audience: 'ai', kind: 'text' }),
+    ]
+
+    renderWithLogContext(<ArtifactContent artifactId="prd-votes" phase="COUNCIL_VOTING_PRD" content={content} />, {
+      COUNCIL_VOTING_PRD: logs,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const voterGroup = screen.getByRole('group', { name: /voter-a raw output/i })
+    expect(within(voterGroup).getByRole('button', { name: /voter-a$/ })).toBeInTheDocument()
+    expect(within(voterGroup).getByRole('button', { name: /voter-a Validated/ })).toBeInTheDocument()
+    const rejectedButton = within(voterGroup).getByRole('button', { name: /voter-a Rejected/ })
+    expect(rejectedButton).toBeEnabled()
+
+    fireEvent.click(rejectedButton)
+
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse)).not.toBeInTheDocument()
+  })
+
   it('reconstructs a validated vote raw source for legacy repaired vote artifacts', () => {
     const messyRawResponse = '<think>I compared the drafts.</think>\n\ndraft_scores:\nDraft 1:\n  total_score: 91'
     const content = JSON.stringify({
@@ -1549,6 +1608,182 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rawFullAnswers)).toBeInTheDocument()
     expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rawPrdDraft)).not.toBeInTheDocument()
     expect(within(draftGroup).getByRole('button', { name: /hy3-preview-free Validated/ })).toBeInTheDocument()
+  })
+
+  it('shows rejected draft raw output from logs next to raw and validated draft output', () => {
+    const modelId = 'openai/gpt-5.2'
+    const rejectedRawResponse = 'schema_version: 1\nartifact: prd\nstatus: draft\nepics: []'
+    const acceptedRawResponse = `${buildPrdDocumentContent()}\n`
+    const validatedResponse = buildPrdDocumentContent()
+    const content = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: validatedResponse,
+          rawResponse: acceptedRawResponse,
+          normalizedResponse: validatedResponse,
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Every epic must include at least one user story',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+      isFinal: true,
+    })
+    const logs = [
+      makeLogEntry(`[SYS] ${modelId} PRD draft started.`, { modelId, source: 'system' }),
+      makeLogEntry(`[MODEL] ${rejectedRawResponse}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+      makeLogEntry(`[MODEL] ${acceptedRawResponse}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+    ]
+
+    renderWithLogContext(
+      <ArtifactContent artifactId={`prd-draft-member-${encodeURIComponent(modelId)}`} phase="DRAFTING_PRD" content={content} />,
+      { DRAFTING_PRD: logs },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const draftGroup = screen.getByRole('group', { name: /gpt-5.2 raw output/i })
+    expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Raw Output/ })).toBeInTheDocument()
+    expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Validated/ })).toBeInTheDocument()
+    const rejectedButton = within(draftGroup).getByRole('button', { name: /gpt-5.2 Rejected/ })
+    expect(rejectedButton).toBeEnabled()
+
+    fireEvent.click(rejectedButton)
+
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse)).not.toBeInTheDocument()
+  })
+
+  it('keeps rejected retry output disabled when retry metadata exists but logs are unavailable', () => {
+    const modelId = 'openai/gpt-5.2'
+    const acceptedRawResponse = buildPrdDocumentContent()
+    const content = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: acceptedRawResponse,
+          rawResponse: acceptedRawResponse,
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'PRD parser rejected the first pass',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+      isFinal: true,
+    })
+
+    renderWithLogContext(
+      <ArtifactContent artifactId={`prd-draft-member-${encodeURIComponent(modelId)}`} phase="DRAFTING_PRD" content={content} />,
+      { DRAFTING_PRD: [] },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const draftGroup = screen.getByRole('group', { name: /gpt-5.2 raw output/i })
+    expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Raw Output/ })).toBeEnabled()
+    expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Rejected/ })).toBeDisabled()
+  })
+
+  it('uses PRD drafting stage logs so Full Answers and PRD draft rejected outputs do not cross over', () => {
+    const modelId = 'opencode/hy3-preview-free'
+    const rejectedFullAnswers = 'full_answers: rejected prose'
+    const acceptedFullAnswers = buildInterviewDocumentContent({
+      questions: [
+        {
+          id: 'Q01',
+          phase: 'Foundation',
+          prompt: 'Which answer should be filled?',
+          source: 'compiled',
+          answer_type: 'free_text',
+          options: [],
+          answer: {
+            skipped: false,
+            free_text: 'Use the accepted full answer.',
+            selected_option_ids: [],
+            answered_by: 'ai_skip',
+            answered_at: '2026-03-25T09:00:00.000Z',
+          },
+        },
+      ],
+    })
+    const rejectedPrdDraft = 'prd: rejected prose'
+    const acceptedPrdDraft = buildPrdDocumentContent()
+    const logs = [
+      makeLogEntry(`[SYS] ${modelId} Full Answers started.`, { modelId, source: 'system' }),
+      makeLogEntry(`[MODEL] ${rejectedFullAnswers}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+      makeLogEntry(`[MODEL] ${acceptedFullAnswers}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+      makeLogEntry(`[SYS] ${modelId} Full Answers completed.`, { modelId, source: 'system' }),
+      makeLogEntry(`[SYS] ${modelId} PRD draft started.`, { modelId, source: 'system' }),
+      makeLogEntry(`[MODEL] ${rejectedPrdDraft}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+      makeLogEntry(`[MODEL] ${acceptedPrdDraft}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+    ]
+    const fullAnswersContent = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: acceptedFullAnswers,
+          rawResponse: acceptedFullAnswers,
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Full Answers first pass was invalid',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+      isFinal: true,
+    })
+    const prdContent = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: acceptedPrdDraft,
+          rawResponse: acceptedPrdDraft,
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'PRD first pass was invalid',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+      isFinal: true,
+    })
+
+    const { unmount } = renderWithLogContext(
+      <ArtifactContent artifactId={`prd-fullanswers-member-${encodeURIComponent(modelId)}`} phase="DRAFTING_PRD" content={fullAnswersContent} />,
+      { DRAFTING_PRD: logs },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    fireEvent.click(screen.getByRole('button', { name: /hy3-preview-free Rejected/ }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedFullAnswers)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedPrdDraft)).not.toBeInTheDocument()
+
+    unmount()
+
+    renderWithLogContext(
+      <ArtifactContent artifactId={`prd-draft-member-${encodeURIComponent(modelId)}`} phase="DRAFTING_PRD" content={prdContent} />,
+      { DRAFTING_PRD: logs },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    fireEvent.click(screen.getByRole('button', { name: /hy3-preview-free Rejected/ }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedPrdDraft)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedFullAnswers)).not.toBeInTheDocument()
   })
 
   it('does not show raw/validated variant buttons for drafts without rawResponse', () => {

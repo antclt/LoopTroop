@@ -163,6 +163,8 @@ Streaming AI upserts are also written to `.ticket/runtime/execution-log.ai.jsonl
 
 Artifact raw tabs show line, character, and tokenizer counts by default. Coverage report cards and coverage report/review raw views intentionally omit line counts because JSON envelopes and escaped multiline payloads can make a displayed line total misleading.
 
+Council draft and vote raw tabs can also expose a disabled-or-enabled `Rejected` raw variant when structured retry metadata exists. The rejected payload is resolved from existing phase model-output logs, scoped by phase, model, and PRD sub-stage where needed; it is not duplicated into artifact companion payloads. If the log-backed rejected response is unavailable, the button stays unavailable and the artifact processing notice still shows the retry diagnostic excerpt.
+
 ### Artifact Processing Notices
 
 Future artifact companion payloads should persist parser and normalizer intervention details in `structuredOutput.interventions`. The collapsed notice stays compact and may include cheap category or rule labels, while the expanded notice treats `interventions` as the display source of truth for exact corrections, before/after examples, rule, category, stage, target, raw validator/parser messages, validation errors, and retry diagnostics.
