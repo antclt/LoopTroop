@@ -62,7 +62,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | Phase | Description |
 | --- | --- |
 | `DRAFT` | Ticket created but inactive; backlog item waiting for Start. |
-| `SCANNING_RELEVANT_FILES` | The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. This single-model step produces the shared relevant-files context artifact that every subsequent planning phase draws from. |
+| `SCANNING_RELEVANT_FILES` | The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Provider, session, and OpenCode errors are correlated with empty or discarded validation failures before this shared context artifact is finalized. |
 | `COUNCIL_DELIBERATING` | Each council member independently drafts its own interview question strategy in parallel — no model sees another's draft, ensuring diverse coverage before the voting round selects the strongest candidate. |
 | `COUNCIL_VOTING_INTERVIEW` | Council members score all anonymized interview drafts against a structured rubric (question relevance, coverage breadth, clarity, and actionability) to select the strongest candidate. |
 | `COMPILING_INTERVIEW` | The winning interview draft is normalized into an interactive session: questions get unique IDs, types, and display metadata, and a batch-state snapshot is built for the interview UI. |
@@ -91,7 +91,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | `CLEANING_ENV` | Removes transient runtime resources (lock files, session folders, temp files) while preserving permanent artifacts (interview, PRD, beads, logs, test and integration reports) for long-term review and audit. |
 | `COMPLETED` | The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible. The ticket records whether it closed as a merged PR or finished without merge. |
 | `CANCELED` | Ticket canceled by user action. Artifacts are preserved by default; optional cleanup is available at cancellation time. |
-| `BLOCKED_ERROR` | A phase failure paused the workflow. The failed phase is preserved so Retry re-enters it with full context. Inspect the error details and logs, then choose Retry or Cancel. |
+| `BLOCKED_ERROR` | A phase failure paused the workflow. The failed phase is preserved so Retry re-enters it with full context, including structured diagnostics for provider, model, session, timeout, or rate-limit-style failures when available. |
 
 ## Transition Model
 

@@ -110,10 +110,10 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Prompt Assembly: LoopTroop builds a minimal prompt from the ticket title and description (the Ticket Details context). The prompt instructs the model to identify source files that are likely relevant to implementing this ticket — including files that would need modification, files that provide important interfaces or types, and files that contain related logic.',
       'Model Execution: The locked main implementer model processes the prompt and returns a structured response listing relevant files with their paths, content excerpts, relevance ratings (e.g., high/medium/low), and natural-language rationales explaining why each file matters to this ticket.',
-      'Output Validation: LoopTroop validates the structured output against the expected schema (correct field types, non-empty file paths, valid relevance levels). If validation fails — for example, if the model returns malformed JSON or missing required fields — it automatically retries once, either within the same session or by starting a fresh session.',
+      'Output Validation: LoopTroop validates the structured output against the expected schema (correct field types, non-empty file paths, valid relevance levels). Provider, session, and OpenCode failures are correlated with empty or discarded validation failures so transient infrastructure errors are not mistaken for ordinary malformed output. If validation fails, it automatically retries once, either within the same session or by starting a fresh session.',
       'Artifact Persistence: On success, LoopTroop writes the canonical `relevant-files.yaml` artifact into the ticket workspace directory. This YAML file becomes the reusable file-context artifact that all downstream phases can reference without needing to re-scan the codebase.',
       'Summarized Scan Artifact: A companion summarized scan artifact is also stored for UI review, giving you a quick overview of what files were identified and why.',
-      'Logging: The normal phase log captures key session lifecycle milestones — prompt dispatch timing, summarized model output, retry attempts, validation results, and the final extracted file count.',
+      'Logging: The normal phase log captures key session lifecycle milestones — prompt dispatch timing, summarized model output, retry attempts, validation results, correlated provider/session/OpenCode diagnostics, and the final extracted file count.',
     ],
     outputs: [
       'Canonical `relevant-files.yaml` inside the ticket workspace — this becomes a shared context artifact that interview, PRD, and beads phases all receive as part of their input context.',
@@ -122,7 +122,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     transitions: [
       'Success → Council Drafting Questions: A valid scan artifact advances the ticket to the council deliberation phase where multiple models begin drafting interview questions.',
-      'Failure → Blocked Error: Validation failure after retry, model timeout, missing implementer configuration, or unexpected runtime errors route the ticket to the Blocked Error state for manual intervention.',
+      'Failure → Blocked Error: Validation failure after retry, correlated provider/session/OpenCode errors, model timeout, missing implementer configuration, or unexpected runtime errors route the ticket to the Blocked Error state for manual intervention.',
     ],
     notes: [
       'This phase is single-model (main implementer only), not multi-council — it is a preparatory step before the council engages.',
@@ -929,16 +929,16 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   BLOCKED_ERROR: {
-    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so retry knows exactly where to return. You can see the error details, inspect logs around the failing moment, and choose to either retry the failed phase or cancel the ticket entirely.',
+    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so retry knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, and rate-limit-style failures alongside the human-readable error. You can see the error details, inspect logs around the failing moment, and choose to either retry the failed phase or cancel the ticket entirely.',
     steps: [
-      'Error Recording: LoopTroop captures the error message, error codes (if available), the precise timestamp of the failure, and the workflow status where the failure occurred. This information is stored as an error occurrence record.',
+      'Error Recording: LoopTroop captures the error message, error codes (if available), the precise timestamp of the failure, and the workflow status where the failure occurred. Provider, model, session, timeout, and rate-limit-style diagnostics are persisted as structured fields when the failing subsystem exposes them. This information is stored as an error occurrence record.',
       'State Preservation: The blocked error becomes the active workflow state while preserving the previous status (the phase that failed). This preserved status is critical — it tells the retry mechanism exactly which phase to re-enter when you click Retry.',
       'Error History: If a ticket has been blocked multiple times (e.g., retry → fail → retry → fail), all error occurrences are preserved in a history list. This helps you identify recurring issues and decide whether retry is likely to succeed.',
-      'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
+      'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, persisted structured provider/model/session diagnostics, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
       'Decision Point: You choose either Retry (which returns the workflow to the previously blocked status and re-attempts the failed operation) or Cancel (which moves the ticket to the terminal Canceled state, preserving all artifacts).',
     ],
     outputs: [
-      'Error occurrence history with timestamps, error messages, error codes, and the phase where each failure occurred.',
+      'Error occurrence history with timestamps, error messages, error codes, structured provider/model/session/timeout/rate-limit diagnostics when available, and the phase where each failure occurred.',
       'Blocked state metadata linking the error to the specific phase that failed.',
       'Retry or cancel decision point for manual intervention.',
     ],
@@ -949,7 +949,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Past error occurrences remain reviewable even after the ticket moves on (via retry) or is canceled — the error history is never deleted.',
       'Context available: Current Bead Data (if the failure occurred during the coding phase) + Error Context (error message, codes, phase, timing).',
-      'Common causes of blocked errors: model timeouts, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
+      'Common causes of blocked errors: provider or model failures, session interruptions, model timeouts, rate-limit-style failures, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
       'Tip: Before retrying, check the error details. If the error is a transient issue (timeout, connectivity), retry is likely to succeed. If the error indicates a fundamental problem (malformed output, missing configuration), retry may fail again.',
     ],
   },
@@ -1047,7 +1047,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'SCANNING_RELEVANT_FILES',
     label: 'Scanning Relevant Files',
-    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. This single-model step produces the shared relevant-files context artifact that every subsequent planning phase draws from.',
+    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Provider, session, and OpenCode errors are correlated with empty or discarded validation failures before this shared context artifact is finalized.',
     details: WORKFLOW_PHASE_DETAILS.SCANNING_RELEVANT_FILES,
     kanbanPhase: 'in_progress',
     groupId: 'discovery',
@@ -1404,7 +1404,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'BLOCKED_ERROR',
     label: 'Error (reason)',
-    description: 'A phase failure paused the workflow. The failed phase is preserved so Retry re-enters it with full context. Inspect the error details and logs, then choose Retry or Cancel.',
+    description: 'A phase failure paused the workflow. The failed phase is preserved so Retry re-enters it with full context, including structured diagnostics for provider, model, session, timeout, or rate-limit-style failures when available.',
     details: WORKFLOW_PHASE_DETAILS.BLOCKED_ERROR,
     kanbanPhase: 'needs_input',
     groupId: 'errors',

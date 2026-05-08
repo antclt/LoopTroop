@@ -35,6 +35,8 @@ WAITING_PR_REVIEW -> merge or close-unmerged -> CLEANING_ENV
 
 Browser, frontend, backend, OpenCode, and model interruptions do not create new workflow states. They are recovered through persisted ticket state, SSE replay/refetch, OpenCode ownership checks, and phase-specific retry rules. If the app cannot prove a safe resume point, it blocks the ticket instead of guessing.
 
+When a ticket enters `BLOCKED_ERROR`, the error panel shows the normal error details and logs. If OpenCode or the provider exposed underlying diagnostics, LoopTroop persists and displays those structured details too, including provider, model, session, timeout, and rate-limit-style failure context.
+
 ## Detailed Flow Diagram
 
 ```mermaid
