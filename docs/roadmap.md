@@ -1162,10 +1162,13 @@ search: false
     *   Parallel mode policy supports `auto`, `always`, `never` (CLI override > project config > default).
     *   `auto` enables parallel only when all hold: at least one parallel group has `>=2` runnable beads, total runnable beads `>=3`, and dependency-cycle ratio `<=50%`; otherwise fall back to sequential mode.
     *   Persist parallel-activation decision at `.looptroop/tickets/<ticket-id>/parallel/<run-id>/activation-report.yaml` with analyzed groups, cycle ratio, chosen mode, and chosen worker count.
-    *   Use git worktrees per flow, but create them outside the project tree (sibling directory) to prevent agent CLI parent-repo misdetection; persist absolute worktree paths in run manifest.
-    *   On worktree creation, sync local developer state from source workspace into the new worktree: copy untracked files + unstaged tracked modifications, while excluding `.git/` and the worktree root itself to avoid recursion.
-    *   Add deterministic worktree-create conflict policy for `path_exists`, `branch_exists`, `worktree_locked`, and `dirty_source_workspace` with explicit outcomes (`reuse`, `rename`, `retry`, `fail_with_receipt`).
-    *   Persist worktree-create receipts at `.looptroop/tickets/<ticket-id>/worktrees/create-<timestamp>.json` with requested path/branch, conflict kind, chosen resolution, and final result.
+    *   Use a worker worktree per parallel job, not nested worktrees. MVP job granularity is one runnable bead; later lane mode may let one worker execute a sequenced bead group only when dependency and overlap analysis proves the lane safe.
+    *   Keep one ticket integration branch as the merge target. Each worker uses a unique worker branch (`looptroop/<ticket-id>/<run-id>/<job-id>` or equivalent), and LoopTroop must not force-checkout the same ticket/session branch into multiple worktrees.
+    *   Create worker worktrees outside the project tree (sibling or configured external directory) to prevent agent CLI parent-repo misdetection; persist canonical absolute worktree paths in the run manifest.
+    *   On worktree creation, sync local developer state from the ticket integration baseline/source workspace into the new worker worktree: copy untracked files + unstaged tracked modifications, while excluding `.git/`, other worktree roots, runtime logs, and dependency/build caches unless explicitly allowlisted.
+    *   Add deterministic worktree-create conflict policy for `path_exists`, `branch_exists`, `worktree_locked`, `branch_checked_out_elsewhere`, and `dirty_source_workspace` with explicit outcomes (`reuse`, `rename`, `retry`, `fail_with_receipt`).
+    *   Persist worktree-create receipts at `.looptroop/tickets/<ticket-id>/worktrees/create-<timestamp>.json` with requested path/branch, base ref, target integration branch, conflict kind, chosen resolution, and final result.
+    *   Lock active worker worktrees with a reason while an agent owns them, enumerate them via porcelain-formatted `git worktree list`, and unlock/remove them through `git worktree remove` rather than raw filesystem deletion.
     *   Preserve symlinks/junctions during sync where supported, and persist `sync_stats` (`untracked_copied`, `modified_copied`, `skipped`, `errors`) in parallel run artifacts.
     *   **Worktree optimization track:** evaluate `git worktree add --detach` plus shared object/reference cache (`--reference`/alternates) to reduce spawn latency and disk I/O for parallel Ralph loops.
     *   Prefer copy-on-write semantics when the host filesystem supports it; fall back to standard worktree creation when unavailable.
@@ -1176,13 +1179,14 @@ search: false
         *   persist dependency-link receipt (`mode`, `link_target`, `install_skipped`, `estimated_space_saved_mb`) so worktree startup regressions are measurable.
     *   Persist per-run worktree efficiency metrics (`create_ms`, `disk_mb`, `reuse_mode`) in parallel run artifacts for tuning and regression detection.
     *   Workers must never mutate tracker state directly; they emit lifecycle events only, and tracker writes are applied by the orchestrator/main process.
+    *   LoopTroop bead artifacts and optional Beads CLI compatibility files are read-only inputs inside worker worktrees. Final bead status, notes, and discovered follow-up items are returned as structured worker events and applied centrally after merge so parallel workers cannot race on JSONL/SQLite tracker sync.
     *   Any worker-side tracker write attempt is rejected with `tracker_write_violation`, logged, and the worker is paused/fails deterministically by policy.
     *   Add run lock at `.looptroop/locks/parallel.lock`; stale-lock recovery must verify owner PID is dead before takeover and emit `stale_lock_recovered`.
-    *   Add `repo_git_mutex` for sandbox-mode workers that share a single `.git` directory.
-        *   Serialize git-sensitive operations (`checkout`, `add`, `commit`, branch creation) through the mutex.
+    *   Add `repo_git_mutex` for operations that mutate shared repository metadata across linked worktrees.
+        *   Serialize git-sensitive operations (`worktree add/remove/prune/repair`, branch creation/deletion, checkout of shared refs, fetch, commit, merge/cherry-pick, tag creation, tracker sync) through the mutex.
         *   On mutex wait timeout, preserve worker workspace, emit `git_mutex_timeout`, and route to manual recovery.
     *   Before merge queue starts, run deterministic pre-merge overlap analysis (`git diff --name-only`) for each worker branch and compute `overlap_score` against target branch and other worker branches.
-    *   Merge ordering policy: process branches by lowest `overlap_score` first; tie-break by deepest worktree path first (child before parent), then lowest changed-file count.
+    *   Merge ordering policy: process branches by lowest `overlap_score` first; tie-break by dependency depth, deterministic `job_id`, then lowest changed-file count.
     *   Use a session branch per parallel run (`looptroop-session/<run-id-short>`): merge worker branches into the session branch first, then land to target branch in one controlled step.
     *   Before starting merge queue, create session rollback tag `looptroop/session-start/<run-id>` so full parallel run can be reverted to pre-merge baseline.
     *   Before starting merge queue, stash local uncommitted user changes and restore them after merge phase; stash/restore failures must be logged as warnings and must not drop user changes.
@@ -1190,9 +1194,10 @@ search: false
     *   If conflict resolution fails, abort merge and hard reset to pre-merge backup; re-queue that bead once in a sequential lane after current queue settles.
     *   If the one-time sequential re-queue fails again, route bead to `needs_manual_resolution` with preserved conflict artifacts; do not auto-discard either side.
     *   Snapshot + restore tracker state files around each merge so stale worker copies cannot overwrite completed statuses in source-of-truth artifacts.
-    *   Worktree cleanup contract: if a worker worktree has uncommitted changes after merge/cleanup attempt, do not delete it; mark it as `left_in_place` and persist absolute path + reason in run manifest for manual recovery.
-    *   Persist a run manifest at `.looptroop/tickets/<ticket-id>/parallel/<run-id>/manifest.tsv` with `job_id`, `bead_id`, `flow_id`, `worktree`, `branch`, `overlap_score`, `status`, `log_path`, `merge_result`, `backup_tag`, `cleanup_state`, `cleanup_reason`.
+    *   Worktree cleanup contract: if a worker worktree has uncommitted changes after merge/cleanup attempt, do not delete it; mark it as `left_in_place` and persist absolute path + reason in run manifest for manual recovery. Clean merged workers with `git worktree remove`, then prune stale metadata only after receipts are written.
+    *   Persist a run manifest at `.looptroop/tickets/<ticket-id>/parallel/<run-id>/manifest.tsv` with `job_id`, `bead_id`, `flow_id`, `base_ref`, `target_branch`, `worker_branch`, `worktree`, `locked`, `overlap_score`, `status`, `log_path`, `merge_result`, `backup_tag`, `cleanup_state`, `cleanup_reason`.
     *   Unresolved conflicts remain preserved for manual review and are linked in the run manifest with conflict file list.
+    *   Implementation impact: scheduler dispatch, OpenCode session ownership, execution logs, tracker writes, merge receipts, cleanup, and UI Worktree Manager must key parallel state by `run_id` + `job_id` + `worker_branch` rather than assuming one ticket worktree.
     *   Add UI Worktree Manager per ticket/project: list active/stale worktrees, open path, retry cleanup, prune stale, and resolve creation/merge conflicts with guided actions.
     *   Every UI worktree action must emit audit receipts at `.looptroop/tickets/<ticket-id>/worktrees/actions-<date>.jsonl`.
 *   **Per-ticket override + Council Presets:** You can change the main implementer and council members per ticket to override the general configuration.
