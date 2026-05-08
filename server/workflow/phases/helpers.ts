@@ -12,6 +12,7 @@ import type {
   DraftResult,
   DraftStructuredOutputMeta,
   MemberOutcome,
+  RawAttempt,
   Vote,
   VotePresentationOrder,
 } from '../../council/types'
@@ -1478,12 +1479,8 @@ export function upsertCouncilDraftArtifact(
       ...(draft.structuredOutput ? { structuredOutput: buildStructuredMetadata(draft.structuredOutput) } : {}),
       ...(typeof draft.rawResponse === 'string' ? { rawResponse: draft.rawResponse } : {}),
       ...(typeof draft.normalizedResponse === 'string' ? { normalizedResponse: draft.normalizedResponse } : {}),
-      ...(
-        draft.outcome !== 'completed'
-        && draft.content
-          ? { content: draft.content }
-          : {}
-      ),
+      ...(draft.rawAttempts && draft.rawAttempts.length > 0 ? { rawAttempts: draft.rawAttempts } : {}),
+      ...(draft.skippedReason ? { skippedReason: draft.skippedReason } : {}),
     })),
   })
 }
@@ -1501,6 +1498,7 @@ export function upsertCouncilVoteArtifact(
     rawResponse?: string
     normalizedResponse?: string
     structuredOutput?: DraftStructuredOutputMeta
+    rawAttempts?: RawAttempt[]
   }>,
   presentationOrders?: Record<string, VotePresentationOrder>,
   winnerId?: string,

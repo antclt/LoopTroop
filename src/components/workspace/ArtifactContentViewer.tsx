@@ -23,6 +23,7 @@ import type { LogEntry } from '@/context/logUtils'
 import { parseExecutionSetupPlanContent } from '@/lib/executionSetupPlan'
 import type {
   ArtifactStructuredOutputData,
+  ArtifactRawAttemptData,
   CleanupReportData,
   CoverageArtifactData,
   CoverageGapResolutionData,
@@ -3298,6 +3299,55 @@ function findRejectedRawOutput(history: string[] | undefined, currentRawResponse
   return history[history.length - 2]
 }
 
+function getRawAttemptContent(attempt: ArtifactRawAttemptData): string | undefined {
+  return attempt.rawResponse ?? attempt.modelOutput ?? attempt.content
+}
+
+function getRawAttemptStatus(attempt: ArtifactRawAttemptData): string | undefined {
+  return attempt.status ?? attempt.outcome
+}
+
+function formatRawAttemptStatusLabel(status: string | undefined): string {
+  const normalized = status?.toLowerCase()
+  if (normalized === 'rejected' || normalized === 'invalid_output' || normalized === 'failed' || normalized === 'timed_out') return 'Rejected'
+  if (normalized === 'accepted' || normalized === 'completed') return 'Accepted'
+  return ''
+}
+
+function isRejectedRawAttempt(attempt: ArtifactRawAttemptData): boolean {
+  const status = getRawAttemptStatus(attempt)?.toLowerCase()
+  return status === 'rejected' || status === 'failed' || status === 'invalid_output' || status === 'timed_out' || Boolean(attempt.error || attempt.validationError)
+}
+
+function getRejectedRawAttempt(rawAttempts: ArtifactRawAttemptData[] | undefined): string | undefined {
+  const rejected = rawAttempts?.filter(isRejectedRawAttempt).map(getRawAttemptContent).filter((content): content is string => typeof content === 'string')
+  return rejected?.[rejected.length - 1]
+}
+
+function buildRawAttemptVariants(
+  ownerId: string,
+  ownerLabel: string,
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+): RawContentVariant[] {
+  return (rawAttempts ?? []).flatMap((attempt, index) => {
+    const content = getRawAttemptContent(attempt)
+    if (typeof content !== 'string') return []
+    const status = getRawAttemptStatus(attempt)
+    const statusLabel = formatRawAttemptStatusLabel(status)
+    const baseLabel = typeof attempt.attempt === 'number' ? `Attempt ${attempt.attempt}` : `Attempt ${index + 1}`
+    const attemptLabel = attempt.label ?? `${baseLabel}${statusLabel ? ` ${statusLabel}` : ''}`
+    const titleStatus = status ? ` · ${status}` : ''
+    return [{
+      id: `${ownerId}:attempt:${index}`,
+      label: attemptLabel,
+      content,
+      displayContent: content,
+      ariaLabel: `${ownerLabel} ${attemptLabel}`,
+      title: `Show ${attemptLabel.toLowerCase()} raw output from ${ownerLabel}${titleStatus}`,
+    }]
+  })
+}
+
 function buildRejectedRawVariant(
   id: string,
   label: string,
@@ -3322,9 +3372,10 @@ function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: str
   const normalizedResponse = draft.normalizedResponse ?? (
     draft.structuredOutput?.repairApplied && draft.content ? draft.content : undefined
   )
-  const shouldShowRejected = hasStructuredRetryMetadata(draft.structuredOutput)
-  if (typeof rawResponse !== 'string' && typeof normalizedResponse !== 'string' && !shouldShowRejected) return undefined
   const label = getModelDisplayName(draft.memberId)
+  const rawAttemptVariants = buildRawAttemptVariants(`draft:${draft.memberId}`, label, draft.rawAttempts)
+  const shouldShowRejected = hasStructuredRetryMetadata(draft.structuredOutput)
+  if (typeof rawResponse !== 'string' && typeof normalizedResponse !== 'string' && rawAttemptVariants.length === 0 && !shouldShowRejected) return undefined
   const variants: RawContentVariant[] = [{
     id: `draft:${draft.memberId}:raw`,
     label: 'Raw Output',
@@ -3337,8 +3388,13 @@ function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: str
       : `No exact raw output stored for ${label}`,
   }]
   if (shouldShowRejected) {
-    variants.push(buildRejectedRawVariant(`draft:${draft.memberId}:rejected`, label, rejectedRawResponse))
+    variants.push(buildRejectedRawVariant(
+      `draft:${draft.memberId}:rejected`,
+      label,
+      getRejectedRawAttempt(draft.rawAttempts) ?? rejectedRawResponse,
+    ))
   }
+  variants.push(...rawAttemptVariants)
   if (typeof normalizedResponse === 'string') {
     variants.push({
       id: `draft:${draft.memberId}:validated`,
@@ -3542,6 +3598,44 @@ function getRejectedVoteRawResponse(
 ): string | undefined {
   if (!hasStructuredRetryMetadata(detail?.structuredOutput)) return undefined
   return findRejectedRawOutput(histories.get(voterId), detail?.rawResponse)
+}
+
+function isFailedCouncilDraftOutcome(outcome?: CouncilOutcome): boolean {
+  return outcome === 'invalid_output' || outcome === 'failed' || outcome === 'timed_out'
+}
+
+function CouncilDraftFailureDiagnostics({ draft }: { draft: CouncilDraftData }) {
+  const diagnostics = [
+    draft.error,
+    draft.structuredOutput?.validationError,
+    ...(draft.structuredOutput?.retryDiagnostics ?? []).flatMap((diagnostic) => [
+      diagnostic.validationError,
+      diagnostic.excerpt ? `Retry ${diagnostic.attempt} excerpt: ${diagnostic.excerpt}` : undefined,
+    ]),
+  ].filter((message): message is string => typeof message === 'string' && message.trim().length > 0)
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-3">
+        <div className="text-sm font-semibold">{getCouncilStatusLabel(draft.outcome, 'drafting')}</div>
+        <div className="mt-1 text-xs text-muted-foreground">
+          {draft.outcome === 'timed_out'
+            ? 'No accepted draft was received before the timeout.'
+            : draft.outcome === 'failed'
+              ? 'The draft run failed before producing an accepted artifact.'
+              : 'The draft response did not pass strict artifact validation.'}
+        </div>
+      </div>
+      {diagnostics.length > 0 ? (
+        <ArtifactListSection
+          title="Diagnostics"
+          items={diagnostics}
+          emptyLabel="No validation diagnostics were recorded."
+          tone="error"
+        />
+      ) : null}
+    </div>
+  )
 }
 
 function getCoverageCandidateLabel(phase?: string, candidateVersion?: number): string {
@@ -3935,8 +4029,28 @@ function ExecutionSetupPlanView({
     : 'border-green-300 bg-green-50 text-green-950 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-100'
   const errors = report?.errors ?? []
   const notes = report?.notes ?? []
+  const failed = report?.ready === false || report?.status === 'failed'
   const showModelOutput = Boolean(report?.modelOutput)
     && !isExecutionSetupModelOutputEquivalentToRawPlan(content, report?.modelOutput)
+    && !failed
+  const rawSources: RawContentSource[] | undefined = report?.modelOutput || report?.rawAttempts?.length
+    ? [{
+        id: 'execution-setup-plan-model-output',
+        label: 'Model Output',
+        variants: [
+          ...(report?.modelOutput ? [{
+            id: 'execution-setup-plan-model-output:current',
+            label: 'Model Output',
+            content: report.modelOutput,
+            displayContent: report.modelOutput,
+            title: 'Show execution setup plan model output',
+          }] : []),
+          ...buildRawAttemptVariants('execution-setup-plan', 'Execution setup plan', report?.rawAttempts),
+        ],
+        disabled: !report?.modelOutput && !report?.rawAttempts?.length,
+        title: 'Show execution setup plan raw diagnostics',
+      }]
+    : undefined
   const projectCommandGroups: Array<{ title: string; items: string[]; emptyLabel: string }> = [
     {
       title: 'Prepare Commands',
@@ -3980,6 +4094,7 @@ function ExecutionSetupPlanView({
       structuredLabel="Plan"
       header={resolvedHeader}
       notice={<ArtifactProcessingNotice structuredOutput={report?.structuredOutput} kind="artifact" />}
+      rawSources={rawSources}
     >
       <div className="space-y-4">
         <div className={cn('rounded-md border px-3 py-3', statusTone)}>
@@ -4500,6 +4615,24 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
   const statusTone = failed
     ? 'border-red-300 bg-red-50 text-red-950 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-100'
     : 'border-green-300 bg-green-50 text-green-950 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-100'
+  const rawSources: RawContentSource[] | undefined = report.modelOutput || report.rawAttempts?.length
+    ? [{
+        id: 'execution-setup-model-output',
+        label: 'Model Output',
+        variants: [
+          ...(report.modelOutput ? [{
+            id: 'execution-setup-model-output:current',
+            label: 'Model Output',
+            content: report.modelOutput,
+            displayContent: report.modelOutput,
+            title: 'Show execution setup model output',
+          }] : []),
+          ...buildRawAttemptVariants('execution-setup', 'Execution setup', report.rawAttempts),
+        ],
+        disabled: !report.modelOutput && !report.rawAttempts?.length,
+        title: 'Show execution setup raw diagnostics',
+      }]
+    : undefined
   const header = report.preparedBy
     ? (
       <ModelBadge modelId={report.preparedBy} active className="px-3 py-2 h-auto flex-1 justify-start">
@@ -4520,6 +4653,7 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
       structuredLabel={runtimeLabel ? 'Runtime' : 'Report'}
       header={header}
       notice={<ArtifactProcessingNotice structuredOutput={report.structuredOutput} kind="artifact" status={failed ? 'failed' : 'completed'} />}
+      rawSources={rawSources}
     >
       <div className="space-y-4">
         <div className={cn('rounded-md border px-3 py-3', statusTone)}>
@@ -4595,7 +4729,7 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
           tone="error"
         />
 
-        {report.modelOutput ? (
+        {report.modelOutput && !failed ? (
           <CollapsibleSection title="Model Output">
             <div className="space-y-2">
               <div className="flex justify-end">
@@ -5679,11 +5813,12 @@ export function ArtifactContent({
         const detail = voterDetailById.get(voterId)
         const rawResponse = detail?.rawResponse
         const validatedResponse = getValidatedVoteResponse(voterId, councilResult, detail)
-        const rejectedResponse = getRejectedVoteRawResponse(voterId, detail, voteRawLogHistories)
+        const rejectedResponse = getRejectedRawAttempt(detail?.rawAttempts) ?? getRejectedVoteRawResponse(voterId, detail, voteRawLogHistories)
         const shouldShowRejected = hasStructuredRetryMetadata(detail?.structuredOutput)
         const hasRawResponse = typeof rawResponse === 'string'
         const hasValidatedResponse = typeof validatedResponse === 'string'
         const label = getModelDisplayName(voterId)
+        const rawAttemptVariants = buildRawAttemptVariants(`voter:${voterId}`, label, detail?.rawAttempts)
         const variants: RawContentVariant[] = [{
           id: `voter:${voterId}:raw`,
           label,
@@ -5698,6 +5833,7 @@ export function ArtifactContent({
         if (shouldShowRejected) {
           variants.push(buildRejectedRawVariant(`voter:${voterId}:rejected`, label, rejectedResponse))
         }
+        variants.push(...rawAttemptVariants)
         if (hasValidatedResponse) {
           variants.push({
             id: `voter:${voterId}:validated`,
@@ -5733,6 +5869,33 @@ export function ArtifactContent({
       const winnerDraft = winnerDraftSource
         ? withDraftRawLogFallback(winnerDraftSource, phase, artifactId, draftRawLogFallbacks)
         : undefined
+      if (winnerDraft && isFailedCouncilDraftOutcome(winnerDraft.outcome)) {
+        const isPrd = isStructuredPrdArtifactId(artifactId)
+        const isBeads = Boolean(artifactId?.includes('beads'))
+        const rawContent = winnerDraft.rawResponse ?? getRejectedRawAttempt(winnerDraft.rawAttempts) ?? winnerDraft.content ?? JSON.stringify({
+          memberId: winnerDraft.memberId,
+          outcome: winnerDraft.outcome,
+          error: winnerDraft.error,
+          validationError: winnerDraft.structuredOutput?.validationError,
+        }, null, 2)
+        return (
+          <WithRawTab
+            content={rawContent}
+            structuredLabel="Diagnostics"
+            notice={<ArtifactProcessingNotice
+              structuredOutput={winnerDraft.structuredOutput}
+              kind={getCouncilDraftNoticeKind({ isFullAnswers: false, isInterview: !isPrd && !isBeads, isPrd, isBeads })}
+              status={winnerDraft.outcome}
+            />}
+            rawSources={buildDraftRawSources(
+              winnerDraft,
+              getRejectedDraftRawResponse(winnerDraft, phase, artifactId, draftRawLogHistories),
+            )}
+          >
+            <CouncilDraftFailureDiagnostics draft={winnerDraft} />
+          </WithRawTab>
+        )
+      }
       const winnerContent = winnerDraft?.content ?? councilResult.winnerContent ?? ''
       if (!winnerContent) return <div className="text-xs text-muted-foreground italic">Voting still in progress — winner not yet determined.</div>
       const header = winnerDraft ? (
@@ -5791,7 +5954,9 @@ export function ArtifactContent({
     const draft = draftSource
       ? withDraftRawLogFallback(draftSource, phase, artifactId, draftRawLogFallbacks)
       : null
-    const draftContent = draft?.content ?? councilResult.refinedContent ?? councilResult.winnerContent ?? ''
+    const draftContent = draft
+      ? (isFailedCouncilDraftOutcome(draft.outcome) ? '' : draft.content ?? '')
+      : councilResult.refinedContent ?? councilResult.winnerContent ?? ''
 
     const header = draft ? (
       <ModelBadge
@@ -5822,43 +5987,31 @@ export function ArtifactContent({
       </ModelBadge>
     ) : null
 
-    if (draft?.outcome === 'invalid_output' && draft.content) {
+    if (draft && isFailedCouncilDraftOutcome(draft.outcome)) {
       const isFullAnswers = isPrdFullAnswersArtifactId(artifactId)
       const isInterview = Boolean(artifactId?.startsWith('draft') || artifactId?.includes('interview'))
       const isPrd = isStructuredPrdArtifactId(artifactId) && !isFullAnswers
       const isBeads = Boolean(artifactId?.includes('beads'))
-      const noticeContext = isFullAnswers ? getFullAnswersNoticeContext(draft.content) : undefined
-      const noticeOutput = withRawNormalizationNotice(draft.structuredOutput, draft.rawResponse, draft.normalizedResponse, draft.content)
-      const structured = isFullAnswers ? <InterviewAnswersView content={draft.content} />
-        : isInterview ? <InterviewDraftView content={draft.content} />
-          : isPrd ? <PrdDraftView content={draft.content} />
-            : isBeads ? <BeadsDraftView content={draft.content} />
-              : null
+      const noticeOutput = withRawNormalizationNotice(draft.structuredOutput, draft.rawResponse, draft.normalizedResponse, '')
+      const rawContent = draft.rawResponse ?? getRejectedRawAttempt(draft.rawAttempts) ?? draft.content ?? JSON.stringify({
+        memberId: draft.memberId,
+        outcome: draft.outcome,
+        error: draft.error,
+        validationError: draft.structuredOutput?.validationError,
+      }, null, 2)
       return (
-        <div className="space-y-2">
-          {header}
-          <CollapsibleWarningNotice
-            title="Output did not pass strict validation."
-            summary="The saved draft did not match the required format."
-            body="LoopTroop is showing the model output because it may still be useful, but it did not match the required format and may have formatting problems."
-            detail={draft.error ? `Validator message: ${draft.error}` : undefined}
-          />
-          {structured
-            ? (
-              <WithRawTab
-                content={draft.content}
-                structuredLabel="Draft"
-                notice={<ArtifactProcessingNotice structuredOutput={noticeOutput} kind={getCouncilDraftNoticeKind({ isFullAnswers, isInterview, isPrd, isBeads })} context={noticeContext} status={draft.outcome} />}
-                rawSources={buildDraftRawSources(
-                  draft,
-                  getRejectedDraftRawResponse(draft, phase, artifactId, draftRawLogHistories),
-                )}
-              >
-                {structured}
-              </WithRawTab>
-            )
-            : <RawContentWithCopy content={draft.content} />}
-        </div>
+        <WithRawTab
+          content={rawContent}
+          structuredLabel="Diagnostics"
+          header={header}
+          notice={<ArtifactProcessingNotice structuredOutput={noticeOutput} kind={getCouncilDraftNoticeKind({ isFullAnswers, isInterview, isPrd, isBeads })} status={draft.outcome} />}
+          rawSources={buildDraftRawSources(
+            draft,
+            getRejectedDraftRawResponse(draft, phase, artifactId, draftRawLogHistories),
+          )}
+        >
+          <CouncilDraftFailureDiagnostics draft={draft} />
+        </WithRawTab>
       )
     }
 

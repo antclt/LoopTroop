@@ -94,6 +94,7 @@ interface CoverageResultLike {
 
 type Domain = 'interview' | 'prd' | 'beads'
 type ArtifactSource = Pick<DBartifact, 'phase' | 'artifactType' | 'content'>
+type NonSuccessOutcome = Extract<CouncilOutcome, 'invalid_output' | 'failed' | 'timed_out'>
 
 export function getCouncilAction(phase: string): CouncilAction {
   if (phase.includes('DELIBERATING') || phase.includes('DRAFTING')) return 'drafting'
@@ -161,7 +162,7 @@ function mergeCouncilDraftLists(primaryDrafts: DraftLike[], fallbackDrafts: Draf
     if (!primary) return fallback!
     if (!fallback) return primary
 
-    return {
+    const merged = {
       ...primary,
       content: primary.content?.trim() ? primary.content : fallback.content,
       outcome: primary.outcome === 'pending' && fallback.outcome && fallback.outcome !== 'pending'
@@ -172,7 +173,12 @@ function mergeCouncilDraftLists(primaryDrafts: DraftLike[], fallbackDrafts: Draf
       questionCount: primary.questionCount ?? fallback.questionCount,
       draftMetrics: primary.draftMetrics ?? fallback.draftMetrics,
     }
+    return isFailedDraftOutcome(merged.outcome) ? { ...merged, content: undefined } : merged
   })
+}
+
+function isFailedDraftOutcome(outcome: CouncilOutcome | undefined): outcome is NonSuccessOutcome {
+  return outcome === 'invalid_output' || outcome === 'failed' || outcome === 'timed_out'
 }
 
 function buildDraftMemberArtifacts(
@@ -671,8 +677,6 @@ function getDraftPhaseForVoting(phase: string): string {
   if (phase === 'COUNCIL_VOTING_PRD') return 'DRAFTING_PRD'
   return 'DRAFTING_BEADS'
 }
-
-type NonSuccessOutcome = 'timed_out' | 'invalid_output' | 'failed'
 
 function getDraftOutcomes(domain: Domain, artifacts: ArtifactSource[], draftPhase: string): Map<string, NonSuccessOutcome> {
   const draftArtifact = findLatestArtifact(artifacts, a => a.phase === draftPhase && a.artifactType === `${domain}_drafts`)

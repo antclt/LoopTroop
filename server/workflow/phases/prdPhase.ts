@@ -384,6 +384,8 @@ export async function handlePrdDraft(
         structuredOutput: entry.structuredOutput,
         ...(typeof entry.rawResponse === 'string' ? { rawResponse: entry.rawResponse } : {}),
         ...(typeof entry.normalizedResponse === 'string' ? { normalizedResponse: entry.normalizedResponse } : {}),
+        ...(entry.rawAttempts ? { rawAttempts: entry.rawAttempts } : {}),
+        ...(entry.skippedReason ? { skippedReason: entry.skippedReason } : {}),
       }
       if (entry.structuredOutput?.repairWarnings.length) {
         emitPhaseLog(
@@ -420,6 +422,8 @@ export async function handlePrdDraft(
         structuredOutput: entry.structuredOutput,
         ...(typeof entry.rawResponse === 'string' ? { rawResponse: entry.rawResponse } : {}),
         ...(typeof entry.normalizedResponse === 'string' ? { normalizedResponse: entry.normalizedResponse } : {}),
+        ...(entry.rawAttempts ? { rawAttempts: entry.rawAttempts } : {}),
+        ...(entry.skippedReason ? { skippedReason: entry.skippedReason } : {}),
       }
       if (entry.structuredOutput?.repairWarnings.length) {
         emitPhaseLog(
@@ -450,7 +454,10 @@ export async function handlePrdDraft(
         return
       }
       if (entry.status === 'skipped') {
-        emitPhaseLog(ticketId, context.externalId, phase, 'info', `${entry.memberId} ${stepLabel} skipped; reusing the approved interview artifact.`, { source: 'system', modelId: entry.memberId })
+        const skippedMessage = entry.step === 'full_answers'
+          ? `${entry.memberId} ${stepLabel} skipped; reusing the approved interview artifact.`
+          : `${entry.memberId} ${stepLabel} skipped: ${entry.error ?? 'Full Answers did not pass validation.'}`
+        emitPhaseLog(ticketId, context.externalId, phase, 'info', skippedMessage, { source: 'system', modelId: entry.memberId })
         return
       }
       if (entry.status === 'completed') {
@@ -602,7 +609,7 @@ export async function handlePrdVote(
     acc[member.modelId] = 'pending'
     return acc
   }, {})
-  const liveVoterDetails = new Map<string, { voterId: string; error?: string; rawResponse?: string; normalizedResponse?: string; structuredOutput?: NonNullable<typeof intermediate.drafts[number]['structuredOutput']> }>()
+  const liveVoterDetails = new Map<string, { voterId: string; error?: string; rawResponse?: string; normalizedResponse?: string; structuredOutput?: NonNullable<typeof intermediate.drafts[number]['structuredOutput']>; rawAttempts?: NonNullable<typeof intermediate.drafts[number]['rawAttempts']> }>()
 
   emitPhaseLog(ticketId, context.externalId, 'COUNCIL_VOTING_PRD', 'info',
     `PRD voting started with ${members.length} council members on ${intermediate.drafts.filter(d => d.outcome === 'completed').length} drafts.`)
@@ -664,6 +671,7 @@ export async function handlePrdVote(
         ...(typeof entry.rawResponse === 'string' ? { rawResponse: entry.rawResponse } : {}),
         ...(typeof entry.normalizedResponse === 'string' ? { normalizedResponse: entry.normalizedResponse } : {}),
         ...(entry.structuredOutput ? { structuredOutput: entry.structuredOutput } : {}),
+        ...(entry.rawAttempts ? { rawAttempts: entry.rawAttempts } : {}),
       })
       upsertCouncilVoteArtifact(ticketId, 'COUNCIL_VOTING_PRD', 'prd_votes', intermediate.drafts, liveVotes, liveVoterOutcomes, [...liveVoterDetails.values()])
     },

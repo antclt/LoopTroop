@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import jsYaml from 'js-yaml'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
 
 describe.concurrent('repairYamlListDashSpace', () => {
   it.each([
@@ -42,6 +42,51 @@ describe.concurrent('repairYamlListDashSpace', () => {
     expect(parsed.questions).toHaveLength(2)
     expect(parsed.questions[0]!.id).toBe('Q01')
     expect(parsed.questions[1]!.id).toBe('Q02')
+  })
+})
+
+describe.concurrent('repairYamlMappingKeyColonSpace', () => {
+  it('inserts a missing space after simple mapping-key colons', () => {
+    const input = [
+      'schema_version:1',
+      'artifact:interview',
+      'questions:',
+      '  - id:Q01',
+      '    answer_type:free_text',
+    ].join('\n')
+
+    expect(repairYamlMappingKeyColonSpace(input)).toBe([
+      'schema_version: 1',
+      'artifact: interview',
+      'questions:',
+      '  - id: Q01',
+      '    answer_type: free_text',
+    ].join('\n'))
+  })
+
+  it('preserves valid mapping entries, block scalar bodies, and drive-like scalars', () => {
+    const input = [
+      'artifact: interview',
+      'free_text: >-',
+      '  artifact:interview is literal answer text',
+      'paths:',
+      '  - C:\\temp\\file.txt',
+      '  - https://example.test/path',
+    ].join('\n')
+
+    expect(repairYamlMappingKeyColonSpace(input)).toBe(input)
+  })
+
+  it('produces YAML mappings instead of plain scalars after repair', () => {
+    const repaired = repairYamlMappingKeyColonSpace([
+      'artifact:interview',
+      'questions:',
+      '  - id:Q01',
+    ].join('\n'))
+
+    const parsed = jsYaml.load(repaired) as { artifact: string; questions: { id: string }[] }
+    expect(parsed.artifact).toBe('interview')
+    expect(parsed.questions[0]!.id).toBe('Q01')
   })
 })
 

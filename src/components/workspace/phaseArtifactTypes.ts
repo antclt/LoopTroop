@@ -170,6 +170,20 @@ export interface ArtifactStructuredOutputData {
   interventions?: StructuredIntervention[]
 }
 
+export interface ArtifactRawAttemptData {
+  attempt?: number
+  label?: string
+  status?: string
+  outcome?: string
+  stage?: string
+  rawResponse?: string
+  modelOutput?: string
+  content?: string
+  error?: string
+  validationError?: string
+  failureClass?: string
+}
+
 export interface CouncilDraftData {
   memberId: string
   outcome?: CouncilOutcome
@@ -179,6 +193,8 @@ export interface CouncilDraftData {
   structuredOutput?: ArtifactStructuredOutputData
   rawResponse?: string
   normalizedResponse?: string
+  rawAttempts?: ArtifactRawAttemptData[]
+  skippedReason?: string
 }
 
 export interface CouncilVoteData {
@@ -199,6 +215,7 @@ export interface CouncilVoterDetailData {
   error?: string
   rawResponse?: string
   normalizedResponse?: string
+  rawAttempts?: ArtifactRawAttemptData[]
 }
 
 export interface CouncilResultData {
@@ -353,6 +370,7 @@ export interface ExecutionSetupPlanReportData {
   generatedBy?: string
   summary?: string
   modelOutput?: string
+  rawAttempts?: ArtifactRawAttemptData[]
   errors: string[]
   structuredOutput?: ArtifactStructuredOutputData
   notes?: string[]
@@ -415,6 +433,7 @@ export interface ExecutionSetupRuntimeReportData {
     policy: string
   } | null
   modelOutput?: string
+  rawAttempts?: ArtifactRawAttemptData[]
   errors: string[]
   structuredOutput?: ArtifactStructuredOutputData
   attempt?: number
@@ -627,6 +646,28 @@ function normalizeStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
+function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] | undefined {
+  if (!Array.isArray(value)) return undefined
+  const attempts = value
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    .map((entry) => ({
+      attempt: normalizeNumber(getValueByAliases(entry, ['attempt', 'attemptNumber', 'attempt_number'])),
+      label: normalizeOptionalString(getValueByAliases(entry, ['label', 'name'])),
+      status: normalizeOptionalString(getValueByAliases(entry, ['status', 'outcome'])),
+      outcome: normalizeOptionalString(getValueByAliases(entry, ['outcome', 'status'])),
+      stage: normalizeOptionalString(getValueByAliases(entry, ['stage', 'step'])),
+      rawResponse: normalizeOptionalString(getValueByAliases(entry, ['rawResponse', 'raw_response'])),
+      modelOutput: normalizeOptionalString(getValueByAliases(entry, ['modelOutput', 'model_output'])),
+      content: normalizeOptionalString(getValueByAliases(entry, ['content', 'output'])),
+      error: normalizeOptionalString(getValueByAliases(entry, ['error', 'message'])),
+      validationError: normalizeOptionalString(getValueByAliases(entry, ['validationError', 'validation_error'])),
+      failureClass: normalizeOptionalString(getValueByAliases(entry, ['failureClass', 'failure_class'])),
+    }))
+    .filter((entry) => entry.rawResponse || entry.modelOutput || entry.content || entry.error || entry.validationError)
+
+  return attempts.length > 0 ? attempts : undefined
+}
+
 export function parseIntegrationReport(content: string): IntegrationReportData | null {
   const parsed = tryParseStructuredContent(content)
   if (!isRecord(parsed)) return null
@@ -772,6 +813,8 @@ export function parseExecutionSetupPlanReport(content: string): ExecutionSetupPl
     && !('generatedBy' in parsed)
     && !('summary' in parsed)
     && !('modelOutput' in parsed)
+    && !('rawAttempts' in parsed)
+    && !('raw_attempts' in parsed)
     && !('errors' in parsed)
     && !('structuredOutput' in parsed)
     && !('notes' in parsed)
@@ -787,6 +830,7 @@ export function parseExecutionSetupPlanReport(content: string): ExecutionSetupPl
     generatedBy: normalizeOptionalString(parsed.generatedBy),
     summary: normalizeOptionalString(parsed.summary),
     modelOutput: normalizeOptionalString(parsed.modelOutput),
+    rawAttempts: normalizeRawAttempts(getValueByAliases(parsed, ['rawAttempts', 'raw_attempts'])),
     errors: normalizeStringArray(parsed.errors),
     structuredOutput: normalizeArtifactStructuredOutput(parsed.structuredOutput),
     notes: normalizeStringArray(parsed.notes),
@@ -911,6 +955,7 @@ export function parseExecutionSetupRuntimeReport(content: string): ExecutionSetu
   const status = normalizeOptionalString(getValueByAliases(parsed, ['status']))
   const readyRaw = getValueByAliases(parsed, ['ready'])
   const modelOutput = normalizeOptionalString(getValueByAliases(parsed, ['modelOutput', 'model_output']))
+  const rawAttempts = normalizeRawAttempts(getValueByAliases(parsed, ['rawAttempts', 'raw_attempts']))
   const errors = normalizeStringArray(getValueByAliases(parsed, ['errors']))
   const attemptHistory = parseExecutionSetupAttemptHistory(getValueByAliases(parsed, ['attemptHistory', 'attempt_history']))
 
@@ -920,6 +965,7 @@ export function parseExecutionSetupRuntimeReport(content: string): ExecutionSetu
     && !profile
     && !checks
     && !modelOutput
+    && !rawAttempts
     && errors.length === 0
     && attemptHistory.length === 0
   ) {
@@ -936,6 +982,7 @@ export function parseExecutionSetupRuntimeReport(content: string): ExecutionSetu
     profile,
     checks,
     modelOutput,
+    rawAttempts,
     errors,
     structuredOutput: normalizeArtifactStructuredOutput(getValueByAliases(parsed, ['structuredOutput', 'structured_output'])),
     attempt: normalizeNumber(getValueByAliases(parsed, ['attempt'])),

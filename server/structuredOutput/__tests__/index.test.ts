@@ -5196,6 +5196,56 @@ describe.concurrent('structured output normalization', () => {
     expect(result.value.questions[1]?.answer.selected_option_ids).toEqual(['opt1'])
   })
 
+  it('recovers answer-only Full Answers question blocks when canonical ids match', () => {
+    const result = normalizeResolvedInterviewDocumentOutput([
+      'generated_by:',
+      '  winner_model: "nvidia/nemotron"',
+      '  generated_at: "2026-04-30T15:29:00Z"',
+      'questions:',
+      '  - id:Q01',
+      '    answer:',
+      '      skipped:false',
+      '      selected_option_ids: []',
+      '      free_text: "Introduce a deterministic, risk-first planning checkpoint."',
+      '    answered_by: ai_skip',
+      '    answered_at: "2026-04-30T15:29:01Z"',
+      '  - id: Q02',
+      '    answer:',
+      '      skipped: false',
+      '      selected_option_ids: ["opt2"]',
+      '      free_text: ""',
+      '    answered_by: user',
+      '    answered_at: "2026-03-25T18:19:00.000Z"',
+    ].join('\n'), {
+      ticketId: TICKET_ID,
+      canonicalInterviewContent: CANONICAL_RESOLVED_INTERVIEW,
+      memberId: 'nvidia/nemotron',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.repairWarnings).toContain('Recovered Full Answers answer-only question blocks using canonical question metadata.')
+    expect(result.repairWarnings).toContain('Hoisted answered_by into answer for canonical question Q01.')
+    expect(result.repairWarnings).toContain('Hoisted answered_at into answer for canonical question Q01.')
+    expect(result.repairWarnings).toContain('Repaired YAML mapping keys missing a space after colon before parsing.')
+    expect(result.value.questions[0]?.prompt).toBe('What primary problem should the new phase solve?')
+    expect(result.value.questions[0]?.answer).toEqual({
+      skipped: false,
+      selected_option_ids: [],
+      free_text: 'Introduce a deterministic, risk-first planning checkpoint.',
+      answered_by: 'ai_skip',
+      answered_at: '2026-04-30T15:29:01Z',
+    })
+    expect(result.value.questions[1]?.prompt).toBe('Who should consume the strategy?')
+    expect(result.value.questions[1]?.answer).toEqual({
+      skipped: false,
+      selected_option_ids: ['opt1'],
+      free_text: '',
+      answered_by: 'user',
+      answered_at: '2026-03-25T18:19:00.000Z',
+    })
+  })
+
   it('keeps truncated resolved interview artifacts invalid', () => {
     const canonicalInterview = [
       'schema_version: 1',

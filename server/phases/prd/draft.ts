@@ -6,6 +6,7 @@ import type {
   DraftResult,
   DraftStructuredOutputMeta,
   MemberOutcome,
+  RawAttempt,
 } from '../../council/types'
 import { CancelledError } from '../../council/types'
 import { classifyDraftFailure, isAbortError, isPhaseDeadlineError, PHASE_DEADLINE_ERROR } from '../../council/draftUtils'
@@ -39,9 +40,12 @@ interface StructuredStepSuccess {
   questionCount?: number
   draftMetrics?: DraftResult['draftMetrics']
   structuredOutput: DraftStructuredOutputMeta
+  rawAttempts: RawAttempt[]
 }
 
 type PrdDraftSubstep = 'full_answers' | 'prd_draft'
+
+const PRD_DRAFT_SKIPPED_AFTER_FULL_ANSWERS_ERROR = 'PRD draft not started because Full Answers did not pass validation'
 
 class StructuredStepError extends Error {
   constructor(
@@ -50,6 +54,7 @@ class StructuredStepError extends Error {
     readonly structuredOutput: DraftStructuredOutputMeta,
     readonly questionCount?: number,
     readonly draftMetrics?: DraftResult['draftMetrics'],
+    readonly rawAttempts?: RawAttempt[],
   ) {
     super(message)
     this.name = 'StructuredStepError'
@@ -231,6 +236,8 @@ function buildFailedDraft(
   structuredOutput?: DraftStructuredOutputMeta,
   rawResponse?: string,
   normalizedResponse?: string,
+  rawAttempts?: RawAttempt[],
+  skippedReason?: string,
 ): DraftResult {
   return {
     memberId,
@@ -243,6 +250,8 @@ function buildFailedDraft(
     structuredOutput,
     ...(typeof rawResponse === 'string' ? { rawResponse } : {}),
     ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
+    ...(rawAttempts && rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
+    ...(skippedReason ? { skippedReason } : {}),
   }
 }
 
@@ -255,6 +264,7 @@ function buildCompletedDraft(
   structuredOutput?: DraftStructuredOutputMeta,
   rawResponse?: string,
   normalizedResponse?: string,
+  rawAttempts?: RawAttempt[],
 ): DraftResult {
   return {
     memberId,
@@ -266,7 +276,48 @@ function buildCompletedDraft(
     structuredOutput,
     ...(typeof rawResponse === 'string' ? { rawResponse } : {}),
     ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
+    ...(rawAttempts && rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
   }
+}
+
+function buildSkippedPrdDraftAfterFullAnswers(memberId: string, fullAnswersOutcome: MemberOutcome): DraftResult {
+  if (fullAnswersOutcome === 'timed_out') {
+    return buildFailedDraft(
+      memberId,
+      'timed_out',
+      0,
+      'PRD draft not started because Full Answers timed out',
+      '',
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      'full_answers_invalid',
+    )
+  }
+
+  return buildFailedDraft(
+    memberId,
+    'invalid_output',
+    0,
+    PRD_DRAFT_SKIPPED_AFTER_FULL_ANSWERS_ERROR,
+    '',
+    undefined,
+    undefined,
+    {
+      repairApplied: false,
+      repairWarnings: [],
+      autoRetryCount: 0,
+      validationError: PRD_DRAFT_SKIPPED_AFTER_FULL_ANSWERS_ERROR,
+      failureClass: 'validation_error',
+    },
+    undefined,
+    undefined,
+    undefined,
+    'full_answers_invalid',
+  )
 }
 
 function shouldRestartFullAnswersInFreshSession(validationError: string): boolean {
@@ -331,6 +382,7 @@ async function executeStructuredStep(
   let validation: StepValidationResult | undefined
   let lastValidationError: string | undefined
   let rawResponse = ''
+  const rawAttempts: RawAttempt[] = []
   const retryDiagnostics: NonNullable<DraftStructuredOutputMeta['retryDiagnostics']> = []
   const sessionManager = options.ticketId ? new SessionManager(adapter) : null
 
@@ -426,6 +478,12 @@ async function executeStructuredStep(
     try {
       validation = options.validateStep(rawResponse)
       const content = validation.normalizedContent ?? rawResponse
+      rawAttempts.push({
+        attempt: attemptCount + 1,
+        stage: options.step,
+        outcome: 'accepted',
+        rawResponse,
+      })
       return {
         session: result.session,
         content,
@@ -434,6 +492,7 @@ async function executeStructuredStep(
         questionCount: validation.questionCount,
         draftMetrics: validation.draftMetrics,
         structuredOutput: buildStructuredOutput(validation, lastValidationError, attemptCount, undefined, retryDiagnostics),
+        rawAttempts: [...rawAttempts],
       }
     } catch (error) {
       lastValidationError = error instanceof Error ? error.message : String(error)
@@ -447,6 +506,14 @@ async function executeStructuredStep(
             useStructuredRetryPrompt: false,
           }
         : baseRetryDecision
+      rawAttempts.push({
+        attempt: attemptCount + 1,
+        stage: options.step,
+        outcome: 'rejected',
+        rawResponse,
+        validationError: lastValidationError,
+        failureClass: retryDecision.failureClass,
+      })
       retryDiagnostics.push(resolveStructuredRetryDiagnostic({
         attempt: attemptCount + 1,
         rawResponse,
@@ -461,6 +528,7 @@ async function executeStructuredStep(
           buildStructuredOutput(validation, lastValidationError, attemptCount, retryDecision.failureClass, retryDiagnostics),
           validation?.questionCount,
           validation?.draftMetrics,
+          [...rawAttempts],
         )
       }
 
@@ -564,6 +632,7 @@ export async function draftPRD(
       const timedOutDuration = options.draftTimeoutMs
       const structuredError = error instanceof StructuredStepError ? error : null
       const errorContent = structuredError?.content ?? ''
+      const errorRawAttempts = structuredError?.rawAttempts
 
       const failed = timedOut
         ? buildFailedDraft(
@@ -576,6 +645,8 @@ export async function draftPRD(
             structuredError?.draftMetrics,
             structuredError?.structuredOutput,
             errorContent || undefined,
+            undefined,
+            errorRawAttempts,
           )
         : (() => {
             const {
@@ -596,11 +667,13 @@ export async function draftPRD(
               outcome,
               duration,
               errorDetail,
-              outcome === 'failed' ? '' : errorContent,
+              '',
               structuredError?.questionCount,
               structuredError?.draftMetrics,
               structuredOutput,
               errorContent || undefined,
+              undefined,
+              errorRawAttempts,
             )
           })()
 
@@ -627,11 +700,15 @@ export async function draftPRD(
           structuredOutput: fullAnswersResult.structuredOutput,
           ...(typeof fullAnswersResult.rawResponse === 'string' ? { rawResponse: fullAnswersResult.rawResponse } : {}),
           ...(typeof fullAnswersResult.normalizedResponse === 'string' ? { normalizedResponse: fullAnswersResult.normalizedResponse } : {}),
+          ...(fullAnswersResult.rawAttempts ? { rawAttempts: fullAnswersResult.rawAttempts } : {}),
+          ...(fullAnswersResult.skippedReason ? { skippedReason: fullAnswersResult.skippedReason } : {}),
         })
       }
 
       if (!prdResult) {
-        prdResult = failed
+        prdResult = step === 'full_answers'
+          ? buildSkippedPrdDraftAfterFullAnswers(member.modelId, failed.outcome)
+          : failed
         onDraftProgress?.({
           memberId: member.modelId,
           status: 'finished',
@@ -645,7 +722,19 @@ export async function draftPRD(
           structuredOutput: prdResult.structuredOutput,
           ...(typeof prdResult.rawResponse === 'string' ? { rawResponse: prdResult.rawResponse } : {}),
           ...(typeof prdResult.normalizedResponse === 'string' ? { normalizedResponse: prdResult.normalizedResponse } : {}),
+          ...(prdResult.rawAttempts ? { rawAttempts: prdResult.rawAttempts } : {}),
+          ...(prdResult.skippedReason ? { skippedReason: prdResult.skippedReason } : {}),
         })
+        if (step === 'full_answers') {
+          onStepEvent?.({
+            memberId: member.modelId,
+            step: 'prd_draft',
+            status: 'skipped',
+            outcome: prdResult.outcome,
+            duration: 0,
+            error: prdResult.error,
+          })
+        }
       }
     }
 
@@ -719,6 +808,7 @@ export async function draftPRD(
           fullAnswersStep.structuredOutput,
           fullAnswersStep.rawResponse,
           fullAnswersStep.normalizedResponse,
+          fullAnswersStep.rawAttempts,
         )
         onFullAnswersProgress?.({
           memberId: member.modelId,
@@ -731,6 +821,7 @@ export async function draftPRD(
           structuredOutput: fullAnswersResult.structuredOutput,
           ...(typeof fullAnswersResult.rawResponse === 'string' ? { rawResponse: fullAnswersResult.rawResponse } : {}),
           ...(typeof fullAnswersResult.normalizedResponse === 'string' ? { normalizedResponse: fullAnswersResult.normalizedResponse } : {}),
+          ...(fullAnswersResult.rawAttempts ? { rawAttempts: fullAnswersResult.rawAttempts } : {}),
         })
         onStepEvent?.({
           memberId: member.modelId,
@@ -834,6 +925,7 @@ export async function draftPRD(
         prdStep.structuredOutput,
         prdStep.rawResponse,
         prdStep.normalizedResponse,
+        prdStep.rawAttempts,
       )
       onDraftProgress?.({
         memberId: member.modelId,
@@ -846,6 +938,7 @@ export async function draftPRD(
         structuredOutput: prdResult.structuredOutput,
         ...(typeof prdResult.rawResponse === 'string' ? { rawResponse: prdResult.rawResponse } : {}),
         ...(typeof prdResult.normalizedResponse === 'string' ? { normalizedResponse: prdResult.normalizedResponse } : {}),
+        ...(prdResult.rawAttempts ? { rawAttempts: prdResult.rawAttempts } : {}),
       })
       onStepEvent?.({
         memberId: member.modelId,

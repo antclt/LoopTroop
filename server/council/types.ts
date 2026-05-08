@@ -17,6 +17,19 @@ export function throwIfAborted(signal?: AbortSignal, ticketId?: number | string)
 
 export type MemberOutcome = 'pending' | 'completed' | 'timed_out' | 'invalid_output' | 'failed'
 
+export type RawAttemptOutcome = 'rejected' | 'accepted'
+
+export type RawAttemptStage = 'draft' | 'full_answers' | 'prd_draft' | 'vote' | 'refine' | string
+
+export interface RawAttempt {
+  attempt: number
+  stage: RawAttemptStage
+  outcome: RawAttemptOutcome
+  rawResponse: string
+  validationError?: string
+  failureClass?: StructuredFailureClass
+}
+
 export interface DraftMetrics {
   questionCount?: number
   epicCount?: number
@@ -53,6 +66,8 @@ export interface DraftResult {
   structuredOutput?: DraftStructuredOutputMeta
   rawResponse?: string
   normalizedResponse?: string
+  rawAttempts?: RawAttempt[]
+  skippedReason?: string
 }
 
 export interface DraftProgressEvent {
@@ -68,6 +83,8 @@ export interface DraftProgressEvent {
   structuredOutput?: DraftStructuredOutputMeta
   rawResponse?: string
   normalizedResponse?: string
+  rawAttempts?: RawAttempt[]
+  skippedReason?: string
 }
 
 export interface DraftGenerationResult {
@@ -100,6 +117,7 @@ export interface VoterDetail {
   rawResponse?: string
   normalizedResponse?: string
   structuredOutput?: DraftStructuredOutputMeta
+  rawAttempts?: RawAttempt[]
 }
 
 export interface VotingPhaseResult {

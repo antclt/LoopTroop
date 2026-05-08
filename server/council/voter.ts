@@ -5,6 +5,7 @@ import type {
   DraftResult,
   DraftStructuredOutputMeta,
   MemberOutcome,
+  RawAttempt,
   Vote,
   VotePresentationOrder,
   VoteScore,
@@ -113,6 +114,7 @@ export async function conductVoting(
     rawResponse?: string
     normalizedResponse?: string
     structuredOutput?: DraftStructuredOutputMeta
+    rawAttempts?: RawAttempt[]
   }) => void,
   buildPromptForVoter?: (entry: {
     voter: CouncilMember
@@ -163,6 +165,7 @@ export async function conductVoting(
     structuredOutput?: DraftStructuredOutputMeta,
     rawResponse?: string,
     normalizedResponse?: string,
+    rawAttempts?: RawAttempt[],
   ): boolean {
     if (finalizedMembers.has(memberId)) return false
 
@@ -174,6 +177,7 @@ export async function conductVoting(
       ...(typeof rawResponse === 'string' ? { rawResponse } : {}),
       ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
       ...(structuredOutput ? { structuredOutput } : {}),
+      ...(rawAttempts && rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
     })
     if (outcome === 'completed' && voterVotes.length > 0) {
       votes.push(...voterVotes)
@@ -186,6 +190,7 @@ export async function conductVoting(
       rawResponse,
       normalizedResponse,
       structuredOutput,
+      ...(rawAttempts && rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
     })
     return true
   }
@@ -205,6 +210,8 @@ export async function conductVoting(
     let sessionId = ''
     let closed = false
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
+    let response = ''
+    const rawAttempts: RawAttempt[] = []
 
     const markTimedOut = async () => {
       if (closed) return
@@ -233,7 +240,6 @@ export async function conductVoting(
             },
           ]
       let promptParts = votingPrompt
-      let response = ''
       let result: Awaited<ReturnType<typeof runOpenCodePrompt>> | undefined
       let attemptCount = 0
       let lastValidationError: string | undefined
@@ -307,6 +313,12 @@ export async function conductVoting(
         )
 
         if (scorecardResult.ok) {
+          rawAttempts.push({
+            attempt: attemptCount + 1,
+            stage: 'vote',
+            outcome: 'accepted',
+            rawResponse: response,
+          })
           const normalizedResponse = scorecardResult.repairApplied || scorecardResult.normalizedContent.trim() !== response.trim()
             ? scorecardResult.normalizedContent
             : undefined
@@ -332,7 +344,7 @@ export async function conductVoting(
               totalScore: normalizedScores.total_score ?? scores.reduce((sum, score) => sum + score.score, 0),
             })
           }
-          if (!recordOutcome(voter.modelId, 'completed', voterVotes, undefined, structuredOutput, response, normalizedResponse)) {
+          if (!recordOutcome(voter.modelId, 'completed', voterVotes, undefined, structuredOutput, response, normalizedResponse, rawAttempts)) {
             return voterVotes
           }
           break
@@ -340,6 +352,14 @@ export async function conductVoting(
 
         lastValidationError = scorecardResult.error
         const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
+        rawAttempts.push({
+          attempt: attemptCount + 1,
+          stage: 'vote',
+          outcome: 'rejected',
+          rawResponse: response,
+          validationError: scorecardResult.error,
+          failureClass: retryDecision.failureClass,
+        })
         retryDiagnostics.push(resolveStructuredRetryDiagnostic({
           attempt: attemptCount + 1,
           rawResponse: response,
@@ -362,6 +382,8 @@ export async function conductVoting(
             scorecardResult.error,
             structuredOutput,
             response,
+            undefined,
+            rawAttempts,
           )
           return voterVotes
         }
@@ -402,7 +424,11 @@ export async function conductVoting(
         : 'failed'
       recordOutcome(voter.modelId, outcome, [], outcome === 'timed_out'
         ? `AI response timeout reached after ${timeoutMs}ms`
-        : errorDetail)
+        : errorDetail,
+      undefined,
+      response || undefined,
+      undefined,
+      rawAttempts)
       return []
     } finally {
       if (timeoutHandle) {

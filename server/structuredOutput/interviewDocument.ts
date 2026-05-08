@@ -494,6 +494,164 @@ function unwrapInterviewArtifactObjectWrapper(value: unknown): unknown {
   }
 }
 
+function buildAnswerOnlyResolvedInterviewCandidate(
+  candidateContent: string,
+  canonical: InterviewDocument,
+  options: {
+    memberId?: string
+  },
+): StructuredOutputResult<InterviewDocument> | null {
+  const repairWarnings: string[] = []
+  let parsed: unknown
+
+  for (const parseOptions of [
+    {},
+    { nestedMappingChildren: INTERVIEW_DOCUMENT_NESTED_MAPPING_CHILDREN },
+  ]) {
+    try {
+      parsed = unwrapInterviewArtifactObjectWrapper(unwrapExplicitWrapperRecord(parseYamlOrJsonCandidate(candidateContent, {
+        ...parseOptions,
+        allowTrailingTerminalNoise: true,
+        repairWarnings,
+      }), [
+        'interview',
+        'output',
+        'result',
+        'data',
+      ]))
+      break
+    } catch {
+      parsed = undefined
+    }
+  }
+  if (parsed === undefined) return null
+
+  if (!isRecord(parsed)) return null
+
+  const rawQuestions = getValueByAliases(parsed, ['questions'])
+  if (!Array.isArray(rawQuestions) || rawQuestions.length === 0) return null
+
+  const canonicalIds = canonical.questions.map((question) => question.id)
+  const rawQuestionRecords: Record<string, unknown>[] = []
+  const rawQuestionIds: string[] = []
+  const allowedQuestionKeys = new Set([
+    'id',
+    'answer',
+    'skipped',
+    'selectedoptionids',
+    'selected_option_ids',
+    'selected',
+    'freetext',
+    'free_text',
+    'text',
+    'answeredby',
+    'answered_by',
+    'answeredat',
+    'answered_at',
+  ].map(normalizeKey))
+
+  for (let index = 0; index < rawQuestions.length; index += 1) {
+    const rawQuestion = rawQuestions[index]
+    if (!isRecord(rawQuestion)) return null
+
+    const unknownKeys = Object.keys(rawQuestion).filter((key) => !allowedQuestionKeys.has(normalizeKey(key)))
+    if (unknownKeys.length > 0) return null
+
+    const id = toOptionalString(getValueByAliases(rawQuestion, ['id']))
+    if (!id) return null
+
+    rawQuestionRecords.push(rawQuestion)
+    rawQuestionIds.push(id)
+  }
+
+  if (
+    rawQuestionIds.length !== canonicalIds.length
+    || new Set(rawQuestionIds).size !== rawQuestionIds.length
+    || canonicalIds.some((id) => !rawQuestionIds.includes(id))
+  ) {
+    return null
+  }
+
+  repairWarnings.push('Recovered Full Answers answer-only question blocks using canonical question metadata.')
+
+  const rawQuestionsById = new Map(rawQuestionRecords.map((question) => [
+    toOptionalString(getValueByAliases(question, ['id']))!,
+    question,
+  ]))
+
+  const questions = canonical.questions.map((canonicalQuestion) => {
+    const rawQuestion = rawQuestionsById.get(canonicalQuestion.id)
+    if (!rawQuestion) {
+      throw new Error(`Resolved interview is missing canonical question ${canonicalQuestion.id}`)
+    }
+
+    const rawAnswer = getValueByAliases(rawQuestion, ['answer'])
+    const answerRecord = isRecord(rawAnswer) ? { ...rawAnswer } : {}
+    const hoistedAnsweredBy = getValueByAliases(rawQuestion, ['answeredby', 'answered_by'])
+    const hoistedAnsweredAt = getValueByAliases(rawQuestion, ['answeredat', 'answered_at'])
+
+    if (hoistedAnsweredBy !== undefined && getValueByAliases(answerRecord, ['answeredby', 'answered_by']) === undefined) {
+      answerRecord.answered_by = hoistedAnsweredBy
+      repairWarnings.push(`Hoisted answered_by into answer for canonical question ${canonicalQuestion.id}.`)
+    }
+    if (hoistedAnsweredAt !== undefined && getValueByAliases(answerRecord, ['answeredat', 'answered_at']) === undefined) {
+      answerRecord.answered_at = hoistedAnsweredAt
+      repairWarnings.push(`Hoisted answered_at into answer for canonical question ${canonicalQuestion.id}.`)
+    }
+
+    const answerSiblingAliases: Array<[string[], string[]]> = [
+      [['skipped'], ['skipped']],
+      [['selectedoptionids', 'selected_option_ids', 'selected'], ['selectedoptionids', 'selected_option_ids', 'selected']],
+      [['freetext', 'free_text', 'text'], ['freetext', 'free_text', 'text']],
+    ]
+    for (const [sourceKey, targetKey] of answerSiblingAliases) {
+      const siblingValue = getValueByAliases(rawQuestion, sourceKey)
+      const target = targetKey[0]
+      if (target && siblingValue !== undefined && getValueByAliases(answerRecord, targetKey) === undefined) {
+        answerRecord[target] = siblingValue
+      }
+    }
+
+    return {
+      ...canonicalQuestion,
+      answer: normalizeQuestionAnswer(answerRecord, canonicalQuestion.answer_type, repairWarnings, canonicalQuestion.id),
+    }
+  })
+
+  let generatedBy = canonical.generated_by
+  const rawGeneratedBy = getValueByAliases(parsed, ['generatedby', 'generated_by'])
+  if (isRecord(rawGeneratedBy)) {
+    try {
+      generatedBy = normalizeGeneratedBy(rawGeneratedBy)
+    } catch {
+      repairWarnings.push('Ignored incomplete generated_by in answer-only Full Answers artifact.')
+    }
+  }
+
+  const document = syncFinalFreeFormSummary({
+    ...canonical,
+    status: 'draft',
+    generated_by: {
+      ...generatedBy,
+      ...(options.memberId ? { winner_model: options.memberId } : {}),
+      canonicalization: 'server_normalized',
+    },
+    questions,
+    approval: {
+      approved_by: '',
+      approved_at: '',
+    },
+  })
+
+  return {
+    ok: true,
+    value: document,
+    normalizedContent: buildInterviewDocumentYaml(document),
+    repairApplied: true,
+    repairWarnings,
+  }
+}
+
 export function buildInterviewDocumentYaml(document: InterviewDocument): string {
   return buildYamlDocument(document)
 }
@@ -685,21 +843,29 @@ export function normalizeResolvedInterviewDocumentOutput(
       continue
     }
 
-    const candidateResult = normalizeInterviewDocumentOutput(candidateContent, {
+    let candidateResult = normalizeInterviewDocumentOutput(candidateContent, {
       ticketId: options.ticketId,
       allowTrailingTerminalNoise: true,
     })
     if (!candidateResult.ok) {
-      if (isPromptEchoValidationError(candidateResult.error)) {
-        preferredPromptEchoError ??= candidateResult.error
-        preferredPromptEchoRetryDiagnostic ??= candidateResult.retryDiagnostic
+      const answerOnlyCandidate = buildAnswerOnlyResolvedInterviewCandidate(candidateContent, canonicalResult.value, {
+        memberId: options.memberId,
+      })
+      if (answerOnlyCandidate) {
+        candidateResult = answerOnlyCandidate
+      } else {
+        if (isPromptEchoValidationError(candidateResult.error)) {
+          preferredPromptEchoError ??= candidateResult.error
+          preferredPromptEchoRetryDiagnostic ??= candidateResult.retryDiagnostic
+          continue
+        }
+        lastError = candidateResult.error
+        lastErrorCause = candidateResult.retryDiagnostic
+        lastRetryDiagnostic = candidateResult.retryDiagnostic
         continue
       }
-      lastError = candidateResult.error
-      lastErrorCause = candidateResult.retryDiagnostic
-      lastRetryDiagnostic = candidateResult.retryDiagnostic
-      continue
     }
+    if (!candidateResult.ok) continue
 
     try {
       const repairWarnings = [...candidateResult.repairWarnings]

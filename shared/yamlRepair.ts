@@ -236,6 +236,57 @@ export function repairYamlInlineSequenceParents(yaml: string): string {
   return result.join('\n')
 }
 
+/**
+ * Repair mapping keys where the colon is missing the required following space.
+ *
+ * Models sometimes emit `artifact:interview` or `- id:Q01`. YAML treats those
+ * as plain scalars rather than mapping entries, so this repair runs before the
+ * first YAML parse. It is intentionally line-scoped and only targets lines that
+ * already look like simple mapping entries, while preserving block scalar bodies
+ * and avoiding one-letter keys such as Windows drive paths (`C:\...`).
+ */
+export function repairYamlMappingKeyColonSpace(yaml: string): string {
+  const lines = yaml.split('\n')
+  const result: string[] = []
+  const BLOCK_SCALAR_PATTERN = /:\s*[>|][+-]?(?:\s+#.*)?$/
+
+  let insideBlockScalar = false
+  let blockScalarBaseIndent = -1
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    const indent = getLineIndent(line)
+
+    if (insideBlockScalar) {
+      if (!trimmed || indent > blockScalarBaseIndent) {
+        result.push(line)
+        continue
+      }
+      insideBlockScalar = false
+      blockScalarBaseIndent = -1
+    }
+
+    const match = line.match(/^(\s*(?:-\s+)?)([A-Za-z_][\w-]*):(?![\s]|$)(.*)$/)
+    if (match && match[2]!.length >= 2 && !match[3]?.startsWith('//')) {
+      const repaired = `${match[1]}${match[2]}: ${match[3]}`
+      result.push(repaired)
+      if (BLOCK_SCALAR_PATTERN.test(repaired.trimEnd())) {
+        insideBlockScalar = true
+        blockScalarBaseIndent = indent
+      }
+      continue
+    }
+
+    result.push(line)
+    if (BLOCK_SCALAR_PATTERN.test(trimmed)) {
+      insideBlockScalar = true
+      blockScalarBaseIndent = indent
+    }
+  }
+
+  return result.join('\n')
+}
+
 function getLineIndent(line: string): number {
   return line.match(/^(\s*)/)?.[1]?.length ?? 0
 }

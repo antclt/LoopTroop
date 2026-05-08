@@ -178,6 +178,40 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText(/project bootstrap/)).toBeInTheDocument()
   })
 
+  it('hides failed execution setup plan model output from details and exposes it in raw diagnostics', () => {
+    const modelOutput = '<EXECUTION_SETUP_PLAN>\nsummary: failed draft\n</EXECUTION_SETUP_PLAN>'
+
+    render(
+      <ArtifactContent
+        artifactId="execution-setup-plan"
+        content={buildExecutionSetupPlanContent()}
+        reportContent={JSON.stringify({
+          status: 'failed',
+          ready: false,
+          summary: 'Setup plan generation failed.',
+          modelOutput,
+          errors: ['Planner returned an invalid setup plan.'],
+          rawAttempts: [
+            {
+              attempt: 1,
+              status: 'failed',
+              modelOutput: 'attempt model output',
+              error: 'Missing readiness block.',
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getByText('Generation Errors')).toBeInTheDocument()
+    expect(screen.queryByText(modelOutput)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    fireEvent.click(screen.getByRole('button', { name: /Model Output/ }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === modelOutput)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Execution setup plan Attempt 1/i })).toBeInTheDocument()
+  })
+
   it('renders execution setup profiles with structured sections and raw access', () => {
     render(
       <ArtifactContent
@@ -544,6 +578,98 @@ describe('ArtifactContentViewer', () => {
 
     expect(screen.getByText('Review PRD drafts')).toBeInTheDocument()
     expect(screen.getByText('Show epics and user stories in the structured view.')).toBeInTheDocument()
+  })
+
+  it('suppresses invalid PRD draft bodies and shows diagnostics with raw access', () => {
+    const invalidBody = buildPrdDocumentContent({
+      epicTitle: 'Do not render invalid draft body',
+      storyTitle: 'Hidden invalid story',
+      acceptanceCriterion: 'Invalid draft text stays out of the body.',
+    })
+
+    render(
+      <ArtifactContent
+        artifactId="prd-draft-member-openai%2Fgpt-5.2"
+        phase="DRAFTING_PRD"
+        content={JSON.stringify({
+          drafts: [
+            {
+              memberId: 'openai/gpt-5.2',
+              outcome: 'invalid_output',
+              content: invalidBody,
+              rawResponse: 'raw invalid prd payload',
+              error: 'epics[0].user_stories is required',
+              structuredOutput: futureStructuredOutput({
+                repairApplied: false,
+                repairWarnings: [],
+                autoRetryCount: 1,
+                validationError: 'PRD parser rejected the model output.',
+              }),
+            },
+          ],
+          memberOutcomes: {
+            'openai/gpt-5.2': 'invalid_output',
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeInTheDocument()
+    expect(screen.getByText('Invalid Output')).toBeInTheDocument()
+    expect(screen.getByText('epics[0].user_stories is required')).toBeInTheDocument()
+    expect(screen.queryByText('Do not render invalid draft body')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hidden invalid story')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'raw invalid prd payload')).toBeInTheDocument()
+  })
+
+  it('suppresses invalid PRD winner draft bodies in future council views', () => {
+    const invalidBody = buildPrdDocumentContent({
+      epicTitle: 'Do not render invalid future winner body',
+      storyTitle: 'Hidden future invalid story',
+      acceptanceCriterion: 'Invalid winner body stays out of vote/refine views.',
+    })
+
+    render(
+      <ArtifactContent
+        artifactId="winner-prd-draft"
+        phase="COUNCIL_VOTING_PRD"
+        content={JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          drafts: [
+            {
+              memberId: 'openai/gpt-5.2',
+              outcome: 'invalid_output',
+              content: invalidBody,
+              rawAttempts: [
+                {
+                  attempt: 1,
+                  outcome: 'rejected',
+                  rawResponse: 'raw invalid future winner payload',
+                  validationError: 'PRD parser rejected the winner draft.',
+                },
+              ],
+              error: 'PRD parser rejected the winner draft.',
+              structuredOutput: futureStructuredOutput({
+                repairApplied: false,
+                repairWarnings: [],
+                autoRetryCount: 1,
+                validationError: 'PRD parser rejected the winner draft.',
+              }),
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeInTheDocument()
+    expect(screen.queryByText('Do not render invalid future winner body')).not.toBeInTheDocument()
+    expect(screen.queryByText('Hidden future invalid story')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    fireEvent.click(screen.getByRole('button', { name: /gpt-5.2 Attempt 1 Rejected/ }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'raw invalid future winner payload')).toBeInTheDocument()
   })
 
   it('renders refined PRD artifacts with the same structured PRD viewer', () => {
@@ -1671,6 +1797,57 @@ describe('ArtifactContentViewer', () => {
 
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
     expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse)).not.toBeInTheDocument()
+  })
+
+  it('prefers rawAttempts over log-derived rejected draft output', () => {
+    const modelId = 'openai/gpt-5.2'
+    const loggedRejectedRawResponse = 'logged rejected draft'
+    const attemptedRejectedRawResponse = 'attempt recorded rejected draft'
+    const acceptedRawResponse = `${buildPrdDocumentContent()}\n`
+    const validatedResponse = buildPrdDocumentContent()
+    const content = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: validatedResponse,
+          rawResponse: acceptedRawResponse,
+          normalizedResponse: validatedResponse,
+          rawAttempts: [
+            {
+              attempt: 1,
+              status: 'invalid_output',
+              rawResponse: attemptedRejectedRawResponse,
+              validationError: 'Missing user stories.',
+            },
+          ],
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Every epic must include at least one user story',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+    })
+    const logs = [
+      makeLogEntry(`[SYS] ${modelId} PRD draft started.`, { modelId, source: 'system' }),
+      makeLogEntry(`[MODEL] ${loggedRejectedRawResponse}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+      makeLogEntry(`[MODEL] ${acceptedRawResponse}`, { modelId, source: `model:${modelId}`, audience: 'ai', kind: 'text' }),
+    ]
+
+    renderWithLogContext(
+      <ArtifactContent artifactId={`prd-draft-member-${encodeURIComponent(modelId)}`} phase="DRAFTING_PRD" content={content} />,
+      { DRAFTING_PRD: logs },
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    fireEvent.click(screen.getByRole('button', { name: /gpt-5.2 Rejected/ }))
+
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === attemptedRejectedRawResponse)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === loggedRejectedRawResponse)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /gpt-5.2 Attempt 1/ })).toBeInTheDocument()
   })
 
   it('keeps rejected retry output disabled when retry metadata exists but logs are unavailable', () => {

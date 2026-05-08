@@ -139,12 +139,12 @@ const WORKFLOW_PHASE_DETAILS = {
       'Draft Content: Each draft typically includes a set of interview questions, their types (free-text, choice-based), ordering rationale, and a strategy explanation for why these particular questions would best clarify the implementation intent.',
       'Progress Tracking: LoopTroop tracks per-model progress in real time, streaming model logs to the UI so you can see how each council member is progressing. It also monitors quorum — the minimum number of successful drafts needed to proceed.',
       'Quorum Check: If too many models fail (insufficient successful drafts to meet quorum), the phase fails fast rather than waiting for all models to finish. This prevents wasted time when the council cannot produce enough valid drafts to vote on.',
-      'Artifact Persistence: Each completed draft is persisted as a council artifact, stored alongside the model identity and draft metadata. These artifacts are used in the next voting phase for side-by-side comparison.',
+      'Artifact Persistence: Each completed draft is persisted as a council artifact, stored alongside the model identity and draft metadata. Invalid, failed, or timed-out outputs persist diagnostics and raw attempt history only; malformed text is kept out of the structured artifact body and remains available from Raw.',
     ],
     outputs: [
       'A set of competing interview drafts — one from each council member — each with its own question set, ordering, and strategic rationale.',
       'Per-model draft progress and selected session milestones viewable in the phase log panel; completed drafts are preserved as artifacts for exact review.',
-      'Persisted council draft artifacts that will be anonymized and presented to voters in the next phase.',
+      'Persisted council draft artifacts that will be anonymized and presented to voters in the next phase, plus raw attempt diagnostics for rejected retries.',
     ],
     transitions: [
       'Quorum Met → Voting on Questions: When enough valid drafts are complete (meeting the configured quorum threshold), the workflow advances to the voting phase where the council scores each draft.',
@@ -154,6 +154,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This is the first multi-model phase in the workflow — all phases before this used only the single main implementer.',
       'Council member independence is enforced: no model can see another\'s draft during this phase.',
+      'Rejected or uncorrectable model output is diagnostic-only in artifacts: the structured view shows outcome, model, validation error, retry count, and excerpts, while the full malformed response stays in Raw and execution logs.',
       'Context available: Relevant Files + Ticket Details. The council does not yet have interview answers, PRD, or beads — it is creating the interview that will gather those answers.',
       'Why multiple drafts? A single model might focus narrowly on one aspect of the ticket. By having multiple models independently draft interview approaches, the system captures a wider range of relevant questions and perspectives.',
     ],
@@ -323,13 +324,14 @@ const WORKFLOW_PHASE_DETAILS = {
       'Part 1 — Answering Skipped Questions: LoopTroop loads the relevant files, ticket details, and interview results (including which questions were answered vs. skipped). For each skipped question, each council member generates a reasonable full answer based on the available context. The result is a per-model "Full Answers" artifact where every question has a response — either the user\'s original answer or that model\'s AI-generated fill-in.',
       'Why Keep Per-Model Full Answers? The PRD council benefits from diverse assumptions when the user skipped uncertain areas. Keeping Full Answers per model lets voting evaluate each PRD draft together with the assumptions that produced it, instead of forcing all members through one canonical guess before drafting.',
       'Part 2 — Generating PRD Drafts: LoopTroop loads the relevant files, ticket details, and that member\'s Full Answers artifact (including AI-filled responses). Each council model independently produces a complete PRD candidate rather than editing a shared draft. This independence ensures diverse specification approaches.',
+      'Part 2 Gating: If Part 1 does not produce a valid Full Answers artifact for a member, that member\'s PRD draft is not started. The PRD draft row is recorded as skipped/invalid with a concise diagnostic instead of copying Full Answers raw output or retry warnings into the PRD draft artifact.',
       'PRD Content Structure: Each draft follows a consistent structure containing requirements (what the system should do), acceptance criteria (how to verify it works), edge cases (unusual situations to handle), test intent (what should be tested and how), and implementation guidance (suggested approach and constraints).',
-      'Output Normalization: LoopTroop normalizes draft output to ensure consistent structure, records draft metrics (requirement count, acceptance criteria count, edge case count), logs structured-output diagnostics, and persists the draft artifacts for the upcoming voting phase.',
+      'Output Normalization: LoopTroop normalizes draft output to ensure consistent structure, records draft metrics (requirement count, acceptance criteria count, edge case count), logs structured-output diagnostics, records raw accepted/rejected attempts, and persists only accepted draft bodies for the upcoming voting phase.',
     ],
     outputs: [
       'Per-model Full Answers artifacts — complete interview documents with AI-generated responses filling in skipped questions where needed (produced in Part 1). The winning model\'s Full Answers artifact is later available read-only from Approving Specs.',
       'Competing PRD drafts — one from each council member — each containing requirements, acceptance criteria, edge cases, test intent, and implementation guidance.',
-      'Draft metrics and structured-output diagnostics for each council member\'s output.',
+      'Draft metrics, raw attempt history, and structured-output diagnostics for each council member\'s output.',
     ],
     transitions: [
       'Quorum Met → Voting on Specs: When enough valid PRD drafts are ready (meeting the configured quorum threshold), the workflow advances to the PRD voting phase.',
@@ -337,6 +339,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'This phase has 2 internal parts with different context inputs: Part 1 receives Relevant Files + Ticket Details + Interview Results; Part 2 receives Relevant Files + Ticket Details + Full Answers.',
+      'Rejected or uncorrectable Full Answers and PRD draft text is not rendered as artifact body content. Raw responses remain available in Raw attempt views and execution logs for diagnosis.',
       'The PRD phase is the first stage that converts interview intent into a formal implementation specification — it bridges the gap between "what do you want" (interview) and "what should be built" (specification).',
       'Each council member drafts from its own Full Answers artifact, so the PRD vote selects both a specification approach and the assumptions behind it.',
     ],
@@ -476,12 +479,12 @@ const WORKFLOW_PHASE_DETAILS = {
       'Context Loading: LoopTroop loads the approved PRD, ticket details, and relevant-files context into the beads drafting prompt. This gives each council member the full picture: what needs to be built (PRD), why (ticket), and what code already exists (relevant files).',
       'Independent Blueprint Drafting: Each council member independently proposes a semantic beads blueprint. A blueprint contains individual bead definitions, each with a description of what the bead should accomplish, acceptance criteria for verifying completion, dependency declarations (which beads must complete before this one can start), and test intent (what tests should verify this bead\'s work).',
       'Task Decomposition Strategy: Models decide how to split the PRD into beads — balancing granularity (each bead should be a meaningful unit of work) against dependency complexity (too many fine-grained beads create complex dependency chains). Different council members may propose very different decomposition strategies.',
-      'Validation & Metrics: Draft output is normalized, validated against the expected schema (proper bead structure, valid dependency references, non-empty fields), and stored as council draft artifacts. Draft metrics capture task counts, structure depth, and dependency graph complexity for each blueprint.',
+      'Validation & Metrics: Draft output is normalized, validated against the expected schema (proper bead structure, valid dependency references, non-empty fields), and stored as council draft artifacts. Draft metrics capture task counts, structure depth, and dependency graph complexity for each blueprint. Invalid, failed, or timed-out blueprint bodies are suppressed from structured artifact views and preserved only as raw attempts/log diagnostics.',
     ],
     outputs: [
       'Competing beads blueprint drafts — one from each council member — each proposing a different task decomposition strategy.',
       'Draft metrics for task counts, dependency graph complexity, and structural analysis.',
-      'Council artifacts persisted for the upcoming voting phase.',
+      'Council artifacts persisted for the upcoming voting phase, with rejected raw attempts retained separately from accepted blueprint bodies.',
     ],
     transitions: [
       'Quorum Met → Voting on Blueprint: When enough valid blueprints are complete (meeting quorum), the workflow advances to the beads voting phase.',
@@ -490,6 +493,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Context available: Relevant Files + Ticket Details + PRD.',
       'Blueprints at this stage are semantic — they describe tasks conceptually without execution-specific fields like shell commands or exact file paths. Those are added later during the expansion step.',
+      'Rejected or uncorrectable blueprint output is diagnostic-only in artifacts; the structured tab does not render malformed blueprint text as if it were a usable draft.',
       'Why independent drafting? Different models may identify different natural task boundaries. Voting on competing blueprints helps select the most logical and implementable decomposition.',
     ],
     equivalents: [
@@ -688,6 +692,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This state is still pre-coding. No permanent repository files should be modified here.',
       'No AI execution proceeds past this gate until you approve the proposed setup plan.',
+      'If setup-plan generation fails, rejected `modelOutput` is diagnostic-only: the structured details show failure state and errors, while full malformed output is available from Raw diagnostics.',
       'The approved setup plan is separate from the final execution setup profile. The profile is produced only after the next phase verifies readiness and runs any approved temporary setup inside LoopTroop-owned runtime paths.',
       'Setup-plan generation owns its OpenCode session only while producing the draft: ready reports complete the session, while invalid or failed reports abandon it so retry starts from clean durable context.',
     ],
@@ -1059,7 +1064,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'COUNCIL_DELIBERATING',
     label: 'Council Drafting Questions',
-    description: 'Each council member independently drafts its own interview question strategy in parallel — no model sees another\'s draft, ensuring diverse coverage before the voting round selects the strongest candidate.',
+    description: 'Each council member independently drafts interview questions in parallel; accepted drafts become artifacts, while invalid outputs keep only diagnostics and raw-attempt history.',
     details: WORKFLOW_PHASE_DETAILS.COUNCIL_DELIBERATING,
     kanbanPhase: 'in_progress',
     groupId: 'interview',
@@ -1133,7 +1138,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'DRAFTING_PRD',
     label: 'Council Drafting Specs',
-    description: 'Models produce per-model Full Answers artifacts and competing PRD drafts.',
+    description: 'Models produce per-model Full Answers artifacts and competing PRD drafts. Invalid Full Answers skip that member\'s PRD draft and malformed bodies stay in Raw diagnostics only.',
     details: WORKFLOW_PHASE_DETAILS.DRAFTING_PRD,
     kanbanPhase: 'in_progress',
     groupId: 'prd',
@@ -1195,7 +1200,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'DRAFTING_BEADS',
     label: 'Council Drafting Blueprint',
-    description: 'Each council member independently decomposes the approved PRD into a competing semantic beads blueprint — a task graph with descriptions, acceptance criteria, dependencies, and test intent — before voting selects the best candidate.',
+    description: 'Each council member independently decomposes the approved PRD into a semantic beads blueprint; accepted blueprints advance, while invalid bodies are shown only as diagnostics/raw attempts.',
     details: WORKFLOW_PHASE_DETAILS.DRAFTING_BEADS,
     kanbanPhase: 'in_progress',
     groupId: 'beads',
@@ -1282,7 +1287,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_EXECUTION_SETUP_APPROVAL',
     label: 'Approving Workspace Setup',
-    description: 'Review the readiness audit and approve any temporary workspace preparation before execution runs it.',
+    description: 'Review the readiness audit and approve any temporary workspace preparation; failed setup-plan output stays in Raw diagnostics, not the structured plan body.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_EXECUTION_SETUP_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'pre_implementation',

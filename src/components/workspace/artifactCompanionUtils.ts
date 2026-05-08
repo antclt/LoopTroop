@@ -35,6 +35,21 @@ function normalizeMemberOutcomes(value: unknown): Record<string, string> | undef
   )
 }
 
+function isFailedCouncilOutcome(value: unknown): boolean {
+  return value === 'invalid_output' || value === 'failed' || value === 'timed_out'
+}
+
+function suppressFailedDraftBody<T extends Record<string, unknown>>(draft: T): T {
+  if (!isFailedCouncilOutcome(draft.outcome) || !('content' in draft)) return draft
+  const rest = { ...draft }
+  delete rest.content
+  return rest as T
+}
+
+function suppressFailedDraftBodies(drafts: Record<string, unknown>[]): Record<string, unknown>[] {
+  return drafts.map((draft) => suppressFailedDraftBody(draft))
+}
+
 export function findLatestArtifact(
   artifacts: ArtifactSource[],
   predicate: (artifact: ArtifactSource) => boolean,
@@ -116,7 +131,7 @@ export function mergeDraftArtifactContent(
   const mergedDrafts = orderedMemberIds.map((memberId) => {
     const draft = drafts.find((entry) => entry.memberId === memberId) ?? {}
     const detail = detailByMember.get(memberId) ?? {}
-    return {
+    return suppressFailedDraftBody({
       ...detail,
       ...draft,
       memberId,
@@ -125,7 +140,7 @@ export function mergeDraftArtifactContent(
         : typeof detail.outcome === 'string'
           ? detail.outcome
           : undefined,
-    }
+    })
   })
 
   return JSON.stringify({
@@ -150,7 +165,7 @@ export function mergeVoteArtifactContent(
 
   if (!companion && !draftRecord) return voteContent
 
-  const resolvedDrafts = normalizeDraftList(draftRecord?.drafts ?? companion?.drafts ?? core.drafts)
+  const resolvedDrafts = suppressFailedDraftBodies(normalizeDraftList(draftRecord?.drafts ?? companion?.drafts ?? core.drafts))
   const resolvedMemberOutcomes = normalizeMemberOutcomes(
     draftRecord?.memberOutcomes ?? core.memberOutcomes,
   )

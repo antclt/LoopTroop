@@ -464,6 +464,8 @@ export async function handleInterviewDeliberate(
         structuredOutput: entry.structuredOutput,
         ...(typeof entry.rawResponse === 'string' ? { rawResponse: entry.rawResponse } : {}),
         ...(typeof entry.normalizedResponse === 'string' ? { normalizedResponse: entry.normalizedResponse } : {}),
+        ...(entry.rawAttempts ? { rawAttempts: entry.rawAttempts } : {}),
+        ...(entry.skippedReason ? { skippedReason: entry.skippedReason } : {}),
       }
       if (entry.structuredOutput?.repairWarnings.length) {
         emitPhaseLog(
@@ -570,7 +572,7 @@ export async function handleInterviewVote(
     acc[member.modelId] = 'pending'
     return acc
   }, {})
-  const liveVoterDetails = new Map<string, { voterId: string; error?: string; rawResponse?: string; normalizedResponse?: string; structuredOutput?: NonNullable<typeof intermediate.drafts[number]['structuredOutput']> }>()
+  const liveVoterDetails = new Map<string, { voterId: string; error?: string; rawResponse?: string; normalizedResponse?: string; structuredOutput?: NonNullable<typeof intermediate.drafts[number]['structuredOutput']>; rawAttempts?: NonNullable<typeof intermediate.drafts[number]['rawAttempts']> }>()
 
   emitPhaseLog(ticketId, context.externalId, 'COUNCIL_VOTING_INTERVIEW', 'info',
     `Interview voting started with ${members.length} council members on ${intermediate.drafts.filter(d => d.outcome === 'completed').length} drafts.`)
@@ -632,6 +634,7 @@ export async function handleInterviewVote(
         ...(typeof entry.rawResponse === 'string' ? { rawResponse: entry.rawResponse } : {}),
         ...(typeof entry.normalizedResponse === 'string' ? { normalizedResponse: entry.normalizedResponse } : {}),
         ...(entry.structuredOutput ? { structuredOutput: entry.structuredOutput } : {}),
+        ...(entry.rawAttempts ? { rawAttempts: entry.rawAttempts } : {}),
       })
       upsertCouncilVoteArtifact(ticketId, 'COUNCIL_VOTING_INTERVIEW', 'interview_votes', intermediate.drafts, liveVotes, liveVoterOutcomes, [...liveVoterDetails.values()])
     },

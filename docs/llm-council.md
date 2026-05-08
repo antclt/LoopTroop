@@ -39,6 +39,10 @@ This is where LoopTroop deliberately seeks diversity. A single draft tends to en
 
 PRD drafting has an extra first part: each member first produces its own Full Answers artifact from the approved interview, filling skipped answers when needed. The member then drafts its PRD from that completed answer set. After voting and refinement, the winning model's Full Answers artifact is available read-only from the PRD approval screen as supporting context.
 
+If a member's Full Answers artifact is invalid after retry, that member's PRD draft is not started. LoopTroop records a concise skipped/invalid PRD draft diagnostic instead of copying the Full Answers malformed text into the PRD draft artifact.
+
+Rejected model responses are diagnostic data, not draft bodies. Accepted drafts persist normalized artifact content; invalid, failed, or timed-out outputs show only outcome, model, validation/retry diagnostics, and short excerpts in the structured artifact view. The full malformed responses remain available through Raw attempt views and execution logs.
+
 ## Step 2: Structured Voting
 
 Voting is not "pick the one you like." It is a structured evaluation pass over anonymized drafts.

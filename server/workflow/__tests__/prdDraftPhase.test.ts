@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { parseUiArtifactCompanionArtifact } from '@shared/artifactCompanions'
-import type { Vote } from '../../council/types'
+import type { DraftResult, Vote } from '../../council/types'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { getLatestPhaseArtifact } from '../../storage/tickets'
 import { TEST, makeInterviewYaml, makePrdYaml } from '../../test/factories'
@@ -37,6 +37,7 @@ vi.mock('../../council/voter', async () => {
 })
 
 import { handleMockPrdDraft, handleMockPrdVote, handlePrdDraft, handlePrdVote } from '../phases/prdPhase'
+import { upsertCouncilDraftArtifact } from '../phases/helpers'
 
 const repoManager = createTestRepoManager('prd-draft-')
 
@@ -64,6 +65,54 @@ describe('handlePrdDraft', () => {
 
     expect(draftPRDMock).not.toHaveBeenCalled()
     expect(getLatestPhaseArtifact(ticket.id, 'prd_drafts', 'DRAFTING_PRD')).toBeUndefined()
+  })
+
+  it('persists invalid draft diagnostics without visible artifact content', () => {
+    const { ticket } = createInitializedTestTicket(repoManager)
+    const malformedOutput = 'not a valid PRD draft but previously leaked into artifact body'
+    const drafts: DraftResult[] = [{
+      memberId: TEST.councilMembers[0],
+      content: malformedOutput,
+      outcome: 'invalid_output',
+      duration: 123,
+      error: 'PRD draft failed validation',
+      rawResponse: malformedOutput,
+      rawAttempts: [{
+        attempt: 1,
+        stage: 'prd_draft',
+        outcome: 'rejected',
+        rawResponse: malformedOutput,
+        validationError: 'PRD draft failed validation',
+        failureClass: 'validation_error',
+      }],
+      structuredOutput: {
+        repairApplied: false,
+        repairWarnings: [],
+        autoRetryCount: 0,
+        validationError: 'PRD draft failed validation',
+        failureClass: 'validation_error',
+      },
+    }]
+
+    upsertCouncilDraftArtifact(ticket.id, 'DRAFTING_PRD', 'prd_drafts', drafts, {
+      [TEST.councilMembers[0]]: 'invalid_output',
+    }, true)
+
+    const coreRow = getLatestPhaseArtifact(ticket.id, 'prd_drafts', 'DRAFTING_PRD')
+    const companionRow = getLatestPhaseArtifact(ticket.id, 'ui_artifact_companion:prd_drafts', 'DRAFTING_PRD')
+    expect(coreRow).toBeDefined()
+    expect(companionRow).toBeDefined()
+
+    const corePayload = JSON.parse(coreRow!.content) as { drafts?: Array<{ content?: string; outcome?: string }> }
+    expect(corePayload.drafts?.[0]).toMatchObject({ outcome: 'invalid_output' })
+    expect(corePayload.drafts?.[0]?.content).toBeUndefined()
+
+    const companionPayload = parseUiArtifactCompanionArtifact(companionRow!.content)?.payload as {
+      draftDetails?: Array<{ content?: string; rawResponse?: string; rawAttempts?: Array<{ rawResponse?: string }> }>
+    } | undefined
+    expect(companionPayload?.draftDetails?.[0]?.content).toBeUndefined()
+    expect(companionPayload?.draftDetails?.[0]?.rawResponse).toBe(malformedOutput)
+    expect(companionPayload?.draftDetails?.[0]?.rawAttempts?.[0]?.rawResponse).toBe(malformedOutput)
   })
 
   it('persists normalized draft metadata and logs PRD-specific metrics', async () => {

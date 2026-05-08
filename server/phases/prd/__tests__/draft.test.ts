@@ -994,7 +994,33 @@ describe.concurrent('draftPRD', () => {
     )
 
     expect(result.fullAnswers[0]).toMatchObject({ memberId: 'model-a', outcome: 'invalid_output', structuredOutput: { autoRetryCount: 1 } })
-    expect(result.drafts[0]?.outcome).toBe('invalid_output')
+    expect(result.fullAnswers[0]?.rawAttempts).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        stage: 'full_answers',
+        outcome: 'rejected',
+        rawResponse: 'This is not valid interview YAML.',
+      }),
+      expect.objectContaining({
+        attempt: 2,
+        stage: 'full_answers',
+        outcome: 'rejected',
+        rawResponse: '1. Introduce shard support.\n2. Add parser repairs.\n3. Update tests.',
+      }),
+    ])
+    expect(result.drafts[0]).toMatchObject({
+      memberId: 'model-a',
+      outcome: 'invalid_output',
+      content: '',
+      error: 'PRD draft not started because Full Answers did not pass validation',
+      skippedReason: 'full_answers_invalid',
+      structuredOutput: {
+        autoRetryCount: 0,
+        validationError: 'PRD draft not started because Full Answers did not pass validation',
+      },
+    })
+    expect(result.drafts[0]?.rawResponse).toBeUndefined()
+    expect(result.drafts[0]?.rawAttempts).toBeUndefined()
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
   })
 
@@ -1010,7 +1036,14 @@ describe.concurrent('draftPRD', () => {
     )
 
     expect(result.fullAnswers[0]).toMatchObject({ memberId: 'model-a', outcome: 'invalid_output', structuredOutput: { autoRetryCount: 1 } })
-    expect(result.drafts[0]?.outcome).toBe('invalid_output')
+    expect(result.drafts[0]).toMatchObject({
+      memberId: 'model-a',
+      outcome: 'invalid_output',
+      content: '',
+      error: 'PRD draft not started because Full Answers did not pass validation',
+      skippedReason: 'full_answers_invalid',
+    })
+    expect(result.drafts[0]?.rawResponse).toBeUndefined()
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
   })
 
@@ -1072,11 +1105,16 @@ describe.concurrent('draftPRD', () => {
     expect(result.drafts[0]).toMatchObject({
       memberId: 'model-a',
       outcome: 'invalid_output',
+      content: '',
+      error: 'PRD draft not started because Full Answers did not pass validation',
+      skippedReason: 'full_answers_invalid',
       structuredOutput: {
-        autoRetryCount: 1,
-        validationError: 'Interview document output echoed the prompt instead of returning a structured interview artifact',
+        autoRetryCount: 0,
+        validationError: 'PRD draft not started because Full Answers did not pass validation',
       },
     })
+    expect(result.drafts[0]?.rawResponse).toBeUndefined()
+    expect(result.drafts[0]?.rawAttempts).toBeUndefined()
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
     const fullAnswerRetryMessages = adapter.messages.get('mock-session-1')?.filter((message) => typeof message.content === 'string' && message.content.includes('Full Answers Structured Output Retry')) ?? []
     expect(fullAnswerRetryMessages).toHaveLength(1)

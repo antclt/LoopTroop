@@ -1,6 +1,6 @@
 import jsYaml from 'js-yaml'
 import type { PromptPart } from '../opencode/types'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlTypeUnionScalars, repairYamlUnclosedQuotes, stripCodeFences } from '@shared/yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlTypeUnionScalars, repairYamlUnclosedQuotes, stripCodeFences } from '@shared/yamlRepair'
 import { isRecord } from '@shared/typeGuards'
 
 export { isRecord }
@@ -131,6 +131,7 @@ const XML_STYLE_TAGS_WARNING = 'Stripped XML-style tags from the payload before 
 const CANDIDATE_RECOVERY_WARNING = 'Recovered the structured artifact from surrounding transcript or wrapper text before validation.'
 const WRAPPER_KEY_WARNING = 'Removed wrapper key from top level.'
 const INLINE_YAML_WARNING = 'Repaired inline YAML sequence or mapping syntax before parsing.'
+const MAPPING_KEY_COLON_SPACE_WARNING = 'Repaired YAML mapping keys missing a space after colon before parsing.'
 const PLAIN_SCALAR_COLON_WARNING = 'Quoted YAML plain scalar values containing colon-space before reparsing.'
 const QUOTED_SCALAR_WARNING = 'Repaired improperly quoted YAML scalar value.'
 const RESERVED_INDICATOR_SCALAR_WARNING = 'Quoted plain YAML scalars that began with reserved indicator characters (` or @) before reparsing.'
@@ -514,6 +515,7 @@ export function parseYamlOrJsonCandidate(
         markdownCodeFence?: boolean
         nestedMappingChildren?: boolean
         inlineYaml?: boolean
+        mappingKeyColonSpace?: boolean
         plainScalarColon?: boolean
         xmlStyleTags?: string[]
       },
@@ -526,6 +528,9 @@ export function parseYamlOrJsonCandidate(
       }
       if (appliedRepairs?.inlineYaml) {
         appendRepairWarningOnce(options?.repairWarnings, INLINE_YAML_WARNING)
+      }
+      if (appliedRepairs?.mappingKeyColonSpace) {
+        appendRepairWarningOnce(options?.repairWarnings, MAPPING_KEY_COLON_SPACE_WARNING)
       }
       if (appliedRepairs?.plainScalarColon) {
         appendRepairWarningOnce(options?.repairWarnings, PLAIN_SCALAR_COLON_WARNING)
@@ -562,13 +567,15 @@ export function parseYamlOrJsonCandidate(
       const inlineKeyPreRepaired = repairYamlInlineKeys(inlineSequencePreRepaired, {
         nestedMappingChildren: options?.nestedMappingChildren,
       })
-      const plainScalarColonPreRepaired = repairYamlPlainScalarColons(inlineKeyPreRepaired)
+      const mappingKeyColonSpacePreRepaired = repairYamlMappingKeyColonSpace(inlineKeyPreRepaired)
+      const plainScalarColonPreRepaired = repairYamlPlainScalarColons(mappingKeyColonSpacePreRepaired)
       const preParseRepaired = applyNestedMappingRepair(plainScalarColonPreRepaired)
       if (preParseRepaired !== candidate) {
         try {
           return finalizeParsedCandidate(jsYaml.load(preParseRepaired), {
             inlineYaml: inlineSequencePreRepaired !== candidate || inlineKeyPreRepaired !== inlineSequencePreRepaired,
-            plainScalarColon: plainScalarColonPreRepaired !== inlineKeyPreRepaired,
+            mappingKeyColonSpace: mappingKeyColonSpacePreRepaired !== inlineKeyPreRepaired,
+            plainScalarColon: plainScalarColonPreRepaired !== mappingKeyColonSpacePreRepaired,
             nestedMappingChildren: preParseRepaired !== plainScalarColonPreRepaired,
           })
         } catch { /* fall through to the original input and later repairs */ }
@@ -595,23 +602,26 @@ export function parseYamlOrJsonCandidate(
         const inlineRepaired = repairYamlInlineKeys(inlineSequenceRepaired, {
           nestedMappingChildren: options?.nestedMappingChildren,
         })
-        if (inlineRepaired !== effectiveBase) {
-          const nestedInlineRepaired = applyNestedMappingRepair(inlineRepaired)
-          if (nestedInlineRepaired !== inlineRepaired) {
+        const mappingKeyColonSpaceRepaired = repairYamlMappingKeyColonSpace(inlineRepaired)
+        if (mappingKeyColonSpaceRepaired !== effectiveBase) {
+          const nestedInlineRepaired = applyNestedMappingRepair(mappingKeyColonSpaceRepaired)
+          if (nestedInlineRepaired !== mappingKeyColonSpaceRepaired) {
             try {
               return finalizeParsedCandidate(jsYaml.load(nestedInlineRepaired), {
                 nestedMappingChildren: true,
-                inlineYaml: true,
+                inlineYaml: inlineRepaired !== effectiveBase,
+                mappingKeyColonSpace: mappingKeyColonSpaceRepaired !== inlineRepaired,
               })
             } catch { /* fall through — later repairs may still be needed */ }
           }
           try {
-            const parsed = jsYaml.load(inlineRepaired)
-            appendRepairWarningOnce(options?.repairWarnings, INLINE_YAML_WARNING)
-            return parsed
+            return finalizeParsedCandidate(jsYaml.load(mappingKeyColonSpaceRepaired), {
+              inlineYaml: inlineRepaired !== effectiveBase,
+              mappingKeyColonSpace: mappingKeyColonSpaceRepaired !== inlineRepaired,
+            })
           } catch { /* fall through — lines split but further repairs may be needed */ }
         }
-        const afterInline = inlineRepaired !== effectiveBase ? inlineRepaired : effectiveBase
+        const afterInline = mappingKeyColonSpaceRepaired !== effectiveBase ? mappingKeyColonSpaceRepaired : effectiveBase
 
         // Pre-processing: strip XML tags, quote fragile free_text values, remove duplicate keys, fix missing list-dash space
         const xmlStripped = stripSpuriousXmlTags(afterInline)

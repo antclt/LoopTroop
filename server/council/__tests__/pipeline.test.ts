@@ -135,7 +135,12 @@ describe('Council Pipeline', () => {
 
     const drafts = draftRun.drafts
     expect(drafts[0]!.outcome).toBe('invalid_output')
-    expect(drafts[0]!.content).toBe('still not valid yaml')
+    expect(drafts[0]!.content).toBe('')
+    expect(drafts[0]!.rawResponse).toBe('still not valid yaml')
+    expect(drafts[0]!.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'not valid yaml' }),
+      expect.objectContaining({ attempt: 2, outcome: 'rejected', rawResponse: 'still not valid yaml' }),
+    ])
     expect(drafts[0]!.error).toBe('schema validation failed')
   })
 

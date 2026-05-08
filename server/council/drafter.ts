@@ -7,6 +7,7 @@ import type {
   DraftResult,
   DraftStructuredOutputMeta,
   MemberOutcome,
+  RawAttempt,
 } from './types'
 import { CancelledError } from './types'
 import type { Message, PromptPart, StreamEvent } from '../opencode/types'
@@ -121,6 +122,8 @@ export async function generateDrafts(
       structuredOutput: draft.structuredOutput,
       ...(typeof draft.rawResponse === 'string' ? { rawResponse: draft.rawResponse } : {}),
       ...(typeof draft.normalizedResponse === 'string' ? { normalizedResponse: draft.normalizedResponse } : {}),
+      ...(draft.rawAttempts ? { rawAttempts: draft.rawAttempts } : {}),
+      ...(draft.skippedReason ? { skippedReason: draft.skippedReason } : {}),
     })
     return true
   }
@@ -137,6 +140,7 @@ export async function generateDrafts(
     let lastFailureClass: DraftStructuredOutputMeta['failureClass']
     let rawResponse: string | undefined
     let normalizedResponse: string | undefined
+    const rawAttempts: RawAttempt[] = []
     const retryDiagnostics: NonNullable<DraftStructuredOutputMeta['retryDiagnostics']> = []
 
     const buildStructuredOutput = (): DraftStructuredOutputMeta | undefined => {
@@ -248,6 +252,12 @@ export async function generateDrafts(
           if (normalizedContent !== content) {
             normalizedResponse = normalizedContent
           }
+          rawAttempts.push({
+            attempt: attemptCount + 1,
+            stage: 'draft',
+            outcome: 'accepted',
+            rawResponse: content,
+          })
           content = normalizedContent
           break
         } catch (error) {
@@ -255,6 +265,14 @@ export async function generateDrafts(
           lastValidationError = validationError
           const retryDecision = getStructuredRetryDecision(content, result.responseMeta)
           lastFailureClass = retryDecision.failureClass
+          rawAttempts.push({
+            attempt: attemptCount + 1,
+            stage: 'draft',
+            outcome: 'rejected',
+            rawResponse: content,
+            validationError,
+            failureClass: retryDecision.failureClass,
+          })
           retryDiagnostics.push(resolveStructuredRetryDiagnostic({
             attempt: attemptCount + 1,
             rawResponse: content,
@@ -277,6 +295,15 @@ export async function generateDrafts(
         }
       }
 
+      if (!validateDraft && rawResponse !== undefined && rawAttempts.length === 0) {
+        rawAttempts.push({
+          attempt: 1,
+          stage: 'draft',
+          outcome: 'accepted',
+          rawResponse,
+        })
+      }
+
       const draft: DraftResult = {
         memberId: member.modelId,
         outcome: 'completed',
@@ -287,6 +314,7 @@ export async function generateDrafts(
         structuredOutput: buildStructuredOutput(),
         ...(typeof rawResponse === 'string' ? { rawResponse } : {}),
         ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
+        ...(rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
       }
 
       if (!recordResult(draft, sessionId)) {
@@ -328,6 +356,7 @@ export async function generateDrafts(
           structuredOutput: buildStructuredOutput(),
           ...(typeof rawResponse === 'string' ? { rawResponse } : {}),
           ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
+          ...(rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
         }
         recordResult(draft, sessionId)
         return draft
@@ -340,7 +369,7 @@ export async function generateDrafts(
       } = classifyDraftFailure(err, { content, failureClass: lastFailureClass })
       const draft: DraftResult = {
         memberId: member.modelId,
-        content: outcome === 'failed' ? '' : content,
+        content: '',
         outcome,
         duration,
         error: errorDetail,
@@ -358,6 +387,7 @@ export async function generateDrafts(
         ),
         ...(typeof rawResponse === 'string' ? { rawResponse } : {}),
         ...(typeof normalizedResponse === 'string' ? { normalizedResponse } : {}),
+        ...(rawAttempts.length > 0 ? { rawAttempts: [...rawAttempts] } : {}),
       }
       recordResult(draft, sessionId)
       return draft
