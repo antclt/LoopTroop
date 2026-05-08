@@ -1,7 +1,6 @@
 import { useMemo, useState } from 'react'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
 import { formatTimestampString } from '@/components/workspace/logFormat'
@@ -138,7 +137,7 @@ export function ErrorOccurrencesPanel({
       </button>
 
       {expanded && (
-        <ScrollArea className="max-h-[260px] pr-1">
+        <div className="max-h-[260px] overflow-y-auto pr-1">
           <div className="space-y-1.5">
             {visibleOccurrences.map((occurrence) => (
               <ErrorOccurrenceRow
@@ -149,7 +148,7 @@ export function ErrorOccurrencesPanel({
               />
             ))}
           </div>
-        </ScrollArea>
+        </div>
       )}
     </div>
   )

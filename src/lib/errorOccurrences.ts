@@ -99,11 +99,11 @@ export function getTicketErrorOccurrences(ticket: TicketErrorSource): TicketErro
     .sort((left, right) => {
       const leftTime = Date.parse(left.occurredAt)
       const rightTime = Date.parse(right.occurredAt)
-      if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) return left.occurrenceNumber - right.occurrenceNumber
+      if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) return right.occurrenceNumber - left.occurrenceNumber
       if (Number.isNaN(leftTime)) return 1
       if (Number.isNaN(rightTime)) return -1
-      if (leftTime !== rightTime) return leftTime - rightTime
-      return left.occurrenceNumber - right.occurrenceNumber
+      if (leftTime !== rightTime) return rightTime - leftTime
+      return right.occurrenceNumber - left.occurrenceNumber
     })
 
   if (normalized.length > 0) return normalized
