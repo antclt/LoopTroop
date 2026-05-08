@@ -215,7 +215,7 @@ Two extra guards matter at the user-action layer:
 | Workflow state | durable ticket status plus serialized XState snapshot |
 | Relevant file scan | `.ticket/relevant-files.yaml` plus scan companion artifacts |
 | Interview refinement and answers | `.ticket/interview.yaml`, interview session snapshot, answer state |
-| PRD drafting and approval | `.ticket/prd.yaml`, per-model full answers artifacts, winning Full Answers approval context, PRD coverage history |
+| PRD drafting and approval | `.ticket/prd.yaml`, per-model full answers artifacts, raw attempt diagnostics for rejected Full Answers/PRD drafts, winning Full Answers approval context, PRD coverage history |
 | Beads coverage and approval | `.ticket/beads/<flow>/.beads/issues.jsonl`, beads coverage history, approval receipt |
 | Setup-plan approval | `execution_setup_plan` artifact and approval receipt |
 | Execution runtime | `.ticket/runtime/execution-log.jsonl`, `.ticket/runtime/execution-log.debug.jsonl`, `.ticket/runtime/execution-log.ai.jsonl`, `.ticket/runtime/state.yaml`, execution setup profile, bead notes and diffs |
@@ -296,7 +296,7 @@ See [Configuration Reference → Interview Coverage Passes](/configuration#inter
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `DRAFTING_PRD` | Each council member first creates its own Full Answers artifact by filling skipped interview answers where needed, then drafts a PRD candidate from that member-specific completed interview. | Per-model Full Answers artifacts, PRD drafts, draft diagnostics. | `cancel` | Valid quorum advances to PRD voting. |
+| `DRAFTING_PRD` | Each council member first creates its own Full Answers artifact by filling skipped interview answers where needed, then drafts a PRD candidate from that member-specific completed interview. If a Full Answers artifact stays invalid after retry, that member's PRD draft is not started and only a concise skipped/invalid diagnostic is shown. | Per-model Full Answers artifacts, PRD drafts, skipped draft diagnostics, raw attempt history. | `cancel` | Valid quorum advances to PRD voting. |
 | `COUNCIL_VOTING_PRD` | The council scores anonymized PRD drafts against a weighted requirements rubric and selects the best baseline. | PRD vote artifacts, ranking breakdowns, winner selection. | `cancel` | Winner advances to PRD refinement. |
 | `REFINING_PRD` | The winning PRD model upgrades its own draft by selectively merging stronger requirements, acceptance criteria, tests, and edge cases from the losing drafts. | Refined PRD Candidate v1 and optional diff metadata. | `cancel` | Success advances to PRD coverage. |
 | `VERIFYING_PRD_COVERAGE` | The current PRD candidate is checked against the winning model's Full Answers artifact and revised in-place when gaps are found. This is a versioned loop capped by configuration. | PRD coverage history, latest PRD candidate, unresolved-gap diagnostics. | `cancel` | Clean or cap-reached advances to PRD approval. |
@@ -312,7 +312,7 @@ See [Configuration Reference → PRD Coverage Passes](/configuration#prd-coverag
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `DRAFTING_BEADS` | Council members independently decompose the approved PRD into semantic execution blueprints with dependencies, acceptance criteria, and test intent. | Beads draft artifacts and structure metrics. | `cancel` | Valid quorum advances to beads voting. |
+| `DRAFTING_BEADS` | Council members independently decompose the approved PRD into semantic execution blueprints with dependencies, acceptance criteria, and test intent. Invalid, failed, or timed-out blueprint text is kept out of the structured draft body and remains available through Raw diagnostics. | Beads draft artifacts, structure metrics, and raw attempt diagnostics. | `cancel` | Valid quorum advances to beads voting. |
 | `COUNCIL_VOTING_BEADS` | The council ranks anonymized blueprints using an architecture rubric focused on decomposition quality, feasibility, dependency correctness, and testability. | Beads vote artifacts, scorecards, winner selection. | `cancel` | Winner advances to beads refinement. |
 | `REFINING_BEADS` | The winning blueprint is strengthened with better tasks, constraints, and test ideas from losing blueprints, while preserving the dependency graph shape. | Refined semantic blueprint plus diff metadata. | `cancel` | Success advances to beads coverage. |
 | `VERIFYING_BEADS_COVERAGE` | The semantic blueprint is checked against the PRD and revised until coverage is acceptable or the pass budget is exhausted. | Coverage history, revised blueprint candidate, unresolved-gap diagnostics. | `cancel` | Clean or cap-reached advances to beads expansion. |
@@ -330,7 +330,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
 | `PRE_FLIGHT_CHECK` | LoopTroop runs deterministic readiness checks: workspace health, OpenCode reachability, execution-mode probe, bead availability, and dependency-graph sanity. | Pre-flight report. | `cancel` | Passing checks move to setup-plan approval. |
-| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. Regenerating archives the current draft as a prior version, starts background generation, and returns you to the ticket overview immediately; all prior versions are accessible via the VERSION dropdown at the top of the approval pane. | `execution_setup_plan`, generation report, approval receipt on approval. | `approve`, `cancel` | Approved plan advances to execution setup. |
+| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. Regenerating archives the current draft as a prior version, starts background generation, and returns you to the ticket overview immediately; all prior versions are accessible via the VERSION dropdown at the top of the approval pane. Failed setup-plan model output is diagnostic-only and is not shown as structured setup content. | `execution_setup_plan`, generation report, raw setup diagnostics, approval receipt on approval. | `approve`, `cancel` | Approved plan advances to execution setup. |
 | `PREPARING_EXECUTION_ENV` | The approved setup plan is executed in a constrained way. The goal is a reusable runtime profile, not general project mutation. | Execution setup profile, setup logs, setup diagnostics. | `cancel` | Success enters `CODING`. |
 
 ### Implementation
@@ -382,7 +382,7 @@ The retry route adds two safety checks before it dispatches `RETRY`:
 | Frontend crashes or restarts | Draft interview answers and approval editor state are saved to ticket UI-state artifacts. Page unload uses a best-effort keepalive write for the latest unsaved snapshot. |
 | Backend process restarts | Startup validates or reconstructs non-terminal actor snapshots, starts actors from their stored state, and immediately processes the restored snapshot so active work continues. |
 | OpenCode server restarts or loses a session | Owned sessions are validated against the remote OpenCode session list. Missing remote sessions are abandoned and a fresh owned session is created when the phase can safely continue. |
-| Model prompt fails, times out, or returns invalid output | Planning phases use structured retries and attempt-scoped artifacts. Execution phases use bead-scoped retry, context wipe notes, and worktree reset before trying again. |
+| Model prompt fails, times out, or returns invalid output | Planning phases use structured retries and attempt-scoped artifacts. Invalid artifact bodies show only failure diagnostics; malformed text stays in Raw/logs. Execution phases use bead-scoped retry, context wipe notes, and worktree reset before trying again. |
 | Resume point cannot be proven | The ticket enters or remains in `BLOCKED_ERROR` with an explicit retry/cancel choice. |
 
 ## PR Review Outcomes

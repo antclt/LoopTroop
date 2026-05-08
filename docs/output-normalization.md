@@ -4,6 +4,8 @@ Every structured artifact that an AI council member produces goes through a norm
 
 Repairs produce `repairWarnings` that are stored on the run record and surfaced in the diagnostics view. A repair being applied never silently discards data; it always records what changed.
 
+If output remains invalid after the bounded repair and retry path, LoopTroop treats the malformed text as diagnostics only. It is kept in raw attempt views and execution logs, but it is not rendered as structured artifact body content.
+
 ---
 
 ## Universal Repairs
@@ -109,7 +111,15 @@ questions:
     phase: foundation
 ```
 
-#### 3. Inline keys repair
+#### 3. Missing mapping-key colon spacing
+
+**Trigger:** A simple mapping key is emitted without the required space after the colon, e.g. `artifact:interview`, `skipped:false`, or `- id:Q01`. YAML can treat these as plain scalar strings instead of mapping entries.
+
+**Repair:** A single space is inserted after the colon for lines that already look like simple mapping entries. The repair is line-scoped, skips block scalar bodies, and avoids one-letter keys such as Windows drive paths.
+
+**Warning:** *Repaired YAML mapping keys missing a space after colon before parsing.*
+
+#### 4. Inline keys repair
 
 **Trigger:** Multiple mapping keys appear on a single line, e.g. `batch_number: 4 progress: current: 4 total: 17`.
 
@@ -117,7 +127,7 @@ questions:
 
 **Warning:** *Repaired inline YAML sequence or mapping syntax before parsing.*
 
-#### 4. Plain scalar colon repair
+#### 5. Plain scalar colon repair
 
 **Trigger:** A plain (unquoted) YAML scalar value contains `: ` (colon followed by space), which YAML interprets as a nested mapping entry. Example: `rationale: some rules: apply here`.
 
@@ -125,7 +135,7 @@ questions:
 
 **Warning:** *Quoted YAML plain scalar values containing colon-space before reparsing.*
 
-#### 5. Markdown code fence stripping
+#### 6. Markdown code fence stripping
 
 **Trigger:** The entire artifact is wrapped in a ` ```yaml ` … ` ``` ` block (or `json` / `yml` / `jsonl`).
 
@@ -133,7 +143,7 @@ questions:
 
 **Warning:** *Unwrapped markdown code fence wrapping the YAML payload.*
 
-#### 6. Spurious XML tag stripping
+#### 7. Spurious XML tag stripping
 
 **Trigger:** Lines that consist entirely of a bare XML-style tag (`<tag>`, `</tag>`, `<tag/>`).
 
@@ -141,25 +151,25 @@ questions:
 
 **Warning:** *Stripped XML-style tags `<tag>` from the payload before parsing.* (Lists the specific tags that were removed.)
 
-#### 7. Free-text scalar quoting
+#### 8. Free-text scalar quoting
 
 **Trigger:** A `free_text:` field has an unquoted plain-scalar value. Such values are always strings in LoopTroop's schema but can start with backticks, look like booleans, or contain `: ` — all of which cause YAML to misinterpret them.
 
 **Repair:** The value is wrapped in double quotes. Multi-line single-quoted values are converted to YAML block literals (`|-`).
 
-#### 8. Missing list-dash space
+#### 9. Missing list-dash space
 
 **Trigger:** A list item starts with `-` immediately followed by a key letter: `-key: value` instead of `- key: value`.
 
 **Repair:** A space is inserted after the dash.
 
-#### 9. Duplicate key removal
+#### 10. Duplicate key removal
 
 **Trigger:** The same mapping key appears more than once with exactly the same line text (key + value).
 
 **Repair:** The exact duplicate is dropped. If the duplicate opens a nested block (e.g. a second `options:` with the same list), the entire duplicate block is skipped. Ambiguous duplicates with *different* values are left for js-yaml to report as an error.
 
-#### 10. Invalid double-quoted escape repair
+#### 11. Invalid double-quoted escape repair
 
 **Trigger:** A double-quoted YAML scalar contains a backslash sequence that is not valid in YAML (e.g. `\+`, `\p`, `\s` from regex-like text). YAML only permits a specific set of escape sequences (`\n`, `\t`, `\\`, `\"`, `\uXXXX`, etc.).
 
@@ -167,13 +177,13 @@ questions:
 
 **Warning:** *Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.*
 
-#### 11. Unclosed double-quote repair
+#### 12. Unclosed double-quote repair
 
 **Trigger:** A `key: "value` line has an opening `"` with no matching closing `"`, and the next non-blank line is clearly a new YAML structural element (list item, sibling key, code fence, document marker `---`, or end of file).
 
 **Repair:** A closing `"` is appended to the line.
 
-#### 12. Quoted scalar fragment repair
+#### 13. Quoted scalar fragment repair
 
 Two sub-cases:
 
@@ -187,13 +197,13 @@ Two sub-cases:
 
 **Warning:** *Repaired improperly quoted YAML scalar value.*
 
-#### 13. Type-union scalar repair
+#### 14. Type-union scalar repair
 
 **Trigger:** Schema-like values such as `type: "epic" | "user_story"` or `- "unit" | "integration"`. YAML interprets the `|` as a block-scalar indicator after a quoted token.
 
 **Repair:** The entire scalar is wrapped in double quotes.
 
-#### 14. Reserved indicator scalar repair
+#### 15. Reserved indicator scalar repair
 
 **Trigger:** Plain scalars starting with `` ` `` (backtick) or `@`. YAML reserves these characters and rejects plain scalars that begin with them.
 
@@ -210,13 +220,13 @@ question: "`repo_git_mutex` behavior?"
 
 **Warning:** *Quoted plain YAML scalars that began with reserved indicator characters (`` ` `` or `@`) before reparsing.*
 
-#### 15. Sequence entry indent drift repair
+#### 16. Sequence entry indent drift repair
 
 **Trigger:** After a block scalar (`>-`, `|`), subsequent sibling list items drift by 1–3 spaces relative to the first item in the sequence.
 
 **Repair:** All sibling dashes are normalized to the indent of the first `- ` in each sequence level.
 
-#### 16. Indentation repair
+#### 17. Indentation repair
 
 **Trigger:** Property lines inside a list item are indented by the wrong amount (off by 1–2 spaces relative to `dash_indent + 2`).
 
@@ -336,6 +346,25 @@ Questions are sorted by phase (foundation → structure → assembly), preservin
 When the coverage checker returns a list of gap strings, each item is wrapped in double quotes to prevent YAML from coercing values like `true`, `null`, or values containing `: `.
 
 Coverage revision metadata must reference each provided gap. PRD and beads coverage accept exact references first; if a model only changes harmless formatting such as quote style or whitespace, the reference is canonicalized back to the provided gap text and a repair warning is recorded.
+
+---
+
+### Full Answers Artifact
+
+Full Answers uses the interview document parser plus one additional recovery path. It exists only for PRD Part 1, where a council member fills skipped interview answers before drafting a PRD.
+
+**Answer-only overlay recovery**
+
+**Trigger:** The model returns a `questions:` list that contains only canonical question IDs and answer-shaped fields instead of copying the complete interview question metadata. The question ID set must exactly match the approved interview: same count, no duplicates, and no missing or invented IDs. Question blocks may contain only `id`, `answer`, answer scalar fields, and sibling `answered_by` / `answered_at` metadata.
+
+**Repair:** LoopTroop overlays the returned answers onto the approved interview's canonical question order, prompts, phases, source metadata, answer types, and options. Misplaced sibling `answered_by` and `answered_at` values are hoisted into the nested `answer` object when that nested value is absent.
+
+**Warnings:**
+- *Recovered Full Answers answer-only question blocks using canonical question metadata.*
+- *Hoisted answered_by into answer for canonical question Q01.*
+- *Hoisted answered_at into answer for canonical question Q01.*
+
+This recovery is intentionally not shared by PRD, beads, or generic YAML parsers. Those artifacts do not have a safe canonical-question overlay source, so missing structural content remains a validation failure there.
 
 ---
 
@@ -499,3 +528,7 @@ Every repair produces one or more entries in `repairWarnings`. These are stored 
 A `repairApplied: true` flag is set on any result where at least one repair warning was generated or where the winning candidate was not the raw output verbatim. This flag drives the amber repair indicator shown in the council log.
 
 Repairs never silently drop required fields — if a required field cannot be recovered after all repairs, the parse fails and the run is retried with a structured retry prompt that explains the specific validation error.
+
+Structured retry loops may store `rawAttempts` next to the draft, vote, or setup report detail. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class. The older `rawResponse` field remains the latest attempt for compatibility.
+
+Invalid, failed, or timed-out outputs are diagnostic-only. The structured artifact body shows the outcome, model or stage, retry count, validation error, and short diagnostic excerpts; full malformed model text belongs in Raw attempt views and execution logs only.

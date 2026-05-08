@@ -126,6 +126,7 @@ Important note:
 
 - the current DB schema does not include a `file_path` column
 - the frontend artifact normalizer accepts `filePath` in API payloads, but that field is not a physical column in `phase_artifacts`
+- council companion artifacts may store draft/vote metadata and raw attempt diagnostics in `content`; invalid, failed, or timed-out companion payloads intentionally omit malformed model text from structured body fields
 
 ### `ticket_phase_attempts`
 

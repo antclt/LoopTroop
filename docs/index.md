@@ -66,7 +66,7 @@ If you are new to LoopTroop, use this order:
 ### Reference
 
 - [API Reference](api-reference.md): routes, SSE events, payload shapes.
-- [Output Normalization](output-normalization.md): how malformed or partial model output is repaired before use.
+- [Output Normalization](output-normalization.md): how malformed or partial model output is repaired or isolated before use.
 
 ### Operations
 

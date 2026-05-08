@@ -83,6 +83,8 @@ Planning is intentionally artifact-driven.
 
 The planning phases are not one long conversation. Each stage assembles a new context window from durable artifacts and runs in its own session scope.
 
+Only accepted, normalized planning outputs become artifact body content. Rejected or uncorrectable model responses are retained as diagnostics/raw attempts so downstream stages do not consume malformed text as if it were canonical planning state.
+
 ## Execution Flow
 
 Execution is built around beads, not around one monolithic coding prompt.
