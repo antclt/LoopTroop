@@ -1363,6 +1363,13 @@ search: false
     *   Exports are read-only artifacts and must never become source-of-truth or mutate PRD execution status.
     *   Persist exports under `.looptroop/tickets/<ticket-id>/exports/` with `template_source`, `template_version`, `render_hash`, and `generated_at`.
     *   Optional integrations: Export PRD to workflow tools (e.g., Linear tickets, UML diagrams) for immediate action.
+*   **Shareable Completion Summary + Image Generator:** When a ticket reaches `COMPLETED`, add a prominent Share action in the ticket detail view/dashboard that creates a polished summary card for celebrating the result.
+    *   Generate the summary from approved ticket artifacts and execution evidence: ticket title/ID, completion date, final status, outcome summary, key impact, challenges handled, participants, planning artifact links, bead/commit counts, elapsed calendar time, and active execution time when tracked.
+    *   Use the main implementer model for the narrative summary, with deterministic source references to interview, proposal/design/PRD, beads, execution logs, commits, diffs, and harvest output when available.
+    *   Render a branded share image suitable for X/Twitter, LinkedIn, Discord, and similar channels; include LoopTroop branding, ticket ID, readable metric badges, and a subtle "Built with LoopTroop" note.
+    *   Provide lightweight customization: toggle sections, add a caption/hashtag, choose a visual style (`minimal`, `celebratory`, `technical`), export PNG, and copy a Markdown/text version.
+    *   Trigger generation lazily on first Share click or after the `COMPLETED` transition; persist the generated summary/image reference in ticket artifacts for reuse.
+    *   Enforce privacy by default: include only public/share-approved fields, never auto-post, and require explicit user action before copying, downloading, or sharing externally.
 *   **Structured Commit Evidence + Receipt Contract:**
     *   After each completed bead, enforce a deterministic commit template:
         *   `<ticket-id> <bead-id>: <short title>`
