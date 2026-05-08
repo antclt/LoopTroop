@@ -49,6 +49,31 @@ describe('commandLogger', () => {
     expect(logs[2]!.content).toBe('[CMD] $ git push  →  error: remote rejected')
   })
 
+  it('summarizes silent internal commands instead of showing generic ok', () => {
+    const logs: string[] = []
+    withCommandLogging(
+      'test-ticket', 'TEST-1', 'CODING',
+      () => {
+        logCommand('git', ['status', '--porcelain'], { ok: true })
+        logCommand('git', ['ls-files', '--others', '--exclude-standard'], { ok: true })
+        logCommand('git', ['clean', '-fd'], { ok: true })
+        logCommand('git', ['worktree', 'remove', '/tmp/wt'], { ok: true })
+        logCommand('git', ['push', 'origin', 'HEAD:refs/heads/TEST-1'], { ok: true })
+        logCommand('gh', ['pr', 'ready', '123'], { ok: true })
+      },
+      (_phase, _type, content) => { logs.push(content) },
+    )
+
+    expect(logs).toEqual([
+      '[CMD] $ git status --porcelain  →  worktree clean',
+      '[CMD] $ git ls-files --others --exclude-standard  →  no untracked files',
+      '[CMD] $ git clean -fd  →  no files removed',
+      '[CMD] $ git worktree remove /tmp/wt  →  worktree removed',
+      '[CMD] $ git push origin HEAD:refs/heads/TEST-1  →  push completed',
+      '[CMD] $ gh pr ready 123  →  pull request marked ready',
+    ])
+  })
+
   it('emits stderr-only output as a structured command section', () => {
     const logs: string[] = []
     withCommandLogging(
@@ -104,6 +129,26 @@ describe('commandLogger', () => {
       'M  file1.ts',
       'A  file2.ts',
       'D  file3.ts',
+    ].join('\n'))
+  })
+
+  it('normalizes NUL-delimited command output into readable structured lines', () => {
+    const logs: string[] = []
+    withCommandLogging(
+      'test-ticket', 'TEST-1', 'DRAFT',
+      () => {
+        logCommand('git', ['ls-files', '-z'], {
+          ok: true,
+          stdout: 'src/app.ts\0src/main.ts\0',
+        })
+      },
+      (_phase, _type, content) => { logs.push(content) },
+    )
+    expect(logs[0]).toBe([
+      '[CMD] $ git ls-files -z',
+      'STDOUT:',
+      'src/app.ts',
+      'src/main.ts',
     ].join('\n'))
   })
 

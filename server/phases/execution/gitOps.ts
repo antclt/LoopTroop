@@ -260,7 +260,7 @@ export function captureBeadDiff(worktreePath: string, beadStartCommit: string): 
 
 export function resetWorktreeToCommit(worktreePath: string, commit: string, options?: ResetWorktreeOptions): void {
   runGitOp(worktreePath, ['reset', '--hard', commit])
-  const cleanArgs = ['clean', '-fdq']
+  const cleanArgs = ['clean', '-fd']
   for (const path of options?.preservePaths ?? []) {
     cleanArgs.push('-e', path)
   }

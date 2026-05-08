@@ -140,4 +140,35 @@ describe('server/git/github', () => {
     expect(result.patchError).toBe('spawnSync git ENOBUFS')
     expect(result.patch).toContain('omitted the full patch')
   })
+
+  it('syncs the local base branch with fetch progress disabled', async () => {
+    spawnSyncMock.mockImplementation((_command: string, args: readonly string[]) => {
+      if (args.includes('status')) return makeSpawnResult()
+      if (args.includes('fetch')) return makeSpawnResult()
+      if (args.includes('rev-parse') && args.includes('--abbrev-ref')) {
+        return makeSpawnResult({ stdout: 'main\n' })
+      }
+      if (args.includes('rev-parse') && args.includes('refs/remotes/origin/main')) {
+        return makeSpawnResult({ stdout: 'remote-sha\n' })
+      }
+      if (args.includes('merge')) return makeSpawnResult()
+      if (args.includes('rev-parse') && args.includes('HEAD')) {
+        return makeSpawnResult({ stdout: 'local-sha\n' })
+      }
+      return makeSpawnResult()
+    })
+
+    const github = await import('../github')
+    const result = github.syncLocalBaseBranch('/repo', 'main')
+
+    expect(result).toEqual({
+      originalBranch: 'main',
+      localBaseHead: 'local-sha',
+      remoteBaseHead: 'remote-sha',
+    })
+    expect(spawnSyncMock.mock.calls.some(([, args]) => (
+      Array.isArray(args)
+      && args.join(' ') === '-C /repo fetch --no-progress --prune origin'
+    ))).toBe(true)
+  })
 })

@@ -44,7 +44,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 | `.ticket/relevant-files.yaml` | Relevant file scan output used by later planning phases | Replaces older `codebase-map.yaml` terminology |
 | `.ticket/interview.yaml` and `.ticket/prd.yaml` | Editable review artifacts for the approved planning stages | These are user-facing canonical documents |
 | `.ticket/beads/<flow>/.beads/issues.jsonl` | The current bead plan for a given flow or base branch | Stored as line-oriented JSONL, but rewritten atomically on updates |
-| `.ticket/runtime/execution-log.jsonl` | Durable normal execution and phase log stream | Read by `/api/files/:ticketId/logs` and folded for UI display |
+| `.ticket/runtime/execution-log.jsonl` | Durable normal execution and phase log stream | Read by `/api/files/:ticketId/logs` and folded for UI display; internal CMD rows are result-only summaries rather than recurring progress streams |
 | `.ticket/runtime/execution-log.debug.jsonl` | Persisted debug/forensic execution log stream | Read by `/api/files/:ticketId/logs?channel=debug`; supports the same log filters |
 | `.ticket/runtime/execution-log.ai.jsonl` | Persisted AI detail log stream for prompts, thinking, tool calls, and streamed model rows | Read by `/api/files/:ticketId/logs?channel=ai`; folded into AI/model log views |
 | `.ticket/runtime/state.yaml` | Runtime state projection for the active execution | Used for restart and status projection |

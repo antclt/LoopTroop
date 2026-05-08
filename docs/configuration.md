@@ -421,6 +421,8 @@ Hard cap on the number of characters stored for tool outputs in the execution lo
 
 Tool outputs are typically larger than inputs (think: test run output, command stdout, file read results), which is why the default is higher than the input cap.
 
+Internal `SYS > CMD` entries are logged after command completion. Quiet deterministic commands use concise summaries, while real stdout/stderr remains capped here.
+
 **When to change:**
 
 - Increase if you need to see the full output of long test suites or verbose build commands in the log.

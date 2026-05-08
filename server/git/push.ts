@@ -87,7 +87,7 @@ export function pushBranchRef({
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      runGit(projectPath, ['push', '--progress', ...leaseArg, remote, refspec])
+      runGit(projectPath, ['push', ...leaseArg, remote, refspec])
       return { pushed: true }
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error)

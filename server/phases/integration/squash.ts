@@ -189,7 +189,7 @@ const MAX_PUSH_RETRIES = 3
 
 export function pushSquashedCandidate(worktreePath: string): PushResult {
   for (let attempt = 1; attempt <= MAX_PUSH_RETRIES; attempt++) {
-    const fullArgs = ['-C', worktreePath, 'push', '--progress']
+    const fullArgs = ['-C', worktreePath, 'push']
     const result = spawnSync('git', fullArgs, { encoding: 'utf8' })
     const stdout = (result.stdout ?? '').trim()
     const stderr = (result.stderr ?? '').trim()

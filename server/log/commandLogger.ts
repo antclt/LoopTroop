@@ -180,9 +180,8 @@ export function logCommand(
       content = formatStructuredCommandLog(cmdStr, result)
     } else {
       const outputStr = formatCompactCommandOutput(result.stdout, result.stderr)
-      content = outputStr
-        ? `[CMD] $ ${cmdStr}  →  ${truncateOutput(outputStr, 2500)}`
-        : `[CMD] $ ${cmdStr}  →  ok`
+      const silentOutcome = outputStr ? null : formatKnownSilentSuccess(bin, args)
+      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(outputStr || silentOutcome || 'ok', 2500)}`
     }
     type = 'info'
   } else {
@@ -233,7 +232,11 @@ function compactCommandText(text: string | undefined): string {
 }
 
 function normalizeCommandText(text: string | undefined): string {
-  return (text ?? '').replace(/\r\n/g, '\n').trim()
+  return (text ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\0+/g, '\n')
+    .trim()
 }
 
 function formatCompactCommandOutput(stdout?: string, stderr?: string): string {
@@ -336,6 +339,96 @@ function formatKnownGitProbeFailure(commandText: string, error: string): string 
 
   if (commandText.includes(' show-ref --verify --quiet refs/')) {
     return 'ref not found'
+  }
+
+  return null
+}
+
+function formatKnownSilentSuccess(bin: string, args: string[]): string | null {
+  if (bin === 'git') return formatKnownSilentGitSuccess(args)
+  if (bin === 'gh') return formatKnownSilentGhSuccess(args)
+  return null
+}
+
+function formatKnownSilentGhSuccess(args: string[]): string | null {
+  if (args[0] === 'pr' && args[1] === 'ready') return 'pull request marked ready'
+  if (args[0] === 'api') return 'GitHub API request completed'
+  return null
+}
+
+function formatKnownSilentGitSuccess(args: string[]): string | null {
+  const command = getGitSubcommand(args)
+  if (!command) return null
+
+  switch (command.name) {
+    case 'add':
+      return 'files staged'
+    case 'branch':
+      if (args.includes('--show-current')) return 'branch not attached'
+      if (args.includes('-D') || args.includes('-d') || args.includes('--delete')) return 'branch removed'
+      return 'branch updated'
+    case 'checkout':
+      return 'checkout completed'
+    case 'clean':
+      return 'no files removed'
+    case 'fetch':
+      return 'fetch completed'
+    case 'merge':
+      return 'merge completed'
+    case 'push':
+      return 'push completed'
+    case 'reset':
+      return 'reset completed'
+    case 'status':
+      return args.includes('--porcelain') || args.some(arg => arg.startsWith('--porcelain='))
+        ? 'worktree clean'
+        : null
+    case 'worktree': {
+      const action = args[command.index + 1]
+      if (action === 'add') return 'worktree added'
+      if (action === 'remove') return 'worktree removed'
+      if (action === 'prune') return 'worktree metadata pruned'
+      return null
+    }
+    case 'ls-files':
+      return args.includes('--others') ? 'no untracked files' : 'no files matched'
+    case 'diff':
+      return args.includes('--name-only') || args.includes('--name-status') || args.includes('--stat')
+        ? 'no diff'
+        : null
+    default:
+      return null
+  }
+}
+
+function getGitSubcommand(args: string[]): { name: string; index: number } | null {
+  for (let index = 0; index < args.length; index++) {
+    const arg = args[index]
+    if (!arg) continue
+
+    if (
+      arg === '-C'
+      || arg === '-c'
+      || arg === '--git-dir'
+      || arg === '--work-tree'
+      || arg === '--namespace'
+    ) {
+      index += 1
+      continue
+    }
+
+    if (
+      arg.startsWith('-C')
+      || arg.startsWith('-c')
+      || arg.startsWith('--git-dir=')
+      || arg.startsWith('--work-tree=')
+      || arg.startsWith('--namespace=')
+    ) {
+      continue
+    }
+
+    if (arg.startsWith('-')) continue
+    return { name: arg, index }
   }
 
   return null

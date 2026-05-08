@@ -718,6 +718,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Coding receives a read-only setup profile file path rather than the profile inline, keeping later execution context small while still avoiding repeated environment rediscovery when setup details are needed.',
       'The approved setup plan remains the user-facing review artifact. Execution setup may augment it temporarily, but those augmentations are audited in the execution report instead of silently rewriting the approved plan.',
       'Everything created here is temporary runtime state. Cleanup removes the temp roots at ticket end while preserving audit artifacts and the execution log.',
+      'Internal setup/reset commands appear in `SYS > CMD` as completed-command summaries; quiet git operations use concise outcomes instead of generic `ok` rows or progress streams.',
     ],
   },
   CODING: {
@@ -730,7 +731,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Inner Response Loop — Completion Marker Evaluation: After each agent response, LoopTroop parses the `<BEAD_STATUS>...</BEAD_STATUS>` completion marker from the response text and branches into one of three paths. (1) Marker present and all gates passing (tests, lint, typecheck, qualitative all "pass", status "done") → success, exit the inner loop immediately. (2) Marker missing or has a validation error (`shouldUseStructuredRetry()` returns true) → if the session is still healthy, sends a same-session structured retry prompt with the BEAD_STATUS_SCHEMA_REMINDER; if the session is unhealthy, abandons it and re-sends the full original bead prompt in a fresh session. (3) Marker found but gates not all passing → sends a continuation prompt (`buildContinuationPrompt`) in the same session, instructing the agent to inspect failures, keep working, and return the final marker only when done. A per-iteration timeout deadline (`perIterationTimeoutMs`) is tracked across all inner-loop steps; once remaining time drops to zero, the inner loop exits with a Timeout error.',
       'Live Streaming: High-signal execution events, prompt dispatches, visible agent responses, file modification events, test results, and session lifecycle events are emitted into the normal phase log in real time. Deeper forensic/debug details live in the debug log.',
       'Scoped Verification: During execution, LoopTroop prefers bead-specific test commands first, then impacted or package-scoped lint and typecheck commands. When command-family details are needed, the coding agent can read the setup profile file instead of receiving it inline. This avoids failing beads solely because of pre-existing repository-wide baseline failures unrelated to this bead\'s work.',
-      'Success Path — Git Commit, Diff Capture, Artifacts, and Broadcast: When the inner loop exits successfully, LoopTroop marks the bead `done` in the tracker and updates progress counters. It then runs best-effort git side effects: (a) `commitBeadChanges` creates a per-bead git commit of all file changes and optionally pushes to the remote branch — git failures are logged as warnings but do not un-mark the bead as done; (b) if `beadStartCommit` was recorded, `captureBeadDiff` generates a code-only diff from that SHA to the new HEAD (excluding `.ticket/**` metadata) and stores it as a `bead_diff:{beadId}` phase artifact. The full execution result (iteration count, response text, error history) is persisted as a `bead_execution:{beadId}` phase artifact on both success and failure. Finally, a `bead_complete` SSE event with progress counters (e.g., completed 3/7) is broadcast to the UI.',
+      'Success Path — Git Commit, Diff Capture, Artifacts, and Broadcast: When the inner loop exits successfully, LoopTroop marks the bead `done` in the tracker and updates progress counters. It then runs best-effort git side effects: (a) `commitBeadChanges` creates a per-bead git commit of all file changes and optionally pushes to the remote branch — git failures are logged as warnings but do not un-mark the bead as done, and internal push logs avoid progress streams; (b) if `beadStartCommit` was recorded, `captureBeadDiff` generates a code-only diff from that SHA to the new HEAD (excluding `.ticket/**` metadata) and stores it as a `bead_diff:{beadId}` phase artifact. The full execution result (iteration count, response text, error history) is persisted as a `bead_execution:{beadId}` phase artifact on both success and failure. Finally, a `bead_complete` SSE event with progress counters (e.g., completed 3/7) is broadcast to the UI.',
       'Failure Path — Context Wipe Note Generation: When an iteration fails (timeout, uncaught error, or inner-loop exhaustion without a valid completion marker), LoopTroop attempts to generate an AI context wipe note by sending the PROM51 prompt to the still-open failing session. PROM51 asks the model to summarise what went wrong, what it tried, and what the next attempt should do differently — the session\'s accumulated tool calls, test output, and error traces make this note more informative than any static template. If PROM51 itself fails (session error, timeout, parse failure), LoopTroop falls back to a deterministic note built from the recorded iteration errors and recent tool-failure excerpts. The note (AI-generated or fallback) is stamped with the iteration number and timestamp and appended to `bead.notes`, accumulating across iterations. These notes are included in the bead context on every subsequent attempt.',
       'Failure Path — Worktree Reset and Status Rollback: After the context wipe note is generated, LoopTroop resets the worktree back to `beadStartCommit` via `resetToBeadStart` (this step is skipped if `beadStartCommit` was not recorded). Only paths listed in `EXECUTION_RUNTIME_PRESERVE_PATHS` survive the reset; all uncommitted file changes from the failed attempt are discarded. The bead\'s status is set back to `pending` in the tracker with the accumulated notes attached. The active session is abandoned after the note is generated, and the outer iteration counter increments.',
       'Retry Budget Exhaustion and Loop Continuation: If the iteration counter reaches `maxIterations`, the bead is marked `error` in the tracker with the `BEAD_RETRY_BUDGET_EXHAUSTED` error code attached, and a `BEAD_ERROR` event is sent — routing the ticket to Blocked Error. From Blocked Error you can retry (re-enters CODING and re-attempts the failed bead using the accumulated iteration notes as context) or cancel. After a successful bead, `isAllComplete` is checked: if every bead is done, `ALL_BEADS_DONE` is sent and the workflow advances to final testing; otherwise `BEAD_COMPLETE` is sent and the state stays in CODING, immediately picking the next runnable bead.',
@@ -755,6 +756,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Context wipe notes accumulate: each failed iteration appends a new stamped note to `bead.notes`. By iteration N the agent receives a progressive diagnostic history of everything that has been tried and what went wrong — this is the primary mechanism for conveying failure context across iterations.',
       'The context wipe note (PROM51) uses the failing session\'s full accumulated context (tool calls, test output, error traces) to generate an AI-authored diagnostic. If PROM51 itself fails, a deterministic fallback note is built from recorded errors and recent tool-failure excerpts — the worktree reset always completes regardless of whether the AI note succeeds.',
       'Each successful bead produces a separate per-bead git commit. The integration phase later squashes all bead commits into a single clean candidate commit for the pull request.',
+      'Internal git commands in this phase are logged to `SYS > CMD` after completion with concise summaries for quiet outcomes such as clean worktrees, empty diffs, completed pushes, and context-wipe cleanup.',
     ],
   },
   RUNNING_FINAL_TEST: {
@@ -764,7 +766,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Test Plan Generation: The locked main implementer analyzes the full context and generates a structured final-test plan. This plan includes test commands to execute, expected outcomes, and what each test is verifying. Tests may include unit tests, integration tests, build verification, and acceptance criteria validation.',
       'Test Execution: LoopTroop executes the generated test commands in the ticket worktree under the configured timeout budget. Tests run on the actual branch state produced by the coding phase.',
       'Result Recording: A final test report artifact is written whether tests pass or fail. The report includes the generated test plan, actual command output, pass/fail status for each test, and any error messages or stack traces from failures.',
-      'Phase Logging: The normal phase log captures the test lifecycle — plan generation, command execution, output streams, and final results — for review and diagnosis.',
+      'Phase Logging: The normal phase log captures the test lifecycle — plan generation, command execution, output streams, and final results — for review and diagnosis. LoopTroop-owned reset and git inspection commands are logged as completed-command summaries rather than recurring progress rows.',
     ],
     outputs: [
       'Final test report with the generated test plan, execution results, pass/fail status, and error details.',
@@ -785,7 +787,7 @@ const WORKFLOW_PHASE_DETAILS = {
   INTEGRATING_CHANGES: {
     overview: 'LoopTroop turns the unsquashed ticket branch (which may contain many small commits from individual bead executions) into a single, clean candidate commit ready for pull-request creation. This produces one reviewable squash commit on the ticket branch while preserving the earlier bead-level history in the audit trail.',
     steps: [
-      'Branch Analysis: LoopTroop resolves the ticket worktree and base branch, calculates the merge base (where the ticket branch diverged), and counts the number of individual commits made during bead execution.',
+      'Branch Analysis: LoopTroop resolves the ticket worktree and base branch, calculates the merge base (where the ticket branch diverged), and counts the number of individual commits made during bead execution. These internal git commands are audited in `SYS > CMD` as concise completed-command rows.',
       'Soft Reset: The branch is soft-reset back to the merge base, which unstages all bead-level commits but keeps all file changes in the working directory. This effectively "un-commits" the individual bead commits.',
       'Reviewer-Facing Candidate: All ticket changes (excluding LoopTroop-owned operational files that should not appear in the final PR) are staged and committed as a single candidate commit with LoopTroop-specific commit metadata.',
       'Handoff Metadata: Integration records the candidate SHA, merge base, pre-squash HEAD, and squash statistics. That metadata becomes the source of truth for the next phase, which will push the candidate and create or update the draft PR.',
@@ -811,7 +813,7 @@ const WORKFLOW_PHASE_DETAILS = {
   CREATING_PULL_REQUEST: {
     overview: 'LoopTroop pushes the final candidate SHA to the remote ticket branch and creates or updates a draft pull request on GitHub. This is an automatic GitHub-sync phase: it packages the final diff, the ticket intent, and the validation results into a reviewer-facing draft PR without merging anything yet.',
     steps: [
-      'Remote Candidate Push: LoopTroop force-pushes the final candidate SHA to the remote ticket branch using a lease, replacing the bead-level backup branch state with the single reviewable candidate commit.',
+      'Remote Candidate Push: LoopTroop force-pushes the final candidate SHA to the remote ticket branch using a lease, replacing the bead-level backup branch state with the single reviewable candidate commit. Internal push logging records the final result without progress output.',
       'PR Drafting: The locked main implementer generates a draft PR title and body in a fresh owned session using only ticket details and PRD as context, with integration report, final test report, diff stat, changed-file status, and diff patch appended as explicit prompt sections. The interview and beads artifacts are not fed to PR drafting.',
       'PR Upsert: LoopTroop creates a new draft PR when none exists, or updates the existing PR title/body and metadata when one already exists for the ticket branch.',
       'Metadata Persistence: The PR URL, number, state, head SHA, generated title/body, and timestamps are written into ticket artifacts so the review UI and later phases can reuse them deterministically.',
@@ -838,7 +840,7 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Draft PR Presentation: The workspace shows the PR URL, current PR state, candidate SHA, branch/base refs, integration report, and final test summary.',
       'Manual Review: You inspect the draft PR and the local result. There is no time limit; LoopTroop waits for your decision.',
-      'Merge Path: Choosing Merge PR & Finish marks the PR ready if needed, merges it into the base branch on GitHub, fast-forwards the local base branch to origin, then proceeds to cleanup.',
+      'Merge Path: Choosing Merge PR & Finish marks the PR ready if needed, merges it into the base branch on GitHub, fast-forwards the local base branch to origin with fetch progress disabled, then proceeds to cleanup.',
       'Finish Without Merge Path: Choosing Finish Without Merge preserves the PR and remote ticket branch exactly as they are, then proceeds directly to cleanup and terminal completion.',
       'External Merge Detection: If the PR is merged manually in GitHub while this phase is open, LoopTroop detects that during polling, syncs the local base branch, and continues automatically.',
     ],
@@ -856,6 +858,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Context available: PR metadata, final test report, integration summary, and merge controls. No AI prompt context is assembled in this review gate.',
       'This is the human quality gate for the GitHub-native endgame.',
       'LoopTroop completion does not require deleting the PR or remote branch when you finish without merge.',
+      'Internal merge, fetch, push, and cleanup commands appear in `SYS > CMD` as final summaries so the review gate remains auditable without recurring progress chatter.',
     ],
   },
   CLEANING_ENV: {
@@ -1292,7 +1295,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'PREPARING_EXECUTION_ENV',
     label: 'Preparing Workspace Runtime',
-    description: 'Verifying readiness and performing only the missing temporary execution setup before coding begins.',
+    description: 'Verifying readiness and performing only the missing temporary execution setup before coding begins. Internal setup commands are audited as concise completion summaries.',
     details: WORKFLOW_PHASE_DETAILS.PREPARING_EXECUTION_ENV,
     kanbanPhase: 'in_progress',
     groupId: 'pre_implementation',
@@ -1304,7 +1307,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CODING',
     label: 'Implementing (Bead ?/?)',
-    description: 'AI coding agent executes beads one at a time; each bead has its own session, context-wipe recovery between iterations, and a git commit after success.',
+    description: 'AI coding agent executes beads one at a time; each bead has its own session, context-wipe recovery, concise internal CMD summaries, and a git commit after success.',
     details: WORKFLOW_PHASE_DETAILS.CODING,
     kanbanPhase: 'in_progress',
     groupId: 'implementation',
@@ -1317,7 +1320,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'RUNNING_FINAL_TEST',
     label: 'Testing Implementation',
-    description: 'The main implementer generates a comprehensive test plan from ticket details, PRD, beads, and retry notes, then runs it against the ticket branch to verify the whole implementation holistically — catching integration issues individual bead tests may miss.',
+    description: 'The main implementer generates a comprehensive test plan from ticket details, PRD, beads, and retry notes, then runs it against the ticket branch while LoopTroop logs internal reset/git commands as concise CMD summaries.',
     details: WORKFLOW_PHASE_DETAILS.RUNNING_FINAL_TEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1329,7 +1332,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'INTEGRATING_CHANGES',
     label: 'Preparing Final Commit',
-    description: 'Squashes all individual bead commits into one clean candidate commit on the ticket branch, ready for the draft pull request. Per-bead history is preserved in the audit trail.',
+    description: 'Squashes all individual bead commits into one clean candidate commit on the ticket branch, with progress-free internal git audit rows. Per-bead history is preserved in the audit trail.',
     details: WORKFLOW_PHASE_DETAILS.INTEGRATING_CHANGES,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1341,7 +1344,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CREATING_PULL_REQUEST',
     label: 'Creating Pull Request',
-    description: 'Pushing the final candidate branch and drafting the PR from ticket details, PRD, final reports, and git diff sections in a fresh owned session.',
+    description: 'Pushing the final candidate branch without progress-style command chatter and drafting the PR from ticket details, PRD, final reports, and git diff sections in a fresh owned session.',
     details: WORKFLOW_PHASE_DETAILS.CREATING_PULL_REQUEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1353,7 +1356,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_PR_REVIEW',
     label: 'Reviewing Pull Request',
-    description: 'Review the draft pull request on GitHub, then choose Merge PR & Finish or Finish Without Merge. Either path closes the ticket successfully and proceeds to cleanup.',
+    description: 'Review the draft pull request on GitHub, then choose Merge PR & Finish or Finish Without Merge; merge/sync commands are audited as concise CMD summaries before cleanup.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_PR_REVIEW,
     kanbanPhase: 'needs_input',
     groupId: 'post_implementation',

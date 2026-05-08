@@ -127,7 +127,7 @@ describe('resetToBeadStart', () => {
     expect(readFileSync(join(dir, 'hello.ts'), 'utf8')).toBe('const x = 1\n')
   })
 
-  it('removes untracked files (git clean -fdq)', () => {
+  it('removes untracked files (git clean -fd)', () => {
     const [dir, sha] = makeFreshRepo()
     writeFileSync(join(dir, 'untracked.ts'), 'export const y = 2\n')
     resetToBeadStart(dir, sha)
@@ -156,8 +156,8 @@ describe('resetToBeadStart', () => {
     expect(status).toBe('')
   })
 
-  it('preserves ignored files (git clean -fdq does NOT remove .gitignore entries)', () => {
-    // Demonstrates that `clean -fdq` (without -x) leaves ignored files intact.
+  it('preserves ignored files (git clean -fd does NOT remove .gitignore entries)', () => {
+    // Demonstrates that `clean -fd` (without -x) leaves ignored files intact.
     // Only `clean -fdx` would remove them — a future accidental change to -fdx
     // would cause this test to fail, surfacing the semantic regression.
     const [dir] = makeFreshRepo()
