@@ -40,6 +40,7 @@
 - **Always create a detailed commit message** that clearly explains:
   - What was changed; Why it was changed; Key implementation decisions; Any side effects or areas impacted.
 - After committing your changes, push to the current branch.
+- Ignore dependabot alerts
 
 ### UI Changes
 - Use available agent skills/tools for UI modifications.
