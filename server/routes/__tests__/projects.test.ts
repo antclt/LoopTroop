@@ -8,6 +8,7 @@ import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { getProjectLoopTroopDir } from '../../storage/paths'
 import { attachExistingProject, attachProject, listProjects, resolveProjectState } from '../../storage/projects'
+import { createTicket, patchTicket } from '../../storage/ticketMutations'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { projectRouter } from '../projects'
 
@@ -186,5 +187,33 @@ describe('projectRouter project cleanup', () => {
     expect(payload.status).toBe('invalid')
     expect(payload.message).toContain('/mnt/c/Users/example/repo')
     expect(payload.performanceWarning).toContain('/mnt/c/Users/example/repo')
+  })
+
+  it('allows deleting worktrees even when tickets are in active/working statuses', async () => {
+    const repoDir = repoManager.createRepo()
+    addGithubOrigin(repoDir)
+    const app = new Hono()
+    app.route('/api', projectRouter)
+
+    const createResponse = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Worktrees Test', shortname: 'WKT', folderPath: repoDir }),
+    })
+    expect(createResponse.status).toBe(201)
+    const { id: projectId } = await createResponse.json() as { id: number }
+
+    // Create a ticket and move it to an active (non-terminal) status
+    const ticket = createTicket({ projectId, title: 'Active ticket' })
+    patchTicket(ticket.externalId, { status: 'CODING' })
+
+    // Delete-worktrees must succeed regardless of active tickets
+    const deleteResponse = await app.request(`/api/projects/${projectId}/worktrees`, {
+      method: 'DELETE',
+    })
+
+    expect(deleteResponse.status).toBe(200)
+    const payload = await deleteResponse.json() as { success: boolean; freedBytes: number }
+    expect(payload.success).toBe(true)
   })
 })

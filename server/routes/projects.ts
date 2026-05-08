@@ -257,15 +257,6 @@ projectRouter.delete('/projects/:id/worktrees', (c) => {
   const projectRoot = getProjectRootById(id)
   if (!projectRoot) return c.json({ error: 'Project not found' }, 404)
 
-  const projectTickets = listProjectTickets(id)
-  const allowedStatuses = ['DRAFT', 'COMPLETED', 'CANCELED']
-  const hasInProgress = projectTickets.some(ticket => !allowedStatuses.includes(ticket.status))
-  if (hasInProgress) {
-    return c.json({
-      error: 'Cannot delete worktrees. Some tickets are still in progress. Move all tickets to Done or cancel them first.',
-    }, 409)
-  }
-
   try {
     const result = deleteProjectWorktrees(projectRoot)
     return c.json({ success: true, freedBytes: result.freedBytes })
