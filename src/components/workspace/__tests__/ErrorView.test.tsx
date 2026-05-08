@@ -104,6 +104,47 @@ describe('ErrorView', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
+  it('renders structured blocked-error diagnostics when present', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'SCANNING_RELEVANT_FILES',
+      activeErrorOccurrenceId: 'diag-1',
+      errorOccurrences: [{
+        id: 'diag-1',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'SCANNING_RELEVANT_FILES',
+        errorMessage: 'Relevant files scan failed validation after retry.',
+        errorCodes: ['RELEVANT_FILES_SCAN_FAILED', 'OPENCODE_PROVIDER_AUTH_FAILED'],
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'invalid_request_error: Your authentication token has been invalidated. Please try signing in again. (HTTP 401)',
+          modelId: 'openai/gpt-5.3-codex',
+          sessionId: 'ses-auth',
+          statusCode: 401,
+          providerErrorType: 'invalid_request_error',
+          providerErrorMessage: 'Your authentication token has been invalidated. Please try signing in again.',
+          isRetryable: false,
+        },
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('Underlying error')).toBeInTheDocument()
+    expect(screen.getByText(/invalid_request_error: Your authentication token has been invalidated/)).toBeInTheDocument()
+    expect(screen.getByText('HTTP:')).toBeInTheDocument()
+    expect(screen.getByText('401')).toBeInTheDocument()
+    expect(screen.getByText('Provider type:')).toBeInTheDocument()
+    expect(screen.getByText('invalid_request_error')).toBeInTheDocument()
+    expect(screen.getByText('Retryable:')).toBeInTheDocument()
+    expect(screen.getByText('no')).toBeInTheDocument()
+  })
+
   it('omits milliseconds from occurrence timestamps', () => {
     const occurrence = {
       id: '3',

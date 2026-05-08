@@ -91,6 +91,52 @@ describe('hydrateAllTickets', () => {
     }
   })
 
+  it('persists blocked-error diagnostics from actor ERROR events into public tickets', () => {
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Persist blocked diagnostics',
+    })
+
+    try {
+      const actor = ensureActorForTicket(ticket.id)
+      actor.send({ type: 'START', lockedMainImplementer: 'model-a', lockedCouncilMembers: ['model-a'] })
+      actor.send({
+        type: 'ERROR',
+        message: 'Relevant files scan failed validation after retry: Relevant files output was empty. Underlying OpenCode error: rate_limit_error: Model usage limit reached (HTTP 429)',
+        codes: ['RELEVANT_FILES_SCAN_FAILED', 'OPENCODE_PROVIDER_ERROR'],
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'rate_limit_error: Model usage limit reached (HTTP 429)',
+          modelId: 'model-a',
+          sessionId: 'ses-limit',
+          statusCode: 429,
+          providerErrorType: 'rate_limit_error',
+          providerErrorMessage: 'Model usage limit reached',
+          isRetryable: true,
+        },
+      })
+
+      const recovered = getTicketByRef(ticket.id)
+      expect(recovered?.status).toBe('BLOCKED_ERROR')
+      expect(recovered?.errorOccurrences.at(-1)).toMatchObject({
+        blockedFromStatus: 'SCANNING_RELEVANT_FILES',
+        errorCodes: ['RELEVANT_FILES_SCAN_FAILED', 'OPENCODE_PROVIDER_ERROR'],
+        diagnostics: expect.objectContaining({
+          kind: 'opencode_provider',
+          source: 'provider',
+          modelId: 'model-a',
+          sessionId: 'ses-limit',
+          statusCode: 429,
+          providerErrorType: 'rate_limit_error',
+          providerErrorMessage: 'Model usage limit reached',
+          isRetryable: true,
+        }),
+      })
+    } finally {
+      stopActor(ticket.id)
+    }
+  })
+
   it('reconstructs a missing active snapshot from the durable ticket status', () => {
     const { ticket } = createInitializedTestTicket(repoManager, {
       title: 'Missing snapshot recovery',

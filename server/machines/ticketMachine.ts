@@ -31,10 +31,15 @@ export const ticketMachine = setup({
         if (event.type === 'BEAD_ERROR') return event.codes ?? []
         return []
       },
+      errorDiagnostics: ({ event }) => {
+        if (event.type === 'ERROR') return event.diagnostics ?? null
+        return null
+      },
     }),
     clearError: assign({
       error: () => null,
       errorCodes: () => [] as string[],
+      errorDiagnostics: () => null,
     }),
     updateStatus: assign({
       previousStatus: ({ context }) => context.status,
@@ -68,6 +73,7 @@ export const ticketMachine = setup({
     previousStatus: null,
     error: null,
     errorCodes: [],
+    errorDiagnostics: null,
     beadProgress: { total: 0, completed: 0, current: null },
     iterationCount: 0,
     maxIterations: input.maxIterations ?? PROFILE_DEFAULTS.maxIterations,

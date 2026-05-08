@@ -1,0 +1,216 @@
+import {
+  OPENCODE_PROVIDER_AUTH_FAILED,
+  OPENCODE_PROVIDER_ERROR,
+} from '@shared/errorCodes'
+import {
+  normalizeBlockedErrorDiagnostics,
+  type BlockedErrorDiagnostics,
+  type BlockedErrorDiagnosticKind,
+} from '@shared/errorDiagnostics'
+import type { OpenCodeResponseMeta } from './assistantMessageAnalysis'
+import type { ModelErrorInfo } from './errorDetails'
+import { extractModelErrorInfo, summarizeModelErrorForLog } from './errorDetails'
+
+export interface OpenCodeAttemptDiagnosticMeta {
+  errorSource?: 'session_error' | 'assistant_error'
+  error?: string
+  errorDetails?: unknown
+  sessionErrored?: boolean
+  latestAssistantErrored?: boolean
+}
+
+export interface BuildOpenCodeBlockedErrorDiagnosticsInput {
+  error?: unknown
+  responseMeta?: OpenCodeResponseMeta
+  attemptMeta?: OpenCodeAttemptDiagnosticMeta
+  modelId?: string
+  sessionId?: string
+  fallbackMessage?: string
+}
+
+export interface OpenCodeBlockedErrorDiagnosticsResult {
+  diagnostics: BlockedErrorDiagnostics | null
+  errorCodes: string[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function readErrorProperty(error: unknown, key: string): unknown {
+  return isRecord(error) ? error[key] : undefined
+}
+
+function hasProviderSignal(info: ModelErrorInfo | undefined): boolean {
+  return Boolean(
+    info?.statusCode !== undefined
+    || info?.requestModel
+    || info?.responseErrorType
+    || info?.responseErrorTitle
+    || info?.responseErrorMessage
+    || info?.responseBodyPreview,
+  )
+}
+
+function normalizeMessage(value: string | undefined): string {
+  return value?.trim() ?? ''
+}
+
+function cleanOptionalMessage(value: string | undefined): string | undefined {
+  const normalized = normalizeMessage(value)
+  return normalized.length > 0 ? normalized : undefined
+}
+
+function isAuthLikeFailure(info: ModelErrorInfo | undefined, message: string): boolean {
+  const haystack = [
+    message,
+    info?.message,
+    info?.responseErrorType,
+    info?.responseErrorTitle,
+    info?.responseErrorMessage,
+    info?.responseBodyPreview,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase()
+
+  return info?.statusCode === 401
+    || info?.statusCode === 403
+    || /\b(auth|authentication|authenticated|unauthorized|forbidden|credential|api key|token|signing in|sign in)\b/.test(haystack)
+}
+
+function isProviderLikeFailure(info: ModelErrorInfo | undefined, message: string): boolean {
+  const haystack = [
+    message,
+    info?.message,
+    info?.responseErrorType,
+    info?.responseErrorTitle,
+    info?.responseErrorMessage,
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .toLowerCase()
+
+  return hasProviderSignal(info)
+    || isAuthLikeFailure(info, message)
+    || /\b(rate[_ -]?limit|usage limit|limit reached|quota|credits?|modelerror|model error|invalid_request_error|provider)\b/.test(haystack)
+}
+
+function parseHttpStatus(message: string): number | undefined {
+  const match = message.match(/\bHTTP\s+([1-5]\d{2})\b/i)
+  if (!match) return undefined
+  const status = Number.parseInt(match[1] ?? '', 10)
+  return Number.isFinite(status) ? status : undefined
+}
+
+function isTimeoutLike(message: string): boolean {
+  return /\b(timeout|timed out|deadline|aborterror)\b/i.test(message)
+}
+
+function isTransportLike(message: string): boolean {
+  return /\b(connection reset|econnreset|socket hang up|network|fetch failed|failed to prompt|unreachable)\b/i.test(message)
+}
+
+function resolveKind(input: {
+  info?: ModelErrorInfo
+  summaryMessage: string
+  responseMeta?: OpenCodeResponseMeta
+  attemptMeta?: OpenCodeAttemptDiagnosticMeta
+}): BlockedErrorDiagnosticKind {
+  if (isTimeoutLike(input.summaryMessage)) return 'timeout'
+  if (isProviderLikeFailure(input.info, input.summaryMessage)) return 'opencode_provider'
+  if (input.responseMeta?.sessionErrored || input.attemptMeta?.errorSource === 'session_error') return 'opencode_session'
+  if (isTransportLike(input.summaryMessage)) return 'transport'
+  return 'runtime'
+}
+
+function resolveErrorCodes(info: ModelErrorInfo | undefined, summaryMessage: string): string[] {
+  if (isAuthLikeFailure(info, summaryMessage)) return [OPENCODE_PROVIDER_AUTH_FAILED]
+  if (isProviderLikeFailure(info, summaryMessage)) return [OPENCODE_PROVIDER_ERROR]
+  return []
+}
+
+function resolveDetails(input: BuildOpenCodeBlockedErrorDiagnosticsInput): unknown {
+  return input.responseMeta?.sessionErrorDetails
+    ?? input.responseMeta?.latestAssistantErrorInfo
+    ?? input.attemptMeta?.errorDetails
+    ?? readErrorProperty(input.error, 'modelErrorDetails')
+    ?? readErrorProperty(input.error, 'details')
+    ?? input.error
+}
+
+function resolveFallbackMessage(input: BuildOpenCodeBlockedErrorDiagnosticsInput): string | undefined {
+  return input.responseMeta?.sessionError
+    ?? input.responseMeta?.latestAssistantError
+    ?? input.attemptMeta?.error
+    ?? cleanOptionalMessage(input.fallbackMessage)
+    ?? (input.error instanceof Error ? input.error.message : undefined)
+}
+
+export function buildOpenCodeBlockedErrorDiagnostics(
+  input: BuildOpenCodeBlockedErrorDiagnosticsInput,
+): OpenCodeBlockedErrorDiagnosticsResult {
+  const hasDiagnosticSignal = Boolean(
+    input.error !== undefined
+    || cleanOptionalMessage(input.fallbackMessage)
+    || input.responseMeta?.sessionErrored
+    || input.responseMeta?.latestAssistantHasError
+    || input.attemptMeta?.error
+    || input.attemptMeta?.errorDetails !== undefined,
+  )
+  if (!hasDiagnosticSignal) {
+    return { diagnostics: null, errorCodes: [] }
+  }
+
+  const details = resolveDetails(input)
+  const fallbackMessage = resolveFallbackMessage(input)
+  const summary = summarizeModelErrorForLog(details, fallbackMessage)
+  const summaryMessage = normalizeMessage(summary.message)
+  if (!summaryMessage) {
+    return { diagnostics: null, errorCodes: [] }
+  }
+
+  const info = summary.details ?? extractModelErrorInfo(details)
+  const statusCode = info?.statusCode ?? parseHttpStatus(summaryMessage)
+  const infoWithStatus = statusCode === info?.statusCode
+    ? info
+    : { ...(info ?? {}), ...(statusCode !== undefined ? { statusCode } : {}) }
+  const kind = resolveKind({
+    info: infoWithStatus,
+    summaryMessage,
+    responseMeta: input.responseMeta,
+    attemptMeta: input.attemptMeta,
+  })
+  const diagnostics = normalizeBlockedErrorDiagnostics({
+    kind,
+    source: kind === 'opencode_provider' ? 'provider' : 'opencode',
+    summary: summaryMessage,
+    modelId: input.modelId,
+    sessionId: input.sessionId,
+    statusCode,
+    requestModel: info?.requestModel,
+    isRetryable: info?.isRetryable,
+    providerErrorType: info?.responseErrorType,
+    providerErrorTitle: info?.responseErrorTitle,
+    providerErrorMessage: info?.responseErrorMessage,
+    responseBodyPreview: info?.responseBodyPreview,
+  })
+
+  return {
+    diagnostics,
+    errorCodes: resolveErrorCodes(info, summaryMessage),
+  }
+}
+
+export function appendBlockedErrorDiagnosticsSummary(
+  message: string,
+  diagnostics: BlockedErrorDiagnostics | null | undefined,
+): string {
+  const summary = diagnostics?.summary?.trim()
+  if (!summary || message.includes(summary)) return message
+  return `${message} Underlying OpenCode error: ${summary}`
+}
+
+export function mergeErrorCodes(primary: string[], secondary: string[]): string[] {
+  return Array.from(new Set([...primary, ...secondary].filter((code) => code.trim().length > 0)))
+}

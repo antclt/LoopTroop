@@ -141,6 +141,7 @@ export const ticketErrorOccurrences = sqliteTable('ticket_error_occurrences', {
   blockedFromStatus: text('blocked_from_status').notNull(),
   errorMessage: text('error_message'),
   errorCodes: text('error_codes'),
+  diagnosticDetails: text('diagnostic_details'),
   occurredAt: text('occurred_at').notNull().$defaultFn(() => new Date().toISOString()),
   resolvedAt: text('resolved_at'),
   resolutionStatus: text('resolution_status'),

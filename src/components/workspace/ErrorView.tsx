@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock3, RotateCcw } from 'lucide-react'
+import { AlertTriangle, Clock3, Info, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -81,6 +81,33 @@ function filterLogsWithinWindow(
   })
 }
 
+function formatDiagnosticKind(value: string): string {
+  return value
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ')
+}
+
+function buildDiagnosticRows(diagnostics: NonNullable<TicketErrorOccurrence['diagnostics']>) {
+  const rows: Array<{ label: string; value: string }> = [
+    { label: 'Kind', value: formatDiagnosticKind(diagnostics.kind) },
+    { label: 'Source', value: formatDiagnosticKind(diagnostics.source) },
+  ]
+
+  if (diagnostics.modelId) rows.push({ label: 'Model', value: diagnostics.modelId })
+  if (diagnostics.requestModel && diagnostics.requestModel !== diagnostics.modelId) rows.push({ label: 'Request model', value: diagnostics.requestModel })
+  if (diagnostics.sessionId) rows.push({ label: 'Session', value: diagnostics.sessionId })
+  if (typeof diagnostics.statusCode === 'number') rows.push({ label: 'HTTP', value: String(diagnostics.statusCode) })
+  if (diagnostics.providerErrorType) rows.push({ label: 'Provider type', value: diagnostics.providerErrorType })
+  if (typeof diagnostics.isRetryable === 'boolean') rows.push({ label: 'Retryable', value: diagnostics.isRetryable ? 'yes' : 'no' })
+  if (diagnostics.providerErrorTitle) rows.push({ label: 'Provider title', value: diagnostics.providerErrorTitle })
+  if (diagnostics.providerErrorMessage && diagnostics.providerErrorMessage !== diagnostics.summary) {
+    rows.push({ label: 'Provider message', value: diagnostics.providerErrorMessage })
+  }
+
+  return rows
+}
+
 export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewProps) {
   const { mutate: performAction, isPending } = useTicketAction()
   const logCtx = useLogs()
@@ -133,6 +160,8 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && ticket.status === 'BLOCKED_ERROR'
     && Boolean(visibleOccurrence)
     && visibleOccurrence?.resolvedAt === null
+  const diagnostics = visibleOccurrence?.diagnostics ?? null
+  const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -192,6 +221,23 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                       {code}
                     </Badge>
                   ))}
+                </div>
+              )}
+              {diagnostics && (
+                <div className="rounded border border-border bg-background/70 px-2 py-1.5 text-[11px] text-muted-foreground space-y-1.5">
+                  <div className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-foreground">
+                    <Info className="h-3.5 w-3.5" />
+                    Underlying error
+                  </div>
+                  <p className="font-mono whitespace-pre-wrap text-muted-foreground/90">{diagnostics.summary}</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
+                    {diagnosticRows.map((row) => (
+                      <div key={`${row.label}:${row.value}`} className="min-w-0">
+                        <span className="text-muted-foreground/80">{row.label}: </span>
+                        <span className="font-mono text-foreground break-words">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
               {(failedBead || ticket.runtime.activeBeadIteration) && (

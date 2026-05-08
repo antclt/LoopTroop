@@ -1,3 +1,5 @@
+import type { BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
+
 export interface TicketContext {
   ticketId: string
   projectId: number
@@ -16,6 +18,7 @@ export interface TicketContext {
   previousStatus: string | null
   error: string | null
   errorCodes: string[]
+  errorDiagnostics?: BlockedErrorDiagnostics | null
   beadProgress: {
     total: number
     completed: number
@@ -76,7 +79,7 @@ export type TicketEvent =
   | { type: 'RELEVANT_FILES_READY' }
   | { type: 'CANCEL' }
   | { type: 'RETRY' }
-  | { type: 'ERROR'; message: string; codes?: string[] }
+  | { type: 'ERROR'; message: string; codes?: string[]; diagnostics?: BlockedErrorDiagnostics | null }
 
 // Kanban phase mapping
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'

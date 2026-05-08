@@ -3,6 +3,46 @@ import { createActor } from 'xstate'
 import { ticketMachine } from '../ticketMachine'
 
 describe('ticketMachine execution setup flow', () => {
+  it('records and clears structured diagnostics for blocked ERROR events', () => {
+    const actor = createActor(ticketMachine, {
+      input: {
+        ticketId: '1:T-1',
+        projectId: 1,
+        externalId: 'T-1',
+        title: 'Diagnostic blocked error',
+        maxIterations: 5,
+      },
+    })
+
+    actor.start()
+    actor.send({ type: 'START', lockedMainImplementer: 'model-a', lockedCouncilMembers: ['model-a'] })
+    actor.send({
+      type: 'ERROR',
+      message: 'Relevant files scan failed',
+      codes: ['RELEVANT_FILES_SCAN_FAILED', 'OPENCODE_PROVIDER_AUTH_FAILED'],
+      diagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'invalid_request_error: token invalidated (HTTP 401)',
+        modelId: 'model-a',
+        sessionId: 'ses-auth',
+        statusCode: 401,
+      },
+    })
+
+    expect(actor.getSnapshot().value).toBe('BLOCKED_ERROR')
+    expect(actor.getSnapshot().context.errorDiagnostics).toMatchObject({
+      kind: 'opencode_provider',
+      source: 'provider',
+      statusCode: 401,
+    })
+
+    actor.send({ type: 'RETRY' })
+
+    expect(actor.getSnapshot().value).toBe('SCANNING_RELEVANT_FILES')
+    expect(actor.getSnapshot().context.errorDiagnostics).toBeNull()
+  })
+
   it('routes approval through pre-flight, setup-plan approval, and execution setup before coding', () => {
     const actor = createActor(ticketMachine, {
       input: {

@@ -139,6 +139,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       blocked_from_status TEXT NOT NULL,
       error_message TEXT,
       error_codes TEXT,
+      diagnostic_details TEXT,
       occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
       resolved_at TEXT,
       resolution_status TEXT,
@@ -164,6 +165,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
   ensureColumn(sqlite, 'tickets', 'locked_council_member_variants', 'TEXT')
   ensureColumn(sqlite, 'opencode_sessions', 'phase_attempt', 'INTEGER DEFAULT 1')
   ensureColumn(sqlite, 'opencode_sessions', 'step', 'TEXT')
+  ensureColumn(sqlite, 'ticket_error_occurrences', 'diagnostic_details', 'TEXT')
   ensureColumn(sqlite, 'projects', 'execution_setup_timeout', 'INTEGER')
   ensureColumn(sqlite, 'phase_artifacts', 'phase_attempt', 'INTEGER NOT NULL DEFAULT 1')
   ensureColumn(sqlite, 'phase_artifacts', 'updated_at', 'TEXT')

@@ -13,6 +13,7 @@ import {
   runOpenCodeSessionPrompt,
   type OpenCodePromptCompletedEvent,
   type OpenCodePromptDispatchEvent,
+  type OpenCodeRunResult,
 } from '../runOpenCodePrompt'
 import { safeAtomicWrite } from '../../io/atomicWrite'
 import { buildRelevantFilesArtifact, type RelevantFilesData } from '../../ticket/relevantFiles'
@@ -100,6 +101,11 @@ import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagn
 import { buildStructuredOutputFailure } from '../../structuredOutput/failure'
 import { parseUiArtifactCompanionArtifact } from '@shared/artifactCompanions'
 import type { UiRefinementDiffArtifact } from '@shared/refinementDiffArtifacts'
+import {
+  appendBlockedErrorDiagnosticsSummary,
+  buildOpenCodeBlockedErrorDiagnostics,
+  mergeErrorCodes,
+} from '../../opencode/blockedErrorDiagnostics'
 
 export function validateRelevantFilesScanResponse(response: string): StructuredOutputResult<RelevantFilesOutputPayload> {
   const trimmed = response.trim()
@@ -2013,10 +2019,22 @@ export async function handleRelevantFilesScan(
     return
   }
 
+  let sessionId = ''
   try {
     const { draftTimeoutMs } = resolveCouncilRuntimeSettings(context)
     const streamState = createOpenCodeStreamState()
-    let sessionId = ''
+    const openCodeDiagnostics: Array<ReturnType<typeof buildOpenCodeBlockedErrorDiagnostics>> = []
+    const rememberOpenCodeDiagnostics = (runResult: OpenCodeRunResult) => {
+      const diagnosticResult = buildOpenCodeBlockedErrorDiagnostics({
+        responseMeta: runResult.responseMeta,
+        attemptMeta: runResult.attemptMeta,
+        modelId: codingModelId,
+        sessionId: runResult.session.id,
+      })
+      if (diagnosticResult.diagnostics) {
+        openCodeDiagnostics.push(diagnosticResult)
+      }
+    }
 
     const result = await runOpenCodePrompt({
       adapter,
@@ -2065,6 +2083,7 @@ export async function handleRelevantFilesScan(
         )
       },
     })
+    rememberOpenCodeDiagnostics(result)
 
     throwIfAborted(signal, ticketId)
 
@@ -2148,6 +2167,7 @@ export async function handleRelevantFilesScan(
             )
           },
         })
+        rememberOpenCodeDiagnostics(retryResult)
 
         throwIfAborted(signal, ticketId)
 
@@ -2212,6 +2232,7 @@ export async function handleRelevantFilesScan(
             )
           },
         })
+        rememberOpenCodeDiagnostics(freshResult)
 
         throwIfAborted(signal, ticketId)
 
@@ -2232,9 +2253,16 @@ export async function handleRelevantFilesScan(
 
       normalized = validateRelevantFilesScanResponse(finalResponse)
       if (!normalized.ok) {
-        const msg = `Relevant files scan failed validation after retry: ${normalized.error}`
+        const latestOpenCodeDiagnostics = openCodeDiagnostics.at(-1) ?? null
+        const baseMsg = `Relevant files scan failed validation after retry: ${normalized.error}`
+        const msg = appendBlockedErrorDiagnosticsSummary(baseMsg, latestOpenCodeDiagnostics?.diagnostics)
         emitPhaseLog(ticketId, context.externalId, phase, 'error', msg)
-        sendEvent({ type: 'ERROR', message: msg, codes: ['RELEVANT_FILES_SCAN_FAILED'] })
+        sendEvent({
+          type: 'ERROR',
+          message: msg,
+          codes: mergeErrorCodes(['RELEVANT_FILES_SCAN_FAILED'], latestOpenCodeDiagnostics?.errorCodes ?? []),
+          ...(latestOpenCodeDiagnostics?.diagnostics ? { diagnostics: latestOpenCodeDiagnostics.diagnostics } : {}),
+        })
         return
       }
     }
@@ -2282,14 +2310,39 @@ export async function handleRelevantFilesScan(
   } catch (err) {
     if (err instanceof CancelledError) throw err
     if (err instanceof Error && err.message === 'Timeout') {
-      emitPhaseLog(ticketId, context.externalId, phase, 'error', `Relevant files scan failed: Timeout`)
-      sendEvent({ type: 'ERROR', message: `Relevant files scan failed: Timeout`, codes: ['RELEVANT_FILES_SCAN_FAILED'] })
+      const diagnosticResult = buildOpenCodeBlockedErrorDiagnostics({
+        error: err,
+        modelId: codingModelId,
+        sessionId,
+        fallbackMessage: 'Timeout',
+      })
+      const msg = appendBlockedErrorDiagnosticsSummary('Relevant files scan failed: Timeout', diagnosticResult.diagnostics)
+      emitPhaseLog(ticketId, context.externalId, phase, 'error', msg)
+      sendEvent({
+        type: 'ERROR',
+        message: msg,
+        codes: mergeErrorCodes(['RELEVANT_FILES_SCAN_FAILED'], diagnosticResult.errorCodes),
+        ...(diagnosticResult.diagnostics ? { diagnostics: diagnosticResult.diagnostics } : {}),
+      })
       return
     }
     throwIfCancelled(err, signal, ticketId)
     const errMsg = err instanceof Error ? err.message : String(err)
-    emitPhaseLog(ticketId, context.externalId, phase, 'error', `Relevant files scan failed: ${errMsg}`)
-    sendEvent({ type: 'ERROR', message: `Relevant files scan failed: ${errMsg}`, codes: ['RELEVANT_FILES_SCAN_FAILED'] })
+    const diagnosticResult = buildOpenCodeBlockedErrorDiagnostics({
+      error: err,
+      modelId: codingModelId,
+      sessionId,
+      fallbackMessage: errMsg,
+    })
+    const baseMsg = `Relevant files scan failed: ${errMsg}`
+    const msg = appendBlockedErrorDiagnosticsSummary(baseMsg, diagnosticResult.diagnostics)
+    emitPhaseLog(ticketId, context.externalId, phase, 'error', msg)
+    sendEvent({
+      type: 'ERROR',
+      message: msg,
+      codes: mergeErrorCodes(['RELEVANT_FILES_SCAN_FAILED'], diagnosticResult.errorCodes),
+      ...(diagnosticResult.diagnostics ? { diagnostics: diagnosticResult.diagnostics } : {}),
+    })
   }
 }
 

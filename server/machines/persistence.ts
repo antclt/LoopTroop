@@ -15,6 +15,7 @@ import {
   recordTicketErrorOccurrence,
   resolveLatestTicketErrorOccurrence,
 } from '../storage/tickets'
+import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 
 const activeActors = new Map<string, ReturnType<typeof createActor<typeof ticketMachine>>>()
 
@@ -59,6 +60,7 @@ function buildMachineContext(
     previousStatus?: string | null
     error?: string | null
     errorCodes?: string[]
+    errorDiagnostics?: BlockedErrorDiagnostics | null
     createdAt?: string | null
     updatedAt?: string | null
   },
@@ -81,6 +83,7 @@ function buildMachineContext(
     previousStatus: options.previousStatus ?? null,
     error: options.error ?? null,
     errorCodes: options.errorCodes ?? [],
+    errorDiagnostics: options.errorDiagnostics ?? null,
     beadProgress: { total: 0, completed: 0, current: null },
     iterationCount: 0,
     maxIterations: input.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
@@ -97,6 +100,7 @@ function buildPersistedSnapshot(
     previousStatus?: string | null
     error?: string | null
     errorCodes?: string[]
+    errorDiagnostics?: BlockedErrorDiagnostics | null
     createdAt?: string | null
     updatedAt?: string | null
   },
@@ -165,6 +169,7 @@ function reconcileSnapshotForTicket(
   if (!Array.isArray(context.errorCodes)) {
     context.errorCodes = []
   }
+  context.errorDiagnostics = normalizeBlockedErrorDiagnostics(context.errorDiagnostics)
 
   return rawSnapshot
 }
@@ -213,6 +218,7 @@ function blockTicketForSnapshotRecovery(
     previousStatus: blockedFromStatus,
     error: message,
     errorCodes: ['SNAPSHOT_RECOVERY_FAILED'],
+    errorDiagnostics: null,
   })
 
   const existing = getTicketByRef(ticketRef)
@@ -379,6 +385,7 @@ function persistSnapshot(
   const errorCodes = Array.isArray(currentSnapshot.context.errorCodes)
     ? currentSnapshot.context.errorCodes.filter((code): code is string => typeof code === 'string' && code.trim().length > 0)
     : []
+  const errorDiagnostics = normalizeBlockedErrorDiagnostics(currentSnapshot.context.errorDiagnostics)
   const transitionAt = new Date().toISOString()
 
   const updated = patchTicket(resolvedTicketRef, {
@@ -415,6 +422,7 @@ function persistSnapshot(
         blockedFromStatus: payload.from,
         errorMessage,
         errorCodes,
+        diagnostics: errorDiagnostics,
         occurredAt: transitionAt,
       })
       emitAppErrorLog(
@@ -426,6 +434,7 @@ function persistSnapshot(
           blockedFrom: payload.from,
           blockedTo: payload.to,
           errorCodes,
+          ...(errorDiagnostics ? { diagnostics: errorDiagnostics } : {}),
         },
       )
     } else if (previousStatus === 'BLOCKED_ERROR') {

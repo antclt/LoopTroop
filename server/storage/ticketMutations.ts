@@ -31,6 +31,7 @@ import type {
   TicketErrorOccurrence,
   TicketErrorResolutionStatus,
 } from './ticketQueries'
+import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 import { syncTicketRuntimeProjection } from './ticketRuntimeProjection'
 import {
   getTicketContext,
@@ -47,6 +48,20 @@ function parseErrorCodes(values: string[] | null | undefined): string {
   return JSON.stringify((values ?? []).filter((value) => typeof value === 'string' && value.trim().length > 0))
 }
 
+function serializeDiagnostics(value: BlockedErrorDiagnostics | null | undefined): string | null {
+  const diagnostics = normalizeBlockedErrorDiagnostics(value)
+  return diagnostics ? JSON.stringify(diagnostics) : null
+}
+
+function parseDiagnostics(raw: string | null | undefined): BlockedErrorDiagnostics | null {
+  if (!raw) return null
+  try {
+    return normalizeBlockedErrorDiagnostics(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
 function hydrateErrorOccurrence(row: {
   id: number
   ticketId: number
@@ -54,6 +69,7 @@ function hydrateErrorOccurrence(row: {
   blockedFromStatus: string
   errorMessage: string | null
   errorCodes: string | null
+  diagnosticDetails: string | null
   occurredAt: string
   resolvedAt: string | null
   resolutionStatus: string | null
@@ -66,6 +82,7 @@ function hydrateErrorOccurrence(row: {
     blockedFromStatus: row.blockedFromStatus,
     errorMessage: row.errorMessage,
     errorCodes: parseJsonArray(row.errorCodes),
+    diagnostics: parseDiagnostics(row.diagnosticDetails),
     occurredAt: row.occurredAt,
     resolvedAt: row.resolvedAt,
     resolutionStatus: row.resolutionStatus as TicketErrorResolutionStatus | null,
@@ -79,6 +96,7 @@ export function recordTicketErrorOccurrence(
     blockedFromStatus: string
     errorMessage: string | null
     errorCodes?: string[] | null
+    diagnostics?: BlockedErrorDiagnostics | null
     occurredAt?: string
   },
 ): TicketErrorOccurrence | undefined {
@@ -100,6 +118,7 @@ export function recordTicketErrorOccurrence(
       blockedFromStatus: input.blockedFromStatus,
       errorMessage: input.errorMessage,
       errorCodes: parseErrorCodes(input.errorCodes),
+      diagnosticDetails: serializeDiagnostics(input.diagnostics),
       occurredAt: input.occurredAt ?? new Date().toISOString(),
     })
     .returning()
@@ -126,6 +145,7 @@ export function resolveLatestTicketErrorOccurrence(
     blockedFromStatus: ticketErrorOccurrences.blockedFromStatus,
     errorMessage: ticketErrorOccurrences.errorMessage,
     errorCodes: ticketErrorOccurrences.errorCodes,
+    diagnosticDetails: ticketErrorOccurrences.diagnosticDetails,
     occurredAt: ticketErrorOccurrences.occurredAt,
     resolvedAt: ticketErrorOccurrences.resolvedAt,
     resolutionStatus: ticketErrorOccurrences.resolutionStatus,

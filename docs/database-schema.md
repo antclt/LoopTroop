@@ -180,6 +180,7 @@ Columns:
 - `blocked_from_status`
 - `error_message`
 - `error_codes`
+- `diagnostic_details`
 - `occurred_at`
 - `resolved_at`
 - `resolution_status`

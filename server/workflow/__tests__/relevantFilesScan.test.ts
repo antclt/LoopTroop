@@ -11,6 +11,7 @@ import {
 } from '../../test/factories'
 import { resetTestDb } from '../../test/integration'
 import { initializeTicket } from '../../ticket/initialize'
+import { OPENCODE_PROVIDER_AUTH_FAILED } from '@shared/errorCodes'
 
 const { runOpenCodePromptMock, runOpenCodeSessionPromptMock } = vi.hoisted(() => ({
   runOpenCodePromptMock: vi.fn(),
@@ -294,6 +295,104 @@ describe('handleRelevantFilesScan', () => {
         failureClass: 'empty_response',
       }),
     ])
+  })
+
+  it('includes underlying provider diagnostics when retry exhaustion ends with discarded OpenCode output', async () => {
+    const { ticket, context, paths } = createInitializedTicket()
+    const sendEvent = vi.fn()
+
+    runOpenCodePromptMock
+      .mockResolvedValueOnce({
+        session: { id: 'ses-empty', projectPath: paths.worktreePath },
+        response: '',
+        responseMeta: {
+          hasAssistantMessage: true,
+          latestAssistantMessageId: 'msg-empty',
+          latestAssistantWasEmpty: true,
+          latestAssistantHasError: false,
+          latestAssistantWasStale: false,
+        },
+        attemptMeta: {
+          outcome: 'clean',
+          responseAccepted: true,
+          discardedResponse: false,
+          sessionErrored: false,
+          latestAssistantErrored: false,
+        },
+        messages: [],
+      })
+      .mockResolvedValueOnce({
+        session: { id: 'ses-auth', projectPath: paths.worktreePath },
+        response: '',
+        responseMeta: {
+          hasAssistantMessage: false,
+          latestAssistantWasEmpty: true,
+          latestAssistantHasError: false,
+          latestAssistantWasStale: false,
+          sessionErrored: true,
+          sessionError: 'Provider request failed',
+          sessionErrorDetails: {
+            name: 'APIError',
+            data: {
+              message: 'Your authentication token has been invalidated. Please try signing in again.',
+              statusCode: 401,
+              isRetryable: false,
+              responseBody: JSON.stringify({
+                error: {
+                  type: 'invalid_request_error',
+                  code: 'token_invalidated',
+                  message: 'Your authentication token has been invalidated. Please try signing in again.',
+                },
+              }),
+            },
+          },
+        },
+        attemptMeta: {
+          outcome: 'errored_session',
+          responseAccepted: false,
+          discardedResponse: true,
+          sessionErrored: true,
+          latestAssistantErrored: false,
+          errorSource: 'session_error',
+          error: 'Provider request failed',
+          errorDetails: {
+            name: 'APIError',
+            data: {
+              message: 'Your authentication token has been invalidated. Please try signing in again.',
+              statusCode: 401,
+              isRetryable: false,
+              responseBody: JSON.stringify({
+                error: {
+                  type: 'invalid_request_error',
+                  code: 'token_invalidated',
+                  message: 'Your authentication token has been invalidated. Please try signing in again.',
+                },
+              }),
+            },
+          },
+        },
+        messages: [],
+      })
+
+    await handleRelevantFilesScan(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(runOpenCodePromptMock).toHaveBeenCalledTimes(2)
+    expect(runOpenCodeSessionPromptMock).not.toHaveBeenCalled()
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'ERROR',
+      message: expect.stringContaining('Relevant files scan failed validation after retry: Relevant files output was empty.'),
+      codes: ['RELEVANT_FILES_SCAN_FAILED', OPENCODE_PROVIDER_AUTH_FAILED],
+      diagnostics: expect.objectContaining({
+        kind: 'opencode_provider',
+        source: 'provider',
+        sessionId: 'ses-auth',
+        modelId: TEST.implementer,
+        statusCode: 401,
+        providerErrorType: 'invalid_request_error',
+        providerErrorMessage: 'Your authentication token has been invalidated. Please try signing in again.',
+      }),
+    }))
+    expect(sendEvent.mock.calls.at(-1)?.[0].message).toContain('Underlying OpenCode error: invalid_request_error')
   })
 
   it('blocks immediately when no main implementer is locked', async () => {

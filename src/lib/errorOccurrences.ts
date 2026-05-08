@@ -1,5 +1,6 @@
 import type { Ticket } from '@/hooks/useTickets'
 import { getStatusUserLabel } from '@/lib/workflowMeta'
+import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 
 export interface TicketErrorOccurrence {
   id: string
@@ -7,6 +8,7 @@ export interface TicketErrorOccurrence {
   blockedFromStatus: string
   errorMessage: string
   errorCodes: string[]
+  diagnostics?: BlockedErrorDiagnostics | null
   occurredAt: string
   resolvedAt: string | null
   resolutionStatus: 'RETRIED' | 'CANCELED' | null
@@ -49,6 +51,7 @@ function normalizeErrorOccurrence(
       : 'BLOCKED_ERROR',
     errorMessage: typeof occurrence.errorMessage === 'string' ? occurrence.errorMessage : '',
     errorCodes: normalizeCodeList(occurrence.errorCodes),
+    diagnostics: normalizeBlockedErrorDiagnostics(occurrence.diagnostics),
     occurredAt: typeof occurrence.occurredAt === 'string' && occurrence.occurredAt.length > 0
       ? occurrence.occurredAt
       : new Date().toISOString(),
@@ -76,6 +79,7 @@ function buildSyntheticCurrentOccurrence(ticket: TicketErrorSource): TicketError
       : 'BLOCKED_ERROR',
     errorMessage: ticket.errorMessage ?? '',
     errorCodes: [],
+    diagnostics: null,
     occurredAt: ticket.updatedAt,
     resolvedAt: null,
     resolutionStatus: null,

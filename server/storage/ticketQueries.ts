@@ -17,6 +17,7 @@ import { getAvailableWorkflowActions } from '@shared/workflowMeta'
 import { getTicketBeadsPath, resolveTicketBaseBranch } from '../ticket/metadata'
 import type { ArtifactSnapshot } from '../sse/eventTypes'
 import { EXECUTION_BAND_STATUSES } from '../workflow/executionBand'
+import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
@@ -30,6 +31,7 @@ export interface TicketErrorOccurrence {
   blockedFromStatus: string
   errorMessage: string | null
   errorCodes: string[]
+  diagnostics?: BlockedErrorDiagnostics | null
   occurredAt: string
   resolvedAt: string | null
   resolutionStatus: TicketErrorResolutionStatus | null
@@ -160,6 +162,12 @@ function parseTicketErrorCodes(raw: string | null | undefined): string[] {
     : []
 }
 
+function parseTicketErrorDiagnostics(raw: string | null | undefined): BlockedErrorDiagnostics | null {
+  if (!raw) return null
+  const parsed = parseJsonObject<unknown>(raw)
+  return normalizeBlockedErrorDiagnostics(parsed)
+}
+
 function readTicketErrorOccurrences(
   projectContext: NonNullable<ReturnType<typeof getProjectContextById>> | null | undefined,
   localTicketId: number,
@@ -173,6 +181,7 @@ function readTicketErrorOccurrences(
     blockedFromStatus: ticketErrorOccurrences.blockedFromStatus,
     errorMessage: ticketErrorOccurrences.errorMessage,
     errorCodes: ticketErrorOccurrences.errorCodes,
+    diagnosticDetails: ticketErrorOccurrences.diagnosticDetails,
     occurredAt: ticketErrorOccurrences.occurredAt,
     resolvedAt: ticketErrorOccurrences.resolvedAt,
     resolutionStatus: ticketErrorOccurrences.resolutionStatus,
@@ -190,6 +199,7 @@ function readTicketErrorOccurrences(
     blockedFromStatus: row.blockedFromStatus,
     errorMessage: row.errorMessage,
     errorCodes: parseTicketErrorCodes(row.errorCodes),
+    diagnostics: parseTicketErrorDiagnostics(row.diagnosticDetails),
     occurredAt: row.occurredAt,
     resolvedAt: row.resolvedAt,
     resolutionStatus: row.resolutionStatus as TicketErrorResolutionStatus | null,

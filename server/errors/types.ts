@@ -18,6 +18,14 @@ export const ERROR_CODES: Record<string, { severity: ErrorSeverity; remediation:
     severity: 'recoverable',
     remediation: 'Session will be recreated automatically on retry',
   },
+  OPENCODE_PROVIDER_AUTH_FAILED: {
+    severity: 'critical',
+    remediation: 'Sign in again or refresh the configured provider credentials, then retry',
+  },
+  OPENCODE_PROVIDER_ERROR: {
+    severity: 'recoverable',
+    remediation: 'Review the provider diagnostic details, adjust model/provider limits if needed, then retry',
+  },
   GIT_DIRTY_WORKTREE: {
     severity: 'critical',
     remediation: 'Clean working directory before starting',
