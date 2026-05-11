@@ -374,6 +374,10 @@ export function useTicketUIState<T = unknown>(ticketId: string, scope: string, e
     queryKey: ['ticket-ui-state', ticketId, scope],
     queryFn: () => fetchTicketUIState<T>(ticketId, scope),
     enabled,
+    select: (data) => {
+      rememberTicketUiStateRevision(ticketId, scope, data.clientRevision)
+      return data
+    },
   })
 }
 

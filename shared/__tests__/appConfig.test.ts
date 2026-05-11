@@ -5,6 +5,7 @@ const ORIGINAL_ENV = {
   LOOPTROOP_BACKEND_PORT: process.env.LOOPTROOP_BACKEND_PORT,
   LOOPTROOP_BACKEND_HOST: process.env.LOOPTROOP_BACKEND_HOST,
   LOOPTROOP_ALLOW_REMOTE_API: process.env.LOOPTROOP_ALLOW_REMOTE_API,
+  LOOPTROOP_API_TOKEN: process.env.LOOPTROOP_API_TOKEN,
   LOOPTROOP_DOCS_PORT: process.env.LOOPTROOP_DOCS_PORT,
   LOOPTROOP_FRONTEND_ORIGIN: process.env.LOOPTROOP_FRONTEND_ORIGIN,
   LOOPTROOP_FRONTEND_PORT: process.env.LOOPTROOP_FRONTEND_PORT,
@@ -28,6 +29,12 @@ describe('appConfig frontend origin', () => {
       delete process.env.LOOPTROOP_ALLOW_REMOTE_API
     } else {
       process.env.LOOPTROOP_ALLOW_REMOTE_API = ORIGINAL_ENV.LOOPTROOP_ALLOW_REMOTE_API
+    }
+
+    if (ORIGINAL_ENV.LOOPTROOP_API_TOKEN === undefined) {
+      delete process.env.LOOPTROOP_API_TOKEN
+    } else {
+      process.env.LOOPTROOP_API_TOKEN = ORIGINAL_ENV.LOOPTROOP_API_TOKEN
     }
 
     if (ORIGINAL_ENV.LOOPTROOP_DOCS_PORT === undefined) {
@@ -90,6 +97,17 @@ describe('appConfig frontend origin', () => {
     expect(() => getAllowedBackendHost()).toThrow('Refusing to bind LoopTroop API')
 
     process.env.LOOPTROOP_ALLOW_REMOTE_API = '1'
+    // Still requires a token when binding to a non-loopback host.
+    expect(() => getAllowedBackendHost()).toThrow('LOOPTROOP_API_TOKEN must be set')
+
+    process.env.LOOPTROOP_API_TOKEN = 'secret-token'
+    expect(getAllowedBackendHost()).toBe('0.0.0.0')
+  })
+
+  it('allows non-loopback bind when both LOOPTROOP_ALLOW_REMOTE_API and LOOPTROOP_API_TOKEN are set', () => {
+    process.env.LOOPTROOP_BACKEND_HOST = '0.0.0.0'
+    process.env.LOOPTROOP_ALLOW_REMOTE_API = '1'
+    process.env.LOOPTROOP_API_TOKEN = 'my-token'
     expect(getAllowedBackendHost()).toBe('0.0.0.0')
   })
 })

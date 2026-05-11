@@ -23,7 +23,7 @@ function logCmd(
   }
 }
 import { getProjectContextById } from './projects'
-import { opencodeSessions, phaseArtifacts, projects, ticketErrorOccurrences, ticketStatusHistory, tickets } from '../db/schema'
+import { opencodeSessions, phaseArtifacts, projects, ticketErrorOccurrences, ticketPhaseAttempts, ticketStatusHistory, tickets } from '../db/schema'
 import { getTicketAiLogPath, getTicketDebugLogPath, getTicketDir, getTicketExecutionLogPath, getTicketWorktreePath } from './paths'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { lockTicketModelSelection, resolveTicketBaseBranch } from '../ticket/metadata'
@@ -528,6 +528,7 @@ export function deleteTicket(ticketRef: string): boolean {
   projectDb.transaction((tx) => {
     tx.delete(phaseArtifacts).where(eq(phaseArtifacts.ticketId, localTicketId)).run()
     tx.delete(opencodeSessions).where(eq(opencodeSessions.ticketId, localTicketId)).run()
+    tx.delete(ticketPhaseAttempts).where(eq(ticketPhaseAttempts.ticketId, localTicketId)).run()
     tx.delete(ticketErrorOccurrences).where(eq(ticketErrorOccurrences.ticketId, localTicketId)).run()
     tx.delete(ticketStatusHistory).where(eq(ticketStatusHistory.ticketId, localTicketId)).run()
     tx.delete(tickets).where(eq(tickets.id, localTicketId)).run()

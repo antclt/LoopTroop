@@ -8,6 +8,7 @@ import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { attachProject } from '../../storage/projects'
 import { createTicket, getTicketByRef, patchTicket } from '../../storage/tickets'
+import { ensureActivePhaseAttempt } from '../../storage/ticketPhaseAttempts'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { initializeTicket } from '../../ticket/initialize'
 
@@ -113,5 +114,36 @@ describe('ticketRouter DELETE /tickets/:id', () => {
       encoding: 'utf8',
     })
     expect(branchResult.status).not.toBe(0)
+  })
+
+  it('deletes a ticket that has phase attempts without a foreign-key constraint failure', async () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'LoopTroop FK',
+      shortname: 'FK',
+    })
+    const ticket = createTicket({
+      projectId: project.id,
+      title: 'FK regression',
+      description: 'Ensure ticket_phase_attempts rows are deleted before the ticket row.',
+    })
+
+    initializeTicket({ projectFolder: repoDir, externalId: ticket.externalId })
+
+    // Create a phase attempt row (the child that previously caused FK constraint failures).
+    ensureActivePhaseAttempt(ticket.id, 'WAITING_INTERVIEW_APPROVAL')
+
+    patchTicket(ticket.id, { status: 'CANCELED' })
+
+    const app = new Hono()
+    app.route('/api', ticketRouter)
+
+    const response = await app.request(`/api/tickets/${ticket.id}`, { method: 'DELETE' })
+
+    expect(response.status).toBe(200)
+    const payload = await response.json() as { success?: boolean }
+    expect(payload.success).toBe(true)
+    expect(getTicketByRef(ticket.id)).toBeUndefined()
   })
 })

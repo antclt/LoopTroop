@@ -53,6 +53,12 @@ export function getAllowedBackendHost(): string {
       'Set LOOPTROOP_ALLOW_REMOTE_API=1 only when you understand the local-control API exposure.',
     )
   }
+  if (!isLoopbackHost(host) && !process.env.LOOPTROOP_API_TOKEN?.trim()) {
+    throw new Error(
+      `LOOPTROOP_API_TOKEN must be set when binding to non-loopback host "${host}". ` +
+      'An unauthenticated control-plane API must not be exposed to the network.',
+    )
+  }
   return host
 }
 
