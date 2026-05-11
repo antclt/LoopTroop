@@ -1,4 +1,5 @@
 import { and, asc, desc, eq } from 'drizzle-orm'
+import { z } from 'zod'
 import { db as appDb } from '../db/index'
 import { PROFILE_DEFAULTS } from '../db/defaults'
 import { getProjectContextById, getProjectById, listProjects } from './projects'
@@ -21,6 +22,29 @@ import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
+
+const TrimmedNonEmptyStringSchema = z.string().trim().min(1)
+const LockedCouncilMembersSchema = z.array(TrimmedNonEmptyStringSchema)
+const LockedCouncilMemberVariantsSchema = z.record(TrimmedNonEmptyStringSchema).superRefine((value, ctx) => {
+  for (const key of Object.keys(value)) {
+    if (key.trim().length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Council member variant keys must be non-empty strings.',
+      })
+      return
+    }
+  }
+})
+
+function truncateLoggedValue(value: string, maxLength = 200): string {
+  const trimmed = value.trim()
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed
+}
+
+function warnInvalidDbJson(fieldName: string, raw: string, detail: string): void {
+  console.warn(`[tickets] Invalid ${fieldName} JSON in database: ${truncateLoggedValue(raw)} (${detail})`)
+}
 
 export type TicketErrorResolutionStatus = 'RETRIED' | 'CANCELED'
 
@@ -140,9 +164,55 @@ export function normalizeModelList(values: Array<string | null | undefined>): st
   return normalized
 }
 
+export function parseLockedCouncilMembers(raw: string | null | undefined): string[] {
+  if (!raw) return []
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    const result = LockedCouncilMembersSchema.safeParse(parsed)
+    if (!result.success) {
+      warnInvalidDbJson('lockedCouncilMembers', raw, result.error.message)
+      return []
+    }
+    return normalizeModelList(result.data)
+  } catch (error) {
+    warnInvalidDbJson('lockedCouncilMembers', raw, error instanceof Error ? error.message : String(error))
+    return []
+  }
+}
+
+export function parseLockedCouncilMemberVariants(raw: string | null | undefined): Record<string, string> | null {
+  if (!raw) return null
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    const result = LockedCouncilMemberVariantsSchema.safeParse(parsed)
+    if (!result.success) {
+      warnInvalidDbJson('lockedCouncilMemberVariants', raw, result.error.message)
+      return null
+    }
+
+    return Object.fromEntries(
+      Object.entries(result.data).map(([key, value]) => [key.trim(), value]),
+    )
+  } catch (error) {
+    warnInvalidDbJson('lockedCouncilMemberVariants', raw, error instanceof Error ? error.message : String(error))
+    return null
+  }
+}
+
 export function arraysEqual(left: string[], right: string[]): boolean {
   if (left.length !== right.length) return false
-  return left.every((value, index) => value === right[index])
+
+  const leftSet = new Set(left)
+  const rightSet = new Set(right)
+  if (leftSet.size !== left.length || rightSet.size !== right.length) return false
+  if (leftSet.size !== rightSet.size) return false
+  return [...leftSet].every((value) => rightSet.has(value))
+}
+
+export function isValidResolutionStatus(v: unknown): v is TicketErrorResolutionStatus {
+  return v === 'RETRIED' || v === 'CANCELED'
 }
 
 function parseJsonObject<T>(raw: string | null | undefined): T | null {
@@ -202,7 +272,7 @@ function readTicketErrorOccurrences(
     diagnostics: parseTicketErrorDiagnostics(row.diagnosticDetails),
     occurredAt: row.occurredAt,
     resolvedAt: row.resolvedAt,
-    resolutionStatus: row.resolutionStatus as TicketErrorResolutionStatus | null,
+    resolutionStatus: isValidResolutionStatus(row.resolutionStatus) ? row.resolutionStatus : null,
     resumedToStatus: row.resumedToStatus,
   }))
 }
@@ -268,10 +338,8 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
   const project = getProjectById(projectId)
   const projectContext = getProjectContextById(projectId)
   const baseBranch = project ? resolveTicketBaseBranch(project.folderPath, ticket.externalId) : 'unknown'
-  const lockedCouncilMembers = parseJsonArray(ticket.lockedCouncilMembers)
-  const lockedCouncilMemberVariants = ticket.lockedCouncilMemberVariants
-    ? parseJsonObject<Record<string, string>>(ticket.lockedCouncilMemberVariants)
-    : null
+  const lockedCouncilMembers = parseLockedCouncilMembers(ticket.lockedCouncilMembers)
+  const lockedCouncilMemberVariants = parseLockedCouncilMemberVariants(ticket.lockedCouncilMemberVariants)
   const snapshot = parseJsonObject<{ context?: { previousStatus?: unknown } }>(ticket.xstateSnapshot)
   const errorOccurrences = readTicketErrorOccurrences(projectContext, ticket.id)
   const activeErrorOccurrenceId = readActiveErrorOccurrenceId(errorOccurrences)

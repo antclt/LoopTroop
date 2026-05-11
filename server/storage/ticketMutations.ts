@@ -2,6 +2,7 @@ import { and, desc, eq, isNull } from 'drizzle-orm'
 import { existsSync, mkdirSync, rmSync } from 'fs'
 import { resolve } from 'path'
 import { spawnSync } from 'child_process'
+import { z } from 'zod'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -37,12 +38,42 @@ import {
   getTicketContext,
   toPublicTicket,
   parseJsonArray,
+  parseLockedCouncilMembers,
+  parseLockedCouncilMemberVariants,
   normalizeModelId,
   normalizeModelList,
   arraysEqual,
+  isValidResolutionStatus,
 } from './ticketQueries'
 
 type LocalTicketRow = typeof tickets.$inferSelect
+
+const BlockedErrorDiagnosticsSchema = z.object({
+  kind: z.enum(['opencode_provider', 'opencode_session', 'timeout', 'transport', 'runtime', 'unknown']).optional(),
+  source: z.enum(['opencode', 'provider', 'system', 'runtime']).optional(),
+  summary: z.string().optional(),
+  modelId: z.string().optional(),
+  sessionId: z.string().optional(),
+  statusCode: z.number().finite().optional(),
+  requestModel: z.string().optional(),
+  isRetryable: z.boolean().optional(),
+  providerErrorType: z.string().optional(),
+  providerErrorTitle: z.string().optional(),
+  providerErrorMessage: z.string().optional(),
+  responseBodyPreview: z.string().optional(),
+}).passthrough()
+
+const CreateTicketInputSchema = z.object({
+  projectId: z.number().int().positive(),
+  title: z.string().min(1).max(500),
+  description: z.string().max(10000).optional(),
+  priority: z.number().int().min(1).max(5).optional(),
+})
+
+function truncateLoggedValue(value: string, maxLength = 200): string {
+  const trimmed = value.trim()
+  return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed
+}
 
 function parseErrorCodes(values: string[] | null | undefined): string {
   return JSON.stringify((values ?? []).filter((value) => typeof value === 'string' && value.trim().length > 0))
@@ -55,9 +86,25 @@ function serializeDiagnostics(value: BlockedErrorDiagnostics | null | undefined)
 
 function parseDiagnostics(raw: string | null | undefined): BlockedErrorDiagnostics | null {
   if (!raw) return null
+
   try {
-    return normalizeBlockedErrorDiagnostics(JSON.parse(raw))
-  } catch {
+    const parsed = JSON.parse(raw) as unknown
+    const result = BlockedErrorDiagnosticsSchema.safeParse(parsed)
+    if (!result.success) {
+      console.warn(`[tickets] Invalid stored diagnostics JSON: ${truncateLoggedValue(raw)} (${result.error.message})`)
+      return null
+    }
+
+    const diagnostics = normalizeBlockedErrorDiagnostics(result.data)
+    if (!diagnostics) {
+      console.warn(`[tickets] Invalid stored diagnostics payload: ${truncateLoggedValue(raw)}`)
+      return null
+    }
+
+    return diagnostics
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error)
+    console.warn(`[tickets] Failed to parse stored diagnostics JSON: ${truncateLoggedValue(raw)} (${detail})`)
     return null
   }
 }
@@ -85,7 +132,7 @@ function hydrateErrorOccurrence(row: {
     diagnostics: parseDiagnostics(row.diagnosticDetails),
     occurredAt: row.occurredAt,
     resolvedAt: row.resolvedAt,
-    resolutionStatus: row.resolutionStatus as TicketErrorResolutionStatus | null,
+    resolutionStatus: isValidResolutionStatus(row.resolutionStatus) ? row.resolutionStatus : null,
     resumedToStatus: row.resumedToStatus,
   }
 }
@@ -124,7 +171,11 @@ export function recordTicketErrorOccurrence(
     .returning()
     .get()
 
-  return inserted ? hydrateErrorOccurrence(inserted) : undefined
+  if (!inserted) {
+    throw new Error(`Failed to insert ticket error occurrence for ticket: ${ticketRef}`)
+  }
+
+  return hydrateErrorOccurrence(inserted)
 }
 
 export function resolveLatestTicketErrorOccurrence(
@@ -179,6 +230,16 @@ export function resolveLatestTicketErrorOccurrence(
   })
 }
 
+function recordsEqual(left: Record<string, string> | null, right: Record<string, string> | null): boolean {
+  if (!left && !right) return true
+  if (!left || !right) return false
+
+  const leftKeys = Object.keys(left)
+  const rightKeys = Object.keys(right)
+  if (leftKeys.length !== rightKeys.length) return false
+  return leftKeys.every((key) => left[key] === right[key])
+}
+
 function assertLockedModelConfigurationMutable(
   ticket: LocalTicketRow,
   patch: Partial<Omit<LocalTicketRow, 'id' | 'projectId' | 'externalId' | 'createdAt'>>,
@@ -190,20 +251,38 @@ function assertLockedModelConfigurationMutable(
   if (!updatesLockedModels) return
 
   const currentMainImplementer = normalizeModelId(ticket.lockedMainImplementer)
-  const currentCouncilMembers = parseJsonArray(ticket.lockedCouncilMembers)
-  if (!currentMainImplementer && currentCouncilMembers.length === 0) return
+  const currentMainImplementerVariant = normalizeModelId(ticket.lockedMainImplementerVariant)
+  const currentCouncilMembers = parseLockedCouncilMembers(ticket.lockedCouncilMembers)
+  const currentCouncilMemberVariants = parseLockedCouncilMemberVariants(ticket.lockedCouncilMemberVariants)
+  const hasLockedConfiguration = currentMainImplementer !== null
+    || currentMainImplementerVariant !== null
+    || currentCouncilMembers.length > 0
+    || currentCouncilMemberVariants !== null
+  if (!hasLockedConfiguration) return
 
   const nextMainImplementer = 'lockedMainImplementer' in patch
     ? normalizeModelId(patch.lockedMainImplementer)
     : currentMainImplementer
+  const nextMainImplementerVariant = 'lockedMainImplementerVariant' in patch
+    ? normalizeModelId(patch.lockedMainImplementerVariant)
+    : currentMainImplementerVariant
   const nextCouncilMembers = 'lockedCouncilMembers' in patch
-    ? parseJsonArray(patch.lockedCouncilMembers)
+    ? parseLockedCouncilMembers(patch.lockedCouncilMembers)
     : currentCouncilMembers
+  const nextCouncilMemberVariants = 'lockedCouncilMemberVariants' in patch
+    ? parseLockedCouncilMemberVariants(patch.lockedCouncilMemberVariants)
+    : currentCouncilMemberVariants
 
-  if (currentMainImplementer && currentMainImplementer !== nextMainImplementer) {
+  if (currentMainImplementer !== nextMainImplementer) {
     throw new Error(`Ticket model configuration is immutable after start: ${ticket.externalId}`)
   }
-  if (currentCouncilMembers.length > 0 && !arraysEqual(currentCouncilMembers, nextCouncilMembers)) {
+  if (currentMainImplementerVariant !== nextMainImplementerVariant) {
+    throw new Error(`Ticket model configuration is immutable after start: ${ticket.externalId}`)
+  }
+  if (!arraysEqual(currentCouncilMembers, nextCouncilMembers)) {
+    throw new Error(`Ticket model configuration is immutable after start: ${ticket.externalId}`)
+  }
+  if (!recordsEqual(currentCouncilMemberVariants, nextCouncilMemberVariants)) {
     throw new Error(`Ticket model configuration is immutable after start: ${ticket.externalId}`)
   }
 }
@@ -259,7 +338,16 @@ export function createTicket(input: {
   description?: string
   priority?: number
 }): PublicTicket {
-  const project = getProjectContextById(input.projectId)
+  const parsedInput = CreateTicketInputSchema.safeParse(input)
+  if (!parsedInput.success) {
+    const issues = parsedInput.error.issues
+      .map((issue) => `${issue.path.join('.') || 'input'}: ${issue.message}`)
+      .join('; ')
+    throw new Error(`Invalid createTicket input: ${issues}`)
+  }
+
+  const validatedInput = parsedInput.data
+  const project = getProjectContextById(validatedInput.projectId)
   if (!project) throw new Error('Project not found')
 
   const newCounter = (project.project.ticketCounter ?? 0) + 1
@@ -274,13 +362,17 @@ export function createTicket(input: {
     .values({
       externalId,
       projectId: project.project.id,
-      title: input.title,
-      description: input.description ?? null,
-      priority: input.priority ?? 3,
+      title: validatedInput.title,
+      description: validatedInput.description ?? null,
+      priority: validatedInput.priority ?? 3,
       status: 'DRAFT',
     })
     .returning()
     .get()
+
+  if (!ticket) {
+    throw new Error(`Failed to create ticket: ${externalId}`)
+  }
 
   const metaDir = resolve(getTicketDir(project.projectRoot, externalId), 'meta')
   mkdirSync(metaDir, { recursive: true })
@@ -288,12 +380,12 @@ export function createTicket(input: {
     resolve(metaDir, 'ticket.meta.json'),
     JSON.stringify({
       externalId,
-      title: input.title,
+      title: validatedInput.title,
       createdAt: ticket.createdAt,
     }, null, 2),
   )
 
-  const publicTicket = toPublicTicket(input.projectId, ticket)
+  const publicTicket = toPublicTicket(validatedInput.projectId, ticket)
   syncTicketRuntimeProjection(publicTicket)
   return publicTicket
 }
@@ -306,7 +398,9 @@ export function updateTicket(ticketRef: string, patch: Partial<Pick<LocalTicketR
     .where(eq(tickets.id, context.localTicketId))
     .run()
   const updated = context.projectDb.select().from(tickets).where(eq(tickets.id, context.localTicketId)).get()
-  if (!updated) return undefined
+  if (!updated) {
+    throw new Error(`Ticket not found after update: ${ticketRef}`)
+  }
   const publicTicket = toPublicTicket(context.projectId, updated)
   syncTicketRuntimeProjection(publicTicket)
   return publicTicket
@@ -331,7 +425,9 @@ export function patchTicket(
     .run()
 
   const updated = context.projectDb.select().from(tickets).where(eq(tickets.id, context.localTicketId)).get()
-  if (!updated) return undefined
+  if (!updated) {
+    throw new Error(`Ticket not found after patch: ${ticketRef}`)
+  }
 
   if (patch.status && patch.status !== previousStatus) {
     context.projectDb.insert(ticketStatusHistory)
@@ -379,9 +475,14 @@ export function lockTicketStartConfiguration(
   }
 
   const lockedCouncilMembersRaw = JSON.stringify(lockedCouncilMembers)
+  const lockedCouncilMemberVariantsRaw = input.lockedCouncilMemberVariants
+    ? JSON.stringify(input.lockedCouncilMemberVariants)
+    : null
   assertLockedModelConfigurationMutable(context.localTicket, {
     lockedMainImplementer,
+    lockedMainImplementerVariant: input.lockedMainImplementerVariant ?? null,
     lockedCouncilMembers: lockedCouncilMembersRaw,
+    lockedCouncilMemberVariants: lockedCouncilMemberVariantsRaw,
   })
 
   const meta = lockTicketModelSelection(context.projectRoot, context.externalId, {
@@ -396,7 +497,7 @@ export function lockTicketStartConfiguration(
       lockedMainImplementer,
       lockedMainImplementerVariant: input.lockedMainImplementerVariant ?? null,
       lockedCouncilMembers: lockedCouncilMembersRaw,
-      lockedCouncilMemberVariants: input.lockedCouncilMemberVariants ? JSON.stringify(input.lockedCouncilMemberVariants) : null,
+      lockedCouncilMemberVariants: lockedCouncilMemberVariantsRaw,
       lockedInterviewQuestions: input.lockedInterviewQuestions,
       lockedCoverageFollowUpBudgetPercent: input.lockedCoverageFollowUpBudgetPercent,
       lockedMaxCoveragePasses: input.lockedMaxCoveragePasses,
@@ -409,7 +510,9 @@ export function lockTicketStartConfiguration(
     .run()
 
   const updated = context.projectDb.select().from(tickets).where(eq(tickets.id, context.localTicketId)).get()
-  if (!updated) return undefined
+  if (!updated) {
+    throw new Error(`Ticket not found after locking start configuration: ${ticketRef}`)
+  }
   return toPublicTicket(context.projectId, updated)
 }
 
