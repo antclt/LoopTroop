@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { broadcaster } from '../sse/broadcaster'
@@ -14,7 +15,7 @@ streamRouter.get('/stream', (c) => {
   const lastEventId = c.req.header('Last-Event-ID') ?? c.req.query('lastEventId')
 
   return streamSSE(c, async (stream) => {
-    const clientId = `${ticketId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const clientId = `${ticketId}-${Date.now()}-${randomBytes(6).toString('hex')}`
 
     // Register client with broadcaster
     broadcaster.addClient(ticketId, {
@@ -31,19 +32,24 @@ streamRouter.get('/stream', (c) => {
       },
     })
 
-    // Send initial connection event
-    await stream.writeSSE({
-      event: 'connected',
-      data: JSON.stringify({ ticketId, clientId, timestamp: new Date().toISOString() }),
-      id: '0',
-    })
+    try {
+      // Send initial connection event
+      await stream.writeSSE({
+        event: 'connected',
+        data: JSON.stringify({ ticketId, clientId, timestamp: new Date().toISOString() }),
+        id: '0',
+      })
 
-    // Replay missed events if reconnecting
-    if (lastEventId) {
-      const missed = broadcaster.getEventsSince(ticketId, lastEventId)
-      for (const evt of missed) {
-        await stream.writeSSE({ event: evt.event, data: evt.data, id: evt.id })
+      // Replay missed events if reconnecting
+      if (lastEventId) {
+        const missed = broadcaster.getEventsSince(ticketId, lastEventId)
+        for (const evt of missed) {
+          await stream.writeSSE({ event: evt.event, data: evt.data, id: evt.id })
+        }
       }
+    } catch (error) {
+      broadcaster.removeClient(ticketId, clientId)
+      throw error
     }
 
     // Keep connection alive with heartbeat

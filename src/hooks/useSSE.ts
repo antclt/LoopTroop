@@ -78,6 +78,7 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
   const recoverOnOpenRef = useRef(false)
   const reconnectRef = useRef<(() => void) | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const connectAbortControllerRef = useRef<AbortController | null>(null)
   const connectTokenRef = useRef(0)
   // Keep the connection stable per ticket while always dispatching to the latest callback.
   const onEventRef = useRef(onEvent)
@@ -111,15 +112,23 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
   const connect = useCallback(() => {
     if (!ticketId) return
     const connectToken = ++connectTokenRef.current
+    const connectAbortController = new AbortController()
+    connectAbortControllerRef.current?.abort()
+    connectAbortControllerRef.current = connectAbortController
     setConnectionState((current) => (current === 'reconnecting' ? current : 'connecting'))
 
     void (async () => {
       try {
-        await waitForDevBackend()
+        await waitForDevBackend(connectAbortController.signal)
       } catch {
+        if (connectToken !== connectTokenRef.current || connectAbortController.signal.aborted) return
         setConnectionState('reconnecting')
-        if (connectToken === connectTokenRef.current) scheduleReconnect()
+        scheduleReconnect()
         return
+      } finally {
+        if (connectAbortControllerRef.current === connectAbortController) {
+          connectAbortControllerRef.current = null
+        }
       }
 
       if (connectToken !== connectTokenRef.current || eventSourceRef.current) return
@@ -304,6 +313,8 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
     queueMicrotask(connect)
     return () => {
       connectTokenRef.current += 1
+      connectAbortControllerRef.current?.abort()
+      connectAbortControllerRef.current = null
       if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
       eventSourceRef.current?.close()
       eventSourceRef.current = null
