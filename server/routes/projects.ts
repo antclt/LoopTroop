@@ -1,8 +1,17 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
-import { existsSync, readdirSync, statSync } from 'fs'
+import { access, constants, readdir, stat } from 'fs/promises'
 import { dirname, resolve as resolvePath } from 'path'
 import { homedir } from 'os'
+
+async function existsAsync(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK)
+    return true
+  } catch {
+    return false
+  }
+}
 import {
   attachExistingProject,
   attachProject,
@@ -61,9 +70,9 @@ interface GitRepoInfo {
   existingProject?: ExistingProjectMetadata | null
 }
 
-function getGitRepoInfo(folderPath: string): GitRepoInfo {
+async function getGitRepoInfo(folderPath: string): Promise<GitRepoInfo> {
   const resolved = normalizeFolderPath(folderPath)
-  if (!existsSync(resolved)) {
+  if (!(await existsAsync(resolved))) {
     console.warn(`[getGitRepoInfo] Path does not exist: ${resolved} (original: ${folderPath})`)
     return { isGit: false }
   }
@@ -91,14 +100,14 @@ function getProjectPerformanceWarning(folderPath: string): string | null {
   return buildWslProjectMountedDriveWarning(resolved)
 }
 
-projectRouter.get('/projects/check-git', (c) => {
+projectRouter.get('/projects/check-git', async (c) => {
   const rawPath = c.req.query('path')
   if (!rawPath) return c.json({ isGit: false, status: 'none', message: 'No path provided' })
 
   const folderPath = normalizeFolderPath(rawPath)
   const performanceWarning = getProjectPerformanceWarning(folderPath)
   const warningPayload = performanceWarning ? { performanceWarning } : {}
-  if (!existsSync(folderPath)) {
+  if (!(await existsAsync(folderPath))) {
     return c.json({
       isGit: false,
       status: 'invalid',
@@ -107,7 +116,7 @@ projectRouter.get('/projects/check-git', (c) => {
     })
   }
 
-  const gitInfo = getGitRepoInfo(folderPath)
+  const gitInfo = await getGitRepoInfo(folderPath)
   if (gitInfo.isGit) {
     if (!gitInfo.hasGitHubOrigin) {
       return c.json({
@@ -145,25 +154,29 @@ projectRouter.get('/projects/check-git', (c) => {
   })
 })
 
-projectRouter.get('/projects/ls', (c) => {
+projectRouter.get('/projects/ls', async (c) => {
   const rawPath = c.req.query('path')
   const targetPath = normalizeFolderPath(rawPath || homedir())
 
-  if (!existsSync(targetPath)) {
+  if (!(await existsAsync(targetPath))) {
     return c.json({ error: `Path does not exist: ${targetPath}` }, 400)
   }
 
   try {
-    const entries = readdirSync(targetPath)
-    const dirs = entries
-      .flatMap((name) => {
+    const entries = await readdir(targetPath)
+    const dirsWithNull = await Promise.all(
+      entries.map(async (name) => {
         try {
           const full = resolvePath(targetPath, name)
-          return statSync(full).isDirectory() ? [{ name, path: full }] : []
+          const s = await stat(full)
+          return s.isDirectory() ? { name, path: full } : null
         } catch {
-          return []
+          return null
         }
       })
+    )
+    const dirs = dirsWithNull
+      .filter((d): d is { name: string; path: string } => d !== null)
       .sort((a, b) => a.name.localeCompare(b.name))
 
     const parent = dirname(targetPath)
@@ -241,24 +254,24 @@ projectRouter.patch('/projects/:id', async (c) => {
   return c.json(result)
 })
 
-projectRouter.get('/projects/:id/worktrees/size', (c) => {
+projectRouter.get('/projects/:id/worktrees/size', async (c) => {
   const id = Number(c.req.param('id'))
   if (Number.isNaN(id)) return c.json({ error: 'Invalid project ID' }, 400)
   const projectRoot = getProjectRootById(id)
   if (!projectRoot) return c.json({ error: 'Project not found' }, 404)
 
-  const bytes = getProjectWorktreesSize(projectRoot)
+  const bytes = await getProjectWorktreesSize(projectRoot)
   return c.json({ bytes })
 })
 
-projectRouter.delete('/projects/:id/worktrees', (c) => {
+projectRouter.delete('/projects/:id/worktrees', async (c) => {
   const id = Number(c.req.param('id'))
   if (Number.isNaN(id)) return c.json({ error: 'Invalid project ID' }, 400)
   const projectRoot = getProjectRootById(id)
   if (!projectRoot) return c.json({ error: 'Project not found' }, 404)
 
   try {
-    const result = deleteProjectWorktrees(projectRoot)
+    const result = await deleteProjectWorktrees(projectRoot)
     return c.json({ success: true, freedBytes: result.freedBytes })
   } catch (err) {
     return c.json({ error: 'Failed to delete worktrees', details: String(err) }, 500)

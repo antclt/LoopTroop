@@ -157,26 +157,109 @@ const rawPrdSaveSchema = z.object({
 })
 
 const structuredPrdSaveSchema = z.object({
-  document: z.custom<PrdDocument>((value) => Boolean(value) && typeof value === 'object', {
-    message: 'document must be an object',
-  }),
+  document: z.object({
+    schema_version: z.number(),
+    ticket_id: z.string(),
+    artifact: z.literal('prd'),
+    status: z.enum(['draft', 'approved']),
+    source_interview: z.object({
+      content_sha256: z.string(),
+    }),
+    product: z.object({
+      problem_statement: z.string(),
+      target_users: z.array(z.string()),
+    }),
+    scope: z.object({
+      in_scope: z.array(z.string()),
+      out_of_scope: z.array(z.string()),
+    }),
+    technical_requirements: z.object({
+      architecture_constraints: z.array(z.string()),
+      data_model: z.array(z.string()),
+      api_contracts: z.array(z.string()),
+      security_constraints: z.array(z.string()),
+      performance_constraints: z.array(z.string()),
+      reliability_constraints: z.array(z.string()),
+      error_handling_rules: z.array(z.string()),
+      tooling_assumptions: z.array(z.string()),
+    }),
+    epics: z.array(
+      z.object({
+        id: z.string(),
+        title: z.string(),
+        objective: z.string(),
+        implementation_steps: z.array(z.string()),
+        user_stories: z.array(
+          z.object({
+            id: z.string(),
+            title: z.string(),
+            acceptance_criteria: z.array(z.string()),
+            implementation_steps: z.array(z.string()),
+            verification: z.object({
+              required_commands: z.array(z.string()),
+            }),
+          })
+        ),
+      })
+    ).min(1),
+    risks: z.array(z.string()),
+    approval: z.object({
+      approved_by: z.string(),
+      approved_at: z.string(),
+    }),
+  })
 })
 
 const rawExecutionSetupPlanSaveSchema = z.object({
   content: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES),
 })
 
-const structuredExecutionSetupPlanSaveSchema = z.object({
-  plan: z.custom<ExecutionSetupPlan>((value) => Boolean(value) && typeof value === 'object', {
-    message: 'plan must be an object',
+const executionSetupPlanSchema = z.object({
+  schemaVersion: z.number(),
+  ticketId: z.string(),
+  artifact: z.literal('execution_setup_plan'),
+  status: z.literal('draft'),
+  summary: z.string(),
+  readiness: z.object({
+    status: z.enum(['ready', 'partial', 'missing']),
+    actionsRequired: z.boolean(),
+    evidence: z.array(z.string()),
+    gaps: z.array(z.string()),
   }),
+  tempRoots: z.array(z.string()),
+  steps: z.array(
+    z.object({
+      id: z.string(),
+      title: z.string(),
+      purpose: z.string(),
+      commands: z.array(z.string()),
+      required: z.boolean(),
+      rationale: z.string(),
+      cautions: z.array(z.string()),
+    })
+  ),
+  projectCommands: z.object({
+    prepare: z.array(z.string()),
+    testFull: z.array(z.string()),
+    lintFull: z.array(z.string()),
+    typecheckFull: z.array(z.string()),
+  }),
+  qualityGatePolicy: z.object({
+    tests: z.string(),
+    lint: z.string(),
+    typecheck: z.string(),
+    fullProjectFallback: z.string(),
+  }),
+  cautions: z.array(z.string()),
+})
+
+const structuredExecutionSetupPlanSaveSchema = z.object({
+  plan: executionSetupPlanSchema,
 })
 
 const regenerateExecutionSetupPlanSchema = z.object({
   commentary: z.string().trim().min(1),
-  plan: z.custom<ExecutionSetupPlan>((value) => value === undefined || (Boolean(value) && typeof value === 'object'), {
-    message: 'plan must be an object when provided',
-  }).optional(),
+  plan: executionSetupPlanSchema.optional(),
   rawContent: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES).optional(),
 })
 

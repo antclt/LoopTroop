@@ -1,5 +1,6 @@
 import { eq, or } from 'drizzle-orm'
-import { existsSync as fsExistsSync, lstatSync, readdirSync, rmSync } from 'fs'
+import { rmSync } from 'fs'
+import { access, lstat, readdir, rm } from 'fs/promises'
 import { resolve as resolvePath } from 'path'
 import { spawnSync } from 'child_process'
 import { db as appDb } from '../db/index'
@@ -356,17 +357,26 @@ export function resolveProjectState(projectRootOrFolder: string): { projectRoot:
   return { projectRoot, exists: existingProject !== null, existingProject }
 }
 
-function calcDirSize(dirPath: string): number {
-  if (!fsExistsSync(dirPath)) return 0
+async function existsAsync(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function calcDirSize(dirPath: string): Promise<number> {
+  if (!(await existsAsync(dirPath))) return 0
   let total = 0
   try {
-    const entries = readdirSync(dirPath, { withFileTypes: true })
+    const entries = await readdir(dirPath, { withFileTypes: true })
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue
       const full = resolvePath(dirPath, entry.name)
-      const stat = lstatSync(full)
+      const stat = await lstat(full)
       if (stat.isDirectory()) {
-        total += calcDirSize(full)
+        total += await calcDirSize(full)
       } else {
         total += stat.size
       }
@@ -389,15 +399,19 @@ function getTerminalTicketExternalIds(projectRoot: string): string[] {
   return rows.map(r => r.externalId)
 }
 
-export function getProjectWorktreesSize(projectRoot: string): number {
+export async function getProjectWorktreesSize(projectRoot: string): Promise<number> {
   const worktreesRoot = getProjectWorktreesRoot(projectRoot)
   const externalIds = getTerminalTicketExternalIds(projectRoot)
-  return externalIds.reduce((sum, id) => sum + calcDirSize(resolvePath(worktreesRoot, id)), 0)
+  let sum = 0
+  for (const id of externalIds) {
+    sum += await calcDirSize(resolvePath(worktreesRoot, id))
+  }
+  return sum
 }
 
-export function deleteProjectWorktrees(projectRoot: string): { freedBytes: number } {
+export async function deleteProjectWorktrees(projectRoot: string): Promise<{ freedBytes: number }> {
   const worktreesRoot = getProjectWorktreesRoot(projectRoot)
-  if (!fsExistsSync(worktreesRoot)) return { freedBytes: 0 }
+  if (!(await existsAsync(worktreesRoot))) return { freedBytes: 0 }
 
   const externalIds = getTerminalTicketExternalIds(projectRoot)
   if (externalIds.length === 0) return { freedBytes: 0 }
@@ -405,12 +419,12 @@ export function deleteProjectWorktrees(projectRoot: string): { freedBytes: numbe
   let freedBytes = 0
   for (const externalId of externalIds) {
     const worktreePath = resolvePath(worktreesRoot, externalId)
-    if (!fsExistsSync(worktreePath)) continue
-    freedBytes += calcDirSize(worktreePath)
+    if (!(await existsAsync(worktreePath))) continue
+    freedBytes += await calcDirSize(worktreePath)
     spawnSync('git', ['-C', projectRoot, 'worktree', 'remove', '--force', worktreePath], {
       encoding: 'utf8',
     })
-    rmSync(worktreePath, { recursive: true, force: true })
+    await rm(worktreePath, { recursive: true, force: true })
   }
 
   spawnSync('git', ['-C', projectRoot, 'worktree', 'prune'], { encoding: 'utf8' })
