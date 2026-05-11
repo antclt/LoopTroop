@@ -226,7 +226,7 @@ export function listPortOccupantPids(
   return inspectPortOccupants(port, providedDeps)
     .occupants
     .map((occupant) => occupant.pid)
-    .filter((pid): pid is number => Number.isInteger(pid) && pid > 0)
+    .filter((pid): pid is number => typeof pid === 'number' && Number.isInteger(pid) && pid > 0)
 }
 
 type PortOccupantSummaryInput = {

@@ -170,7 +170,7 @@ if (preflightReport) {
       'Dependencies',
       `Updated ${preflightReport.dependencySync.updatedDependencies.length} runtime and ` +
       `${preflightReport.dependencySync.updatedDevDependencies.length} dev packages to latest stable` +
-      (preflightReport.dependencySync.forced ? ' (with npm --force fallback)' : ''),
+      (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : ''),
     )
   }
 

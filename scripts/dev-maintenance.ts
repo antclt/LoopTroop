@@ -36,6 +36,10 @@ export interface InstallReport {
   ran: boolean
   reasons: string[]
   isForced: boolean
+  errors: string[]
+}
+
+export interface DependencySyncReport {
   skipped: boolean
   deferred: boolean
   checked: boolean
