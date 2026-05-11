@@ -68,10 +68,10 @@ function App() {
   }, [initialModal, queryClient])
 
   useEffect(() => {
-    if (!state.selectedTicketId || !ticketsQuery.isFetched || !Array.isArray(tickets)) return
+    if (!state.selectedTicketId || !ticketsQuery.isSuccess || !Array.isArray(tickets)) return
     if (tickets.some(ticket => ticket.id === state.selectedTicketId)) return
     dispatch({ type: 'CLOSE_TICKET' })
-  }, [dispatch, state.selectedTicketId, tickets, ticketsQuery.isFetched])
+  }, [dispatch, state.selectedTicketId, tickets, ticketsQuery.isSuccess])
 
   const dismissWelcome = () => {
     try {
@@ -94,7 +94,7 @@ function App() {
       }
     }
     initialUrlProcessed.current = true
-  }, [tickets]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [tickets, dispatch])
 
   // Handle back/forward navigation
   useEffect(() => {
@@ -111,7 +111,7 @@ function App() {
     }
     window.addEventListener('popstate', handlePop)
     return () => window.removeEventListener('popstate', handlePop)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [dispatch])
 
   // Modal open/close helpers that sync URL
   const openProfile = () => {

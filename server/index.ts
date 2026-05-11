@@ -21,7 +21,7 @@ import { clearProjectDatabaseCache } from './db/project'
 import { broadcaster } from './sse/broadcaster'
 
 const app = new Hono()
-const SHUTDOWN_FORCE_EXIT_MS = 5_000
+const SHUTDOWN_FORCE_EXIT_MS = 30_000
 
 function isLocalhostRequest(c: Context): boolean {
   const host = c.req.header('Host')?.trim().toLowerCase()
@@ -100,12 +100,19 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   forceExit.unref()
 
   try {
+    console.log('[server] Closing HTTP server...')
     await closeHttpServer()
+    console.log('[server] Stopping log upsert buffer...')
     stopUpsertBuffer()
+    console.log('[server] Stopping broadcaster auto-cleanup...')
     broadcaster.stopAutoCleanup()
+    console.log('[server] Clearing project database cache...')
     clearProjectDatabaseCache()
+    console.log('[server] Closing database connections...')
     closeDatabase()
+    
     clearTimeout(forceExit)
+    console.log('[server] Graceful shutdown completed.')
     process.exit(0)
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

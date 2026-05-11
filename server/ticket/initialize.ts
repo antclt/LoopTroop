@@ -36,8 +36,11 @@ function logCmd(
   try {
     const { logCommand } = _require('../log/commandLogger') as typeof import('../log/commandLogger')
     logCommand(bin, args, result)
-  } catch {
-    // Silently ignore if commandLogger can't be loaded (e.g. in test isolation).
+  } catch (error) {
+    // Ignore if commandLogger can't be loaded in test isolation.
+    if (process.env.NODE_ENV !== 'test' && process.env.VITEST !== 'true') {
+      console.error(`[ticket/initialize] Failed to load commandLogger: ${error instanceof Error ? error.message : String(error)}`)
+    }
   }
 }
 

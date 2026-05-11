@@ -89,8 +89,9 @@ export function startWalCheckpoint() {
   checkpointInterval = setInterval(() => {
     try {
       sqlite.pragma('wal_checkpoint(PASSIVE)')
-    } catch {
-      // Ignore checkpoint errors.
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.error(`[db] WAL checkpoint failed: ${message}`)
     }
   }, 30000)
 }

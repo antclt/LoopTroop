@@ -1056,7 +1056,7 @@ function formatTodoTransitionSummary(
     .slice(0, 4)
     .map((todo) => `${todo.status}: ${todo.content}`)
   const suffix = transitions.length > examples.length ? `; +${transitions.length - examples.length} more` : ''
-  return `[TODO] ${countText}: ${examples.join('; ')}${suffix}`
+  return `[TASK] ${countText}: ${examples.join('; ')}${suffix}`
 }
 
 function questionLogContent(event: Extract<StreamEvent, { type: 'question' }>): string {
