@@ -186,7 +186,7 @@ function resolveSessionCreateOptions(): OpenCodeSessionCreateOptions {
 }
 
 function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number | undefined) {
-  if (!timeoutMs) {
+  if (timeoutMs === undefined) {
     return {
       signal,
       timedOut: () => false,
@@ -196,6 +196,17 @@ function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number 
 
   const controller = new AbortController()
   let didTimeOut = false
+
+  if (timeoutMs <= 0) {
+    didTimeOut = true
+    controller.abort()
+    return {
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
+      timedOut: () => didTimeOut,
+      cleanup: () => undefined,
+    }
+  }
+
   const timer = setTimeout(() => {
     didTimeOut = true
     controller.abort()
@@ -206,6 +217,14 @@ function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number 
     timedOut: () => didTimeOut,
     cleanup: () => clearTimeout(timer),
   }
+}
+
+function getTimeoutDeadline(timeoutMs: number | undefined): number | undefined {
+  return timeoutMs === undefined ? undefined : Date.now() + timeoutMs
+}
+
+function getRemainingTimeoutMs(timeoutDeadline: number | undefined): number | undefined {
+  return timeoutDeadline === undefined ? undefined : timeoutDeadline - Date.now()
 }
 
 function isPromptTransportFailure(error: unknown): boolean {
@@ -235,8 +254,9 @@ export async function runOpenCodePrompt({
 }: OpenCodeRunOptions & { projectPath: string }): Promise<OpenCodeRunResult> {
   const sessionManager = sessionOwnership ? new SessionManager(adapter) : null
   const sessionCreateOptions = resolveSessionCreateOptions()
-  const acquisitionDeadline = createTimeoutSignal(signal, timeoutMs)
-  let session: Session
+  const timeoutDeadline = getTimeoutDeadline(timeoutMs)
+  const acquisitionDeadline = createTimeoutSignal(signal, getRemainingTimeoutMs(timeoutDeadline))
+  let session: Session | undefined
   try {
     if (sessionOwnership?.forceFresh) {
       const existing = sessionManager!.getOwnedActiveSession(
@@ -295,6 +315,7 @@ export async function runOpenCodePrompt({
       onPromptDispatched,
       onStreamEvent,
       onPromptCompleted,
+      timeoutDeadline,
     })
     if (sessionManager && !sessionOwnership?.keepActive) {
       await sessionManager.completeSession(session.id)
@@ -305,6 +326,10 @@ export async function runOpenCodePrompt({
       await sessionManager.abandonSession(session.id)
     }
     throw error
+  } finally {
+    if (session && !sessionOwnership?.keepActive) {
+      sessionPromptDispatchCounts.delete(session.id)
+    }
   }
 }
 
@@ -324,11 +349,13 @@ export async function runOpenCodeSessionPrompt({
   onStreamEvent,
   onStreamError,
   onPromptCompleted,
-}: OpenCodeRunOptions & { session: Session }): Promise<OpenCodeRunResult> {
+  timeoutDeadline,
+}: OpenCodeRunOptions & { session: Session, timeoutDeadline?: number }): Promise<OpenCodeRunResult> {
+  const resolvedTimeoutDeadline = timeoutDeadline ?? getTimeoutDeadline(timeoutMs)
   let resolvedSession = session
   const sessionManager = sessionOwnership ? new SessionManager(adapter) : null
   if (sessionOwnership) {
-    const validationDeadline = createTimeoutSignal(signal, timeoutMs)
+    const validationDeadline = createTimeoutSignal(signal, getRemainingTimeoutMs(resolvedTimeoutDeadline))
     let reconnected: Session | null
     try {
       reconnected = await sessionManager!.validateAndReconnect(sessionOwnership.ticketId, sessionOwnership.phase, {
@@ -353,7 +380,8 @@ export async function runOpenCodeSessionPrompt({
   }
 
   let response = ''
-  const deadlineController = timeoutMs ? new AbortController() : undefined
+  const promptTimeoutMs = getRemainingTimeoutMs(resolvedTimeoutDeadline)
+  const deadlineController = promptTimeoutMs === undefined ? undefined : new AbortController()
   const combinedSignal = deadlineController
     ? signal
       ? AbortSignal.any([signal, deadlineController.signal])
@@ -362,9 +390,9 @@ export async function runOpenCodeSessionPrompt({
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined
   const parsedModel = model ? parseModelRef(model) : undefined
   const tools = resolveOpenCodeTools(toolPolicy)
-  const stepFinishSafetyMs = timeoutMs
-    ? Math.min(Math.max(timeoutMs / 10, PROMPT_MIN_TIMEOUT_MS), PROMPT_MAX_TIMEOUT_MS)
-    : undefined
+  const stepFinishSafetyMs = promptTimeoutMs === undefined || promptTimeoutMs <= 0
+    ? undefined
+    : Math.min(Math.max(promptTimeoutMs / 10, PROMPT_MIN_TIMEOUT_MS), PROMPT_MAX_TIMEOUT_MS)
   const promptOptions: PromptSessionOptions = {
     ...(combinedSignal ? { signal: combinedSignal } : {}),
     ...(parsedModel ? { model: parsedModel } : {}),
@@ -395,7 +423,14 @@ export async function runOpenCodeSessionPrompt({
     })
 
     if (deadlineController) {
-      deadlineTimer = setTimeout(() => deadlineController.abort(), timeoutMs)
+      if (promptTimeoutMs !== undefined && promptTimeoutMs <= 0) {
+        deadlineController.abort()
+      } else {
+        deadlineTimer = setTimeout(() => deadlineController.abort(), promptTimeoutMs)
+      }
+    }
+    if (deadlineController?.signal.aborted) {
+      throw new Error('Timeout')
     }
     response = await adapter.promptSession(resolvedSession.id, parts, combinedSignal, promptOptions)
     // Adapter completed but deadline may have fired during execution;
