@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Search, Zap, Eye, Wrench, Brain, AlertCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { DROPDOWN_MAX_HEIGHT, DROPDOWN_OFFSET, DROPDOWN_PADDING } from '@/lib/constants'
+import { DROPDOWN_MAX_HEIGHT, DROPDOWN_OFFSET, DROPDOWN_PADDING, DROPDOWN_FOCUS_DELAY_MS } from '@/lib/constants'
 import { useOpenCodeModels, useAllOpenCodeModels } from '@/hooks/useOpenCodeModels'
 import type { OpenCodeModel } from '@/hooks/useOpenCodeModels'
 
@@ -125,24 +125,23 @@ function ProviderGroup({
   onClose: () => void
   query: string
 }) {
-  const [collapsed, setCollapsed] = useState(false)
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const hasQuery = query.trim().length > 0
   const wasSearchingRef = useRef(false)
 
   useEffect(() => {
     if (hasQuery && !wasSearchingRef.current) {
-      setCollapsed(false)
+      setIsCollapsed(false)
     }
     wasSearchingRef.current = hasQuery
   }, [hasQuery])
 
-  const isCollapsed = collapsed
 
   return (
     <div>
       <div 
         className="sticky top-0 z-10 bg-popover/95 backdrop-blur-sm px-3 py-1.5 flex items-center justify-between cursor-pointer hover:bg-muted/50 transition-colors select-none border-b border-border/40"
-        onClick={() => setCollapsed(c => !c)}
+        onClick={() => setIsCollapsed(c => !c)}
       >
         <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
           {providerName}
@@ -173,7 +172,7 @@ function ProviderGroup({
 }
 
 export function ModelPicker({ value, onChange, placeholder = 'Search models…', disabledValues = [] }: ModelPickerProps) {
-  const [showAll, setShowAll] = useState(false)
+  const [isShowingAll, setIsShowingAll] = useState(false)
   const {
     data: connectedModels,
     isLoading: loadingConnected,
@@ -188,15 +187,15 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
     error: allError,
     isFetching: fetchingAll,
   } = useAllOpenCodeModels()
-  const models = showAll ? allModels : connectedModels
-  const isLoading = showAll ? loadingAll : loadingConnected
-  const isError = showAll ? hasAllError : hasConnectedError
-  const isFetching = showAll ? fetchingAll : fetchingConnected
-  const activeError = showAll ? allError : connectedError
+  const models = isShowingAll ? allModels : connectedModels
+  const isLoading = isShowingAll ? loadingAll : loadingConnected
+  const isError = isShowingAll ? hasAllError : hasConnectedError
+  const isFetching = isShowingAll ? fetchingAll : fetchingConnected
+  const activeError = isShowingAll ? allError : connectedError
   const errorCopy = useMemo(() => getModelQueryErrorCopy(activeError), [activeError])
-  const [open, setOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
   const [query, setQuery] = useState('')
-  const [showOnlyFree, setShowOnlyFree] = useState(false)
+  const [isShowingOnlyFree, setIsShowingOnlyFree] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const dropdownNodeRef = useRef<HTMLDivElement | null>(null)
@@ -226,26 +225,26 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
     dropdownNodeRef.current = node
     if (node) {
       applyPosition(node)
-      setTimeout(() => inputRef.current?.focus(), 50)
+      setTimeout(() => inputRef.current?.focus(), DROPDOWN_FOCUS_DELAY_MS)
     }
   }, [applyPosition])
 
   // Close on outside click
   useEffect(() => {
-    if (!open) return
+    if (!isOpen) return
     const handler = (e: MouseEvent) => {
       if (
         !containerRef.current?.contains(e.target as Node) &&
         !(e.target as Element)?.closest('[data-model-dropdown]')
-      ) setOpen(false)
+      ) setIsOpen(false)
     }
     document.addEventListener('mousedown', handler)
     return () => document.removeEventListener('mousedown', handler)
-  }, [open])
+  }, [isOpen])
 
   // Reposition on scroll/resize
   useEffect(() => {
-    if (!open) return
+    if (!isOpen) return
     const handler = () => { if (dropdownNodeRef.current) applyPosition(dropdownNodeRef.current) }
     window.addEventListener('scroll', handler, true)
     window.addEventListener('resize', handler)
@@ -253,14 +252,14 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
       window.removeEventListener('scroll', handler, true)
       window.removeEventListener('resize', handler)
     }
-  }, [open, applyPosition])
+  }, [isOpen, applyPosition])
 
   const selected = models?.find(m => m.fullId === value) ?? allModels?.find(m => m.fullId === value) ?? connectedModels?.find(m => m.fullId === value)
 
   const filtered = useMemo(() => {
     if (!models) return []
     let result = models
-    if (showOnlyFree) {
+    if (isShowingOnlyFree) {
       result = result.filter(m => m.costInput === 0)
     }
     const q = query.trim().toLowerCase()
@@ -272,7 +271,7 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
       m.id.toLowerCase().includes(q) ||
       m.family.toLowerCase().includes(q)
     )
-  }, [models, query, showOnlyFree])
+  }, [models, query, isShowingOnlyFree])
 
   // Group by provider
   const grouped = useMemo(() => {
@@ -293,14 +292,14 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
         ref={triggerRef}
         type="button"
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={isOpen}
         aria-label="Pick a model"
-        onClick={() => setOpen(v => !v)}
+        onClick={() => setIsOpen(v => !v)}
         className={cn(
           'w-full flex items-center gap-2 rounded-lg border border-input bg-background px-3 py-2.5',
           'text-sm text-left transition-colors',
           'hover:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-          open && 'border-ring ring-2 ring-ring',
+          isOpen && 'border-ring ring-2 ring-ring',
         )}
       >
         {(isLoading || (isError && isFetching)) ? (
@@ -326,11 +325,11 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
             </span>
           )}
         </span>
-        <ChevronDown className={cn('h-4 w-4 text-muted-foreground shrink-0 transition-transform', open && 'rotate-180')} aria-hidden="true" />
+        <ChevronDown className={cn('h-4 w-4 text-muted-foreground shrink-0 transition-transform', isOpen && 'rotate-180')} aria-hidden="true" />
       </button>
 
       {/* Dropdown — portaled to body to escape modal overflow */}
-      {open && createPortal(
+      {isOpen && createPortal(
         <div
           ref={dropdownRef}
           data-model-dropdown
@@ -370,8 +369,8 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
             <label className="flex items-center gap-2 px-3 pb-2 cursor-pointer">
               <input
                 type="checkbox"
-                checked={showOnlyFree}
-                onChange={e => setShowOnlyFree(e.target.checked)}
+                checked={isShowingOnlyFree}
+                onChange={e => setIsShowingOnlyFree(e.target.checked)}
                 className="rounded border-input text-primary focus:ring-primary"
               />
               <span className="text-xs text-muted-foreground">Show free models only</span>
@@ -398,7 +397,7 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
               <div className="px-4 py-6 text-sm text-muted-foreground text-center">
                 {query
                   ? `No models match "${query}"`
-                  : showOnlyFree
+                  : isShowingOnlyFree
                     ? 'No free models match the current filters.'
                     : 'OpenCode is connected, but no models are currently available.'}
               </div>
@@ -413,7 +412,7 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
                 disabledValues={disabledValues}
                 onChange={onChange}
                 onClose={() => {
-                  setOpen(false)
+                  setIsOpen(false)
                   setQuery('')
                 }}
                 query={query}
@@ -425,8 +424,8 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
           <label className="flex items-center gap-2 px-3 py-2 border-t border-border/40 cursor-pointer shrink-0">
             <input
               type="checkbox"
-              checked={showAll}
-              onChange={e => setShowAll(e.target.checked)}
+              checked={isShowingAll}
+              onChange={e => setIsShowingAll(e.target.checked)}
               className="rounded border-input"
             />
             <span className="text-xs text-muted-foreground">

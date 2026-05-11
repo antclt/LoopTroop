@@ -19,6 +19,7 @@ import {
 } from './yamlUtils'
 import { parseRefinementChanges } from './refinementChanges'
 import { buildStructuredOutputFailure } from './failure'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const PRD_NESTED_MAPPING_CHILDREN = {
   source_interview: ['content_sha256'],
@@ -345,7 +346,7 @@ export function normalizePrdYamlOutput(
         repairWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
       if (/echoed the prompt/i.test(lastError)) {
         const failure = buildStructuredOutputFailure(candidate, lastError, { cause: error })

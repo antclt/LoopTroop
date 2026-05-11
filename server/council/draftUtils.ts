@@ -1,6 +1,7 @@
 import type { MemberOutcome } from './types'
 import type { StructuredFailureClass } from '../lib/structuredOutputRetry'
 import { classifyStructuredFailureFromError } from '../lib/structuredOutputRetry'
+import { getErrorMessage } from '@shared/typeGuards'
 
 export const PHASE_DEADLINE_ERROR = 'CouncilPhaseDeadlineReached'
 
@@ -30,7 +31,7 @@ export function classifyDraftFailure(
 
   return {
     outcome: failureClass === 'validation_error' ? 'invalid_output' as const : 'failed' as const,
-    errorDetail: error instanceof Error ? error.message : String(error),
+    errorDetail: getErrorMessage(error),
     failureClass,
   }
 }

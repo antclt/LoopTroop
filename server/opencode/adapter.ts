@@ -42,6 +42,7 @@ import {
   extractTextFromMessageParts,
 } from './assistantMessageAnalysis'
 import { summarizeModelErrorForLog } from './errorDetails'
+import { getErrorMessage } from '@shared/typeGuards'
 
 interface RawEvent {
   type: string
@@ -149,7 +150,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       return session
     } catch (err) {
       if (err instanceof Error && (err.name === 'AbortError' || signal?.aborted)) throw err
-      const errorMessage = err instanceof Error ? err.message : String(err)
+      const errorMessage = getErrorMessage(err)
       if (options?.permission) {
         throw new Error(
           `Failed to create OpenCode session with YOLO permissions: ${errorMessage}. ` +
@@ -348,7 +349,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       if (err instanceof Error && (err.name === 'AbortError' || promptOptions.signal?.aborted)) throw err
       if (err instanceof Error && err.name === 'OpenCodeSessionError') throw err
       throw new Error(
-        `Failed to prompt OpenCode session: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to prompt OpenCode session: ${getErrorMessage(err)}`,
       )
     } finally {
       streamAbortController.abort()
@@ -745,7 +746,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       onEvent({
         type: 'session_error',
         sessionId,
-        error: error instanceof Error ? error.message : String(error),
+        error: getErrorMessage(error),
         details: error,
       })
     }

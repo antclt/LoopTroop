@@ -21,6 +21,7 @@ import {
 } from './yamlUtils'
 import { parseRefinementChanges } from './refinementChanges'
 import { buildStructuredOutputFailure } from './failure'
+import { getErrorMessage } from '@shared/typeGuards'
 
 export interface BeadDraftMetrics {
   beadCount: number
@@ -260,7 +261,7 @@ export function normalizeBeadSubsetYamlOutput(
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
       repairWarnings.splice(0, repairWarnings.length, ...candidateWarnings)
     }
@@ -807,7 +808,7 @@ export function normalizeBeadsJsonlOutput(rawContent: string): StructuredOutputR
         repairWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -972,7 +973,7 @@ export function normalizeRelevantFilesOutput(rawContent: string): StructuredOutp
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }

@@ -22,6 +22,7 @@ import { buildStructuredOutputMetadata } from '../structuredOutput/metadata'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError } from './draftUtils'
+import { getErrorMessage } from '@shared/typeGuards'
 
 function buildStrictVoteSchemaReminder(rubric: typeof VOTING_RUBRIC): string {
   return [
@@ -418,7 +419,7 @@ export async function conductVoting(
         throw new CancelledError()
       }
 
-      const errorDetail = error instanceof Error ? error.message : String(error)
+      const errorDetail = getErrorMessage(error)
       const outcome: MemberOutcome = isPhaseDeadlineError(error) || closed
         ? 'timed_out'
         : 'failed'

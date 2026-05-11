@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSyn
 import { homedir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
 import Database from 'better-sqlite3'
+import { getErrorMessage } from '../shared/typeGuards'
 
 interface CliOptions {
   backendPort?: number
@@ -791,7 +792,7 @@ function measureDiskWriteLatency(dirPath: string): FsLatencyProbe {
       durationMs: Date.now() - startedAt,
       ok: false,
       details: '(operation failed)',
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -843,7 +844,7 @@ async function probeHttp(label: string, url: string, timeoutMs: number): Promise
       ok: false,
       status: null,
       bodyPreview: '(no response body)',
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1006,7 +1007,7 @@ function measureFsLatency(label: string, action: () => string): FsLatencyProbe {
       durationMs: Date.now() - startedAt,
       ok: false,
       details: '(operation failed)',
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1061,7 +1062,7 @@ function inspectPressureFile(path: string): PressureSnapshot {
       path,
       some: null,
       full: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1093,7 +1094,7 @@ function readProcessIo(pid: number): ProcessIoSnapshot {
       pid,
       values: {},
       raw: '',
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1219,7 +1220,7 @@ function readProcessRuntimeSnapshot(pid: number): ProcessRuntimeSnapshot {
       syscr: null,
       syscw: null,
       capturedAtMs,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1438,7 +1439,7 @@ function readTrendFileSample(target: TrendFileTarget, previous?: TrendFileSample
       sizeBytes: null,
       sizeDeltaBytes: null,
       modifiedAt: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1725,7 +1726,7 @@ function readProcessMemorySnapshot(pid: number): ProcessMemorySnapshot {
       nonvoluntaryCtxtSwitches: null,
       oomScore: null,
       oomScoreAdj: null,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1768,7 +1769,7 @@ async function probeDns(hostname: string): Promise<DnsProbeResult> {
       ok: false,
       durationMs: Date.now() - start,
       addresses: [],
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 }
@@ -1785,7 +1786,7 @@ function readFdLimits(): FdLimits {
     const hard = parseInteger(hardResult.stdout.trim())
     return { soft, hard }
   } catch (error) {
-    return { soft: null, hard: null, error: error instanceof Error ? error.message : String(error) }
+    return { soft: null, hard: null, error: getErrorMessage(error) }
   }
 }
 
@@ -1831,7 +1832,7 @@ function readTcpStats(): TcpStats {
     }
     return { established: 0, timeWait: 0, closeWait: 0, listen: 0, error: 'Platform not supported' }
   } catch (error) {
-    return { established: 0, timeWait: 0, closeWait: 0, listen: 0, error: error instanceof Error ? error.message : String(error) }
+    return { established: 0, timeWait: 0, closeWait: 0, listen: 0, error: getErrorMessage(error) }
   }
 }
 
@@ -1887,7 +1888,7 @@ function readSwapSnapshot(): SwapSnapshot {
     const usePercent = totalKb && totalKb > 0 && usedKb !== null ? Math.round(usedKb / totalKb * 100 * 10) / 10 : null
     return { totalKb, freeKb, usedKb, usePercent }
   } catch (error) {
-    return { totalKb: null, freeKb: null, usedKb: null, usePercent: null, error: error instanceof Error ? error.message : String(error) }
+    return { totalKb: null, freeKb: null, usedKb: null, usePercent: null, error: getErrorMessage(error) }
   }
 }
 
@@ -2038,7 +2039,7 @@ function inspectAppDatabase(appDbPath: string): {
       attachedProjects: [],
       openMs: Date.now() - openStartedAt,
       queryMs: 0,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   } finally {
     db?.close()
@@ -2074,7 +2075,7 @@ function inspectTicketMetaFiles(projectRoot: string, ticketRefs: string[]): {
     } catch (error) {
       metaWithoutBaseBranch += 1
       if (details.length < 8) {
-        const message = error instanceof Error ? error.message : String(error)
+        const message = getErrorMessage(error)
         details.push(`${externalId}: failed to parse meta file (${message})`)
       }
     }
@@ -2147,7 +2148,7 @@ function readTicketExecutionLogPreview(
       logPath,
       exists: true,
       tailLines: [],
-      detail: error instanceof Error ? error.message : String(error),
+      detail: getErrorMessage(error),
     }
   }
 }
@@ -2352,7 +2353,7 @@ function printFileStats(title: string, filePath: string) {
     kv('Size bytes', stats.size)
     kv('Modified at', stats.mtime.toISOString())
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     kv('Stat error', message)
   }
 }

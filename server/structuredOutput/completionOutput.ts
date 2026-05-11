@@ -27,6 +27,7 @@ import {
   getRequiredString,
 } from './yamlUtils'
 import { buildStructuredOutputFailure } from './failure'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const COMPLETION_NESTED_MAPPING_CHILDREN = {
   checks: ['tests', 'lint', 'typecheck', 'qualitative'],
@@ -152,7 +153,7 @@ export function normalizeBeadCompletionMarkerOutput(rawContent: string): Structu
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -267,7 +268,7 @@ export function normalizeFinalTestCommandsOutput(rawContent: string): Structured
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -722,7 +723,7 @@ export function normalizeExecutionSetupPlanOutput(rawContent: string): Structure
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -794,7 +795,7 @@ export function normalizeExecutionSetupResultOutput(rawContent: string): Structu
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }

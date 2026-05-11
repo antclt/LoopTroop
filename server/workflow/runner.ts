@@ -8,6 +8,7 @@ import {
   buildOpenCodeBlockedErrorDiagnostics,
   mergeErrorCodes,
 } from '../opencode/blockedErrorDiagnostics'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const ERR_DELIBERATION_DATA_LOST = 'Council data lost after restart. Retry to re-run deliberation.'
 const ERR_PRD_DATA_LOST = 'Council data lost after restart. Retry to re-run PRD drafting.'
@@ -210,7 +211,7 @@ function startCodingPhase(
   handleCoding(ticketId, context, sendEvent, signal)
     .catch(err => {
       if (isCancellationError(err, signal)) return
-      const errMsg = err instanceof Error ? err.message : String(err)
+      const errMsg = getErrorMessage(err)
       emitPhaseLog(ticketId, context.externalId, 'CODING', 'error', errMsg)
       sendEvent(buildWorkflowErrorEvent(errMsg, ['CODING_FAILED'], err))
     })
@@ -277,7 +278,7 @@ export function attachWorkflowRunner(
         handleMockLifecycleState(ticketId, context, state, sendEvent)
           .catch((err: unknown) => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, state, 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, ['MOCK_LIFECYCLE_FAILED'], err))
           })
@@ -293,7 +294,7 @@ export function attachWorkflowRunner(
         handleRelevantFilesScan(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'SCANNING_RELEVANT_FILES', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['RELEVANT_FILES_SCAN_FAILED'], err))
         })
@@ -305,7 +306,7 @@ export function attachWorkflowRunner(
       handleInterviewDeliberate(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           const isOpenCode = errMsg.includes('OpenCode server is not running')
           const isWorkspace = errMsg.includes('Ticket workspace not initialized')
           const codes = isOpenCode
@@ -325,7 +326,7 @@ export function attachWorkflowRunner(
         handleInterviewVote(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'COUNCIL_VOTING_INTERVIEW', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, ['QUORUM_NOT_MET'], err))
           })
@@ -341,7 +342,7 @@ export function attachWorkflowRunner(
         handleInterviewCompile(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'COMPILING_INTERVIEW', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, [], err))
           })
@@ -359,7 +360,7 @@ export function attachWorkflowRunner(
         handleInterviewQAStart(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'WAITING_INTERVIEW_ANSWERS', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, ['PROM4_INIT_FAILED'], err))
           })
@@ -372,7 +373,7 @@ export function attachWorkflowRunner(
       handleCoverageVerification(ticketId, context, sendEvent, 'interview', signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'VERIFYING_INTERVIEW_COVERAGE', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['COVERAGE_FAILED'], err))
         })
@@ -384,7 +385,7 @@ export function attachWorkflowRunner(
       handlePrdDraft(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'DRAFTING_PRD', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['QUORUM_NOT_MET'], err))
         })
@@ -397,7 +398,7 @@ export function attachWorkflowRunner(
         handlePrdVote(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'COUNCIL_VOTING_PRD', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, ['QUORUM_NOT_MET'], err))
           })
@@ -413,7 +414,7 @@ export function attachWorkflowRunner(
         handlePrdRefine(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'REFINING_PRD', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, [], err))
           })
@@ -428,7 +429,7 @@ export function attachWorkflowRunner(
       handleCoverageVerification(ticketId, context, sendEvent, 'prd', signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'VERIFYING_PRD_COVERAGE', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['COVERAGE_FAILED'], err))
         })
@@ -440,7 +441,7 @@ export function attachWorkflowRunner(
       handleBeadsDraft(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'DRAFTING_BEADS', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['QUORUM_NOT_MET'], err))
         })
@@ -453,7 +454,7 @@ export function attachWorkflowRunner(
         handleBeadsVote(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'COUNCIL_VOTING_BEADS', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, ['QUORUM_NOT_MET'], err))
           })
@@ -469,7 +470,7 @@ export function attachWorkflowRunner(
         handleBeadsRefine(ticketId, context, sendEvent, signal)
           .catch(err => {
             if (isCancellationError(err, signal)) return
-            const errMsg = err instanceof Error ? err.message : String(err)
+            const errMsg = getErrorMessage(err)
             emitPhaseLog(ticketId, context.externalId, 'REFINING_BEADS', 'error', errMsg)
             sendEvent(buildWorkflowErrorEvent(errMsg, [], err))
           })
@@ -484,7 +485,7 @@ export function attachWorkflowRunner(
       handleCoverageVerification(ticketId, context, sendEvent, 'beads', signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'VERIFYING_BEADS_COVERAGE', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['COVERAGE_FAILED'], err))
         })
@@ -496,7 +497,7 @@ export function attachWorkflowRunner(
       handleBeadsExpansion(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'EXPANDING_BEADS', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['EXPANSION_FAILED'], err))
         })
@@ -508,7 +509,7 @@ export function attachWorkflowRunner(
       handlePreFlight(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'PRE_FLIGHT_CHECK', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['PREFLIGHT_FAILED'], err))
         })
@@ -520,7 +521,7 @@ export function attachWorkflowRunner(
       handleExecutionSetupPlanApprovalState(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'WAITING_EXECUTION_SETUP_APPROVAL', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['EXECUTION_SETUP_PLAN_FAILED'], err))
         })
@@ -532,7 +533,7 @@ export function attachWorkflowRunner(
       handleExecutionSetup(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'PREPARING_EXECUTION_ENV', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['EXECUTION_SETUP_FAILED'], err))
         })
@@ -546,7 +547,7 @@ export function attachWorkflowRunner(
       handleFinalTest(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'RUNNING_FINAL_TEST', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['TESTS_FAILED'], err))
         })
@@ -558,7 +559,7 @@ export function attachWorkflowRunner(
       handleIntegration(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'INTEGRATING_CHANGES', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['INTEGRATION_FAILED'], err))
         })
@@ -570,7 +571,7 @@ export function attachWorkflowRunner(
       handleCreatePullRequest(ticketId, context, sendEvent, signal)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'CREATING_PULL_REQUEST', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['PULL_REQUEST_FAILED'], err))
         })
@@ -582,7 +583,7 @@ export function attachWorkflowRunner(
       handleCleanup(ticketId, context, sendEvent)
         .catch(err => {
           if (isCancellationError(err, signal)) return
-          const errMsg = err instanceof Error ? err.message : String(err)
+          const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'CLEANING_ENV', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['CLEANUP_FAILED'], err))
         })

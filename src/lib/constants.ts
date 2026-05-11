@@ -15,9 +15,14 @@ export const DROPDOWN_OFFSET = 4
 export const DROPDOWN_MAX_HEIGHT = 420
 export const DROPDOWN_PADDING = 12
 
+/** Delay before focusing dropdown search input (lets DOM settle after portal mount) */
+export const DROPDOWN_FOCUS_DELAY_MS = 50
+
 /** Query stale time for infrequently-changing data (5 minutes) */
 export const QUERY_STALE_TIME_5M = 5 * 60 * 1000
 /** Default retry count for OpenCode API calls */
 export const OPENCODE_RETRY_COUNT = 8
 /** Default toast notification duration */
 export const TOAST_DURATION_MS = 4000
+/** Interval for polling to recover unanswered AI questions */
+export const QUESTION_RECOVERY_INTERVAL_MS = 30_000

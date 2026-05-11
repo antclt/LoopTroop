@@ -5,6 +5,7 @@ import {
   type PortOccupantInspection,
 } from './port-occupants'
 import { getOpenCodeBasicAuthHeader } from '../shared/opencodeAuth'
+import { getErrorMessage } from '../shared/typeGuards'
 
 const MAX_PORT_SCAN_ATTEMPTS = 50
 
@@ -164,7 +165,7 @@ export async function resolveOpenCodeBaseUrl(options: ResolveOptions): Promise<R
   try {
     url = new URL(requestedBaseUrl)
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     throw new Error(`Invalid OpenCode base URL "${requestedBaseUrl}": ${message}`)
   }
 

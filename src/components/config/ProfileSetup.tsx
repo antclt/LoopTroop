@@ -127,34 +127,34 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
     }
   }, [profile])
 
-  const [openCodeConnected, setOpenCodeConnected] = useState<boolean | null>(null)
+  const [isOpenCodeConnected, setIsOpenCodeConnected] = useState<boolean | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
     fetch('/api/health/opencode', { signal: controller.signal })
       .then(async (res) => {
         if (!res.ok) {
-          setOpenCodeConnected(false)
+          setIsOpenCodeConnected(false)
           return
         }
 
         const payload = await res.json().catch(() => null) as { status?: string } | null
-        setOpenCodeConnected(payload?.status === 'ok')
+        setIsOpenCodeConnected(payload?.status === 'ok')
       })
-      .catch((err) => { if (err.name !== 'AbortError') setOpenCodeConnected(false) })
+      .catch((err) => { if (err.name !== 'AbortError') setIsOpenCodeConnected(false) })
     return () => controller.abort()
   }, [])
 
   useEffect(() => {
-    if (openCodeConnected !== true) return
+    if (isOpenCodeConnected !== true) return
 
     // The model query can race the OpenCode health check on mount.
     void refetchOpenCodeModelsQuery(queryClient)
-  }, [openCodeConnected, queryClient])
+  }, [isOpenCodeConnected, queryClient])
 
   const openCodeStatus = useMemo(() => {
-    if (openCodeConnected === null) return null
-    if (openCodeConnected === false) {
+    if (isOpenCodeConnected === null) return null
+    if (isOpenCodeConnected === false) {
       return { dotClass: 'bg-red-500', label: 'OpenCode not connected' }
     }
     if (modelsError && !modelsFetching) {
@@ -167,7 +167,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
       return { dotClass: 'bg-amber-500', label: 'OpenCode connected, but no models are available' }
     }
     return { dotClass: 'bg-green-500', label: 'OpenCode connected and working' }
-  }, [openCodeConnected, models, modelsError, modelsFetching, modelsLoading])
+  }, [isOpenCodeConnected, models, modelsError, modelsFetching, modelsLoading])
 
   useEffect(() => {
     const err = createProfile.error || updateProfile.error
@@ -252,7 +252,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
               <p className="min-w-0 flex-1">Primary model used for code generation and implementation</p>
               <ConfigurationDocsLink docsPath={descriptionDocs.mainImplementer} label="Main Implementer Model" />
             </div>
-            {openCodeConnected === false && (
+            {isOpenCodeConnected === false && (
               <div className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
                 LoopTroop could not reach the configured OpenCode server. Start it with <code className="font-mono bg-muted-foreground/10 px-1 rounded">opencode serve</code> or check the backend OpenCode URL.
               </div>

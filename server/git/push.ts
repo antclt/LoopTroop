@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -81,7 +82,7 @@ export function pushBranchRef({
   } catch (error) {
     return {
       pushed: false,
-      error: error instanceof Error ? error.message : String(error),
+      error: getErrorMessage(error),
     }
   }
 
@@ -90,7 +91,7 @@ export function pushBranchRef({
       runGit(projectPath, ['push', ...leaseArg, remote, refspec])
       return { pushed: true }
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error)
+      const detail = getErrorMessage(error)
       if (attempt === maxRetries) {
         return {
           pushed: false,

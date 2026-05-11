@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { getErrorMessage } from '../shared/typeGuards'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 export const repoRoot = resolve(__dirname, '..')
@@ -34,16 +35,12 @@ const KNOWN_AUDIT_LEFTOVERS: Record<string, { note: string; url: string }> = {
 export interface InstallReport {
   ran: boolean
   reasons: string[]
-  forced: boolean
-  errors: string[]
-}
-
-export interface DependencySyncReport {
+  isForced: boolean
   skipped: boolean
   deferred: boolean
   checked: boolean
   alreadyCurrent: boolean
-  forced: boolean
+  isForced: boolean
   errors: string[]
   updatedDependencies: string[]
   updatedDevDependencies: string[]
@@ -71,7 +68,7 @@ export interface AuditIssue {
 export interface AuditRemediationReport {
   skipped: boolean
   deferred: boolean
-  fixRan: boolean
+  didFixRun: boolean
   fixChanged: boolean
   unresolved: AuditIssue[]
   totals: AuditTotals
@@ -296,7 +293,7 @@ function runInstallCommand(
 ) {
   const initial = runCommand(args, label, { verbose })
   if (initial.status === 0) {
-    return { forced: false }
+    return { isForced: false }
   }
 
   if (!allowForceFallback) {
@@ -305,12 +302,12 @@ function runInstallCommand(
   }
 
   console.warn(`[dev-preflight] ${label} failed; retrying with --force.`)
-  const forced = runCommand([...args, '--force'], `${label} --force`, { verbose })
-  if (forced.status === 0) {
-    return { forced: true }
+  const forceRetryResult = runCommand([...args, '--force'], `${label} --force`, { verbose })
+  if (forceRetryResult.status === 0) {
+    return { isForced: true }
   }
 
-  const message = forced.stderr || forced.stdout || `${label} --force failed with code ${forced.status ?? 'unknown'}`
+  const message = forceRetryResult.stderr || forceRetryResult.stdout || `${label} --force failed with code ${forceRetryResult.status ?? 'unknown'}`
   throw new Error(message)
 }
 
@@ -517,7 +514,7 @@ export function ensureInstallIfNeeded({ verbose = false }: { verbose?: boolean }
     return {
       ran: false,
       reasons: [],
-      forced: false,
+      isForced: false,
       errors: [],
     }
   }
@@ -536,15 +533,15 @@ export function ensureInstallIfNeeded({ verbose = false }: { verbose?: boolean }
     return {
       ran: true,
       reasons,
-      forced: result.forced,
+      isForced: result.isForced,
       errors: [],
     }
   } catch (error) {
     return {
       ran: true,
       reasons,
-      forced: false,
-      errors: [error instanceof Error ? error.message : String(error)],
+      isForced: false,
+      errors: [getErrorMessage(error)],
     }
   }
 }
@@ -558,7 +555,7 @@ export function syncDirectDependencies(
       deferred: false,
       checked: false,
       alreadyCurrent: false,
-      forced: false,
+      isForced: false,
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
@@ -572,7 +569,7 @@ export function syncDirectDependencies(
       deferred: false,
       checked: true,
       alreadyCurrent: true,
-      forced: false,
+      isForced: false,
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
@@ -587,7 +584,7 @@ export function syncDirectDependencies(
       deferred: false,
       checked: false,
       alreadyCurrent: false,
-      forced: false,
+      isForced: false,
       errors: message ? [`Unable to parse npm outdated output: ${message}`] : [],
       updatedDependencies: [],
       updatedDevDependencies: [],
@@ -610,14 +607,14 @@ export function syncDirectDependencies(
       deferred: false,
       checked: true,
       alreadyCurrent: true,
-      forced: false,
+      isForced: false,
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
     }
   }
 
-  let forced = false
+  let isForced = false
   const errors: string[] = []
 
   try {
@@ -631,7 +628,7 @@ export function syncDirectDependencies(
         'npm install <dependencies>@latest',
         { verbose, allowForceFallback: true },
       )
-      forced = forced || result.forced
+      isForced = isForced || result.isForced
     }
 
     if (updatedDevDependencies.length > 0) {
@@ -644,10 +641,10 @@ export function syncDirectDependencies(
         'npm install -D <dependencies>@latest',
         { verbose, allowForceFallback: true },
       )
-      forced = forced || result.forced
+      isForced = isForced || result.isForced
     }
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error))
+    errors.push(getErrorMessage(error))
   }
 
   return {
@@ -655,7 +652,7 @@ export function syncDirectDependencies(
     deferred: false,
     checked: true,
     alreadyCurrent: false,
-    forced,
+    isForced,
     errors,
     updatedDependencies,
     updatedDevDependencies,
@@ -669,7 +666,7 @@ export function remediateAudit(
     return {
       skipped: true,
       deferred: false,
-      fixRan: false,
+      didFixRun: false,
       fixChanged: false,
       unresolved: [],
       totals: emptyTotals(),
@@ -679,13 +676,13 @@ export function remediateAudit(
 
   const lockContentsBefore = readFileIfPresent(packageLockPath)
   const errors: string[] = []
-  let fixRan = false
+  let didFixRun = false
 
   try {
-    fixRan = true
+    didFixRun = true
     runCommand(['audit', 'fix'], 'npm audit fix', { verbose })
   } catch (error) {
-    errors.push(error instanceof Error ? error.message : String(error))
+    errors.push(getErrorMessage(error))
   }
 
   const lockContentsAfter = readFileIfPresent(packageLockPath)
@@ -713,7 +710,7 @@ export function remediateAudit(
   return {
     skipped: false,
     deferred: false,
-    fixRan,
+    didFixRun,
     fixChanged,
     unresolved: summarizeAuditIssues(auditJson?.vulnerabilities),
     totals: auditJson?.metadata?.vulnerabilities ?? emptyTotals(),
@@ -840,7 +837,7 @@ export function upgradeOpenCodeCli(
       alreadyCurrent: false,
       versionBefore,
       versionAfter,
-      errors: [error instanceof Error ? error.message : String(error)],
+      errors: [getErrorMessage(error)],
     }
   }
 }

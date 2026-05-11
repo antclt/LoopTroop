@@ -44,6 +44,7 @@ import { PROFILE_DEFAULTS } from '../../db/defaults'
 import { persistUiRefinementDiffArtifact } from '../refinementDiffArtifacts'
 import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
 import { withStructuredRetryDiagnosticAttempt } from '@shared/structuredRetryDiagnostics'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { adapter, interviewQASessions, phaseIntermediate, SKIP_ALL_INTERVIEW_COVERAGE_RESPONSE, getOrCreateAbortSignal } from './state'
 import {
@@ -355,7 +356,7 @@ export async function handleInterviewDeliberate(
     throwIfCancelled(err, signal, ticketId)
     // Re-throw if we already formatted the message
     if (err instanceof Error && err.message.startsWith('OpenCode server is not running')) throw err
-    const msg = `OpenCode server is not running. Start it with \`opencode serve\`. (${err instanceof Error ? err.message : String(err)})`
+    const msg = `OpenCode server is not running. Start it with \`opencode serve\`. (${getErrorMessage(err)})`
     emitPhaseLog(ticketId, context.externalId, phase, 'error', msg)
     throw new Error(msg)
   }
@@ -903,7 +904,7 @@ export async function handleInterviewCompile(
       },
     })
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     throw new Error(`PROM3 refinement output failed validation: ${message}`)
   }
 }
@@ -970,7 +971,7 @@ export async function handleInterviewQAStart(
   try {
     compiledInterview = requireCompiledInterviewArtifact(compiledArtifact?.content)
   } catch (error) {
-    const details = error instanceof Error ? error.message : String(error)
+    const details = getErrorMessage(error)
     const code = compiledArtifact ? 'PROM4_INVALID_COMPILED_INTERVIEW' : 'PROM4_NO_COMPILED_INTERVIEW'
     const msg = compiledArtifact
       ? `Compiled interview artifact invalid — cannot start PROM4 session: ${details}`

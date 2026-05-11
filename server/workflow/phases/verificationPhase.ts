@@ -106,6 +106,7 @@ import {
   buildOpenCodeBlockedErrorDiagnostics,
   mergeErrorCodes,
 } from '../../opencode/blockedErrorDiagnostics'
+import { getErrorMessage } from '@shared/typeGuards'
 
 export function validateRelevantFilesScanResponse(response: string): StructuredOutputResult<RelevantFilesOutputPayload> {
   const trimmed = response.trim()
@@ -369,6 +370,10 @@ function loadCoverageHistorySnapshot(
   }
 }
 
+function normalizeGaps(gaps: string[]): string[] {
+  return gaps.map(gap => gap.trim()).filter((gap): gap is string => gap.length > 0)
+}
+
 function normalizePrdCoverageEnvelope(envelope: CoverageResultEnvelope): {
   envelope: CoverageResultEnvelope
   repairWarnings: string[]
@@ -381,7 +386,7 @@ function normalizePrdCoverageEnvelope(envelope: CoverageResultEnvelope): {
     repairWarnings.push('PRD coverage follow_up_questions were ignored because PRD coverage is envelope-only.')
   }
 
-  const sanitizedGaps = envelope.gaps.map(gap => gap.trim()).filter((gap): gap is string => gap.length > 0)
+  const sanitizedGaps = normalizeGaps(envelope.gaps)
 
   if (envelope.status === 'clean') {
     if (sanitizedGaps.length > 0) {
@@ -444,7 +449,7 @@ function normalizeBeadsCoverageEnvelope(envelope: CoverageResultEnvelope): {
     repairWarnings.push('Beads coverage follow_up_questions were ignored because beads coverage is envelope-only.')
   }
 
-  const sanitizedGaps = envelope.gaps.map(gap => gap.trim()).filter((gap): gap is string => gap.length > 0)
+  const sanitizedGaps = normalizeGaps(envelope.gaps)
 
   if (envelope.status === 'clean') {
     if (sanitizedGaps.length > 0) {
@@ -821,7 +826,7 @@ async function runPrdCoverageResolutionPrompt(params: {
 
       return { response, revision, structuredMeta }
     } catch (error) {
-      const validationError = error instanceof Error ? error.message : String(error)
+      const validationError = getErrorMessage(error)
       if (attempt === 1) {
         structuredMeta = buildStructuredMetadata(structuredMeta, {
           autoRetryCount: 1,
@@ -1177,7 +1182,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
 
       return { response, revision, structuredMeta }
     } catch (error) {
-      const validationError = error instanceof Error ? error.message : String(error)
+      const validationError = getErrorMessage(error)
       if (attempt === 1) {
         structuredMeta = buildStructuredMetadata(structuredMeta, {
           autoRetryCount: 1,
@@ -2327,7 +2332,7 @@ export async function handleRelevantFilesScan(
       return
     }
     throwIfCancelled(err, signal, ticketId)
-    const errMsg = err instanceof Error ? err.message : String(err)
+    const errMsg = getErrorMessage(err)
     const diagnosticResult = buildOpenCodeBlockedErrorDiagnostics({
       error: err,
       modelId: codingModelId,
@@ -2466,7 +2471,7 @@ export async function handleCoverageVerification(
       writeCanonicalInterview(context.externalId, ticketDir, interviewSnapshot)
       canonicalInterview = loadCanonicalInterview(ticketDir)
     } catch (err) {
-      const msg = `Failed to rebuild canonical interview.yaml before coverage: ${err instanceof Error ? err.message : String(err)}`
+      const msg = `Failed to rebuild canonical interview.yaml before coverage: ${getErrorMessage(err)}`
       emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', msg)
       sendEvent({ type: 'ERROR', message: msg, codes: ['COVERAGE_FAILED'] })
       return
@@ -2484,7 +2489,7 @@ export async function handleCoverageVerification(
         safeAtomicWrite(prdPath, refinedContent)
         emitPhaseLog(ticketId, context.externalId, stateLabel, 'info', `Recovered missing prd.yaml from the validated refined PRD artifact before coverage.`)
       } catch (err) {
-        const msg = `Failed to restore prd.yaml from the validated refined PRD artifact before coverage: ${err instanceof Error ? err.message : String(err)}`
+        const msg = `Failed to restore prd.yaml from the validated refined PRD artifact before coverage: ${getErrorMessage(err)}`
         emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', msg)
         sendEvent({ type: 'ERROR', message: msg, codes: ['COVERAGE_FAILED'] })
         return
@@ -2503,7 +2508,7 @@ export async function handleCoverageVerification(
         safeAtomicWrite(prdPath, recoveredPrdContent)
         emitPhaseLog(ticketId, context.externalId, stateLabel, 'info', `Recovered missing prd.yaml from the validated refined PRD artifact before coverage.`)
       } catch (err) {
-        const msg = `Failed to restore prd.yaml from the validated refined PRD artifact before coverage: ${err instanceof Error ? err.message : String(err)}`
+        const msg = `Failed to restore prd.yaml from the validated refined PRD artifact before coverage: ${getErrorMessage(err)}`
         emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', msg)
         sendEvent({ type: 'ERROR', message: msg, codes: ['COVERAGE_FAILED'] })
         return
@@ -2991,7 +2996,7 @@ export async function handleCoverageVerification(
       } catch (err) {
         console.error(`[runner] Failed to generate interview.yaml for ticket ${context.externalId}:`, err)
         emitPhaseLog(ticketId, context.externalId, stateLabel, 'info',
-          `Failed to generate interview.yaml: ${err instanceof Error ? err.message : String(err)}`)
+          `Failed to generate interview.yaml: ${getErrorMessage(err)}`)
       }
     }
 
@@ -3139,18 +3144,20 @@ export async function handlePreFlight(
 
       // Emit individual per-check SYS log entries so each diagnostic result
       // is visible in the SYS tab (not only stored in the JSON artifact).
+      const CHECK_RESULT_ICON: Record<string, string> = { pass: '✓', warning: '⚠', fail: '✗' }
       for (const check of report.checks) {
-        const icon = check.result === 'pass' ? '✓' : check.result === 'warning' ? '⚠' : '✗'
+        const icon = CHECK_RESULT_ICON[check.result] ?? '✗'
+        const isFail = check.result === 'fail'
         emitPhaseLog(
           ticketId,
           context.externalId,
           'PRE_FLIGHT_CHECK',
-          check.result === 'fail' ? 'error' : 'info',
+          isFail ? 'error' : 'info',
           `${icon} ${check.name}: ${check.message}`,
           {
             source: 'system',
             audience: 'all',
-            kind: check.result === 'fail' ? 'error' : 'milestone',
+            kind: isFail ? 'error' : 'milestone',
           },
         )
       }

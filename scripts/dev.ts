@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getDocsPort, getFrontendPort } from '../shared/appConfig'
 import { readDevPreflightReport } from './dev-maintenance'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
+import { getErrorMessage } from '../shared/typeGuards'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
@@ -237,7 +238,7 @@ for (const command of commands) {
   })
 
   command.error.subscribe((error) => {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     console.error(`[dev] Service ${command.name} failed to spawn: ${message}`)
   })
 

@@ -94,6 +94,7 @@ import { recoverCodingBeadWithReset } from '../workflow/phases/beadsPhase'
 import { regenerateExecutionSetupPlanDraft } from '../workflow/phases/executionSetupPlanPhase'
 import { isExecutionBandStatus } from '../workflow/executionBand'
 import { normalizeExecutionSetupPlanOutput } from '../structuredOutput'
+import { getErrorMessage } from '@shared/typeGuards'
 
 export const createTicketSchema = z.object({
   projectId: z.number().int().positive(),
@@ -626,7 +627,7 @@ function syncWaitingPullRequestTicket(ticketId: string) {
       return getTicketByRef(ticketId) ?? current
     }
   } catch (err) {
-    const details = err instanceof Error ? err.message : String(err)
+    const details = getErrorMessage(err)
     emitRoutePhaseLog(ticketId, 'WAITING_PR_REVIEW', 'error', `PR sync failed: ${details}`)
     try {
       ensureActorForTicket(ticketId)
@@ -840,7 +841,7 @@ export async function handleStartTicket(c: Context) {
   } catch (err) {
     const initErr = err instanceof TicketInitializationError
       ? err
-      : new TicketInitializationError('INIT_UNKNOWN', err instanceof Error ? err.message : String(err))
+      : new TicketInitializationError('INIT_UNKNOWN', getErrorMessage(err))
     emitRoutePhaseLog(ticketId, startPhase, 'error', `✗ Workspace Init: ${initErr.message}`, {
       code: initErr.code,
       error: initErr.message,
@@ -925,7 +926,7 @@ export async function handleStartTicket(c: Context) {
       startedAt,
     })
   } catch (err) {
-    const details = err instanceof Error ? err.message : String(err)
+    const details = getErrorMessage(err)
     rollbackTicketStartToDraft(ticketId)
     emitRoutePhaseLog(ticketId, startPhase, 'error', `✗ Start Config: ${details}`, {
       error: details,
@@ -1130,7 +1131,7 @@ export async function handleAnswerBatch(c: Context) {
           broadcaster.broadcast(ticketId, 'needs_input', {
             ticketId,
             type: 'interview_error',
-            error: err instanceof Error ? err.message : String(err),
+            error: getErrorMessage(err),
           })
         })
 
@@ -1224,7 +1225,7 @@ export async function handlePutInterviewAnswers(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save interview answers',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 
@@ -1245,7 +1246,7 @@ export async function handlePutInterviewAnswers(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save interview answers',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 }
@@ -1270,7 +1271,7 @@ export async function handlePutInterview(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save interview document',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 
@@ -1291,7 +1292,7 @@ export async function handlePutInterview(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save interview document',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 }
@@ -1313,7 +1314,7 @@ export async function handlePutPrd(c: Context) {
     } catch (err) {
       return c.json({
         error: 'Failed to save PRD document',
-        details: err instanceof Error ? err.message : String(err),
+        details: getErrorMessage(err),
       }, 400)
     }
 
@@ -1338,7 +1339,7 @@ export async function handlePutPrd(c: Context) {
     } catch (err) {
       return c.json({
         error: 'Failed to save PRD document',
-        details: err instanceof Error ? err.message : String(err),
+        details: getErrorMessage(err),
       }, 400)
     }
   }
@@ -1354,7 +1355,7 @@ export async function handlePutPrd(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save PRD document',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 
@@ -1379,7 +1380,7 @@ export async function handlePutPrd(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save PRD document',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 }
@@ -1403,7 +1404,7 @@ export function handleGetExecutionSetupPlan(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to read execution setup plan',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 }
@@ -1425,7 +1426,7 @@ export async function handlePutExecutionSetupPlan(c: Context) {
     } catch (err) {
       return c.json({
         error: 'Failed to save execution setup plan',
-        details: err instanceof Error ? err.message : String(err),
+        details: getErrorMessage(err),
       }, 400)
     }
   }
@@ -1441,7 +1442,7 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   } catch (err) {
     return c.json({
       error: 'Failed to save execution setup plan',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 400)
   }
 }
@@ -1485,7 +1486,7 @@ export async function handleRegenerateExecutionSetupPlan(c: Context) {
     commentary: parsed.data.commentary,
     currentPlan,
   }).catch((err: unknown) => {
-    const errMsg = err instanceof Error ? err.message : String(err)
+    const errMsg = getErrorMessage(err)
     emitRoutePhaseLog(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL', 'error', `Background regeneration failed: ${errMsg}`)
   })
 
@@ -1512,7 +1513,7 @@ export function handleApproveInterview(c: Context) {
     console.error(`[tickets] Failed to approve interview for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve interview',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 500)
   }
 
@@ -1539,7 +1540,7 @@ export function handleApprovePrd(c: Context) {
     console.error(`[tickets] Failed to approve PRD for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve PRD',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 500)
   }
 
@@ -1571,7 +1572,7 @@ export function handleApproveBeads(c: Context) {
     console.error(`[tickets] Failed to approve beads for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve beads',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 500)
   }
 
@@ -1609,7 +1610,7 @@ export function handleApproveExecutionSetupPlan(c: Context) {
     console.error(`[tickets] Failed to approve execution setup plan for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve execution setup plan',
-      details: err instanceof Error ? err.message : String(err),
+      details: getErrorMessage(err),
     }, 500)
   }
 
@@ -1660,7 +1661,7 @@ export function handleMergeTicket(c: Context) {
     })
     sendTicketEvent(ticketId, { type: 'MERGE_COMPLETE' })
   } catch (err) {
-    const details = err instanceof Error ? err.message : String(err)
+    const details = getErrorMessage(err)
     try {
       ensureActorForTicket(ticketId)
       emitRoutePhaseLog(ticketId, phase, 'error', `Pull request merge failed: ${details}`)
@@ -1749,7 +1750,7 @@ export function handleRetryTicket(c: Context) {
     } catch (err) {
       return c.json({
         error: 'Retry is not available because the failed bead could not be safely reset',
-        details: err instanceof Error ? err.message : String(err),
+        details: getErrorMessage(err),
       }, 409)
     }
   }
@@ -1774,7 +1775,7 @@ export async function handleListOpenCodeQuestions(c: Context) {
     if (!questions) return c.json({ error: 'Ticket not found' }, 404)
     return c.json({ questions })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     emitRoutePhaseLog(ticketId, getTicketByRef(ticketId)?.status ?? 'UNKNOWN', 'error', `Failed to list OpenCode questions: ${message}`)
     return c.json({ error: 'Failed to list OpenCode questions', details: message }, 500)
   }
@@ -1813,7 +1814,7 @@ export async function handleReplyOpenCodeQuestion(c: Context) {
     })
     return c.json({ success: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     emitOpenCodeQuestionLog(ticketId, question.phase, `[ERROR] Failed to answer OpenCode question: ${message}`, {
       requestId,
       sessionId: question.sessionId,
@@ -1853,7 +1854,7 @@ export async function handleRejectOpenCodeQuestion(c: Context) {
     })
     return c.json({ success: true })
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
+    const message = getErrorMessage(err)
     emitOpenCodeQuestionLog(ticketId, question.phase, `[ERROR] Failed to reject OpenCode question: ${message}`, {
       requestId,
       sessionId: question.sessionId,

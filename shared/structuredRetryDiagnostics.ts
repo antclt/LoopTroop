@@ -1,3 +1,5 @@
+import { normalizeString } from '@shared/typeGuards'
+
 export type StructuredFailureClass =
   | 'validation_error'
   | 'empty_response'
@@ -14,10 +16,6 @@ export interface StructuredRetryDiagnostic {
   line?: number
   column?: number
   excerpt: string
-}
-
-function normalizeString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }
 
 function normalizeExcerpt(value: unknown): string | undefined {

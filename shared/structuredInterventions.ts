@@ -1,3 +1,5 @@
+import { normalizeString } from '@shared/typeGuards'
+
 export type StructuredInterventionStage = 'parse' | 'normalize' | 'semantic_validation' | 'retry'
 export type StructuredInterventionCategory = 'parser_fix' | 'cleanup' | 'synthesized' | 'dropped' | 'attribution' | 'retry'
 
@@ -40,10 +42,6 @@ export const STRUCTURED_INTERVENTION_CATEGORY_ORDER: StructuredInterventionCateg
 
 const STAGES = new Set<StructuredInterventionStage>(['parse', 'normalize', 'semantic_validation', 'retry'])
 const CATEGORIES = new Set<StructuredInterventionCategory>(STRUCTURED_INTERVENTION_CATEGORY_ORDER)
-
-function normalizeString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
-}
 
 function normalizeStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []

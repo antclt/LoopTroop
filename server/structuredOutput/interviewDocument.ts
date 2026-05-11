@@ -32,6 +32,7 @@ import {
   unwrapExplicitWrapperRecord,
 } from './yamlUtils'
 import { buildStructuredOutputFailure } from './failure'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const INTERVIEW_DOCUMENT_PROMPT_ECHO_ERROR = 'Interview document output echoed the prompt instead of returning a structured interview artifact'
 
@@ -783,7 +784,7 @@ export function normalizeInterviewDocumentOutput(
         repairWarnings: warnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
       if (isPromptEchoValidationError(lastError)) {
         const failure = buildStructuredOutputFailure(candidate, lastError, { cause: error })
@@ -1021,7 +1022,7 @@ export function normalizeResolvedInterviewDocumentOutput(
         repairWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }

@@ -11,6 +11,7 @@ import {
   buildYamlDocument,
 } from './yamlUtils'
 import { buildStructuredOutputFailure } from './failure'
+import { getErrorMessage } from '@shared/typeGuards'
 
 function normalizeVoteDraftLabel(label: string): string | null {
   const match = label.trim().match(/draft\s*(\d+)/i)
@@ -195,7 +196,7 @@ export function normalizeVoteScorecardOutput(
           repairWarnings: variantWarnings,
         }
       } catch (error) {
-        lastError = error instanceof Error ? error.message : String(error)
+        lastError = getErrorMessage(error)
         lastErrorCause = error
       }
     }

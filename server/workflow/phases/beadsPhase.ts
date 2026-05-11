@@ -29,6 +29,7 @@ import {
   buildBeadsUiRefinementDiffArtifact,
   buildBeadsUiRefinementDiffArtifactFromChanges,
 } from '@shared/refinementDiffArtifacts'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { adapter, phaseIntermediate } from './state'
 import {
@@ -189,7 +190,7 @@ export async function executeBeadsExpandStep(params: {
         structuredMeta,
       }
     } catch (error) {
-      const validationError = error instanceof Error ? error.message : String(error)
+      const validationError = getErrorMessage(error)
       const retryDiagnostic = withStructuredRetryDiagnosticAttempt(
         resolveStructuredRetryDiagnostic({
           attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
@@ -741,7 +742,7 @@ export async function handleBeadsRefine(
           const diagnostic = getStructuredRetryDiagnosticFromError(error)
           refineStructuredMeta = buildStructuredMetadata(refineStructuredMeta, {
             autoRetryCount: 1,
-            validationError: error instanceof Error ? error.message : String(error),
+            validationError: getErrorMessage(error),
             ...(diagnostic
               ? { retryDiagnostics: [withStructuredRetryDiagnosticAttempt(diagnostic, (refineStructuredMeta.autoRetryCount ?? 0) + 1)!] }
               : {}),
@@ -759,7 +760,7 @@ export async function handleBeadsRefine(
       context.externalId,
       'REFINING_BEADS',
       'error',
-      `Substep blueprint_refine failed: ${error instanceof Error ? error.message : String(error)}`,
+      `Substep blueprint_refine failed: ${getErrorMessage(error)}`,
     )
     throw error
   }

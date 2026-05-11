@@ -19,6 +19,7 @@ import {
 } from '../storage/paths'
 import { getTicketBeadsDir, updateTicketMeta } from './metadata'
 import { safeAtomicWrite } from '../io/atomicWrite'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -151,7 +152,7 @@ function ensureLoopTroopGitExclude(projectFolder: string) {
   } catch (err) {
     throw new TicketInitializationError(
       'INIT_LOOPTROOP_EXCLUDE_FAILED',
-      `Failed to install the repo-local LoopTroop Git exclude: ${err instanceof Error ? err.message : String(err)}`,
+      `Failed to install the repo-local LoopTroop Git exclude: ${getErrorMessage(err)}`,
     )
   }
 }

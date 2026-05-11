@@ -17,6 +17,7 @@ import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, classifyDraftFailure } from './draftUtils'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
+import { getErrorMessage } from '@shared/typeGuards'
 
 interface DraftValidationResult {
   questionCount?: number
@@ -261,7 +262,7 @@ export async function generateDrafts(
           content = normalizedContent
           break
         } catch (error) {
-          const validationError = error instanceof Error ? error.message : String(error)
+          const validationError = getErrorMessage(error)
           lastValidationError = validationError
           const retryDecision = getStructuredRetryDecision(content, result.responseMeta)
           lastFailureClass = retryDecision.failureClass

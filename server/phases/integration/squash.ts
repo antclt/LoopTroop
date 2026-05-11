@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { resolveBaseBranchRef } from '../../git/repository'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -175,7 +176,7 @@ export function prepareSquashCandidate(
     }
     return {
       success: false,
-      message: error instanceof Error ? error.message : String(error),
+      message: getErrorMessage(error),
     }
   }
 }

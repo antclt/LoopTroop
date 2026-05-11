@@ -40,6 +40,7 @@ import {
 } from './yamlUtils'
 import { MAX_INTERVIEW_BATCH_SIZE } from '../lib/constants'
 import { buildStructuredOutputFailure } from './failure'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const PHASE_ORDER = new Map([
   ['foundation', 0],
@@ -1037,6 +1038,11 @@ function dedupeQuestionOptions<T extends { id: string; label: string }>(
   }
 }
 
+function normalizeInterviewBatchOptions(rawOptions: unknown): { id: string; label: string }[] | undefined {
+  if (!Array.isArray(rawOptions)) return undefined
+  return rawOptions.map((opt, i) => normalizeInterviewBatchOption(opt, i)).filter((opt): opt is { id: string; label: string } => opt !== null)
+}
+
 function normalizeInterviewBatchQuestion(value: unknown, index: number): {
   question: InterviewBatchPayloadQuestion
   repairWarnings: string[]
@@ -1052,9 +1058,7 @@ function normalizeInterviewBatchQuestion(value: unknown, index: number): {
   const rawAnswerType = getValueByAliases(value, ['answertype', 'answer_type', 'type', 'inputtype', 'input_type'])
   const rawNormAnswerType = normalizeInterviewBatchAnswerType(rawAnswerType)
   const rawOptions = getValueByAliases(value, ['options', 'choices', 'answers'])
-  const parsedOptions = Array.isArray(rawOptions)
-    ? rawOptions.map((opt, i) => normalizeInterviewBatchOption(opt, i)).filter((opt): opt is { id: string; label: string } => opt !== null)
-    : undefined
+  const parsedOptions = normalizeInterviewBatchOptions(rawOptions)
 
   // Handle yes_no → single_choice expansion
   let finalAnswerType: 'free_text' | 'single_choice' | 'multiple_choice' | undefined = rawNormAnswerType === 'yes_no' ? 'single_choice' : rawNormAnswerType
@@ -1234,7 +1238,7 @@ export function normalizeInterviewTurnOutput(rawContent: string): StructuredOutp
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -1266,7 +1270,7 @@ export function normalizeInterviewTurnOutput(rawContent: string): StructuredOutp
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -1296,7 +1300,7 @@ export function normalizeInterviewTurnOutput(rawContent: string): StructuredOutp
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
 
@@ -1325,7 +1329,7 @@ export function normalizeInterviewTurnOutput(rawContent: string): StructuredOutp
         repairWarnings: candidateWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -1388,7 +1392,7 @@ export function normalizeInterviewQuestionsOutput(
         repairWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -1592,7 +1596,7 @@ export function normalizeInterviewRefinementOutput(
         repairWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
     }
   }
@@ -1638,9 +1642,7 @@ function normalizeCoverageFollowUpQuestions(value: unknown): {
     const rawAnswerType = getValueByAliases(record, ['answertype', 'answer_type', 'type', 'inputtype', 'input_type'])
     const rawNormAnswerType = normalizeInterviewBatchAnswerType(rawAnswerType)
     const rawOptions = getValueByAliases(record, ['options', 'choices', 'answers'])
-    const parsedOptions = Array.isArray(rawOptions)
-      ? rawOptions.map((opt, i) => normalizeInterviewBatchOption(opt, i)).filter((opt): opt is { id: string; label: string } => opt !== null)
-      : undefined
+    const parsedOptions = normalizeInterviewBatchOptions(rawOptions)
 
     // Handle yes_no → single_choice expansion
     let finalAnswerType: 'free_text' | 'single_choice' | 'multiple_choice' | undefined = rawNormAnswerType === 'yes_no' ? 'single_choice' : rawNormAnswerType
@@ -1760,7 +1762,7 @@ export function normalizeCoverageResultOutput(rawContent: string): StructuredOut
         repairWarnings: normalized.repairWarnings,
       }
     } catch (error) {
-      lastError = error instanceof Error ? error.message : String(error)
+      lastError = getErrorMessage(error)
       lastErrorCause = error
 
       const repairedCandidate = repairCoverageGapStringList(candidate)
@@ -1786,7 +1788,7 @@ export function normalizeCoverageResultOutput(rawContent: string): StructuredOut
           repairWarnings,
         }
       } catch (repairError) {
-        lastError = repairError instanceof Error ? repairError.message : String(repairError)
+        lastError = getErrorMessage(repairError)
         lastErrorCause = repairError
       }
     }

@@ -1,6 +1,6 @@
 import jsYaml from 'js-yaml'
 import { repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlSequenceEntryIndent } from './yamlRepair'
-import { isRecord } from './typeGuards'
+import { getErrorMessage, isRecord } from './typeGuards'
 
 export interface InterviewQuestionPreview {
   id?: string
@@ -288,7 +288,7 @@ function extractStructuredQuestionPreviews(
       try {
         parsedYaml = jsYaml.load(parseCandidate)
       } catch (err) {
-        lastYamlError = err instanceof Error ? err.message : String(err)
+        lastYamlError = getErrorMessage(err)
         continue
       }
 

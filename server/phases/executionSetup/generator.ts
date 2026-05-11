@@ -18,6 +18,7 @@ import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagn
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import { parseExecutionSetupResult } from './parser'
 import type { ExecutionSetupGenerationResult } from './types'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const EXECUTION_SETUP_SCHEMA_REMINDER = [
   'Return exactly one <EXECUTION_SETUP_RESULT>...</EXECUTION_SETUP_RESULT> block and nothing else.',
@@ -35,7 +36,7 @@ type ExecutionSetupPromptStage =
 export type GenerateExecutionSetupResult = ExecutionSetupGenerationResult
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return getErrorMessage(error)
 }
 
 function buildPromptFailureGeneration(

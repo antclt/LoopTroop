@@ -15,6 +15,7 @@ import {
 } from './startupState'
 import { fixTrailingLineCorruption, recoverOrphanTmpFiles } from './io/recovery'
 import { rebuildTicketRuntimeProjections } from './storage/ticketRuntimeProjection'
+import { getErrorMessage } from '@shared/typeGuards'
 
 export function recoverTicketRuntimeArtifacts() {
   let recoveredTmpFiles = 0
@@ -69,7 +70,7 @@ export function startupSequence() {
       console.warn(`[startup] OpenCode is NOT reachable: ${health.error ?? 'unknown error'}. Start it with \`opencode serve\`.`)
     }
   }).catch(err => {
-    console.warn(`[startup] OpenCode health check failed: ${err instanceof Error ? err.message : String(err)}`)
+    console.warn(`[startup] OpenCode health check failed: ${getErrorMessage(err)}`)
   })
 
   console.log('[startup] Step 5: Hydrate XState actors from attached project databases')
@@ -125,7 +126,7 @@ export function startupSequence() {
 
     console.log(`[startup] Reconnected ${reconnected} OpenCode sessions, cleaned up ${abandoned} stale entries`)
   }).catch((err: unknown) => {
-    console.warn(`[startup] OpenCode session reconnection failed: ${err instanceof Error ? err.message : String(err)}`)
+    console.warn(`[startup] OpenCode session reconnection failed: ${getErrorMessage(err)}`)
   }).finally(() => {
     console.log('[startup] Startup complete')
   })

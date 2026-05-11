@@ -44,6 +44,7 @@ import type { StructuredLogFields, StructuredLogAudience, StructuredLogKind, Str
 import { phaseIntermediate } from './state'
 import { formatStructuredFailureForLog, type StructuredFailureClass } from '../../lib/structuredOutputRetry'
 import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
+import { getErrorMessage } from '@shared/typeGuards'
 
 // ── Cached tool log limits from profile ──────────────────────────────────────
 
@@ -497,15 +498,23 @@ export function finalizeOpenCodeParts(
     state.liveStreamEmissions.delete(message.entryId)
   }
 
+  const FINALIZED_CONTENT_BY_KIND: Partial<Record<string, string>> = {
+    tool: 'Tool event finalized.',
+    step: 'Step finalized.',
+  }
+  const LOG_TYPE_BY_KIND: Partial<Record<string, 'error' | 'model_output' | 'info'>> = {
+    error: 'error',
+    text: 'model_output',
+    reasoning: 'model_output',
+  }
   for (const [partId, kind] of state.liveKinds.entries()) {
     const entryId = `${sessionId}:${partId}`
-    const content = state.liveContents.get(partId)
-      ?? (kind === 'tool' ? 'Tool event finalized.' : kind === 'step' ? 'Step finalized.' : '')
+    const content = state.liveContents.get(partId) ?? (FINALIZED_CONTENT_BY_KIND[kind] ?? '')
     emitAiDetail(
       ticketId,
       ticketExternalId,
       phase,
-      kind === 'error' ? 'error' : kind === 'text' || kind === 'reasoning' ? 'model_output' : 'info',
+      LOG_TYPE_BY_KIND[kind] ?? 'info',
       content,
         {
           entryId,
@@ -1829,7 +1838,7 @@ export function tryRecoverPhaseIntermediate(
     console.log(`[runner] Recovered ${pipeline} intermediate data from persisted artifact for ticket ${context.externalId}`)
     return true
   } catch (err) {
-    console.error(`[runner] Failed to recover ${pipeline} intermediate data for ticket ${context.externalId}: ${err instanceof Error ? err.message : String(err)}`)
+    console.error(`[runner] Failed to recover ${pipeline} intermediate data for ticket ${context.externalId}: ${getErrorMessage(err)}`)
     return false
   }
 }

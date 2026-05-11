@@ -3,10 +3,11 @@ import { HelpCircle, Minus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { getApiUrl, waitForDevBackend } from '@/lib/devApi'
-import { SSE_RECONNECT_DELAY_MS } from '@/lib/constants'
+import { SSE_RECONNECT_DELAY_MS, QUESTION_RECOVERY_INTERVAL_MS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
 import { AIQuestionContext, type AIQuestionContextValue } from './aiQuestionContextDef'
+import { getErrorMessage } from '@shared/typeGuards'
 
 interface AIQuestionOption {
   label: string
@@ -388,7 +389,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
     }
 
     void recover()
-    const interval = setInterval(() => void recover(), 30_000)
+    const interval = setInterval(() => void recover(), QUESTION_RECOVERY_INTERVAL_MS)
     return () => {
       cancelled = true
       clearInterval(interval)
@@ -448,7 +449,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
           [request.requestId]: {
             ...latest,
             submitting: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           },
         }
       })
@@ -480,7 +481,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
           [request.requestId]: {
             ...latest,
             submitting: false,
-            error: error instanceof Error ? error.message : String(error),
+            error: getErrorMessage(error),
           },
         }
       })

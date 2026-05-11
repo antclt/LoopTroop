@@ -16,6 +16,7 @@ import {
   resolveLatestTicketErrorOccurrence,
 } from '../storage/tickets'
 import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
+import { getErrorMessage } from '@shared/typeGuards'
 
 const activeActors = new Map<string, ReturnType<typeof createActor<typeof ticketMachine>>>()
 
@@ -212,7 +213,7 @@ function blockTicketForSnapshotRecovery(
   const blockedFromStatus = isKnownWorkflowState(failedStatus) && failedStatus !== 'BLOCKED_ERROR'
     ? failedStatus
     : getTicketByRef(ticketRef)?.previousStatus ?? 'DRAFT'
-  const message = `Ticket workflow snapshot could not be restored safely. Retry will resume from ${blockedFromStatus}. Details: ${cause instanceof Error ? cause.message : String(cause)}`
+  const message = `Ticket workflow snapshot could not be restored safely. Retry will resume from ${blockedFromStatus}. Details: ${getErrorMessage(cause)}`
   const snapshot = buildPersistedSnapshot(input, {
     status: 'BLOCKED_ERROR',
     previousStatus: blockedFromStatus,

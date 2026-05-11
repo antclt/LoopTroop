@@ -24,6 +24,7 @@ import {
   buildPrdUiRefinementDiffArtifactFromChanges,
 } from '@shared/refinementDiffArtifacts'
 import { clearContextCache } from '../../opencode/contextBuilder'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { adapter, phaseIntermediate } from './state'
 import {
@@ -855,7 +856,7 @@ export async function handlePrdRefine(
         })
         return { normalizedContent: result.refinedContent }
       } catch (error) {
-        const validationError = error instanceof Error ? error.message : String(error)
+        const validationError = getErrorMessage(error)
         const retryDiagnostic = withStructuredRetryDiagnosticAttempt(
           getStructuredRetryDiagnosticFromError(error),
           (structuredMeta.autoRetryCount ?? 0) + 1,

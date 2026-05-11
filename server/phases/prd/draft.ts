@@ -23,6 +23,7 @@ import { validatePrdDraft, validateResolvedInterview } from './validation'
 import type { InterviewDocument } from '@shared/interviewArtifact'
 import jsYaml from 'js-yaml'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
+import { getErrorMessage } from '@shared/typeGuards'
 
 interface StepValidationResult {
   questionCount?: number
@@ -495,7 +496,7 @@ async function executeStructuredStep(
         rawAttempts: [...rawAttempts],
       }
     } catch (error) {
-      lastValidationError = error instanceof Error ? error.message : String(error)
+      lastValidationError = getErrorMessage(error)
       const baseRetryDecision = getStructuredRetryDecision(rawResponse, result.responseMeta)
       const retryDecision = options.step === 'full_answers'
         && baseRetryDecision.failureClass === 'validation_error'

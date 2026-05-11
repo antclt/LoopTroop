@@ -12,6 +12,7 @@ interface EffortPickerProps {
 }
 
 const EFFORT_ORDER = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
+const DEFAULT_EFFORT_INTENSITY = 3
 
 function intensityColor(intensity: number, selected: boolean): string {
   if (!selected) return 'bg-muted/40 text-muted-foreground/60 hover:bg-muted hover:text-muted-foreground'
@@ -23,7 +24,7 @@ function intensityColor(intensity: number, selected: boolean): string {
     4: 'bg-amber-100 text-amber-800 ring-1 ring-amber-400 dark:bg-amber-900/60 dark:text-amber-200 dark:ring-amber-600',
     5: 'bg-orange-100 text-orange-800 ring-1 ring-orange-400 dark:bg-orange-900/60 dark:text-orange-200 dark:ring-orange-600',
   }
-  return colors[intensity] ?? colors[3]!
+  return colors[intensity] ?? colors[DEFAULT_EFFORT_INTENSITY]!
 }
 
 export function EffortPicker({ variants, value, onChange, disabled }: EffortPickerProps) {

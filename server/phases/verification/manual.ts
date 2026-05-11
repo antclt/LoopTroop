@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
 import { getCurrentBranch, resolveBaseBranchRef } from '../../git/repository'
 import { pushBranchRef } from '../../git/push'
+import { getErrorMessage } from '@shared/typeGuards'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -180,7 +181,7 @@ export function completeManualVerificationMerge(params: {
       errorCode: null,
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error)
+    const message = getErrorMessage(error)
     const mergeConflict = message.includes('CONFLICT')
 
     tryGit(params.projectPath, ['merge', '--abort'])

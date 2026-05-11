@@ -5,6 +5,7 @@ import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
 import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
 import { buildStructuredRetryPrompt } from '../structuredOutput'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
+import { getErrorMessage } from '@shared/typeGuards'
 
 export async function refineDraft(
   adapter: OpenCodeAdapter,
@@ -128,7 +129,7 @@ export async function refineDraft(
         throw error
       }
       attemptCount += 1
-      const validationError = error instanceof Error ? error.message : String(error)
+      const validationError = getErrorMessage(error)
       promptParts = buildRetryPrompt?.({
         baseParts: refineParts,
         validationError,

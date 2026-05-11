@@ -35,10 +35,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
 const packageJsonPath = resolve(repoRoot, 'package.json')
 const packageLockPath = resolve(repoRoot, 'package-lock.json')
-const verboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
-const skipDependencyMaintenance = process.env.LOOPTROOP_DEV_SKIP_DEPS === '1'
-const skipOpenCodeUpgrade = process.env.LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE === '1'
-const forceDailyMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
+const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
+const shouldSkipDependencyMaintenance = process.env.LOOPTROOP_DEV_SKIP_DEPS === '1'
+const shouldSkipOpenCodeUpgrade = process.env.LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE === '1'
+const shouldForceDailyMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
 
 const configuredPorts = [
   { label: 'frontend', port: getFrontendPort() },
@@ -110,7 +110,7 @@ async function terminateProcessTree(root: ProcessInfo, graph = buildProcessGraph
     `[dev-preflight] Stopping stale LoopTroop dev tree rooted at ${formatProcessSummary(root)}` +
     ` (${processTree.length} ${processTree.length === 1 ? 'process' : 'processes'}).`,
   )
-  if (verboseLogging) {
+  if (isVerboseLogging) {
     console.log(`[dev-preflight]   tree: ${processTree.map(formatProcessSummary).join(' | ')}`)
   }
 
@@ -126,7 +126,7 @@ async function terminateProcessTree(root: ProcessInfo, graph = buildProcessGraph
       `[dev-preflight] Escalating to SIGKILL for ${survivors.length} stubborn ` +
       `${survivors.length === 1 ? 'process' : 'processes'} in the stale dev tree.`,
     )
-    if (verboseLogging) {
+    if (isVerboseLogging) {
       console.warn(`[dev-preflight]   survivors: ${survivors.map(formatProcessSummary).join(' | ')}`)
     }
     for (const entry of survivors) {
@@ -225,7 +225,7 @@ function formatTimestamp(timestamp?: string) {
 ensureDistinctConfiguredPorts()
 const maintenanceState = readDailyMaintenanceState()
 
-const installReport = ensureInstallIfNeeded({ verbose: verboseLogging })
+const installReport = ensureInstallIfNeeded({ verbose: isVerboseLogging })
 for (const error of installReport.errors) {
   console.error(`[dev-preflight] ${error}`)
 }
@@ -236,18 +236,18 @@ if (installReport.errors.length > 0) {
 const dependencySyncDecision = decideDailyMaintenanceTask({
   taskName: 'dependencySync',
   state: maintenanceState,
-  force: forceDailyMaintenance,
+  force: shouldForceDailyMaintenance,
   invalidatedByPaths: [packageJsonPath],
 })
 
-const dependencySyncReport = skipDependencyMaintenance
+const dependencySyncReport = shouldSkipDependencyMaintenance
   ? syncDirectDependencies({
-    verbose: verboseLogging,
+    verbose: isVerboseLogging,
     skip: true,
   })
   : dependencySyncDecision.shouldRun
     ? syncDirectDependencies({
-      verbose: verboseLogging,
+      verbose: isVerboseLogging,
       skip: false,
     })
     : {
@@ -255,7 +255,7 @@ const dependencySyncReport = skipDependencyMaintenance
       deferred: true,
       checked: false,
       alreadyCurrent: false,
-      forced: false,
+      isForced: false,
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
@@ -269,31 +269,31 @@ for (const error of dependencySyncReport.errors) {
 if (dependencySyncReport.errors.length > 0) {
   process.exit(1)
 }
-if (!skipDependencyMaintenance && dependencySyncDecision.shouldRun && dependencySyncReport.checked && dependencySyncReport.errors.length === 0) {
+if (!shouldSkipDependencyMaintenance && dependencySyncDecision.shouldRun && dependencySyncReport.checked && dependencySyncReport.errors.length === 0) {
   recordDailyMaintenanceSuccess(maintenanceState, 'dependencySync')
 }
 
 const auditDecision = decideDailyMaintenanceTask({
   taskName: 'audit',
   state: maintenanceState,
-  force: forceDailyMaintenance,
+  force: shouldForceDailyMaintenance,
   invalidatedByPaths: [packageJsonPath, packageLockPath],
 })
 
-const auditReport = skipDependencyMaintenance
+const auditReport = shouldSkipDependencyMaintenance
   ? remediateAudit({
-    verbose: verboseLogging,
+    verbose: isVerboseLogging,
     skip: true,
   })
   : auditDecision.shouldRun
     ? remediateAudit({
-      verbose: verboseLogging,
+      verbose: isVerboseLogging,
       skip: false,
     })
     : {
       skipped: false,
       deferred: true,
-      fixRan: false,
+      didFixRun: false,
       fixChanged: false,
       unresolved: [],
       totals: {
@@ -315,24 +315,24 @@ for (const error of auditReport.errors) {
 if (auditReport.errors.length > 0) {
   process.exit(1)
 }
-if (!skipDependencyMaintenance && auditDecision.shouldRun && auditReport.errors.length === 0) {
+if (!shouldSkipDependencyMaintenance && auditDecision.shouldRun && auditReport.errors.length === 0) {
   recordDailyMaintenanceSuccess(maintenanceState, 'audit')
 }
 
 const opencodeDecision = decideDailyMaintenanceTask({
   taskName: 'opencode',
   state: maintenanceState,
-  force: forceDailyMaintenance,
+  force: shouldForceDailyMaintenance,
 })
 
-const opencodeReport = skipOpenCodeUpgrade
+const opencodeReport = shouldSkipOpenCodeUpgrade
   ? upgradeOpenCodeCli({
-    verbose: verboseLogging,
+    verbose: isVerboseLogging,
     skip: true,
   })
   : opencodeDecision.shouldRun
     ? upgradeOpenCodeCli({
-      verbose: verboseLogging,
+      verbose: isVerboseLogging,
       skip: false,
     })
     : {
@@ -353,7 +353,7 @@ for (const error of opencodeReport.errors) {
 if (opencodeReport.errors.length > 0) {
   process.exit(1)
 }
-if (!skipOpenCodeUpgrade && opencodeDecision.shouldRun && opencodeReport.errors.length === 0 && opencodeReport.available) {
+if (!shouldSkipOpenCodeUpgrade && opencodeDecision.shouldRun && opencodeReport.errors.length === 0 && opencodeReport.available) {
   recordDailyMaintenanceSuccess(maintenanceState, 'opencode')
 }
 
@@ -421,7 +421,7 @@ for (const { label, port } of configuredPorts) {
       const message = retryError instanceof Error ? retryError.message : String(retryError)
       console.error(`[dev-preflight] Cannot start LoopTroop ${label} service on port ${port}: ${message}`)
       console.error(`[dev-preflight] ${describePortOccupants(port, updatedInspection)}`)
-      if (verboseLogging && updatedInspection.rawSocketSnapshot) {
+      if (isVerboseLogging && updatedInspection.rawSocketSnapshot) {
         console.error('[dev-preflight] Listener snapshot:')
         console.error(updatedInspection.rawSocketSnapshot)
       }
@@ -433,7 +433,7 @@ for (const { label, port } of configuredPorts) {
   }
 }
 
-if (skipDependencyMaintenance) {
+if (shouldSkipDependencyMaintenance) {
   console.log('[dev-preflight] Skipped dependency sync and audit remediation because LOOPTROOP_DEV_SKIP_DEPS=1.')
 } else {
   if (dependencySyncReport.deferred) {
