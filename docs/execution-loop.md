@@ -27,7 +27,7 @@ The workflow-side orchestration that resumes interrupted coding work lives in `s
 For each bead:
 
 1. Load the active bead specification and the current execution profile.
-2. Recover any interrupted in-progress bead from its recorded start snapshot.
+2. Recover any interrupted in-progress bead from a current `bead_execution` checkpoint when possible, or reset it from its recorded start snapshot before retry.
 3. Start or reattach to the owned OpenCode session for that bead iteration.
 4. Prompt the model with the coding template and the narrow execution context.
 5. Require structured completion markers so the system can tell whether the attempt really finished.
@@ -104,7 +104,9 @@ Important `gitOps.ts` behavior:
 
 This is what makes retries safe: the next attempt starts from a known repository state.
 
-On startup or manual retry, `CODING` recovery uses the same reset path. A bead left `in_progress` by a backend crash is reset to `beadStartCommit` and written back as `pending` before the scheduler selects work. If the bead has no recorded start commit, LoopTroop blocks instead of continuing in a worktree it cannot prove clean.
+On startup or manual retry, `CODING` recovery first checks whether the interrupted `in_progress` bead has a current matching `bead_execution:<beadId>` checkpoint for the `CODING` phase. When that persisted execution result exists and matches the current bead, LoopTroop resumes finalization from the checkpoint instead of re-running the bead.
+
+If there is no matching checkpoint, or the checkpoint cannot be parsed as the current bead's execution result, recovery falls back to the reset/retry path. The bead is reset to `beadStartCommit`, written back as `pending`, and handed back to the scheduler. If the bead has no recorded start commit, LoopTroop blocks instead of continuing in a worktree it cannot prove clean.
 
 ## Scheduler Interaction
 
@@ -146,7 +148,7 @@ Execution recovery is intentionally stricter after process or OpenCode interrupt
 
 - an interrupted bead is not treated as successful just because the model session might have continued somewhere else
 - model sessions are owned by ticket, phase, phase attempt, bead, and iteration before they are reused
-- the worktree must reset to the bead-start commit before a failed or interrupted coding retry can run
+- without a valid `bead_execution` checkpoint, the worktree must reset to the bead-start commit before a failed or interrupted coding retry can run
 - missing reset metadata keeps the ticket blocked so the user can inspect the partial state manually
 
 ## Execution Configuration Controls

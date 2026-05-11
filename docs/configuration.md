@@ -374,6 +374,8 @@ How many fresh-session re-attempts LoopTroop allows for a failing bead before it
 
 Each retry discards the polluted conversational state from the failed attempt, resets the worktree to the bead's start commit, opens a brand-new OpenCode session, and starts over with the context wipe note from the previous attempt as context. See [Execution Loop — Bounded Ralph-Style Retry](/execution-loop#bounded-ralph-style-retry) for the full design rationale.
 
+Startup and manual-retry recovery can avoid a fresh attempt when the interrupted bead already has a current matching `bead_execution` checkpoint. In that case LoopTroop finalizes the checkpointed result; only missing or invalid checkpoints fall back to reset/retry and this retry budget.
+
 **Trade-offs:**
 
 | Lower (0–2) | Higher (10–20) |

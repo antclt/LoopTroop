@@ -13,6 +13,8 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
 
+All `/api/*` routes share a global per-client rate limit, with stricter buckets for write methods than read methods. When the limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying.
+
 ## Health, Models, Workflow Meta, And Streaming
 
 | Method | Route | Notes |
@@ -137,7 +139,7 @@ The worktree delete endpoint returns 409 when any ticket in the project is not i
 | --- | --- | --- |
 | `GET` | `/api/tickets` | Optionally filtered with `?projectId=` |
 | `GET` | `/api/tickets/:id` | Get one ticket |
-| `POST` | `/api/tickets` | Create a ticket |
+| `POST` | `/api/tickets` | Create a ticket; title max 500 characters and description max 10,000 characters |
 | `PATCH` | `/api/tickets/:id` | Update title, description, or priority |
 | `DELETE` | `/api/tickets/:id` | Only allowed for `COMPLETED` or `CANCELED` |
 | `GET` | `/api/tickets/:id/ui-state?scope=...` | Read persisted UI state |
@@ -153,6 +155,8 @@ Example ticket creation payload:
   "priority": 2
 }
 ```
+
+Create-ticket validation requires a non-empty title up to 500 characters. The optional description is capped at 10,000 characters.
 
 Example UI-state payload:
 

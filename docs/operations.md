@@ -124,8 +124,8 @@ Both commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview) and 
 
 | Variable | Purpose |
 | --- | --- |
-| `LOOPTROOP_FRONTEND_PORT` | Override frontend port |
-| `LOOPTROOP_FRONTEND_ORIGIN` | Override full frontend origin URL, for example `http://my-server:5173`; takes precedence over `LOOPTROOP_FRONTEND_PORT` |
+| `LOOPTROOP_FRONTEND_PORT` | Override frontend port; also drives the default frontend origin when `LOOPTROOP_FRONTEND_ORIGIN` is unset |
+| `LOOPTROOP_FRONTEND_ORIGIN` | Override full frontend origin URL, for example `http://my-server:5173`; a valid explicit origin takes precedence over `LOOPTROOP_FRONTEND_PORT`, while an invalid value falls back to the default origin |
 | `LOOPTROOP_BACKEND_PORT` | Override backend port |
 | `LOOPTROOP_DOCS_PORT` | Override docs port |
 | `LOOPTROOP_DOCS_ORIGIN` | Override full docs origin URL, for example `http://my-server:5174`; takes precedence over `LOOPTROOP_DOCS_PORT` |
@@ -149,6 +149,12 @@ Default local service addresses:
 | Backend | `http://localhost:3000` |
 | Docs | `http://localhost:5174` |
 | OpenCode | `http://127.0.0.1:4096` |
+
+When `LOOPTROOP_FRONTEND_ORIGIN` is not explicitly set, LoopTroop derives the frontend origin from `LOOPTROOP_FRONTEND_PORT`, defaulting to `http://localhost:5173`. If `LOOPTROOP_FRONTEND_ORIGIN` is set but cannot be parsed as a URL origin, LoopTroop ignores it and falls back to that derived default.
+
+## API Rate Limits
+
+The backend applies a global per-client rate limit to `/api/*` routes. If a client exceeds the limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
 
 ## Project Git Hygiene
 
