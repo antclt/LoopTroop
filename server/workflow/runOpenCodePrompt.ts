@@ -92,6 +92,10 @@ export interface OpenCodeAttemptMeta {
 
 const sessionPromptDispatchCounts = new Map<string, number>()
 
+export function clearOpenCodePromptDispatchCount(sessionId: string): void {
+  sessionPromptDispatchCounts.delete(sessionId)
+}
+
 function formatPromptText(parts: PromptPart[]): string {
   if (parts.length === 1 && !parts[0]?.source) {
     return parts[0]?.content ?? ''
@@ -186,7 +190,7 @@ function resolveSessionCreateOptions(): OpenCodeSessionCreateOptions {
 }
 
 function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number | undefined) {
-  if (timeoutMs === undefined) {
+  if (timeoutMs === undefined || timeoutMs <= 0) {
     return {
       signal,
       timedOut: () => false,
@@ -196,16 +200,6 @@ function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number 
 
   const controller = new AbortController()
   let didTimeOut = false
-
-  if (timeoutMs <= 0) {
-    didTimeOut = true
-    controller.abort()
-    return {
-      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
-      timedOut: () => didTimeOut,
-      cleanup: () => undefined,
-    }
-  }
 
   const timer = setTimeout(() => {
     didTimeOut = true
@@ -220,7 +214,7 @@ function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number 
 }
 
 function getTimeoutDeadline(timeoutMs: number | undefined): number | undefined {
-  return timeoutMs === undefined ? undefined : Date.now() + timeoutMs
+  return timeoutMs === undefined || timeoutMs <= 0 ? undefined : Date.now() + timeoutMs
 }
 
 function getRemainingTimeoutMs(timeoutDeadline: number | undefined): number | undefined {
@@ -267,6 +261,7 @@ export async function runOpenCodePrompt({
       if (existing) {
         await adapter.abortSession(existing.sessionId).catch(() => false)
         await sessionManager!.abandonSession(existing.sessionId)
+        clearOpenCodePromptDispatchCount(existing.sessionId)
       }
     }
     session = sessionOwnership
@@ -319,16 +314,18 @@ export async function runOpenCodePrompt({
     })
     if (sessionManager && !sessionOwnership?.keepActive) {
       await sessionManager.completeSession(session.id)
+      clearOpenCodePromptDispatchCount(session.id)
     }
     return result
   } catch (error) {
     if (sessionManager && !sessionOwnership?.keepActive) {
       await sessionManager.abandonSession(session.id)
+      clearOpenCodePromptDispatchCount(session.id)
     }
     throw error
   } finally {
     if (session && !sessionOwnership?.keepActive) {
-      sessionPromptDispatchCounts.delete(session.id)
+      clearOpenCodePromptDispatchCount(session.id)
     }
   }
 }
@@ -444,12 +441,14 @@ export async function runOpenCodeSessionPrompt({
       const timeoutError = error instanceof Error && error.message === 'Timeout' ? error : new Error('Timeout')
       if (sessionManager && !sessionOwnership?.keepActive) {
         await sessionManager.abandonSession(resolvedSession.id)
+        clearOpenCodePromptDispatchCount(resolvedSession.id)
       }
       onStreamError?.(timeoutError)
       throw timeoutError
     }
     if (sessionManager && !sessionOwnership?.keepActive && isPromptTransportFailure(error)) {
       await sessionManager.abandonSession(resolvedSession.id)
+      clearOpenCodePromptDispatchCount(resolvedSession.id)
     }
     onStreamError?.(error)
     throw error

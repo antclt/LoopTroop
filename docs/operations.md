@@ -154,7 +154,7 @@ When `LOOPTROOP_FRONTEND_ORIGIN` is not explicitly set, LoopTroop derives the fr
 
 ## API Rate Limits
 
-The backend applies a global per-client rate limit to `/api/*` routes. If a client exceeds the limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
+The backend applies a global per-client rate limit to `/api/*` routes. Read requests, normal write actions, and UI-state autosaves use separate buckets so frequent draft saves do not exhaust the workflow-action budget. Defaults are 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. If a client exceeds a limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
 
 ## Project Git Hygiene
 

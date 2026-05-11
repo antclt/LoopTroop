@@ -25,7 +25,7 @@ type LocalProjectRow = typeof projects.$inferSelect
 
 const TrimmedNonEmptyStringSchema = z.string().trim().min(1)
 const LockedCouncilMembersSchema = z.array(TrimmedNonEmptyStringSchema)
-const LockedCouncilMemberVariantsSchema = z.record(TrimmedNonEmptyStringSchema).superRefine((value, ctx) => {
+const LockedCouncilMemberVariantsSchema = z.record(z.string(), TrimmedNonEmptyStringSchema).superRefine((value, ctx) => {
   for (const key of Object.keys(value)) {
     if (key.trim().length === 0) {
       ctx.addIssue({

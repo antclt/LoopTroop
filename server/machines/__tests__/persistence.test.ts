@@ -200,4 +200,72 @@ describe('hydrateAllTickets', () => {
       stopActor(ticket.id)
     }
   })
+
+  it('hydrates an actor with malformed locked council JSON without crashing', () => {
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Malformed locked council hydration',
+    })
+
+    const snapshot = {
+      status: 'active',
+      value: 'REFINING_PRD',
+      historyValue: {},
+      context: makeTicketContextFromTicket(ticket, {
+        status: 'REFINING_PRD',
+        previousStatus: 'COUNCIL_VOTING_PRD',
+      }),
+      children: {},
+    }
+
+    patchTicket(ticket.id, {
+      status: 'REFINING_PRD',
+      lockedCouncilMembers: '{not-json',
+      lockedCouncilMemberVariants: '{not-json',
+      xstateSnapshot: JSON.stringify(snapshot),
+    })
+
+    try {
+      const actor = ensureActorForTicket(ticket.id)
+      expect(actor.getSnapshot().value).toBe('REFINING_PRD')
+      expect(actor.getSnapshot().context.lockedCouncilMembers).toEqual([])
+      expect(actor.getSnapshot().context.lockedCouncilMemberVariants).toBeNull()
+    } finally {
+      stopActor(ticket.id)
+    }
+  })
+
+  it('reverts an active actor with malformed locked council JSON without crashing', () => {
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Malformed locked council revert',
+    })
+
+    const snapshot = {
+      status: 'active',
+      value: 'REFINING_BEADS',
+      historyValue: {},
+      context: makeTicketContextFromTicket(ticket, {
+        status: 'REFINING_BEADS',
+        previousStatus: 'COUNCIL_VOTING_BEADS',
+      }),
+      children: {},
+    }
+
+    patchTicket(ticket.id, {
+      status: 'REFINING_BEADS',
+      lockedCouncilMembers: '{not-json',
+      lockedCouncilMemberVariants: '{"model-a":',
+      xstateSnapshot: JSON.stringify(snapshot),
+    })
+
+    try {
+      expect(ensureActorForTicket(ticket.id).getSnapshot().value).toBe('REFINING_BEADS')
+
+      const rewoundActor = revertTicketToApprovalStatus(ticket.id, 'WAITING_PRD_APPROVAL')
+      expect(rewoundActor.getSnapshot().value).toBe('WAITING_PRD_APPROVAL')
+      expect(rewoundActor.getSnapshot().context.lockedCouncilMembers).toEqual([])
+      expect(rewoundActor.getSnapshot().context.lockedCouncilMemberVariants).toBeNull()
+    } finally {
+      stopActor(ticket.id)
+    }
+  })
 })

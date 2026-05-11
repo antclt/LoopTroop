@@ -6,6 +6,13 @@ import { warnIfVerbose } from '../runtime'
 
 const streamRouter = new Hono()
 
+export function cleanupStreamClient(ticketId: string, clientId: string, interval?: ReturnType<typeof setInterval>): void {
+  if (interval) {
+    clearInterval(interval)
+  }
+  broadcaster.removeClient(ticketId, clientId)
+}
+
 streamRouter.get('/stream', (c) => {
   const ticketId = c.req.query('ticketId')
   if (!ticketId) {
@@ -60,14 +67,13 @@ streamRouter.get('/stream', (c) => {
           data: JSON.stringify({ timestamp: new Date().toISOString() }),
         })
       } catch {
-        clearInterval(interval)
+        cleanupStreamClient(ticketId, clientId, interval)
       }
     }, 30000)
 
     // Clean up on close
     stream.onAbort(() => {
-      clearInterval(interval)
-      broadcaster.removeClient(ticketId, clientId)
+      cleanupStreamClient(ticketId, clientId, interval)
     })
 
     // Keep stream open

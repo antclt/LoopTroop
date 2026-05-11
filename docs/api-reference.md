@@ -13,7 +13,7 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
 
-All `/api/*` routes share a global per-client rate limit, with stricter buckets for write methods than read methods. When the limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying.
+All `/api/*` routes share a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. When a limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying.
 
 ## Health, Models, Workflow Meta, And Streaming
 
@@ -102,7 +102,7 @@ Example profile update payload:
 | `PATCH` | `/api/projects/:id` | Update project settings |
 | `DELETE` | `/api/projects/:id` | Delete a project if no active tickets remain |
 | `GET` | `/api/projects/:id/worktrees/size` | Get the total disk size of all worktrees for a project |
-| `DELETE` | `/api/projects/:id/worktrees` | Delete worktrees for completed and canceled tickets; blocked with 409 if any tickets are still in progress |
+| `DELETE` | `/api/projects/:id/worktrees` | Delete worktrees for completed and canceled tickets only; active ticket worktrees are left untouched |
 
 Example project attachment payload:
 
@@ -129,7 +129,7 @@ Worktree delete response:
 { "success": true, "freedBytes": 1234567 }
 ```
 
-The worktree delete endpoint returns 409 when any ticket in the project is not in `DRAFT`, `COMPLETED`, or `CANCELED` status. Finish or cancel all active tickets before deleting worktrees.
+Project deletion (`DELETE /api/projects/:id`) returns 409 when any ticket in the project is not in `DRAFT`, `COMPLETED`, or `CANCELED` status. Finish or cancel all active tickets before deleting the project. Worktree deletion is narrower: it only removes completed and canceled ticket worktrees and leaves active ticket worktrees untouched.
 
 ## Ticket Routes
 

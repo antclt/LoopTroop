@@ -305,6 +305,9 @@ export function detachProject(id: number): boolean {
 export function deleteProject(id: number): boolean {
   const attached = getAttachedRow(id)
   if (!attached) return false
+  if (hasActiveProjectTickets(attached.folderPath)) {
+    throw new Error('Cannot delete project while tickets are still active. Complete or cancel them first.')
+  }
 
   closeProjectDatabase(attached.folderPath)
   rmSync(getProjectLoopTroopDir(attached.folderPath), { recursive: true, force: true })

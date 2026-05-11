@@ -18,6 +18,8 @@ export {
   listNonTerminalTickets,
   getTicketPaths,
   findProjectExecutionBandConflict,
+  parseLockedCouncilMembers,
+  parseLockedCouncilMemberVariants,
 } from './ticketQueries'
 
 export {

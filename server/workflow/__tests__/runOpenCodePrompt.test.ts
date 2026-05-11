@@ -1208,6 +1208,27 @@ describe('runOpenCodePrompt', () => {
     })).rejects.toThrow('Timeout')
   })
 
+  it('treats timeoutMs 0 as no timeout', async () => {
+    const deferred = createDeferred<string>()
+    const adapter = new TestOpenCodeAdapter([deferred])
+
+    const promise = runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Prompt body' }],
+      timeoutMs: 0,
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(adapter.abortCalls).toEqual([])
+
+    deferred.resolve('done after disabled timeout')
+    await expect(promise).resolves.toMatchObject({
+      response: 'done after disabled timeout',
+    })
+    expect(adapter.abortCalls).toEqual([])
+  })
+
   it('subscribeToEvents emits synthetic done after step-finish safety timeout', async () => {
     // Test the safety timeout directly on the adapter level with a small value
     const fakeClient = createFakeSdkClient({

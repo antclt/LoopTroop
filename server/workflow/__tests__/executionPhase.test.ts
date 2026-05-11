@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bead } from '../../phases/beads/types'
 import { makeTicketContextFromTicket } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
-import { getLatestPhaseArtifact } from '../../storage/tickets'
+import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
 import { readTicketBeads, recoverFailedCodingBead, writeTicketBeads } from '../phases/beadsPhase'
 import { phaseIntermediate } from '../phases/state'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../shared/errorCodes'
@@ -444,9 +444,102 @@ describe('handleCoding', () => {
       }),
     )
     const executedBead = executeBeadMock.mock.calls[0]![1] as Bead
-    expect(executedBead.status).toBe('pending')
+    expect(executedBead.status).toBe('in_progress')
     expect(executedBead.notes).toBe('prior interrupted attempt')
     expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+  })
+
+  it('finalizes a current persisted execution checkpoint without re-executing the bead', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Finalize matching execution checkpoint',
+    })
+    const interruptedBead = makePendingBead('bead-1', 1, {
+      status: 'in_progress',
+      iteration: 2,
+      startedAt: '2026-01-01T00:01:00.000Z',
+      updatedAt: '2026-01-01T00:02:00.000Z',
+      beadStartCommit: 'start-sha',
+    })
+    writeTicketBeads(ticket.id, [interruptedBead])
+    upsertLatestPhaseArtifact(ticket.id, 'bead_execution:bead-1', 'CODING', JSON.stringify({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 2,
+      output: 'checkpointed done',
+      errors: [],
+      checkpoint: {
+        beadId: interruptedBead.id,
+        iteration: interruptedBead.iteration,
+        startedAt: interruptedBead.startedAt,
+        updatedAt: interruptedBead.updatedAt,
+        beadStartCommit: interruptedBead.beadStartCommit,
+      },
+    }))
+    const sendEvent = vi.fn()
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(executeBeadMock).not.toHaveBeenCalled()
+    expect(resetToBeadStartMock).not.toHaveBeenCalled()
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-1')?.status).toBe('done')
+  })
+
+  it('does not reuse a stale persisted execution checkpoint after retry/reset changes bead state', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Ignore stale execution checkpoint',
+    })
+    const interruptedBead = makePendingBead('bead-1', 1, {
+      status: 'in_progress',
+      iteration: 2,
+      startedAt: '2026-01-01T00:01:00.000Z',
+      updatedAt: '2026-01-01T00:02:00.000Z',
+      beadStartCommit: 'start-sha',
+    })
+    writeTicketBeads(ticket.id, [interruptedBead])
+    upsertLatestPhaseArtifact(ticket.id, 'bead_execution:bead-1', 'CODING', JSON.stringify({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 2,
+      output: 'stale done',
+      errors: [],
+      checkpoint: {
+        beadId: interruptedBead.id,
+        iteration: interruptedBead.iteration,
+        startedAt: interruptedBead.startedAt,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        beadStartCommit: interruptedBead.beadStartCommit,
+      },
+    }))
+    executeBeadMock.mockResolvedValueOnce({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 2,
+      output: 'fresh done',
+      errors: [],
+    })
+    const sendEvent = vi.fn()
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(resetToBeadStartMock).toHaveBeenCalledWith(
+      expect.any(String),
+      'start-sha',
+      expect.objectContaining({
+        preservePaths: expect.arrayContaining(['.ticket/runtime/execution-log.jsonl']),
+      }),
+    )
+    expect(executeBeadMock).toHaveBeenCalledTimes(1)
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+
+    const execArtifact = getLatestPhaseArtifact(ticket.id, 'bead_execution:bead-1', 'CODING')
+    const payload = JSON.parse(execArtifact!.content) as {
+      output?: string
+      checkpoint?: { updatedAt?: string; beadStartCommit?: string | null }
+    }
+    expect(payload.output).toBe('fresh done')
+    expect(payload.checkpoint?.beadStartCommit).toBe('abc123')
+    expect(payload.checkpoint?.updatedAt).not.toBe('2026-01-01T00:00:00.000Z')
   })
 
   it('blocks interrupted coding recovery when no bead start commit exists', async () => {
@@ -503,9 +596,17 @@ describe('handleCoding', () => {
 
     const execArtifact = getLatestPhaseArtifact(ticket.id, 'bead_execution:bead-1', 'CODING')
     expect(execArtifact).toBeDefined()
-    const execPayload = JSON.parse(execArtifact!.content) as { success: boolean; beadId: string }
+    const execPayload = JSON.parse(execArtifact!.content) as {
+      success: boolean
+      beadId: string
+      checkpoint?: { beadId?: string; beadStartCommit?: string | null }
+    }
     expect(execPayload.success).toBe(true)
     expect(execPayload.beadId).toBe('bead-1')
+    expect(execPayload.checkpoint).toMatchObject({
+      beadId: 'bead-1',
+      beadStartCommit: 'abc123',
+    })
 
     const diffArtifact = getLatestPhaseArtifact(ticket.id, 'bead_diff:bead-1', 'CODING')
     expect(diffArtifact).toBeDefined()
@@ -531,8 +632,15 @@ describe('handleCoding', () => {
 
     const execArtifact = getLatestPhaseArtifact(ticket.id, 'bead_execution:bead-1', 'CODING')
     expect(execArtifact).toBeDefined()
-    const execPayload = JSON.parse(execArtifact!.content) as { success: boolean }
+    const execPayload = JSON.parse(execArtifact!.content) as {
+      success: boolean
+      checkpoint?: { beadId?: string; beadStartCommit?: string | null }
+    }
     expect(execPayload.success).toBe(false)
+    expect(execPayload.checkpoint).toMatchObject({
+      beadId: 'bead-1',
+      beadStartCommit: 'abc123',
+    })
 
     const diffArtifact = getLatestPhaseArtifact(ticket.id, 'bead_diff:bead-1', 'CODING')
     expect(diffArtifact).toBeUndefined()

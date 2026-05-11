@@ -98,8 +98,8 @@ import { getErrorMessage } from '@shared/typeGuards'
 
 export const createTicketSchema = z.object({
   projectId: z.number().int().positive(),
-  title: z.string().min(1).max(200),
-  description: z.string().optional(),
+  title: z.string().min(1).max(500),
+  description: z.string().max(10000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
 })
 
@@ -713,6 +713,9 @@ export async function handleCreateTicket(c: Context) {
   } catch (err) {
     if (err instanceof Error && err.message === 'Project not found') {
       return c.json({ error: 'Project not found' }, 404)
+    }
+    if (err instanceof Error && err.message.startsWith('Invalid createTicket input:')) {
+      return c.json({ error: 'Invalid input', message: err.message }, 400)
     }
     return c.json({ error: 'Failed to create ticket', details: String(err) }, 500)
   }

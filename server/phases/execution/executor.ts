@@ -3,6 +3,7 @@ import type { Bead } from '../beads/types'
 import type { Message, PromptPart, Session, StreamEvent } from '../../opencode/types'
 import { parseCompletionMarker } from './completionChecker'
 import {
+  clearOpenCodePromptDispatchCount,
   runOpenCodePrompt,
   runOpenCodeSessionPrompt,
   type OpenCodePromptCompletedEvent,
@@ -58,8 +59,8 @@ async function resolveContextParts(input: ContextPartsInput): Promise<PromptPart
   return input
 }
 
-function getRemainingTimeoutMs(deadlineAt: number): number {
-  return Math.max(0, deadlineAt - Date.now())
+function getRemainingTimeoutMs(deadlineAt: number | undefined): number | undefined {
+  return deadlineAt === undefined ? undefined : Math.max(0, deadlineAt - Date.now())
 }
 
 function buildContinuationPrompt(
@@ -271,7 +272,7 @@ export async function executeBead(
     let activeSession: Session | null = null
     const iterationErrors: string[] = []
     let latestMessages: Message[] = []
-    const deadlineAt = Date.now() + timeout
+    const deadlineAt = timeout > 0 ? Date.now() + timeout : undefined
 
     try {
       let sessionId = ''
@@ -348,6 +349,7 @@ export async function executeBead(
         if (result.complete && result.gatesValid) {
           if (activeSessionId && sessionManager) {
             await sessionManager.completeSession(activeSessionId)
+            clearOpenCodePromptDispatchCount(activeSessionId)
             activeSessionId = null
           }
           activeSession = null
@@ -360,7 +362,7 @@ export async function executeBead(
         }
 
         const remainingMs = getRemainingTimeoutMs(deadlineAt)
-        if (remainingMs <= 0) {
+        if (remainingMs !== undefined && remainingMs <= 0) {
           throw new Error('Timeout')
         }
 
@@ -407,6 +409,7 @@ export async function executeBead(
 
           if (activeSessionId && sessionManager) {
             await sessionManager.abandonSession(activeSessionId)
+            clearOpenCodePromptDispatchCount(activeSessionId)
             activeSessionId = null
           }
           activeSession = null
@@ -510,6 +513,7 @@ export async function executeBead(
     } finally {
       if (contextWipeSessionId && sessionManager) {
         await sessionManager.abandonSession(contextWipeSessionId)
+        clearOpenCodePromptDispatchCount(contextWipeSessionId)
       }
     }
     throwIfAborted(signal)

@@ -198,6 +198,33 @@ describe('executeBead', () => {
     expect(messages.some((message) => typeof message.content === 'string' && message.content.includes('Do not reply with a plain-text progress update or plan'))).toBe(true)
   })
 
+  it('treats per-iteration timeout 0 as no deadline across continuation prompts', async () => {
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.mockResponses.set('mock-session-1#1', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"error","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"},"reason":"needs one more edit"}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+    adapter.mockResponses.set('mock-session-1#2', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+
+    const result = await executeBead(
+      adapter,
+      buildBead(),
+      [{ type: 'text', content: 'Bead context' }],
+      '/tmp/test',
+      1,
+      0,
+    )
+
+    expect(result.success).toBe(true)
+    expect(adapter.abortCalls).toEqual([])
+    expect(adapter.promptCalls.map((call) => call.sessionId)).toEqual(['mock-session-1', 'mock-session-1'])
+  })
+
   it('calls onContextWipe when iteration fails and PROM51 generates notes', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()
     adapter.mockResponses.set('mock-session-1#1', [

@@ -7,7 +7,7 @@ import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { getProjectLoopTroopDir } from '../../storage/paths'
-import { attachExistingProject, attachProject, listProjects, resolveProjectState } from '../../storage/projects'
+import { attachExistingProject, attachProject, deleteProject, listProjects, resolveProjectState } from '../../storage/projects'
 import { createTicket, patchTicket } from '../../storage/ticketMutations'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { projectRouter } from '../projects'
@@ -205,7 +205,7 @@ describe('projectRouter project cleanup', () => {
 
     // Create a ticket and move it to an active (non-terminal) status
     const ticket = createTicket({ projectId, title: 'Active ticket' })
-    patchTicket(ticket.externalId, { status: 'CODING' })
+    patchTicket(ticket.id, { status: 'CODING' })
 
     // Delete-worktrees must succeed regardless of active tickets
     const deleteResponse = await app.request(`/api/projects/${projectId}/worktrees`, {
@@ -215,5 +215,19 @@ describe('projectRouter project cleanup', () => {
     expect(deleteResponse.status).toBe(200)
     const payload = await deleteResponse.json() as { success: boolean; freedBytes: number }
     expect(payload.success).toBe(true)
+  })
+
+  it('refuses direct project deletion while active tickets exist', () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'Active Guard Project',
+      shortname: 'AGP',
+    })
+    const ticket = createTicket({ projectId: project.id, title: 'Active ticket' })
+    patchTicket(ticket.id, { status: 'CODING' })
+
+    expect(() => deleteProject(project.id)).toThrow('Cannot delete project while tickets are still active')
+    expect(existsSync(getProjectLoopTroopDir(repoDir))).toBe(true)
   })
 })

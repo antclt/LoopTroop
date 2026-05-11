@@ -1,7 +1,12 @@
-import { describe, expect, it, vi } from 'vitest'
-import { SSEBroadcaster } from '../broadcaster'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { broadcaster, SSEBroadcaster } from '../broadcaster'
+import { cleanupStreamClient } from '../../routes/stream'
 
 describe('SSEBroadcaster', () => {
+  afterEach(() => {
+    broadcaster.clearTicket('1:T-HEARTBEAT')
+  })
+
   it('preserves a provided timestamp in the SSE payload', () => {
     const sent = vi.fn()
     const broadcaster = new SSEBroadcaster()
@@ -105,5 +110,19 @@ describe('SSEBroadcaster', () => {
     const replayIds = replay.map((event) => JSON.parse(event.data).entryId)
 
     expect(replayIds).toEqual(['entry-3'])
+  })
+
+  it('removes a route client when heartbeat cleanup runs after a write failure', () => {
+    const interval = setInterval(() => undefined, 1_000)
+    broadcaster.addClient('1:T-HEARTBEAT', {
+      id: 'client-heartbeat',
+      ticketId: '1:T-HEARTBEAT',
+      send: vi.fn(),
+      close: vi.fn(),
+    })
+
+    cleanupStreamClient('1:T-HEARTBEAT', 'client-heartbeat', interval)
+
+    expect(broadcaster.getClientCount('1:T-HEARTBEAT')).toBe(0)
   })
 })

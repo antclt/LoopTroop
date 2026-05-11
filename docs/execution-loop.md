@@ -104,9 +104,9 @@ Important `gitOps.ts` behavior:
 
 This is what makes retries safe: the next attempt starts from a known repository state.
 
-On startup or manual retry, `CODING` recovery first checks whether the interrupted `in_progress` bead has a current matching `bead_execution:<beadId>` checkpoint for the `CODING` phase. When that persisted execution result exists and matches the current bead, LoopTroop resumes finalization from the checkpoint instead of re-running the bead.
+On startup or manual retry, `CODING` recovery first checks whether the interrupted `in_progress` bead has a current matching `bead_execution:<beadId>` checkpoint for the `CODING` phase. The checkpoint must match the current bead id, iteration, `startedAt`, `updatedAt`, and `beadStartCommit`. When that persisted execution result matches, LoopTroop resumes finalization from the checkpoint instead of re-running the bead.
 
-If there is no matching checkpoint, or the checkpoint cannot be parsed as the current bead's execution result, recovery falls back to the reset/retry path. The bead is reset to `beadStartCommit`, written back as `pending`, and handed back to the scheduler. If the bead has no recorded start commit, LoopTroop blocks instead of continuing in a worktree it cannot prove clean.
+If there is no matching checkpoint, the checkpoint cannot be parsed, or the checkpoint no longer matches the current bead state, recovery falls back to the reset/retry path. The bead is reset to `beadStartCommit`, written back as `pending`, and handed back to the scheduler. If the bead has no recorded start commit, LoopTroop blocks instead of continuing in a worktree it cannot prove clean.
 
 ## Scheduler Interaction
 

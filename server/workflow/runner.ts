@@ -21,6 +21,7 @@ import {
   interviewQASessions,
   phaseIntermediate,
   cancelTicket,
+  cleanupTicketState,
   getOrCreateAbortSignal,
 
   // Helpers
@@ -239,6 +240,11 @@ export function attachWorkflowRunner(
     // When the ticket reaches CANCELED, abort all running work
     if (state === 'CANCELED') {
       cancelTicket(ticketId)
+      return
+    }
+
+    if (state === 'COMPLETED') {
+      cleanupTicketState(ticketId)
       return
     }
 

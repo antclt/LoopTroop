@@ -65,6 +65,18 @@ function getBeadDiffArtifactType(beadId: string): string {
   return `bead_diff:${beadId}`
 }
 
+interface ExecutionCheckpointMetadata {
+  beadId: string
+  iteration: number
+  startedAt: string
+  updatedAt: string
+  beadStartCommit: string | null
+}
+
+type PersistedExecutionCheckpoint = ExecutionResult & {
+  checkpoint?: ExecutionCheckpointMetadata
+}
+
 function isPersistedExecutionResult(value: unknown, beadId: string): value is ExecutionResult {
   if (!value || typeof value !== 'object') return false
   const candidate = value as Partial<ExecutionResult>
@@ -75,6 +87,46 @@ function isPersistedExecutionResult(value: unknown, beadId: string): value is Ex
     && Array.isArray(candidate.errors)
     && candidate.errors.every((entry) => typeof entry === 'string')
     && (candidate.errorCodes == null || (Array.isArray(candidate.errorCodes) && candidate.errorCodes.every((entry) => typeof entry === 'string')))
+}
+
+function getExecutionCheckpointMetadata(value: unknown): ExecutionCheckpointMetadata | null {
+  if (!value || typeof value !== 'object') return null
+  const checkpoint = (value as PersistedExecutionCheckpoint).checkpoint
+  if (!checkpoint || typeof checkpoint !== 'object') return null
+  if (
+    typeof checkpoint.beadId !== 'string'
+    || typeof checkpoint.iteration !== 'number'
+    || typeof checkpoint.startedAt !== 'string'
+    || typeof checkpoint.updatedAt !== 'string'
+    || !(checkpoint.beadStartCommit === null || typeof checkpoint.beadStartCommit === 'string')
+  ) {
+    return null
+  }
+  return checkpoint
+}
+
+function isCurrentExecutionCheckpoint(value: unknown, bead: Bead): value is PersistedExecutionCheckpoint {
+  if (!isPersistedExecutionResult(value, bead.id)) return false
+  const checkpoint = getExecutionCheckpointMetadata(value)
+  if (!checkpoint) return false
+  return checkpoint.beadId === bead.id
+    && checkpoint.iteration === bead.iteration
+    && checkpoint.startedAt === bead.startedAt
+    && checkpoint.updatedAt === bead.updatedAt
+    && checkpoint.beadStartCommit === (bead.beadStartCommit ?? null)
+}
+
+function withExecutionCheckpoint(result: ExecutionResult, bead: Bead): PersistedExecutionCheckpoint {
+  return {
+    ...result,
+    checkpoint: {
+      beadId: bead.id,
+      iteration: bead.iteration,
+      startedAt: bead.startedAt,
+      updatedAt: bead.updatedAt,
+      beadStartCommit: bead.beadStartCommit ?? null,
+    },
+  }
 }
 
 export async function handleMockExecutionUnsupported(
@@ -121,17 +173,20 @@ export async function handleCoding(
     throw new Error('No locked main implementer is configured for coding')
   }
 
-  let nextBead = getLatestInterruptedInProgressBead(beads)
-  let beadStartCommit: string | null = nextBead?.beadStartCommit ?? null
+  let activeBead = getLatestInterruptedInProgressBead(beads)
+  let beadStartCommit: string | null = activeBead?.beadStartCommit ?? null
   let result: ExecutionResult | null = null
 
-  if (nextBead) {
-    const executionArtifact = getLatestPhaseArtifact(ticketId, getBeadExecutionArtifactType(nextBead.id), 'CODING')
+  if (activeBead) {
+    const executionArtifact = getLatestPhaseArtifact(ticketId, getBeadExecutionArtifactType(activeBead.id), 'CODING')
     if (executionArtifact) {
       try {
         const parsed = JSON.parse(executionArtifact.content) as unknown
-        if (!isPersistedExecutionResult(parsed, nextBead.id)) {
+        if (!isPersistedExecutionResult(parsed, activeBead.id)) {
           throw new Error('artifact payload did not match the execution result schema')
+        }
+        if (!isCurrentExecutionCheckpoint(parsed, activeBead)) {
+          throw new Error('artifact checkpoint does not match the current in-progress bead state')
         }
         result = parsed
         emitPhaseLog(
@@ -139,8 +194,8 @@ export async function handleCoding(
           context.externalId,
           'CODING',
           'info',
-          `Recovered interrupted bead ${nextBead.id} from its persisted execution checkpoint and will resume finalization without re-executing.`,
-          { source: 'system', modelId: codingModelId, beadId: nextBead.id },
+          `Recovered interrupted bead ${activeBead.id} from its current execution checkpoint and will resume finalization without re-executing.`,
+          { source: 'system', modelId: codingModelId, beadId: activeBead.id },
         )
       } catch (err) {
         emitPhaseLog(
@@ -148,10 +203,10 @@ export async function handleCoding(
           context.externalId,
           'CODING',
           'info',
-          `Execution checkpoint for bead ${nextBead.id} was invalid; resetting it to its start snapshot before retrying: ${err instanceof Error ? err.message : 'Unknown error'}`,
-          { source: 'system', modelId: codingModelId, beadId: nextBead.id },
+          `Execution checkpoint for bead ${activeBead.id} was invalid; resetting it to its start snapshot before retrying: ${err instanceof Error ? err.message : 'Unknown error'}`,
+          { source: 'system', modelId: codingModelId, beadId: activeBead.id },
         )
-        nextBead = null
+        activeBead = null
         beadStartCommit = null
       }
     }
@@ -176,7 +231,7 @@ export async function handleCoding(
       beads = readTicketBeads(ticketId)
     }
 
-    nextBead = getNextBead(beads)
+    const nextBead = getNextBead(beads)
     if (!nextBead) {
       throw new Error('No runnable bead found; unresolved dependencies remain')
     }
@@ -187,27 +242,33 @@ export async function handleCoding(
       : bead)
     writeTicketBeads(ticketId, inProgressBeads)
     updateTicketProgressFromBeads(ticketId, inProgressBeads)
+    const executingBead = inProgressBeads.find(bead => bead.id === nextBead.id)
+    if (!executingBead) {
+      throw new Error(`Failed to mark bead ${nextBead.id} as in progress`)
+    }
+    activeBead = executingBead
 
-    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Executing bead ${nextBead.id}: ${nextBead.title}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Executing bead ${executingBead.id}: ${executingBead.title}`, { source: 'system', modelId: codingModelId, beadId: executingBead.id })
 
     // Record bead start commit for potential reset on context wipe
     beadStartCommit = null
     try {
-      beadStartCommit = await withCommandLoggingFieldsAsync({ beadId: nextBead.id }, async () => recordBeadStartCommit(paths.worktreePath))
+      beadStartCommit = await withCommandLoggingFieldsAsync({ beadId: executingBead.id }, async () => recordBeadStartCommit(paths.worktreePath))
       const beadsWithCommit = readTicketBeads(ticketId).map(b =>
-        b.id === nextBead.id ? { ...b, beadStartCommit } : b)
+        b.id === executingBead.id ? { ...b, beadStartCommit } : b)
       writeTicketBeads(ticketId, beadsWithCommit)
+      activeBead = beadsWithCommit.find(bead => bead.id === executingBead.id) ?? activeBead
     } catch (err) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not record bead start commit: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not record bead start commit: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: executingBead.id })
     }
 
     throwIfAborted(signal, ticketId)
     const executionSettings = resolveExecutionRuntimeSettings(context)
     const streamStates = new Map<string, OpenCodeStreamState>()
-    result = await withCommandLoggingFieldsAsync({ beadId: nextBead.id }, async () => await executeBead(
+    result = await withCommandLoggingFieldsAsync({ beadId: executingBead.id }, async () => await executeBead(
       adapter,
-      nextBead,
-      () => adapter.assembleBeadContext(ticketId, nextBead.id),
+      executingBead,
+      () => adapter.assembleBeadContext(ticketId, executingBead.id),
       paths.worktreePath,
       executionSettings.maxIterations,
       executionSettings.perIterationTimeoutMs,
@@ -218,7 +279,7 @@ export async function handleCoding(
         variant: context.lockedMainImplementerVariant ?? undefined,
         onSessionCreated: (sessionId, iteration) => {
           const currentBeads = readTicketBeads(ticketId)
-          const updated = currentBeads.map((bead) => bead.id === nextBead!.id
+          const updated = currentBeads.map((bead) => bead.id === executingBead.id
             ? {
                 ...bead,
                 status: 'in_progress' as const,
@@ -231,13 +292,13 @@ export async function handleCoding(
             ticketId,
             context.externalId,
             'CODING',
-            `Coding session created for bead ${nextBead!.id} attempt ${iteration} (session=${sessionId}).`,
-            `${nextBead!.id}:${iteration}:created`,
+            `Coding session created for bead ${executingBead.id} attempt ${iteration} (session=${sessionId}).`,
+            `${executingBead.id}:${iteration}:created`,
             {
               modelId: codingModelId,
               sessionId,
               source: `model:${codingModelId}`,
-              beadId: nextBead!.id,
+              beadId: executingBead.id,
             },
           )
         },
@@ -252,7 +313,7 @@ export async function handleCoding(
             sessionId,
             event,
             streamState,
-            nextBead!.id,
+            executingBead.id,
           )
         },
         onPromptDispatched: ({ event }) => {
@@ -262,7 +323,7 @@ export async function handleCoding(
             'CODING',
             codingModelId,
             event,
-            nextBead!.id,
+            executingBead.id,
           )
         },
         onPromptCompleted: ({ stage, event }) => {
@@ -276,7 +337,7 @@ export async function handleCoding(
             event.response,
             event.messages,
             streamStates.get(event.session.id),
-            nextBead!.id,
+            executingBead.id,
           )
         },
         onContextWipe: async ({ beadId, notes, iteration }) => {
@@ -332,12 +393,21 @@ export async function handleCoding(
       },
     ))
 
-    upsertLatestPhaseArtifact(ticketId, getBeadExecutionArtifactType(nextBead.id), 'CODING', JSON.stringify(result))
+    const checkpointBead = readTicketBeads(ticketId).find(bead => bead.id === executingBead.id) ?? activeBead ?? executingBead
+    activeBead = checkpointBead
+    beadStartCommit = checkpointBead.beadStartCommit ?? beadStartCommit
+    upsertLatestPhaseArtifact(
+      ticketId,
+      getBeadExecutionArtifactType(checkpointBead.id),
+      'CODING',
+      JSON.stringify(withExecutionCheckpoint(result, checkpointBead)),
+    )
   }
 
-  if (!nextBead || !result) {
+  if (!activeBead || !result) {
     throw new Error('Execution flow did not resolve a bead result')
   }
+  const finalizingBead = activeBead
 
   throwIfAborted(signal, ticketId)
 
@@ -347,7 +417,7 @@ export async function handleCoding(
 
   if (!result.success) {
     const nowStr = new Date().toISOString()
-    const failedBeads = freshBeads.map(bead => bead.id === nextBead.id
+    const failedBeads = freshBeads.map(bead => bead.id === finalizingBead.id
       ? {
           ...bead,
           status: 'error' as const,
@@ -357,10 +427,10 @@ export async function handleCoding(
       : bead)
     writeTicketBeads(ticketId, failedBeads)
     updateTicketProgressFromBeads(ticketId, failedBeads)
-    emitPhaseLog(ticketId, context.externalId, 'CODING', 'error', `Bead ${nextBead.id} failed.`, {
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'error', `Bead ${finalizingBead.id} failed.`, {
       source: 'system',
       modelId: codingModelId,
-      beadId: nextBead.id,
+      beadId: finalizingBead.id,
       errors: result.errors,
     })
     sendEvent(result.errorCodes && result.errorCodes.length > 0
@@ -370,7 +440,7 @@ export async function handleCoding(
   }
 
   const doneNow = new Date().toISOString()
-  const completedBeads = freshBeads.map(bead => bead.id === nextBead.id
+  const completedBeads = freshBeads.map(bead => bead.id === finalizingBead.id
     ? {
         ...bead,
         status: 'done' as const,
@@ -384,36 +454,36 @@ export async function handleCoding(
 
   // Commit and push bead changes
   try {
-    const gitResult = await withCommandLoggingFieldsAsync({ beadId: nextBead.id }, async () => commitBeadChanges(paths.worktreePath, nextBead.id, nextBead.title))
+    const gitResult = await withCommandLoggingFieldsAsync({ beadId: finalizingBead.id }, async () => commitBeadChanges(paths.worktreePath, finalizingBead.id, finalizingBead.title))
     if (gitResult.error) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Git operation warning for bead ${nextBead.id}: ${gitResult.error}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Git operation warning for bead ${finalizingBead.id}: ${gitResult.error}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
     }
     if (gitResult.committed) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Committed bead ${nextBead.id} changes${gitResult.pushed ? ' and pushed' : ' (push pending)'}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Committed bead ${finalizingBead.id} changes${gitResult.pushed ? ' and pushed' : ' (push pending)'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
     }
   } catch (err) {
-    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not commit bead changes: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not commit bead changes: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
   }
 
   // Capture code-only diff for this bead (excludes .ticket/** metadata)
   if (beadStartCommit) {
     try {
-      const diffContent = await withCommandLoggingFieldsAsync({ beadId: nextBead.id }, async () => captureBeadDiff(paths.worktreePath, beadStartCommit))
-      upsertLatestPhaseArtifact(ticketId, getBeadDiffArtifactType(nextBead.id), 'CODING', diffContent)
+      const diffContent = await withCommandLoggingFieldsAsync({ beadId: finalizingBead.id }, async () => captureBeadDiff(paths.worktreePath, beadStartCommit))
+      upsertLatestPhaseArtifact(ticketId, getBeadDiffArtifactType(finalizingBead.id), 'CODING', diffContent)
     } catch (err) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not capture bead diff: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not capture bead diff: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
     }
   }
 
   broadcaster.broadcast(ticketId, 'bead_complete', {
     ticketId,
-    beadId: nextBead.id,
-    title: nextBead.title,
+    beadId: finalizingBead.id,
+    title: finalizingBead.title,
     completed: completedBeads.filter(bead => bead.status === 'done').length,
     total: completedBeads.length,
   })
 
-  emitPhaseLog(ticketId, context.externalId, 'CODING', 'bead_complete', `Completed bead ${nextBead.id}: ${nextBead.title}`, { source: 'system', modelId: codingModelId, beadId: nextBead.id })
+  emitPhaseLog(ticketId, context.externalId, 'CODING', 'bead_complete', `Completed bead ${finalizingBead.id}: ${finalizingBead.title}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
   if (isAllComplete(completedBeads)) {
     sendEvent({ type: 'ALL_BEADS_DONE' })
   } else {

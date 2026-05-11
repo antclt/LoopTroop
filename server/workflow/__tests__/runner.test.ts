@@ -168,6 +168,29 @@ describe('attachWorkflowRunner', () => {
     })
   })
 
+  it('cleans in-memory workflow state when a ticket reaches COMPLETED naturally', async () => {
+    const controller = new AbortController()
+    ticketAbortControllers.set(TEST.ticketId, controller)
+    runningPhases.add(`${TEST.ticketId}:CODING`)
+    phaseIntermediate.set(`${TEST.ticketId}:prd`, {} as never)
+
+    const actor = createSnapshotActor('COMPLETED', {
+      title: 'Runner completed cleanup test',
+      status: 'COMPLETED',
+      previousStatus: 'CLEANING_ENV',
+    })
+
+    actor.start()
+    attachWorkflowRunner(TEST.ticketId, actor, (event) => actor.send(event))
+
+    await vi.waitFor(() => {
+      expect(ticketAbortControllers.has(TEST.ticketId)).toBe(false)
+      expect(runningPhases.has(`${TEST.ticketId}:CODING`)).toBe(false)
+      expect(phaseIntermediate.has(`${TEST.ticketId}:prd`)).toBe(false)
+    })
+    expect(controller.signal.aborted).toBe(false)
+  })
+
   it('continues CODING after a bead-complete self-transition', async () => {
     isMockOpenCodeModeMock.mockReturnValue(false)
 
