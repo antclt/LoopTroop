@@ -58,7 +58,10 @@ function getDevReadyProbeUrl(path: string) {
 }
 
 function getApiToken(): string {
-  return typeof __LOOPTROOP_API_TOKEN__ === 'string' ? __LOOPTROOP_API_TOKEN__.trim() : ''
+  // The API token is no longer baked into the client bundle.
+  // Authentication is handled server-side via httpOnly cookies
+  // or injected at runtime via /api/config.
+  return ''
 }
 
 function withApiTokenHeader(init?: RequestInit): RequestInit | undefined {

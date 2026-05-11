@@ -131,6 +131,21 @@ export function LogProvider({
     currentStatusRef.current = currentStatus
   }, [currentStatus])
 
+  useEffect(() => {
+    setLogsByPhase({})
+    setLoadingScopeKeys(new Set())
+    setManualActivePhase(null)
+    loadedScopeKeysRef.current = new Set()
+    loadingScopeKeysRef.current = new Set()
+    scopeByKeyRef.current = new Map()
+    logsByPhaseRef.current = {}
+    pendingLogsRef.current = {}
+    if (flushTimeoutRef.current) {
+      clearTimeout(flushTimeoutRef.current)
+      flushTimeoutRef.current = null
+    }
+  }, [ticketId])
+
   const pendingLogsRef = useRef<Record<string, LogEntry[]>>({})
   const flushTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 

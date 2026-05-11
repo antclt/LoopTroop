@@ -11,12 +11,25 @@ function createAuthApp(token?: string) {
 }
 
 describe('API auth middleware', () => {
-  it('does not require auth when no token is configured', async () => {
+  it('returns 503 when no token is configured and unauthenticated access is not allowed', async () => {
     const app = createAuthApp('')
 
     const response = await app.request('/api/health')
 
-    expect(response.status).toBe(200)
+    expect(response.status).toBe(503)
+    expect(await response.json()).toEqual({ error: 'API token not configured' })
+  })
+
+  it('allows unauthenticated access when LOOPTROOP_ALLOW_UNAUTHENTICATED is set', async () => {
+    const prev = process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED
+    process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED = '1'
+    try {
+      const app = createAuthApp('')
+      const response = await app.request('/api/health')
+      expect(response.status).toBe(200)
+    } finally {
+      process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED = prev
+    }
   })
 
   it('accepts configured tokens from headers, bearer auth, and SSE query params', async () => {

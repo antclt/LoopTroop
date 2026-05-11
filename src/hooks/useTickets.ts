@@ -8,6 +8,17 @@ import { clearErrorTicketSeen } from '@/lib/errorTicketSeen'
 import type { TicketErrorOccurrence } from '@/lib/errorOccurrences'
 import { nextTicketUiStateRevision, rememberTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
 
+async function parseErrorBody(res: Response, fallback: string): Promise<string> {
+  let message = fallback
+  try {
+    const err = await res.json() as { error?: string }
+    message = err.error || message
+  } catch {
+    // ignore parse failure
+  }
+  return message
+}
+
 interface TicketRuntime {
   baseBranch: string
   currentBead: number
@@ -135,8 +146,7 @@ async function createTicket(input: CreateTicketInput): Promise<Ticket> {
     body: JSON.stringify(input),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to create ticket')
+    throw new Error(await parseErrorBody(res, 'Failed to create ticket'))
   }
   return res.json()
 }
@@ -148,8 +158,7 @@ async function updateTicket(id: string, input: Partial<Pick<Ticket, 'title' | 'd
     body: JSON.stringify(input),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to update ticket')
+    throw new Error(await parseErrorBody(res, 'Failed to update ticket'))
   }
   return res.json()
 }
@@ -166,8 +175,7 @@ function getTicketActionPath(id: string, action: WorkflowAction): string {
 async function ticketAction(id: string, action: WorkflowAction): Promise<TicketActionResponse> {
   const res = await fetch(getTicketActionPath(id, action), { method: 'POST' })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || `Failed to ${action} ticket`)
+    throw new Error(await parseErrorBody(res, `Failed to ${action} ticket`))
   }
   return res.json()
 }
@@ -184,8 +192,7 @@ async function cancelTicket(id: string, options: CancelTicketOptions = {}): Prom
     body: JSON.stringify({ deleteContent: options.deleteContent ?? false, deleteLog: options.deleteLog ?? false }),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to cancel ticket')
+    throw new Error(await parseErrorBody(res, 'Failed to cancel ticket'))
   }
   return res.json()
 }
@@ -193,8 +200,7 @@ async function cancelTicket(id: string, options: CancelTicketOptions = {}): Prom
 async function deleteTicket(id: string): Promise<{ success: boolean; ticketId: string }> {
   const res = await fetch(`/api/tickets/${id}`, { method: 'DELETE' })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to delete ticket')
+    throw new Error(await parseErrorBody(res, 'Failed to delete ticket'))
   }
   return res.json()
 }
@@ -220,8 +226,7 @@ async function fetchTicketUIState<T = unknown>(
   const params = new URLSearchParams({ scope })
   const res = await fetch(`/api/tickets/${ticketId}/ui-state?${params.toString()}`)
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to fetch ticket UI state')
+    throw new Error(await parseErrorBody(res, 'Failed to fetch ticket UI state'))
   }
   return res.json()
 }
@@ -239,8 +244,7 @@ async function saveTicketUIState(
     body: JSON.stringify({ scope, data, clientRevision }),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to save ticket UI state')
+    throw new Error(await parseErrorBody(res, 'Failed to save ticket UI state'))
   }
   return res.json()
 }
@@ -418,8 +422,7 @@ async function submitBatch(
     body: JSON.stringify({ answers, selectedOptions }),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to submit batch')
+    throw new Error(await parseErrorBody(res, 'Failed to submit batch'))
   }
   return res.json()
 }
@@ -435,8 +438,7 @@ async function editInterviewAnswer(
     body: JSON.stringify({ questionId, answer }),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to edit answer')
+    throw new Error(await parseErrorBody(res, 'Failed to edit answer'))
   }
   return res.json()
 }
@@ -451,8 +453,7 @@ async function skipInterview(
     body: JSON.stringify({ answers }),
   })
   if (!res.ok) {
-    const err = await res.json()
-    throw new Error(err.error || 'Failed to skip remaining interview questions')
+    throw new Error(await parseErrorBody(res, 'Failed to skip remaining interview questions'))
   }
   return res.json()
 }

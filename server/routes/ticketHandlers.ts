@@ -119,6 +119,9 @@ const uiStateScopeSchema = z.object({
   scope: z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/),
 })
 
+// Guard against concurrent start requests for the same ticket
+const startingTickets = new Set<string>()
+
 const upsertUiStateSchema = z.object({
   scope: z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/),
   data: z.unknown(),
@@ -753,20 +756,26 @@ function syncWaitingPullRequestTicket(ticketId: string) {
         prUrl: mergeReport.prUrl,
       })
 
-      ensureActorForTicket(ticketId)
-      sendTicketEvent(ticketId, { type: 'MERGE_COMPLETE' })
+      const fresh = getTicketByRef(ticketId)
+      if (fresh && fresh.status === 'WAITING_PR_REVIEW') {
+        ensureActorForTicket(ticketId)
+        sendTicketEvent(ticketId, { type: 'MERGE_COMPLETE' })
+      }
       return getTicketByRef(ticketId) ?? current
     }
   } catch (err) {
     const details = getErrorMessage(err)
     emitRoutePhaseLog(ticketId, 'WAITING_PR_REVIEW', 'error', `PR sync failed: ${details}`)
     try {
-      ensureActorForTicket(ticketId)
-      sendTicketEvent(ticketId, {
-        type: 'ERROR',
-        message: `PR sync failed: ${details}`,
-        codes: ['PULL_REQUEST_SYNC_FAILED'],
-      })
+      const fresh = getTicketByRef(ticketId)
+      if (fresh && fresh.status === 'WAITING_PR_REVIEW') {
+        ensureActorForTicket(ticketId)
+        sendTicketEvent(ticketId, {
+          type: 'ERROR',
+          message: `PR sync failed: ${details}`,
+          codes: ['PULL_REQUEST_SYNC_FAILED'],
+        })
+      }
     } catch {
       // Best effort only. Return the current ticket below.
     }
@@ -926,6 +935,12 @@ export async function handleStartTicket(c: Context) {
     return c.json({ error: 'Ticket can only be started from DRAFT status' }, 409)
   }
 
+  if (startingTickets.has(ticketId)) {
+    return c.json({ error: 'Ticket start is already in progress' }, 429)
+  }
+  startingTickets.add(ticketId)
+
+  try {
   const startPhase = 'DRAFT'
   emitRoutePhaseLog(ticketId, startPhase, 'info', 'Start requested.')
 
@@ -1114,6 +1129,9 @@ export async function handleStartTicket(c: Context) {
   }
 
   return respondWithState(c, ticketId, 'Start action accepted')
+  } finally {
+    startingTickets.delete(ticketId)
+  }
 }
 
 export function handleApproveTicket(c: Context) {
@@ -1263,7 +1281,13 @@ export async function handleAnswerBatch(c: Context) {
       ensureActorForTicket(ticketId)
       sendTicketEvent(ticketId, { type: 'BATCH_ANSWERED', batchAnswers: parsed.data.answers, selectedOptions: parsed.data.selectedOptions })
 
-      processInterviewBatchAsync(ticketId, parsed.data.answers, session!, parsed.data.selectedOptions)
+      const batchTimeoutMs = 10 * 60 * 1000
+      Promise.race([
+        processInterviewBatchAsync(ticketId, parsed.data.answers, session!, parsed.data.selectedOptions),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Async batch processing timed out')), batchTimeoutMs),
+        ),
+      ])
         .then(result => {
           ensureActorForTicket(ticketId)
           if (result.isComplete) {

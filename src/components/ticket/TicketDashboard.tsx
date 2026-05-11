@@ -489,7 +489,6 @@ export function TicketDashboard() {
 
   return (
     <LogProvider
-      key={ticketId}
       ticketId={ticketId}
       currentStatus={currentStatus}
       visiblePhase={contextPhase}

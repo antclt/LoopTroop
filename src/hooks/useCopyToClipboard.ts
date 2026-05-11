@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { COPY_SUCCESS_DISPLAY_MS } from '@/lib/constants'
 
 /**
@@ -19,6 +19,10 @@ export function useCopyToClipboard(displayMs = COPY_SUCCESS_DISPLAY_MS) {
     },
     [displayMs],
   )
+
+  useEffect(() => {
+    return () => clearTimeout(timerRef.current)
+  }, [])
 
   return [isCopied, copy] as const
 }

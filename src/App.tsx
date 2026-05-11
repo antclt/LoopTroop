@@ -100,13 +100,33 @@ function App() {
   useEffect(() => {
     const handlePop = () => {
       const p = window.location.pathname
-      if (p === ROUTE_ROOT || p === '') dispatch({ type: 'CLOSE_TICKET' })
-      else if (p.startsWith('/ticket/')) {
+      prevPathRef.current = p
+      if (p === ROUTE_ROOT || p === '') {
+        dispatch({ type: 'CLOSE_TICKET' })
+        setShowProfile(false)
+        setShowProject(false)
+        setShowTicket(false)
+      } else if (p.startsWith('/ticket/')) {
         const externalId = p.split('/')[2] ?? ''
         if (externalId && externalId !== 'new') {
           const ticket = ticketsRef.current?.find(t => t.externalId === externalId)
           if (ticket) dispatch({ type: 'SELECT_TICKET', ticketId: ticket.id, externalId: ticket.externalId })
         }
+        setShowProfile(false)
+        setShowProject(false)
+        setShowTicket(false)
+      } else if (p === ROUTE_CONFIG) {
+        setShowProfile(true)
+        setShowProject(false)
+        setShowTicket(false)
+      } else if (p === ROUTE_PROJECT_NEW) {
+        setShowProfile(false)
+        setShowProject(true)
+        setShowTicket(false)
+      } else if (p === ROUTE_TICKET_NEW) {
+        setShowProfile(false)
+        setShowProject(false)
+        setShowTicket(true)
       }
     }
     window.addEventListener('popstate', handlePop)

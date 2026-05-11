@@ -523,8 +523,6 @@ export function deleteTicket(ticketRef: string): boolean {
   const { localTicketId, projectDb, projectRoot, externalId } = context
   const branchName = context.localTicket.branchName
 
-  removeTicketFilesystem(projectRoot, externalId, branchName)
-
   projectDb.transaction((tx) => {
     tx.delete(phaseArtifacts).where(eq(phaseArtifacts.ticketId, localTicketId)).run()
     tx.delete(opencodeSessions).where(eq(opencodeSessions.ticketId, localTicketId)).run()
@@ -533,6 +531,16 @@ export function deleteTicket(ticketRef: string): boolean {
     tx.delete(ticketStatusHistory).where(eq(ticketStatusHistory.ticketId, localTicketId)).run()
     tx.delete(tickets).where(eq(tickets.id, localTicketId)).run()
   })
+
+  // Filesystem removal happens after DB transaction succeeds.
+  // If it fails, the DB is the source of truth and the orphaned
+  // filesystem can be cleaned up later.
+  try {
+    removeTicketFilesystem(projectRoot, externalId, branchName)
+  } catch (err) {
+    console.warn(`[ticketMutations] Filesystem cleanup failed for ${ticketRef} after DB deletion:`, err)
+  }
+
   return true
 }
 

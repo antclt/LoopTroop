@@ -47,7 +47,6 @@ export default defineConfig({
   define: {
     __LOOPTROOP_DEV_BACKEND_ORIGIN__: JSON.stringify(backendOrigin),
     __LOOPTROOP_DOCS_ORIGIN__: JSON.stringify(getDocsOrigin()),
-    __LOOPTROOP_API_TOKEN__: JSON.stringify(process.env.LOOPTROOP_API_TOKEN?.trim() ?? ''),
   },
   plugins: [
     react(),

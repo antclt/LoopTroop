@@ -423,6 +423,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         sessionID: sessionId,
         ...(directory ? { directory } : {}),
       }, this.requestOptions(AbortSignal.timeout(SDK_OPERATION_TIMEOUT_MS)))
+      this.sessionDirectories.delete(sessionId)
       return true
     } catch {
       return false

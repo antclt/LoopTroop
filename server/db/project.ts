@@ -83,6 +83,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE INDEX IF NOT EXISTS idx_tickets_project_id ON tickets(project_id);
 
     CREATE TABLE IF NOT EXISTS phase_artifacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -150,6 +151,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_project_tickets_external_id ON tickets(external_id);
     CREATE INDEX IF NOT EXISTS idx_phase_artifacts_ticket ON phase_artifacts(ticket_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_ticket_phase ON opencode_sessions(ticket_id, phase, state);
+    CREATE INDEX IF NOT EXISTS idx_opencode_sessions_session_id ON opencode_sessions(session_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_error_occurrences_ticket_sequence
       ON ticket_error_occurrences(ticket_id, occurrence_number);
     CREATE INDEX IF NOT EXISTS idx_ticket_error_occurrences_open

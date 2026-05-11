@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs'
+import { tmpdir } from 'os'
 import { join } from 'path'
 import { safeAtomicWrite } from '../atomicWrite'
 import { safeAtomicAppend } from '../atomicAppend'
@@ -7,7 +8,7 @@ import { recoverOrphanTmpFiles, fixTrailingLineCorruption } from '../recovery'
 import { readJsonl, writeJsonl, appendJsonl } from '../jsonl'
 import { readYamlFile, writeYamlFile } from '../yaml'
 
-const TEST_DIR = `/tmp/looptroop-test-${process.pid}-${Date.now()}`
+const TEST_DIR = join(tmpdir(), `looptroop-test-${process.pid}-${Date.now()}`)
 
 beforeEach(() => {
   mkdirSync(TEST_DIR, { recursive: true })

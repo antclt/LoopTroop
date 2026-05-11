@@ -30,11 +30,21 @@ function getRequestToken(c: Context): string | null {
 
 export function createApiAuthMiddleware(options: ApiAuthOptions = {}) {
   const configuredToken = options.token ?? process.env.LOOPTROOP_API_TOKEN?.trim()
+  const allowUnauthenticated = process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED === '1'
 
   return async (c: Context, next: Next) => {
-    if (c.req.method === 'OPTIONS' || !configuredToken) {
+    if (c.req.method === 'OPTIONS') {
       await next()
       return
+    }
+
+    if (!configuredToken) {
+      if (allowUnauthenticated) {
+        console.warn('[apiAuth] Running without API token authentication. Set LOOPTROOP_API_TOKEN to secure the API.')
+        await next()
+        return
+      }
+      return c.json({ error: 'API token not configured' }, 503)
     }
 
     const requestToken = getRequestToken(c)

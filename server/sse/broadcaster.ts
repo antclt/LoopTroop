@@ -6,6 +6,7 @@ interface SSEClient {
   ticketId: string
   send: (event: string, data: string, id: string) => void
   close: () => void
+  interval?: ReturnType<typeof setInterval>
 }
 
 interface BufferedSSEEvent {
@@ -124,6 +125,9 @@ class SSEBroadcaster {
   clearTicket(ticketId: string) {
     const clients = this.clients.get(ticketId) ?? []
     for (const client of clients) {
+      if (client.interval) {
+        clearInterval(client.interval)
+      }
       try {
         client.close()
       } catch {

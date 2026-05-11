@@ -50,7 +50,7 @@ vi.mock('@/components/shared/KeyboardShortcuts', () => ({
 }))
 
 vi.mock('@/hooks/useTickets', () => ({
-  useTickets: () => ({ data: mockState.tickets, isFetched: mockState.ticketsFetched }),
+  useTickets: () => ({ data: mockState.tickets, isFetched: mockState.ticketsFetched, isSuccess: true }),
 }))
 
 vi.mock('@/hooks/useProfile', () => ({

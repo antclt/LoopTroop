@@ -605,5 +605,5 @@ export function attachWorkflowRunner(
   // restored snapshot. Hydrated tickets need the active state to be processed
   // immediately after the runner is attached, otherwise work can sit idle until
   // some unrelated event arrives.
-  queueMicrotask(() => processSnapshot(actor.getSnapshot()))
+  processSnapshot(actor.getSnapshot())
 }

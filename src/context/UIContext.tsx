@@ -19,13 +19,30 @@ const defaultState: UIState = {
 
 const VALID_VIEWS: UIState['activeView'][] = ['kanban', 'ticket', 'project', 'config']
 
+function isValidUIState(value: unknown): value is Partial<UIState> {
+  if (typeof value !== 'object' || value === null) return false
+  const obj = value as Record<string, unknown>
+  if (obj.logPanelHeight !== undefined && (typeof obj.logPanelHeight !== 'number' || obj.logPanelHeight < 100)) return false
+  if (obj.sidebarOpen !== undefined && typeof obj.sidebarOpen !== 'boolean') return false
+  if (obj.theme !== undefined && !['light', 'dark', 'system'].includes(obj.theme as string)) return false
+  if (obj.activeView !== undefined && !VALID_VIEWS.includes(obj.activeView as UIState['activeView'])) return false
+  if (obj.filters !== undefined) {
+    const filters = obj.filters as Record<string, unknown>
+    if (typeof filters !== 'object' || filters === null) return false
+    if (filters.projectId !== undefined && filters.projectId !== null && typeof filters.projectId !== 'number') return false
+    if (filters.status !== undefined && filters.status !== null && typeof filters.status !== 'string') return false
+    if (filters.search !== undefined && typeof filters.search !== 'string') return false
+  }
+  return true
+}
+
 function getInitialState(): UIState {
   if (typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
-        const parsed = JSON.parse(stored) as Partial<UIState>
-        // Validate activeView — fall back to kanban if stale/invalid
+        const parsed = JSON.parse(stored) as unknown
+        if (!isValidUIState(parsed)) return defaultState
         const activeView = VALID_VIEWS.includes(parsed.activeView as UIState['activeView'])
           ? parsed.activeView
           : 'kanban'

@@ -299,6 +299,7 @@ export function detachProject(id: number): boolean {
   if (hasActiveProjectTickets(attached.folderPath)) {
     throw new Error('Cannot detach project while tickets are still active. Complete or cancel them first.')
   }
+  closeProjectDatabase(attached.folderPath)
   appDb.delete(attachedProjects).where(eq(attachedProjects.id, id)).run()
   return true
 }

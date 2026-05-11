@@ -36,6 +36,18 @@ streamRouter.get('/stream', (c) => {
   return streamSSE(c, async (stream) => {
     const clientId = `${ticketId}-${Date.now()}-${randomBytes(6).toString('hex')}`
 
+    // Keep connection alive with heartbeat
+    const interval = setInterval(async () => {
+      try {
+        await stream.writeSSE({
+          event: 'heartbeat',
+          data: JSON.stringify({ timestamp: new Date().toISOString() }),
+        })
+      } catch {
+        cleanupStreamClient(ticketId, clientId, interval)
+      }
+    }, 30000)
+
     // Register client with broadcaster
     broadcaster.addClient(ticketId, {
       id: clientId,
@@ -49,6 +61,7 @@ streamRouter.get('/stream', (c) => {
       close: () => {
         // stream cleanup handled by onAbort
       },
+      interval,
     })
 
     try {
@@ -70,18 +83,6 @@ streamRouter.get('/stream', (c) => {
       broadcaster.removeClient(ticketId, clientId)
       throw error
     }
-
-    // Keep connection alive with heartbeat
-    const interval = setInterval(async () => {
-      try {
-        await stream.writeSSE({
-          event: 'heartbeat',
-          data: JSON.stringify({ timestamp: new Date().toISOString() }),
-        })
-      } catch {
-        cleanupStreamClient(ticketId, clientId, interval)
-      }
-    }, 30000)
 
     // Clean up on close
     stream.onAbort(() => {
