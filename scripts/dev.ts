@@ -12,6 +12,7 @@ const repoRoot = resolve(__dirname, '..')
 const requestedBaseUrl = process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim() || DEFAULT_OPENCODE_BASE_URL
 const hasExplicitBaseUrl = Boolean(process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim())
 const childEnv = { ...process.env }
+const isStartupMaintenanceOptedIn = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
 const preflightReport = readDevPreflightReport()
 let shutdownSignal: NodeJS.Signals | null = null
 let shutdownStartedAtMs: number | null = null
@@ -41,6 +42,11 @@ if (status === 'ready-to-start' && !childEnv.OPENCODE_SERVER_PASSWORD?.trim()) {
   childEnv.OPENCODE_SERVER_USERNAME = childEnv.OPENCODE_SERVER_USERNAME?.trim() || 'opencode'
   childEnv.OPENCODE_SERVER_PASSWORD = randomBytes(18).toString('base64url')
   console.log('[dev] Securing the local OpenCode dev server with ephemeral basic auth.')
+}
+
+if (!childEnv.LOOPTROOP_API_TOKEN?.trim()) {
+  childEnv.LOOPTROOP_API_TOKEN = randomBytes(24).toString('base64url')
+  console.log('[dev] Securing the local LoopTroop API with an ephemeral token.')
 }
 
 function printSummaryLine(label: string, value: string) {
@@ -138,7 +144,9 @@ if (preflightReport) {
   } else if (preflightReport.opencode.deferred) {
     printSummaryLine(
       'OpenCode CLI',
-      `Deferred daily upgrade check; last completed today at ${formatMaintenanceTimestamp(preflightReport.opencode.lastCompletedAt)}`,
+      isStartupMaintenanceOptedIn && preflightReport.opencode.lastCompletedAt
+        ? `Deferred opt-in upgrade check; last completed today at ${formatMaintenanceTimestamp(preflightReport.opencode.lastCompletedAt)}`
+        : 'Not run during startup; use npm run opencode:upgrade or LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev',
     )
   } else if (!preflightReport.opencode.available) {
     printSummaryLine('OpenCode CLI', 'Local opencode binary not found; skipped automatic CLI upgrade')
@@ -161,7 +169,9 @@ if (preflightReport) {
   } else if (preflightReport.dependencySync.deferred) {
     printSummaryLine(
       'Dependencies',
-      `Deferred daily npm latest check; last completed today at ${formatMaintenanceTimestamp(preflightReport.dependencySync.lastCompletedAt)}`,
+      isStartupMaintenanceOptedIn && preflightReport.dependencySync.lastCompletedAt
+        ? `Deferred opt-in npm latest check; last completed today at ${formatMaintenanceTimestamp(preflightReport.dependencySync.lastCompletedAt)}`
+        : 'Not run during startup; use npm run deps:sync or LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev',
     )
   } else if (preflightReport.dependencySync.alreadyCurrent) {
     printSummaryLine('Dependencies', 'All direct dependencies already matched npm latest stable')
@@ -179,7 +189,9 @@ if (preflightReport) {
   } else if (preflightReport.audit.deferred) {
     printSummaryLine(
       'Audit',
-      `Deferred daily remediation; last completed today at ${formatMaintenanceTimestamp(preflightReport.audit.lastCompletedAt)}`,
+      isStartupMaintenanceOptedIn && preflightReport.audit.lastCompletedAt
+        ? `Deferred opt-in remediation; last completed today at ${formatMaintenanceTimestamp(preflightReport.audit.lastCompletedAt)}`
+        : 'Not run during startup; use npm run audit:remediate or LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev',
     )
   } else if (preflightReport.audit.unresolved.length === 0) {
     printSummaryLine('Audit', 'No remaining npm audit findings after remediation')
@@ -196,8 +208,8 @@ if (preflightReport) {
 }
 
 printDivider('Service Plan')
-console.log('[dev] Step 1        Preflight maintenance already completed before this launcher started.')
-console.log('[dev]               Purpose: install missing packages, then run daily-gated dependency sync, audit remediation, and OpenCode CLI refresh when due.')
+console.log('[dev] Step 1        Preflight checks already completed before this launcher started.')
+console.log('[dev]               Purpose: install missing packages, validate ports, and leave dependency/audit/OpenCode maintenance to explicit opt-in commands.')
 
 services.forEach((service, index) => {
   const stepNumber = index + 2

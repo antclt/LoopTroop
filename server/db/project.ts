@@ -58,7 +58,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS tickets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       external_id TEXT NOT NULL UNIQUE,
-      project_id INTEGER NOT NULL REFERENCES projects(id),
+      project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       description TEXT,
       priority INTEGER DEFAULT 3,
@@ -86,7 +86,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS phase_artifacts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ticket_id INTEGER NOT NULL REFERENCES tickets(id),
+      ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
       phase TEXT NOT NULL,
       phase_attempt INTEGER NOT NULL DEFAULT 1,
       artifact_type TEXT,
@@ -97,7 +97,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS ticket_phase_attempts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ticket_id INTEGER NOT NULL REFERENCES tickets(id),
+      ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
       phase TEXT NOT NULL,
       attempt_number INTEGER NOT NULL,
       state TEXT NOT NULL DEFAULT 'active',
@@ -109,7 +109,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
     CREATE TABLE IF NOT EXISTS opencode_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL,
-      ticket_id INTEGER REFERENCES tickets(id),
+      ticket_id INTEGER REFERENCES tickets(id) ON DELETE SET NULL,
       phase TEXT NOT NULL,
       phase_attempt INTEGER DEFAULT 1,
       member_id TEXT,
@@ -125,7 +125,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS ticket_status_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ticket_id INTEGER NOT NULL REFERENCES tickets(id),
+      ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
       previous_status TEXT,
       new_status TEXT NOT NULL,
       reason TEXT,
@@ -134,7 +134,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
 
     CREATE TABLE IF NOT EXISTS ticket_error_occurrences (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ticket_id INTEGER NOT NULL REFERENCES tickets(id),
+      ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
       occurrence_number INTEGER NOT NULL,
       blocked_from_status TEXT NOT NULL,
       error_message TEXT,
@@ -192,6 +192,37 @@ function initializeProjectSqlite(sqlite: Database.Database) {
   `)
 }
 
+function cleanupProjectForeignKeyOrphans(sqlite: Database.Database) {
+  sqlite.exec(`
+    DELETE FROM phase_artifacts
+    WHERE ticket_id NOT IN (SELECT id FROM tickets)
+      OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
+
+    DELETE FROM ticket_phase_attempts
+    WHERE ticket_id NOT IN (SELECT id FROM tickets)
+      OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
+
+    UPDATE opencode_sessions
+    SET ticket_id = NULL
+    WHERE ticket_id IS NOT NULL
+      AND (
+        ticket_id NOT IN (SELECT id FROM tickets)
+        OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects))
+      );
+
+    DELETE FROM ticket_status_history
+    WHERE ticket_id NOT IN (SELECT id FROM tickets)
+      OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
+
+    DELETE FROM ticket_error_occurrences
+    WHERE ticket_id NOT IN (SELECT id FROM tickets)
+      OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
+
+    DELETE FROM tickets
+    WHERE project_id NOT IN (SELECT id FROM projects);
+  `)
+}
+
 export function getProjectDatabase(projectRoot: string): ProjectDatabase {
   const dbPath = getProjectDbPath(projectRoot)
   const cached = projectDbCache.get(projectRoot)
@@ -207,6 +238,8 @@ export function getProjectDatabase(projectRoot: string): ProjectDatabase {
   sqlite.pragma('synchronous=NORMAL')
   sqlite.pragma(`busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}`)
   initializeProjectSqlite(sqlite)
+  cleanupProjectForeignKeyOrphans(sqlite)
+  sqlite.pragma('foreign_keys=ON')
 
   const projectDb: ProjectDatabase = {
     sqlite,

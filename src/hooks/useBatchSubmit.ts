@@ -1,6 +1,7 @@
 import { useCallback, useState, useEffect, useRef } from 'react'
 import { useSubmitBatch, useSkipInterview, useTicketUIState, useSaveTicketUIState } from '@/hooks/useTickets'
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
+import { INTERVIEW_BATCH_EVENT, parseInterviewBatchEventDetail } from '@/lib/interviewBatchEvents'
 import type { PersistedInterviewBatch } from '@shared/interviewSession'
 
 const INTERVIEW_DRAFTS_SCOPE = 'interview-drafts'
@@ -25,6 +26,28 @@ function deserializeSkipped(map: Record<string, string[]>): Record<string, Set<s
   for (const [key, arr] of Object.entries(map)) {
     result[key] = new Set(arr)
   }
+  return result
+}
+
+function removeSkippedSelectedOptions(
+  selectedOptions: Record<string, Record<string, string[]>>,
+  skippedMap: Record<string, Set<string>>,
+): Record<string, Record<string, string[]>> {
+  const result: Record<string, Record<string, string[]>> = {}
+
+  for (const [batchKey, batchOptions] of Object.entries(selectedOptions)) {
+    const skippedQuestionIds = skippedMap[batchKey]
+    if (!skippedQuestionIds || skippedQuestionIds.size === 0) {
+      result[batchKey] = batchOptions
+      continue
+    }
+
+    const filteredBatchOptions = Object.fromEntries(
+      Object.entries(batchOptions).filter(([questionId]) => !skippedQuestionIds.has(questionId)),
+    )
+    result[batchKey] = filteredBatchOptions
+  }
+
   return result
 }
 
@@ -67,21 +90,29 @@ export function useBatchSubmit(ticketId: string) {
     const persisted = persistedDrafts.data
     const frame = requestAnimationFrame(() => {
       if (persisted) {
+        const persistedSkippedQuestions = persisted.skippedQuestions
+          ? deserializeSkipped(persisted.skippedQuestions)
+          : {}
         if (persisted.draftAnswers && Object.keys(persisted.draftAnswers).length > 0) {
           setDraftAnswers(persisted.draftAnswers)
         }
         if (persisted.skippedQuestions && Object.keys(persisted.skippedQuestions).length > 0) {
-          setSkippedQuestions(deserializeSkipped(persisted.skippedQuestions))
+          setSkippedQuestions(persistedSkippedQuestions)
         }
         if (persisted.selectedOptions && Object.keys(persisted.selectedOptions).length > 0) {
-          setBatchSelectedOptions(persisted.selectedOptions)
+          setBatchSelectedOptions(removeSkippedSelectedOptions(persisted.selectedOptions, persistedSkippedQuestions))
         }
       }
 
+      const snapshotSkippedQuestions = persisted?.skippedQuestions
+        ? deserializeSkipped(persisted.skippedQuestions)
+        : {}
       const snapshot: PersistedInterviewDrafts = {
         draftAnswers: persisted?.draftAnswers ?? {},
         skippedQuestions: persisted?.skippedQuestions ?? {},
-        selectedOptions: persisted?.selectedOptions ?? {},
+        selectedOptions: persisted?.selectedOptions
+          ? removeSkippedSelectedOptions(persisted.selectedOptions, snapshotSkippedQuestions)
+          : {},
       }
       lastSavedSnapshotRef.current = JSON.stringify(snapshot)
       latestDraftSnapshotRef.current = {
@@ -94,27 +125,26 @@ export function useBatchSubmit(ticketId: string) {
     return () => cancelAnimationFrame(frame)
   }, [persistedDrafts])
 
-  // SSE handler
+  // Interview batch events forwarded from the ticket stream.
   useEffect(() => {
-    const handler = (event: MessageEvent) => {
-      try {
-        const data = JSON.parse(event.data) as { type?: string; ticketId?: string; batch?: PersistedInterviewBatch; error?: string }
-        if (String(data.ticketId) !== String(ticketId)) return
-        if (data.type === 'interview_batch' && data.batch) {
-          setSseBatch(data.batch)
-          setSubmittedBatchKey(null)
-          setProcessingError(null)
-        }
-        if (data.type === 'interview_error') {
-          setProcessingError(data.error ?? 'Failed to process interview batch')
-        }
-      } catch {
-        // Ignore malformed messages.
+    const handler = (event: Event) => {
+      const detail = parseInterviewBatchEventDetail((event as CustomEvent<unknown>).detail)
+      if (!detail || detail.ticketId !== ticketId) return
+
+      if (detail.type === 'interview_batch') {
+        setSseBatch(detail.batch)
+        setSubmittedBatchKey(null)
+        setProcessingError(null)
+        return
+      }
+
+      if (detail.type === 'interview_error') {
+        setProcessingError(detail.error || 'Failed to process interview batch')
       }
     }
 
-    window.addEventListener('message', handler)
-    return () => window.removeEventListener('message', handler)
+    window.addEventListener(INTERVIEW_BATCH_EVENT, handler)
+    return () => window.removeEventListener(INTERVIEW_BATCH_EVENT, handler)
   }, [ticketId])
 
   // Auto-save drafts with debounce
@@ -199,6 +229,18 @@ export function useBatchSubmit(ticketId: string) {
       next.add(questionId)
       return { ...current, [currentBatchKey]: next }
     })
+    setBatchSelectedOptions((current) => {
+      const batchOpts = current[currentBatchKey]
+      if (!batchOpts || !(questionId in batchOpts)) return current
+
+      const nextBatchOpts = { ...batchOpts }
+      delete nextBatchOpts[questionId]
+
+      return {
+        ...current,
+        [currentBatchKey]: nextBatchOpts,
+      }
+    })
   }, [])
 
   const handleUnskipQuestion = useCallback((currentBatchKey: string | null, questionId: string) => {
@@ -250,7 +292,11 @@ export function useBatchSubmit(ticketId: string) {
     if (!currentBatch || !currentBatchKey) return
 
     try {
-      const selectedOptions = batchSelectedOptions[currentBatchKey] ?? {}
+      const skippedQuestionIds = skippedQuestions[currentBatchKey] ?? new Set<string>()
+      const selectedOptions = Object.fromEntries(
+        Object.entries(batchSelectedOptions[currentBatchKey] ?? {})
+          .filter(([questionId]) => !skippedQuestionIds.has(questionId)),
+      )
       await submitBatchMutation({
         ticketId,
         answers: batchAnswers,
@@ -279,7 +325,7 @@ export function useBatchSubmit(ticketId: string) {
     } catch (err) {
       console.error('Failed to submit interview batch:', err)
     }
-  }, [submitBatchMutation, batchSelectedOptions, ticketId])
+  }, [submitBatchMutation, batchSelectedOptions, skippedQuestions, ticketId])
 
   const handleConfirmSkipAll = useCallback(async (
     currentBatch: PersistedInterviewBatch | null,

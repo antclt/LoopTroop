@@ -295,6 +295,40 @@ describe('useSSE', () => {
     })
   })
 
+  it('dispatches app-level errors from the app_error SSE event', async () => {
+    const ticketId = '1:T-42'
+    const onEvent = vi.fn<SSEHandler>()
+
+    renderHook(() => useSSE({ ticketId, onEvent }))
+
+    await waitFor(() => {
+      expect(MockEventSource.instances).toHaveLength(1)
+    })
+
+    const source = MockEventSource.instances[0]!
+
+    await act(async () => {
+      source.emit('app_error', {
+        ticketId,
+        phase: 'CODING',
+        message: 'Final test failed',
+      }, '6')
+    })
+
+    await waitFor(() => {
+      expect(onEvent).toHaveBeenCalledWith({
+        type: 'app_error',
+        data: expect.objectContaining({
+          ticketId,
+          phase: 'CODING',
+          message: 'Final test failed',
+        }),
+      })
+    })
+
+    expect(localStorage.getItem(`looptroop-sse-last-event-id:${ticketId}`)).toBe('6')
+  })
+
   it('persists the last SSE event id per ticket and resumes from it', async () => {
     const ticketId = '1:T-42'
     const storageKey = `looptroop-sse-last-event-id:${ticketId}`

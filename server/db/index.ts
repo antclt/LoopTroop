@@ -71,6 +71,7 @@ sqlite.pragma('locking_mode=NORMAL')
 sqlite.pragma('synchronous=NORMAL')
 sqlite.pragma(`busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}`)
 sqlite.pragma('wal_autocheckpoint=1000')
+sqlite.pragma('foreign_keys=ON')
 
 export const db = drizzle(sqlite, { schema })
 export {

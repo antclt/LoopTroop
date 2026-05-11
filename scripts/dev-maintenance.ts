@@ -512,7 +512,9 @@ function summarizeAuditIssues(vulnerabilities: Record<string, {
   })
 }
 
-export function ensureInstallIfNeeded({ verbose = false }: { verbose?: boolean } = {}): InstallReport {
+export function ensureInstallIfNeeded(
+  { verbose = false, allowForceFallback = false }: { verbose?: boolean; allowForceFallback?: boolean } = {},
+): InstallReport {
   const reasons = getInstallReasons()
   if (reasons.length === 0) {
     return {
@@ -523,15 +525,16 @@ export function ensureInstallIfNeeded({ verbose = false }: { verbose?: boolean }
     }
   }
 
-  console.log('[dev-preflight] Running npm install before starting dev:')
+  const installCommand = allowForceFallback ? 'install' : 'ci'
+  console.log(`[dev-preflight] Running npm ${installCommand} before starting dev:`)
   for (const reason of reasons) {
     console.log(`[dev-preflight] - ${reason}`)
   }
 
   try {
-    const result = runInstallCommand(['install', ...npmInstallFlags], 'npm install', {
+    const result = runInstallCommand([installCommand, ...npmInstallFlags], `npm ${installCommand}`, {
       verbose,
-      allowForceFallback: true,
+      allowForceFallback,
     })
 
     return {

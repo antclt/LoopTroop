@@ -1,4 +1,4 @@
-export type SSEEventType = 'state_change' | 'log' | 'progress' | 'error' | 'bead_complete' | 'needs_input' | 'artifact_change'
+export type SSEEventType = 'state_change' | 'log' | 'progress' | 'app_error' | 'bead_complete' | 'needs_input' | 'artifact_change'
 
 export interface SSEEvent {
   id: string

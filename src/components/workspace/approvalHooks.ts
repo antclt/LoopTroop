@@ -1,4 +1,5 @@
 import { useEffect, useRef, type MutableRefObject } from 'react'
+import { nextTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
 
 interface SaveTicketUiStateInput<T> {
   ticketId: string
@@ -18,12 +19,9 @@ interface UseDebouncedApprovalUiStateOptions<T> {
   delayMs?: number
 }
 
-function buildTicketUiStatePayload(scope: string, data: unknown): string {
-  return JSON.stringify({ scope, data })
-}
-
 export function flushTicketUiStateSnapshot<T>(ticketId: string, scope: string, data: T): boolean {
-  const payload = buildTicketUiStatePayload(scope, data)
+  const clientRevision = nextTicketUiStateRevision(ticketId, scope)
+  const payload = JSON.stringify({ scope, data, clientRevision })
 
   if (typeof fetch === 'function') {
     try {

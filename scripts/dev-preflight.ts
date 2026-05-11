@@ -38,7 +38,7 @@ const packageLockPath = resolve(repoRoot, 'package-lock.json')
 const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
 const shouldSkipDependencyMaintenance = process.env.LOOPTROOP_DEV_SKIP_DEPS === '1'
 const shouldSkipOpenCodeUpgrade = process.env.LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE === '1'
-const shouldForceDailyMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
+const shouldRunStartupMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
 
 const configuredPorts = [
   { label: 'frontend', port: getFrontendPort() },
@@ -47,8 +47,16 @@ const configuredPorts = [
 ]
 
 function listProcesses() {
-  const output = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' })
-  return parseProcessTable(output)
+  try {
+    const output = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' })
+    return parseProcessTable(output)
+  } catch (error) {
+    if (isVerboseLogging) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.warn(`[dev-preflight] Process table inspection is unavailable on this platform: ${message}`)
+    }
+    return []
+  }
 }
 
 function collectProtectedPids(currentPid: number, graph: ReturnType<typeof buildProcessGraph>) {
@@ -148,7 +156,7 @@ async function reclaimOccupiedPorts(ports: number[]) {
     const inspection = inspectPortOccupants(port)
     const occupantPids = inspection.occupants
       .map((occupant) => occupant.pid)
-      .filter((pid): pid is number => Number.isInteger(pid) && pid > 0 && pid !== process.pid)
+      .filter((pid): pid is number => typeof pid === 'number' && Number.isInteger(pid) && pid > 0 && pid !== process.pid)
     const resolution = resolveProcessTreesToTerminate(processes, occupantPids, repoRoot)
     for (const root of resolution.roots) {
       if (protectedPids.has(root.pid)) continue
@@ -236,7 +244,7 @@ if (installReport.errors.length > 0) {
 const dependencySyncDecision = decideDailyMaintenanceTask({
   taskName: 'dependencySync',
   state: maintenanceState,
-  force: shouldForceDailyMaintenance,
+  force: shouldRunStartupMaintenance,
   invalidatedByPaths: [packageJsonPath],
 })
 
@@ -245,7 +253,7 @@ const dependencySyncReport = shouldSkipDependencyMaintenance
     verbose: isVerboseLogging,
     skip: true,
   })
-  : dependencySyncDecision.shouldRun
+  : shouldRunStartupMaintenance && dependencySyncDecision.shouldRun
     ? syncDirectDependencies({
       verbose: isVerboseLogging,
       skip: false,
@@ -269,14 +277,14 @@ for (const error of dependencySyncReport.errors) {
 if (dependencySyncReport.errors.length > 0) {
   process.exit(1)
 }
-if (!shouldSkipDependencyMaintenance && dependencySyncDecision.shouldRun && dependencySyncReport.checked && dependencySyncReport.errors.length === 0) {
+if (!shouldSkipDependencyMaintenance && shouldRunStartupMaintenance && dependencySyncDecision.shouldRun && dependencySyncReport.checked && dependencySyncReport.errors.length === 0) {
   recordDailyMaintenanceSuccess(maintenanceState, 'dependencySync')
 }
 
 const auditDecision = decideDailyMaintenanceTask({
   taskName: 'audit',
   state: maintenanceState,
-  force: shouldForceDailyMaintenance,
+  force: shouldRunStartupMaintenance,
   invalidatedByPaths: [packageJsonPath, packageLockPath],
 })
 
@@ -285,7 +293,7 @@ const auditReport = shouldSkipDependencyMaintenance
     verbose: isVerboseLogging,
     skip: true,
   })
-  : auditDecision.shouldRun
+  : shouldRunStartupMaintenance && auditDecision.shouldRun
     ? remediateAudit({
       verbose: isVerboseLogging,
       skip: false,
@@ -315,14 +323,14 @@ for (const error of auditReport.errors) {
 if (auditReport.errors.length > 0) {
   process.exit(1)
 }
-if (!shouldSkipDependencyMaintenance && auditDecision.shouldRun && auditReport.errors.length === 0) {
+if (!shouldSkipDependencyMaintenance && shouldRunStartupMaintenance && auditDecision.shouldRun && auditReport.errors.length === 0) {
   recordDailyMaintenanceSuccess(maintenanceState, 'audit')
 }
 
 const opencodeDecision = decideDailyMaintenanceTask({
   taskName: 'opencode',
   state: maintenanceState,
-  force: shouldForceDailyMaintenance,
+  force: shouldRunStartupMaintenance,
 })
 
 const opencodeReport = shouldSkipOpenCodeUpgrade
@@ -330,7 +338,7 @@ const opencodeReport = shouldSkipOpenCodeUpgrade
     verbose: isVerboseLogging,
     skip: true,
   })
-  : opencodeDecision.shouldRun
+  : shouldRunStartupMaintenance && opencodeDecision.shouldRun
     ? upgradeOpenCodeCli({
       verbose: isVerboseLogging,
       skip: false,
@@ -353,7 +361,7 @@ for (const error of opencodeReport.errors) {
 if (opencodeReport.errors.length > 0) {
   process.exit(1)
 }
-if (!shouldSkipOpenCodeUpgrade && opencodeDecision.shouldRun && opencodeReport.errors.length === 0 && opencodeReport.available) {
+if (!shouldSkipOpenCodeUpgrade && shouldRunStartupMaintenance && opencodeDecision.shouldRun && opencodeReport.errors.length === 0 && opencodeReport.available) {
   recordDailyMaintenanceSuccess(maintenanceState, 'opencode')
 }
 
@@ -362,7 +370,7 @@ writeDailyMaintenanceState(maintenanceState)
 const missingBinsAfterMaintenance = getMissingBins()
 if (missingBinsAfterMaintenance.length > 0) {
   console.error(
-    '[dev-preflight] Required dev tools are missing after dependency maintenance: ' +
+    '[dev-preflight] Required dev tools are missing after dependency install checks: ' +
     missingBinsAfterMaintenance.join(', '),
   )
   process.exit(1)
@@ -401,7 +409,7 @@ for (const { label, port } of configuredPorts) {
     const inspection = inspectPortOccupants(port)
     const occupantPids = inspection.occupants
       .map((occupant) => occupant.pid)
-      .filter((pid): pid is number => Number.isInteger(pid) && pid > 0 && pid !== process.pid)
+      .filter((pid): pid is number => typeof pid === 'number' && Number.isInteger(pid) && pid > 0 && pid !== process.pid)
     const remainingProcesses = listProcesses()
     const resolution = resolveProcessTreesToTerminate(remainingProcesses, occupantPids, repoRoot)
     if (resolution.roots.length > 0) {
@@ -435,6 +443,11 @@ for (const { label, port } of configuredPorts) {
 
 if (shouldSkipDependencyMaintenance) {
   console.log('[dev-preflight] Skipped dependency sync and audit remediation because LOOPTROOP_DEV_SKIP_DEPS=1.')
+} else if (!shouldRunStartupMaintenance) {
+  console.log(
+    '[dev-preflight] Dependency sync and npm audit remediation are opt-in; run `npm run deps:sync`, ' +
+    '`npm run audit:remediate`, or set LOOPTROOP_DEV_FORCE_MAINTENANCE=1 before `npm run dev`.',
+  )
 } else {
   if (dependencySyncReport.deferred) {
     console.log(
@@ -469,6 +482,11 @@ if (shouldSkipDependencyMaintenance) {
 
 if (opencodeReport.skipped) {
   console.log('[dev-preflight] Skipped OpenCode CLI upgrade because LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1.')
+} else if (!shouldRunStartupMaintenance) {
+  console.log(
+    '[dev-preflight] OpenCode CLI upgrade is opt-in; run `npm run opencode:upgrade` or set ' +
+    'LOOPTROOP_DEV_FORCE_MAINTENANCE=1 before `npm run dev`.',
+  )
 } else if (opencodeReport.deferred) {
   console.log(
     `[dev-preflight] Skipped daily OpenCode CLI upgrade check; it already ran today at ${formatTimestamp(opencodeReport.lastCompletedAt)}.`,

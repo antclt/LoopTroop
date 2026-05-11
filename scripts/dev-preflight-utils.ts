@@ -14,17 +14,17 @@ export function parseProcessTable(output: string): ProcessInfo[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => {
+    .flatMap((line) => {
       const match = line.match(/^(\d+)\s+(\d+)\s+(.+)$/)
       if (!match) {
-        throw new Error(`Unable to parse process table line: ${line}`)
+        return []
       }
 
-      return {
+      return [{
         pid: Number(match[1]),
         ppid: Number(match[2]),
         args: match[3]!,
-      }
+      }]
     })
     .filter((entry) => Number.isInteger(entry.pid) && entry.pid > 0)
 }
@@ -44,7 +44,27 @@ export function buildProcessGraph(processes: ProcessInfo[]): ProcessGraph {
 }
 
 function normalizeCommandLine(args: string): string {
-  return args.trim().replace(/\s+/g, ' ')
+  return args.trim().replace(/\\/g, '/').replace(/\s+/g, ' ')
+}
+
+function normalizePathFragment(path: string): string {
+  return path.replace(/\\/g, '/').replace(/\/+$/, '')
+}
+
+function getPathFragmentVariants(path: string): string[] {
+  const normalized = normalizePathFragment(path)
+  const variants = new Set<string>([normalized])
+  const wslDriveMatch = normalized.match(/^\/mnt\/([a-z])\/(.+)$/i)
+  if (wslDriveMatch) {
+    variants.add(`${wslDriveMatch[1]?.toUpperCase()}:/${wslDriveMatch[2]}`)
+  }
+
+  const windowsDriveMatch = normalized.match(/^([a-z]):\/(.+)$/i)
+  if (windowsDriveMatch) {
+    variants.add(`/mnt/${windowsDriveMatch[1]?.toLowerCase()}/${windowsDriveMatch[2]}`)
+  }
+
+  return [...variants]
 }
 
 function isFragmentBoundary(char?: string) {
@@ -71,17 +91,24 @@ function containsCommandFragment(command: string, fragment: string): boolean {
 
 export function isLoopTroopDevProcess(args: string, repoRoot: string): boolean {
   const command = normalizeCommandLine(args)
+  const repoPathMarkers = getPathFragmentVariants(repoRoot).flatMap((root) => [
+    `${root}/scripts/dev.ts`,
+    `${root}/scripts/dev-backend.ts`,
+    `${root}/node_modules/.bin/vite`,
+    `${root}/node_modules/.bin/vite.cmd`,
+    `${root}/node_modules/.bin/concurrently`,
+    `${root}/node_modules/.bin/concurrently.cmd`,
+    `${root}/scripts/dev-opencode.ts`,
+    `${root}/server/index.ts`,
+  ])
   const repoMarkers = [
-    `${repoRoot}/scripts/dev.ts`,
-    `${repoRoot}/scripts/dev-backend.ts`,
-    `${repoRoot}/node_modules/.bin/vite`,
-    `${repoRoot}/node_modules/.bin/concurrently`,
-    `${repoRoot}/scripts/dev-opencode.ts`,
+    ...repoPathMarkers,
     'scripts/dev.ts',
     'scripts/dev-backend.ts',
-    `${repoRoot}/server/index.ts`,
     'node_modules/.bin/vite',
+    'node_modules/.bin/vite.cmd',
     'node_modules/.bin/concurrently',
+    'node_modules/.bin/concurrently.cmd',
     'scripts/dev-opencode.ts',
     'tsx watch server/index.ts',
     'server/index.ts',
@@ -93,7 +120,7 @@ export function isLoopTroopDevProcess(args: string, repoRoot: string): boolean {
     'npm:dev:backend',
   ]
 
-  return repoMarkers.some((marker) => containsCommandFragment(command, marker))
+  return repoMarkers.some((marker) => containsCommandFragment(command, normalizePathFragment(marker)))
 }
 
 export function findOwningRootProcess(

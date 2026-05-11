@@ -7,9 +7,7 @@ This guide covers the parts of LoopTroop you deal with after the first run: star
 | Task | Start here |
 | --- | --- |
 | Start the full local stack | `npm run dev` |
-| Start once without dependency/audit mutation | `LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev` |
-| Skip only the local OpenCode CLI upgrade | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev` |
-| Force all startup maintenance now | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
+| Run dependency/audit/OpenCode maintenance during startup | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
 | Show raw maintenance output | `LOOPTROOP_DEV_VERBOSE=1 npm run dev` |
 | Diagnose slow UI or ticket refresh stalls | `npm run diagnose:stall` |
 | Clean tracked LoopTroop runtime paths from a project | `git rm --cached -r .looptroop` inside the attached project |
@@ -29,24 +27,21 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 
 ## Startup Maintenance
 
-`npm run dev` starts the frontend, backend, docs server, and OpenCode watcher stack. Before those services launch, LoopTroop runs a dev preflight that:
+`npm run dev` starts the frontend, backend, docs server, and OpenCode watcher stack. Before those services launch, LoopTroop runs a read-mostly dev preflight that:
 
-- upgrades the local `opencode` CLI to the latest available version when the binary is installed
-- checks direct dependencies against npm `latest`
-- updates stale direct dependencies to latest stable releases
-- runs `npm audit fix` without `--force`
-- prints an unresolved audit summary before the stack starts
+- verifies required local dev binaries exist, using `npm ci` when dependencies need to be restored
+- checks and reclaims only stale LoopTroop-owned processes on configured ports
 - prints the startup plan for each dev service
+- defers dependency sync, audit remediation, and OpenCode CLI upgrades unless `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` is set
 
 `npm run dev` also resolves the local OpenCode server endpoint before the dev services launch:
 
 - **Reuse:** if the configured address is already responding to authenticated requests, `npm run dev` reuses that running instance.
 - **Port fallback:** if the default port (`4096`) is occupied by a non-OpenCode process, `npm run dev` scans for the next free port and starts OpenCode there instead.
 - **Ephemeral auth:** if `OPENCODE_SERVER_PASSWORD` is not set and a new local OpenCode server is about to start, `npm run dev` generates a random credential and sets `OPENCODE_SERVER_USERNAME` to `opencode`. This credential is propagated automatically to all child processes — backend and watcher — for the duration of the session.
+- **Ephemeral API token:** if `LOOPTROOP_API_TOKEN` is not set, `npm run dev` generates one for the backend and frontend so local `/api/*` calls are protected for that session.
 
-This means `npm run dev` can intentionally mutate local dependency files when safe updates or audit fixes are available.
-
-The expensive networked maintenance work is daily-gated. OpenCode CLI upgrade checks, direct dependency sync, and npm audit remediation run on the first local dev start of the day. If `package.json` or `package-lock.json` changes later the same day, the affected maintenance step runs again immediately.
+By default, `npm run dev` does not update dependency versions and does not run `npm audit fix`. The networked maintenance work is available through explicit commands or by opting the next dev startup into it with `LOOPTROOP_DEV_FORCE_MAINTENANCE=1`.
 
 ## Maintenance Commands
 
@@ -61,8 +56,6 @@ npm run opencode:upgrade
 Use one-run startup flags when you want to change `npm run dev` behavior:
 
 ```bash
-LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev
-LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev
 LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev
 LOOPTROOP_DEV_VERBOSE=1 npm run dev
 ```
@@ -115,10 +108,14 @@ Run `test:client` and `test:server` separately when you only want to validate on
 
 | Script | Purpose |
 | --- | --- |
-| `db:generate` | Generate a migration SQL file from current changes in `server/db/schema.ts`. Run this after modifying the schema, then commit the generated migration file. |
-| `db:push` | Push schema changes directly to the local database without generating a migration file. Useful for rapid schema iteration during development. |
+| `db:generate` | Generate a migration SQL file for the app DB target. Alias for `db:generate:app`. |
+| `db:generate:app` | Generate migrations against the configured app database target. |
+| `db:generate:project` | Generate migrations against a project database target from `LOOPTROOP_PROJECT_DB_PATH`. |
+| `db:push` | Push schema changes directly to the app DB target. Alias for `db:push:app`. |
+| `db:push:app` | Push schema changes directly to the app database target. |
+| `db:push:project` | Push schema changes directly to the project database target from `LOOPTROOP_PROJECT_DB_PATH`. |
 
-Both commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview) and target the databases defined in the Drizzle config.
+All commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview). The default `drizzle.config.ts` points at `drizzle.app.config.ts`; project DB work should use the explicit project scripts.
 
 ## Environment Variables
 
@@ -126,16 +123,23 @@ Both commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview) and 
 | --- | --- |
 | `LOOPTROOP_FRONTEND_PORT` | Override frontend port; also drives the default frontend origin when `LOOPTROOP_FRONTEND_ORIGIN` is unset |
 | `LOOPTROOP_FRONTEND_ORIGIN` | Override full frontend origin URL, for example `http://my-server:5173`; a valid explicit origin takes precedence over `LOOPTROOP_FRONTEND_PORT`, while an invalid value falls back to the default origin |
+| `LOOPTROOP_BACKEND_HOST` | Backend bind host; defaults to `127.0.0.1` |
 | `LOOPTROOP_BACKEND_PORT` | Override backend port |
+| `LOOPTROOP_ALLOW_REMOTE_API=1` | Required before binding the backend to a non-loopback host |
+| `LOOPTROOP_API_TOKEN` | Optional token required by `/api/*`; `npm run dev` generates an ephemeral value when unset |
+| `LOOPTROOP_TRUST_PROXY=1` | Trust `x-forwarded-for` / `x-real-ip` for rate-limit buckets; leave unset unless a trusted proxy owns those headers |
+| `LOOPTROOP_ENABLE_DEV_EVENT=1` | Enable the development-only ticket event injection route when paired with `LOOPTROOP_DEV_EVENT_TOKEN` |
+| `LOOPTROOP_DEV_EVENT_TOKEN` | Required secret for the dev-event route when it is enabled |
 | `LOOPTROOP_DOCS_PORT` | Override docs port |
 | `LOOPTROOP_DOCS_ORIGIN` | Override full docs origin URL, for example `http://my-server:5174`; takes precedence over `LOOPTROOP_DOCS_PORT` |
 | `LOOPTROOP_OPENCODE_BASE_URL` | Point LoopTroop at a specific OpenCode server |
 | `LOOPTROOP_CONFIG_DIR` | Override the app config directory |
 | `LOOPTROOP_APP_DB_PATH` | Override the app database path directly |
+| `LOOPTROOP_PROJECT_DB_PATH` | Project database target for explicit Drizzle project DB commands |
 | `LOOPTROOP_DEV_VERBOSE=1` | Print full dependency, audit, and process details during dev preflight |
-| `LOOPTROOP_DEV_SKIP_DEPS=1` | Skip automatic dependency sync and audit remediation during `npm run dev` |
-| `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1` | Skip the automatic local OpenCode CLI upgrade during `npm run dev` |
-| `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` | Bypass the once-per-day maintenance gate and force all startup maintenance checks now |
+| `LOOPTROOP_DEV_SKIP_DEPS=1` | Skip dependency sync and audit remediation even when startup maintenance is explicitly requested |
+| `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1` | Skip OpenCode CLI upgrades even when startup maintenance is explicitly requested |
+| `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` | Opt the next `npm run dev` into dependency sync, audit remediation, and OpenCode CLI upgrade checks |
 | `LOOPTROOP_OPENCODE_MODE` | Set to `mock` to use the mock adapter instead of the real SDK adapter |
 | `CHOKIDAR_USEPOLLING` | Set to `1` to force chokidar polling for file watching; auto-set on mounted WSL drives, but can be overridden manually |
 | `OPENCODE_SERVER_USERNAME` | Basic auth username for the local OpenCode dev server; defaults to `opencode` when `OPENCODE_SERVER_PASSWORD` is also set |
@@ -146,7 +150,7 @@ Default local service addresses:
 | Service | Address |
 | --- | --- |
 | Frontend | `http://localhost:5173` |
-| Backend | `http://localhost:3000` |
+| Backend | `http://127.0.0.1:3000` |
 | Docs | `http://localhost:5174` |
 | OpenCode | `http://127.0.0.1:4096` |
 
@@ -155,6 +159,8 @@ When `LOOPTROOP_FRONTEND_ORIGIN` is not explicitly set, LoopTroop derives the fr
 ## API Rate Limits
 
 The backend applies a global per-client rate limit to `/api/*` routes. Read requests, normal write actions, and UI-state autosaves use separate buckets so frequent draft saves do not exhaust the workflow-action budget. Defaults are 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. If a client exceeds a limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
+
+Forwarded client IP headers are ignored unless `LOOPTROOP_TRUST_PROXY=1` is set. This keeps local clients from bypassing limits by spoofing `x-forwarded-for`.
 
 ## Project Git Hygiene
 
@@ -228,7 +234,7 @@ Checks:
 When using `npm run dev`, port resolution and basic auth are handled automatically. The checks below apply when OpenCode is still unreachable after startup or when running the backend outside of `npm run dev`.
 
 1. Ensure OpenCode is running: `opencode serve`.
-2. Ping the backend health endpoint: `curl http://localhost:3000/api/health/opencode`.
+2. Ping the backend health endpoint: `curl http://127.0.0.1:3000/api/health/opencode`. If you configured `LOOPTROOP_API_TOKEN`, include `-H "X-LoopTroop-Token: $LOOPTROOP_API_TOKEN"`.
 3. If OpenCode is on a non-default port, set `LOOPTROOP_OPENCODE_BASE_URL`, for example `export LOOPTROOP_OPENCODE_BASE_URL=http://127.0.0.1:4097`.
 4. If you started OpenCode outside of `npm run dev`, ensure `OPENCODE_SERVER_PASSWORD` and `OPENCODE_SERVER_USERNAME` match the values LoopTroop is using. A credential mismatch causes silently failed requests.
 
@@ -244,13 +250,12 @@ CHOKIDAR_USEPOLLING=1 npm run dev
 
 ## Audit Warnings
 
-Even after updating to the latest stable direct dependencies and running `npm audit fix`, some warnings can remain because the fix only exists upstream in a beta/prerelease line or has not shipped in stable yet.
+`npm audit --omit=dev` should be clean. A full `npm audit` can still report dev-only moderate findings through transitive dev-server tooling:
 
-- `better-sqlite3` still installs through deprecated `prebuild-install` on the latest stable line. LoopTroop keeps `better-sqlite3` for now instead of doing a driver migration just to remove that warning.
-- `drizzle-kit` stable still depends on deprecated `@esbuild-kit/*`. The upstream issue is tracked here: [drizzle-team/drizzle-orm#3067](https://github.com/drizzle-team/drizzle-orm/issues/3067).
-- `vitepress` stable still brings its own older Vite/esbuild line, so `npm audit` can report a leftover advisory until a new stable VitePress release lands: [GHSA-p9ff-h696-f583](https://github.com/advisories/GHSA-p9ff-h696-f583).
-- `mermaid` stable still depends on `uuid < 14`. The current advisory targets `uuid` `v3`/`v5`/`v6` buffer writes and is tracked here: [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq).
-- The older esbuild advisory commonly attached to Vite is documented by the Vite maintainers here: [vitejs/vite#19412](https://github.com/vitejs/vite/issues/19412).
+- `drizzle-kit` stable still depends on deprecated `@esbuild-kit/*`, which brings an older `esbuild`. The upstream issue is tracked here: [drizzle-team/drizzle-orm#3067](https://github.com/drizzle-team/drizzle-orm/issues/3067).
+- `vitepress` stable still brings its own older Vite/esbuild line. The current audit path reports the esbuild development-server advisory [GHSA-67mh-4wv8-2f99](https://github.com/advisories/GHSA-67mh-4wv8-2f99).
+
+Do not run `npm audit fix --force` as routine maintenance for these warnings. The current forced fix path proposes a breaking `drizzle-kit` downgrade and does not represent a safe application hardening change.
 
 ## Related Docs
 

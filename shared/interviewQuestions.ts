@@ -39,6 +39,17 @@ export interface ParseInterviewQuestionsOptions {
   allowTopLevelArray?: boolean
 }
 
+interface StructuredQuestionExtractionOptions extends ParseInterviewQuestionsOptions {
+  strictStructuredCollection?: boolean
+}
+
+class MalformedStructuredQuestionCollectionError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'MalformedStructuredQuestionCollectionError'
+  }
+}
+
 const QUESTION_COLLECTION_KEYS = new Set([
   'questions',
   'questionlist',
@@ -154,9 +165,32 @@ function looksLikeQuestionMapEntry(key: string, value: unknown): boolean {
   )
 }
 
-function convertQuestionMap(value: Record<string, unknown>): unknown[] {
+function buildMalformedStructuredQuestionCollectionError(targets: Array<string | number>): Error {
+  const formattedTargets = targets
+    .map((target) => typeof target === 'number' ? String(target + 1) : target)
+    .join(', ')
+  return new MalformedStructuredQuestionCollectionError(
+    `Invalid interview questions: structured questions collection contains malformed entries at ${formattedTargets}.`,
+  )
+}
+
+function convertQuestionMap(
+  value: Record<string, unknown>,
+  options: { strictStructuredCollection?: boolean } = {},
+): unknown[] {
   const entries = Object.entries(value)
-  if (entries.length === 0 || entries.some(([key, entry]) => !looksLikeQuestionMapEntry(key, entry))) {
+  const malformedKeys = entries
+    .filter(([key, entry]) => !looksLikeQuestionMapEntry(key, entry))
+    .map(([key]) => key)
+
+  if (entries.length === 0) {
+    return []
+  }
+
+  if (malformedKeys.length > 0) {
+    if (options.strictStructuredCollection) {
+      throw buildMalformedStructuredQuestionCollectionError(malformedKeys)
+    }
     return []
   }
 
@@ -173,7 +207,7 @@ function convertQuestionMap(value: Record<string, unknown>): unknown[] {
 
 function findQuestionCollection(
   value: unknown,
-  options: ParseInterviewQuestionsOptions,
+  options: StructuredQuestionExtractionOptions,
   depth: number = 0,
 ): unknown[] | null {
   if (depth > 4) return null
@@ -188,12 +222,16 @@ function findQuestionCollection(
     if (!QUESTION_COLLECTION_KEYS.has(normalizeKey(key))) continue
     if (Array.isArray(entry)) return entry
     if (isRecord(entry)) {
-      const mapped = convertQuestionMap(entry)
+      const mapped = convertQuestionMap(entry, {
+        strictStructuredCollection: options.strictStructuredCollection,
+      })
       if (mapped.length > 0) return mapped
     }
   }
 
-  const directMap = convertQuestionMap(value)
+  const directMap = convertQuestionMap(value, {
+    strictStructuredCollection: options.strictStructuredCollection,
+  })
   if (directMap.length > 0) return directMap
 
   for (const entry of Object.values(value)) {
@@ -274,12 +312,36 @@ function normalizeQuestionPreview(
   }
 }
 
+function normalizeQuestionCollection(
+  collection: unknown[],
+  options: { strictStructuredCollection?: boolean } = {},
+): InterviewQuestionPreview[] {
+  const normalized: InterviewQuestionPreview[] = []
+  const malformedIndexes: number[] = []
+
+  collection.forEach((entry, index) => {
+    const question = normalizeQuestionPreview(entry, index)
+    if (question) {
+      normalized.push(question)
+    } else if (options.strictStructuredCollection) {
+      malformedIndexes.push(index)
+    }
+  })
+
+  if (malformedIndexes.length > 0) {
+    throw buildMalformedStructuredQuestionCollectionError(malformedIndexes)
+  }
+
+  return normalized
+}
+
 function extractStructuredQuestionPreviews(
   content: string,
-  options: ParseInterviewQuestionsOptions,
+  options: StructuredQuestionExtractionOptions,
 ): InterviewQuestionPreview[] {
   const candidates = getInterviewContentCandidates(content)
   let lastYamlError: string | null = null
+  let lastMalformedCollectionError: Error | null = null
 
   for (const candidate of candidates) {
     for (const parseCandidate of [repairInterviewCandidate(candidate), candidate]) {
@@ -292,15 +354,35 @@ function extractStructuredQuestionPreviews(
         continue
       }
 
-      const collection = findQuestionCollection(parsedYaml, options)
+      let collection: unknown[] | null
+      try {
+        collection = findQuestionCollection(parsedYaml, options)
+      } catch (err) {
+        if (err instanceof MalformedStructuredQuestionCollectionError) {
+          lastMalformedCollectionError = err
+          continue
+        }
+        throw err
+      }
       if (!collection) continue
 
-      const normalized = collection
-        .map((entry, index) => normalizeQuestionPreview(entry, index))
-        .filter((entry): entry is InterviewQuestionPreview => entry !== null)
+      let normalized: InterviewQuestionPreview[]
+      try {
+        normalized = normalizeQuestionCollection(collection, options)
+      } catch (err) {
+        if (err instanceof MalformedStructuredQuestionCollectionError) {
+          lastMalformedCollectionError = err
+          continue
+        }
+        throw err
+      }
 
       if (normalized.length > 0) return normalized
     }
+  }
+
+  if (lastMalformedCollectionError) {
+    throw lastMalformedCollectionError
   }
 
   if (lastYamlError) {
@@ -605,7 +687,22 @@ export function parseInterviewQuestions(
   content: string,
   options: ParseInterviewQuestionsOptions = {},
 ): ParsedInterviewQuestion[] {
-  const questions = extractInterviewQuestionPreviews(content, options)
+  let questions: InterviewQuestionPreview[] = []
+  try {
+    questions = extractStructuredQuestionPreviews(content, {
+      ...options,
+      strictStructuredCollection: true,
+    })
+  } catch (err) {
+    if (err instanceof MalformedStructuredQuestionCollectionError) {
+      throw err
+    }
+  }
+
+  if (questions.length === 0) {
+    questions = parseLooseQuestionLines(content)
+  }
+
   if (questions.length === 0) {
     throw new Error('Invalid YAML: could not parse interview questions')
   }

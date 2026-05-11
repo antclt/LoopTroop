@@ -60,7 +60,7 @@ export const projects = sqliteTable('projects', {
 export const tickets = sqliteTable('tickets', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   externalId: text('external_id').notNull().unique(),
-  projectId: integer('project_id').notNull().references(() => projects.id),
+  projectId: integer('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   description: text('description'),
   priority: integer('priority').default(3),
@@ -88,7 +88,7 @@ export const tickets = sqliteTable('tickets', {
 
 export const phaseArtifacts = sqliteTable('phase_artifacts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  ticketId: integer('ticket_id').notNull().references(() => tickets.id),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   phase: text('phase').notNull(),
   phaseAttempt: integer('phase_attempt').notNull().default(1),
   artifactType: text('artifact_type'),
@@ -99,7 +99,7 @@ export const phaseArtifacts = sqliteTable('phase_artifacts', {
 
 export const ticketPhaseAttempts = sqliteTable('ticket_phase_attempts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  ticketId: integer('ticket_id').notNull().references(() => tickets.id),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   phase: text('phase').notNull(),
   attemptNumber: integer('attempt_number').notNull(),
   state: text('state').notNull().default('active'),
@@ -111,7 +111,7 @@ export const ticketPhaseAttempts = sqliteTable('ticket_phase_attempts', {
 export const opencodeSessions = sqliteTable('opencode_sessions', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   sessionId: text('session_id').notNull(),
-  ticketId: integer('ticket_id').references(() => tickets.id),
+  ticketId: integer('ticket_id').references(() => tickets.id, { onDelete: 'set null' }),
   phase: text('phase').notNull(),
   phaseAttempt: integer('phase_attempt').default(1),
   memberId: text('member_id'), // council member model ID
@@ -127,7 +127,7 @@ export const opencodeSessions = sqliteTable('opencode_sessions', {
 
 export const ticketStatusHistory = sqliteTable('ticket_status_history', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  ticketId: integer('ticket_id').notNull().references(() => tickets.id),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   previousStatus: text('previous_status'),
   newStatus: text('new_status').notNull(),
   reason: text('reason'),
@@ -136,7 +136,7 @@ export const ticketStatusHistory = sqliteTable('ticket_status_history', {
 
 export const ticketErrorOccurrences = sqliteTable('ticket_error_occurrences', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  ticketId: integer('ticket_id').notNull().references(() => tickets.id),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
   occurrenceNumber: integer('occurrence_number').notNull(),
   blockedFromStatus: text('blocked_from_status').notNull(),
   errorMessage: text('error_message'),

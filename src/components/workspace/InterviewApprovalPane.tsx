@@ -56,12 +56,13 @@ function normalizePersistedAnswerDrafts(
     const draft = record[question.id]
     if (!draft || typeof draft !== 'object' || Array.isArray(draft)) continue
     const answerDraft = draft as Record<string, unknown>
+    const skipped = answerDraft.skipped === true
     baseDrafts[question.id] = {
-      skipped: answerDraft.skipped === true,
-      selected_option_ids: Array.isArray(answerDraft.selected_option_ids)
+      skipped,
+      selected_option_ids: !skipped && Array.isArray(answerDraft.selected_option_ids)
         ? answerDraft.selected_option_ids.filter((item): item is string => typeof item === 'string')
         : [],
-      free_text: typeof answerDraft.free_text === 'string' ? answerDraft.free_text : '',
+      free_text: !skipped && typeof answerDraft.free_text === 'string' ? answerDraft.free_text : '',
     }
   }
 
@@ -196,7 +197,16 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
               ? {
                 questions: interviewDocument.questions.map((question) => ({
                   id: question.id,
-                  answer: answerDrafts[question.id] ?? baseAnswerDrafts[question.id],
+                  answer: (() => {
+                    const answer = answerDrafts[question.id] ?? baseAnswerDrafts[question.id] ?? {
+                      skipped: question.answer.skipped,
+                      selected_option_ids: question.answer.selected_option_ids,
+                      free_text: question.answer.free_text,
+                    }
+                    return answer.skipped
+                      ? { ...answer, selected_option_ids: [], free_text: '' }
+                      : answer
+                  })(),
                 })),
               }
               : { content: yamlDraft },

@@ -136,4 +136,16 @@ describe('VerificationSummaryPanel', () => {
 
     expect(screen.getByText(/Review the draft PR in GitHub if you want/i)).toBeTruthy()
   })
+
+  it('does not render invalid PR URLs as external links', () => {
+    renderPanel({
+      runtime: {
+        prUrl: 'https://evil.example/test/repo/pull/42',
+      },
+    } as Parameters<typeof makeTicket>[0])
+
+    expect(screen.queryByRole('link', { name: /open/i })).toBeNull()
+    expect(screen.getByText('Invalid PR URL')).toBeTruthy()
+    expect(screen.queryByText(/Review the draft PR in GitHub if you want/i)).toBeNull()
+  })
 })

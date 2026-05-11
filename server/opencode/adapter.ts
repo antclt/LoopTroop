@@ -389,7 +389,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
   async listPendingQuestions(projectPath?: string, signal?: AbortSignal): Promise<OpenCodeQuestionRequest[]> {
     const res = await this.client.question.list(
       projectPath ? { directory: projectPath } : undefined,
-      this.requestOptions(signal),
+      this.requestOptions(this.withSdkOperationTimeout(signal)),
     )
     return Array.isArray(res.data)
       ? res.data.map((request) => this.mapQuestionRequest(request)).filter((request): request is OpenCodeQuestionRequest => Boolean(request))
@@ -406,14 +406,14 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       requestID: requestId,
       ...(projectPath ? { directory: projectPath } : {}),
       answers,
-    }, this.requestOptions(signal))
+    }, this.requestOptions(this.withSdkOperationTimeout(signal)))
   }
 
   async rejectQuestion(requestId: string, projectPath?: string, signal?: AbortSignal): Promise<void> {
     await this.client.question.reject({
       requestID: requestId,
       ...(projectPath ? { directory: projectPath } : {}),
-    }, this.requestOptions(signal))
+    }, this.requestOptions(this.withSdkOperationTimeout(signal)))
   }
 
   async abortSession(sessionId: string): Promise<boolean> {
@@ -604,7 +604,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     try {
       const health = await this.client.global.health(this.requestOptions(AbortSignal.timeout(SDK_OPERATION_TIMEOUT_MS)))
       const version = health.data?.version ? String(health.data.version) : 'unknown'
-      const providers = await this.client.config.providers()
+      const providers = await this.withSdkPromiseTimeout(this.client.config.providers())
       return {
         available: true,
         version,
@@ -631,6 +631,23 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
   private withSdkOperationTimeout(signal?: AbortSignal): AbortSignal {
     const timeoutSignal = AbortSignal.timeout(SDK_OPERATION_TIMEOUT_MS)
     return signal ? AbortSignal.any([signal, timeoutSignal]) : timeoutSignal
+  }
+
+  private async withSdkPromiseTimeout<T>(operation: Promise<T>, signal?: AbortSignal): Promise<T> {
+    const timeoutSignal = this.withSdkOperationTimeout(signal)
+    if (timeoutSignal.aborted) {
+      throw timeoutSignal.reason instanceof Error ? timeoutSignal.reason : new Error('OpenCode SDK operation timed out')
+    }
+
+    return await new Promise<T>((resolve, reject) => {
+      const onAbort = () => {
+        reject(timeoutSignal.reason instanceof Error ? timeoutSignal.reason : new Error('OpenCode SDK operation timed out'))
+      }
+      timeoutSignal.addEventListener('abort', onAbort, { once: true })
+      operation
+        .then(resolve, reject)
+        .finally(() => timeoutSignal.removeEventListener('abort', onAbort))
+    })
   }
 
   private mapSession(session: Record<string, unknown>): Session {

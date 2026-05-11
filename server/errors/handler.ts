@@ -28,7 +28,7 @@ export function handleError(ticketId: string, error: LoopTroopError) {
   console.error(`[error] ${error.code} in ${error.phase}: ${getConsoleErrorMessage(error.message)}`)
 
   // Broadcast error to connected clients
-  broadcaster.broadcast(ticketId, 'error', {
+  broadcaster.broadcast(ticketId, 'app_error', {
     code: error.code,
     severity: error.severity,
     message: error.message,

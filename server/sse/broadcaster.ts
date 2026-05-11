@@ -113,6 +113,14 @@ class SSEBroadcaster {
     return (this.clients.get(ticketId) ?? []).length
   }
 
+  getTotalClientCount(): number {
+    let total = 0
+    for (const clients of this.clients.values()) {
+      total += clients.length
+    }
+    return total
+  }
+
   clearTicket(ticketId: string) {
     const clients = this.clients.get(ticketId) ?? []
     for (const client of clients) {

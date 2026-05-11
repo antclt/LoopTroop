@@ -3,6 +3,7 @@ import type { RefinementChange } from '../refinementChanges'
 import {
   buildBeadsUiRefinementDiffArtifact,
   buildBeadsUiRefinementDiffArtifactFromChanges,
+  buildInterviewUiRefinementDiffArtifact,
   buildInterviewUiRefinementDiffArtifactFromChanges,
   buildPrdUiRefinementDiffArtifact,
   buildPrdUiRefinementDiffArtifactFromChanges,
@@ -589,6 +590,53 @@ describe.concurrent('refinement diff artifacts', () => {
     })
 
     expect(artifact.entries).toEqual([])
+  })
+
+  it('keeps phase-only interview changes visible in generated diff text', () => {
+    const artifact = buildInterviewUiRefinementDiffArtifactFromChanges({
+      winnerId: 'openai/gpt-5.2',
+      changes: [{
+        type: 'modified',
+        before: { id: 'Q01', phase: 'Foundation', question: 'Which users need the first release?' },
+        after: { id: 'Q01', phase: 'Assembly', question: 'Which users need the first release?' },
+        inspiration: null,
+        attributionStatus: 'model_unattributed',
+      }],
+    })
+
+    expect(artifact.entries).toEqual([
+      expect.objectContaining({
+        changeType: 'modified',
+        beforeText: 'Phase: Foundation\nWhich users need the first release?',
+        afterText: 'Phase: Assembly\nWhich users need the first release?',
+      }),
+    ])
+  })
+
+  it('keeps phase-only interview draft diffs visible without explicit change metadata', () => {
+    const artifact = buildInterviewUiRefinementDiffArtifact({
+      winnerId: 'openai/gpt-5.2',
+      winnerDraftContent: [
+        'questions:',
+        '  - id: Q01',
+        '    phase: Foundation',
+        '    question: "Which users need the first release?"',
+      ].join('\n'),
+      refinedContent: [
+        'questions:',
+        '  - id: Q01',
+        '    phase: Assembly',
+        '    question: "Which users need the first release?"',
+      ].join('\n'),
+    })
+
+    expect(artifact.entries).toEqual([
+      expect.objectContaining({
+        changeType: 'modified',
+        beforeText: 'Phase: Foundation\nWhich users need the first release?',
+        afterText: 'Phase: Assembly\nWhich users need the first release?',
+      }),
+    ])
   })
 
   it('keeps exact-match PRD fallback attribution when no explicit changes metadata exists', () => {

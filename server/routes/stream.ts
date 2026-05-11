@@ -3,8 +3,11 @@ import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { broadcaster } from '../sse/broadcaster'
 import { warnIfVerbose } from '../runtime'
+import { getTicketByRef } from '../storage/tickets'
 
 const streamRouter = new Hono()
+export const MAX_SSE_CONNECTIONS_PER_TICKET = 6
+export const MAX_SSE_CONNECTIONS_TOTAL = 100
 
 export function cleanupStreamClient(ticketId: string, clientId: string, interval?: ReturnType<typeof setInterval>): void {
   if (interval) {
@@ -17,6 +20,15 @@ streamRouter.get('/stream', (c) => {
   const ticketId = c.req.query('ticketId')
   if (!ticketId) {
     return c.json({ error: 'ticketId query parameter required' }, 400)
+  }
+  if (!getTicketByRef(ticketId)) {
+    return c.json({ error: 'Ticket not found' }, 404)
+  }
+  if (broadcaster.getClientCount(ticketId) >= MAX_SSE_CONNECTIONS_PER_TICKET) {
+    return c.json({ error: 'Too many streams for this ticket' }, 429)
+  }
+  if (broadcaster.getTotalClientCount() >= MAX_SSE_CONNECTIONS_TOTAL) {
+    return c.json({ error: 'Too many active streams' }, 429)
   }
 
   const lastEventId = c.req.header('Last-Event-ID') ?? c.req.query('lastEventId')

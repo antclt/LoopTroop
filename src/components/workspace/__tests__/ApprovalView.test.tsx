@@ -297,6 +297,58 @@ describe('Interview approval UI', () => {
     expect(mockClearTicketArtifactsCache).toHaveBeenCalledWith(TEST.ticketId)
   }, 30_000)
 
+  it('strips selected option IDs from skipped answer drafts before saving', async () => {
+    let submittedBody: { questions: Array<{ id: string; answer: { skipped: boolean; selected_option_ids: string[]; free_text: string } }> } | null = null
+    mockUseTicketUIState.mockReturnValue({
+      data: {
+        scope: 'approval_interview',
+        exists: true,
+        updatedAt: '2026-03-17T10:20:00.000Z',
+        data: {
+          isEditMode: true,
+          editTab: 'answers',
+          answerDrafts: {
+            Q01: {
+              skipped: true,
+              selected_option_ids: ['stale-choice'],
+              free_text: 'stale notes',
+            },
+          },
+        },
+      },
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const url = String(input)
+      if (url === `/api/tickets/${TEST.ticketId}/artifacts`) {
+        return createJsonResponse([])
+      }
+      if (url === `/api/tickets/${TEST.ticketId}/interview-answers` && init?.method === 'PUT') {
+        submittedBody = JSON.parse(String(init.body)) as typeof submittedBody
+        return createJsonResponse({ success: true, ...interviewPayload })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    renderApprovalView(makeTicket({ status: 'WAITING_INTERVIEW_APPROVAL' }))
+
+    await waitFor(() => {
+      expect(screen.getByText('Answer-only editor')).toBeInTheDocument()
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(submittedBody?.questions[0]).toEqual({
+        id: 'Q01',
+        answer: {
+          skipped: true,
+          selected_option_ids: [],
+          free_text: '',
+        },
+      })
+    })
+  })
+
   it('explains skipped answers using the actual PRD drafting behavior', async () => {
     interviewPayload = buildSkippedInterviewPayload()
 

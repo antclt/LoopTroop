@@ -22,6 +22,7 @@ import {
   handleCloseUnmergedTicket,
   handleVerifyTicket,
   handleRetryTicket,
+  handleListAllOpenCodeQuestions,
   handleListOpenCodeQuestions,
   handleReplyOpenCodeQuestion,
   handleRejectOpenCodeQuestion,
@@ -65,6 +66,7 @@ ticketRouter.post('/tickets/:id/merge', (c) => handleMergeTicket(c))
 ticketRouter.post('/tickets/:id/close-unmerged', (c) => handleCloseUnmergedTicket(c))
 ticketRouter.post('/tickets/:id/verify', (c) => handleVerifyTicket(c))
 ticketRouter.post('/tickets/:id/retry', (c) => handleRetryTicket(c))
+ticketRouter.get('/opencode/questions', (c) => handleListAllOpenCodeQuestions(c))
 ticketRouter.get('/tickets/:id/opencode/questions', (c) => handleListOpenCodeQuestions(c))
 ticketRouter.post('/tickets/:id/opencode/questions/:requestId/reply', (c) => handleReplyOpenCodeQuestion(c))
 ticketRouter.post('/tickets/:id/opencode/questions/:requestId/reject', (c) => handleRejectOpenCodeQuestion(c))

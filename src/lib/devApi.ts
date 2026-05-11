@@ -3,6 +3,7 @@ import { API_TIMEOUT_MS } from '@/lib/constants'
 const DEV_BACKEND_HEALTH_PATH = '/api/health'
 const DEV_BACKEND_POLL_MS = 250
 const DEV_BACKEND_TIMEOUT_MS = 30_000
+const API_TOKEN_HEADER = 'X-LoopTroop-Token'
 
 const nativeFetch = (() => {
   if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
@@ -56,6 +57,29 @@ function getDevReadyProbeUrl(path: string) {
   return new URL(path, __LOOPTROOP_DEV_BACKEND_ORIGIN__).toString()
 }
 
+function getApiToken(): string {
+  return typeof __LOOPTROOP_API_TOKEN__ === 'string' ? __LOOPTROOP_API_TOKEN__.trim() : ''
+}
+
+function withApiTokenHeader(init?: RequestInit): RequestInit | undefined {
+  const token = getApiToken()
+  if (!token) return init
+
+  const headers = new Headers(init?.headers)
+  if (!headers.has(API_TOKEN_HEADER) && !headers.has('Authorization')) {
+    headers.set(API_TOKEN_HEADER, token)
+  }
+  return { ...init, headers }
+}
+
+function appendApiTokenQuery(url: URL): URL {
+  const token = getApiToken()
+  if (token && (url.pathname === '/api' || url.pathname.startsWith('/api/'))) {
+    url.searchParams.set('apiToken', token)
+  }
+  return url
+}
+
 async function pingDevBackend() {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
@@ -63,10 +87,10 @@ async function pingDevBackend() {
   try {
     // Use same-origin path through the Vite proxy to avoid cross-origin CORS/PNA issues.
     // nativeFetch bypasses devApiGuard to prevent recursion.
-    const response = await nativeFetch(DEV_BACKEND_HEALTH_PATH, {
+    const response = await nativeFetch(DEV_BACKEND_HEALTH_PATH, withApiTokenHeader({
       cache: 'no-store',
       signal: controller.signal,
-    })
+    }))
     return response.ok
   } catch {
     return false
@@ -132,18 +156,20 @@ export function getApiUrl(path: string, options?: { directInDevelopment?: boolea
   if (typeof window === 'undefined') return path
 
   if (isDevelopmentRuntime() && options?.directInDevelopment) {
-    return getDevReadyProbeUrl(path)
+    return appendApiTokenQuery(new URL(getDevReadyProbeUrl(path))).toString()
   }
 
-  return new URL(path, window.location.origin).toString()
+  return appendApiTokenQuery(new URL(path, window.location.origin)).toString()
 }
 
 export const __devApiForTests = {
   getDevReadyProbeUrl,
+  appendApiTokenQuery,
 }
 
 export function installDevApiGuard() {
-  if (!isDevelopmentRuntime() || devApiGuardInstalled) return
+  if (devApiGuardInstalled) return
+  if (!isDevelopmentRuntime() && !getApiToken()) return
 
   const originalFetch = nativeFetch
 
@@ -153,9 +179,11 @@ export function installDevApiGuard() {
       return originalFetch(input, init)
     }
 
-    await waitForDevBackend(init?.signal ?? undefined)
+    if (isDevelopmentRuntime()) {
+      await waitForDevBackend(init?.signal ?? undefined)
+    }
 
-    return originalFetch(input, init)
+    return originalFetch(input, withApiTokenHeader(init))
   }
 
   devApiGuardInstalled = true

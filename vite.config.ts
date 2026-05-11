@@ -21,7 +21,12 @@ async function respondToBackendHealthProbe(req: IncomingMessage, res: ServerResp
 
   try {
     const response = await fetch(url, {
-      headers: { accept: 'application/json' },
+      headers: {
+        accept: 'application/json',
+        ...(process.env.LOOPTROOP_API_TOKEN?.trim()
+          ? { 'X-LoopTroop-Token': process.env.LOOPTROOP_API_TOKEN.trim() }
+          : {}),
+      },
       signal: AbortSignal.timeout(1_000),
     })
 
@@ -42,6 +47,7 @@ export default defineConfig({
   define: {
     __LOOPTROOP_DEV_BACKEND_ORIGIN__: JSON.stringify(backendOrigin),
     __LOOPTROOP_DOCS_ORIGIN__: JSON.stringify(getDocsOrigin()),
+    __LOOPTROOP_API_TOKEN__: JSON.stringify(process.env.LOOPTROOP_API_TOKEN?.trim() ?? ''),
   },
   plugins: [
     react(),

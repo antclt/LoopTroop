@@ -279,6 +279,7 @@ interface ActiveSessionRow {
 interface ProjectSnapshot {
   id: number
   folderPath: string
+  resolvedFolderPath: string
   exists: boolean
   projectDbPath: string
   projectDbExists: boolean
@@ -385,6 +386,48 @@ function detectPlatform(): Platform {
   })()
   detectedPlatform = procVersion.includes('microsoft') ? 'wsl' : 'linux'
   return detectedPlatform
+}
+
+function isWindowsDrivePath(path: string): boolean {
+  return /^[a-z]:[\\/]/i.test(path)
+}
+
+function isWindowsUncPath(path: string): boolean {
+  return /^\\\\[^\\]+\\[^\\]+/.test(path)
+}
+
+function resolvePortablePath(path: string, basePath = process.cwd()): string {
+  const trimmed = path.trim()
+  if (!trimmed) return trimmed
+
+  const platform = detectPlatform()
+  const windowsDriveMatch = trimmed.match(/^([a-z]):[\\/](.*)$/i)
+  if (windowsDriveMatch) {
+    if (platform === 'wsl') {
+      const drive = windowsDriveMatch[1]!.toLowerCase()
+      const rest = windowsDriveMatch[2]!.replace(/\\/g, '/')
+      return `/mnt/${drive}/${rest}`
+    }
+
+    return trimmed
+  }
+
+  if (isWindowsUncPath(trimmed)) {
+    return trimmed
+  }
+
+  return isAbsolute(trimmed) ? trimmed : resolve(basePath, trimmed)
+}
+
+function describePortablePathResolution(inputPath: string, resolvedPath: string): string | null {
+  if (inputPath === resolvedPath) {
+    if (isWindowsDrivePath(inputPath) && detectPlatform() !== 'windows' && detectPlatform() !== 'wsl') {
+      return `Windows drive path is not directly accessible on ${detectPlatform()}.`
+    }
+    return null
+  }
+
+  return `Resolved platform path: ${resolvedPath}`
 }
 
 const colorEnabled = (() => {
@@ -761,7 +804,11 @@ function readProcessCwd(pid: number): string | null {
 function commandExists(binary: string): boolean {
   const cached = commandAvailability.get(binary)
   if (cached !== undefined) return cached
-  const result = runShell(`command -v ${binary}`, 2000)
+
+  const platform = detectPlatform()
+  const result = platform === 'windows'
+    ? runPowerShell(`Get-Command -Name ${powerShellQuote(binary)} -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty Name`, 2000)
+    : runShell(`command -v ${shellQuote(binary)}`, 2000)
   const exists = result.exitCode === 0 && result.stdout.trim().length > 0
   commandAvailability.set(binary, exists)
   return exists
@@ -801,23 +848,58 @@ function runPowerShell(command: string, timeoutMs = 5000): CommandResult {
   return runProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], timeoutMs)
 }
 
+function parseNetstatListeningPid(output: string, port: number): number | null {
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim()
+    if (!/^tcp/i.test(trimmed) || !/\bLISTEN(?:ING)?\b/i.test(trimmed)) continue
+    const parts = trimmed.split(/\s+/)
+    if (!parts.some((part) => part.endsWith(`:${port}`) || part.endsWith(`.${port}`))) continue
+
+    const pid = parseInteger(parts.at(-1))
+    if (pid && pid > 0) return pid
+  }
+
+  return null
+}
+
+function parseJsonRecords(output: string): Array<Record<string, unknown>> {
+  if (!output.trim()) return []
+
+  try {
+    const parsed = JSON.parse(output) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    }
+    return parsed && typeof parsed === 'object' ? [parsed as Record<string, unknown>] : []
+  } catch {
+    return []
+  }
+}
+
 function findListeningPid(port: number): number | null {
   const platform = detectPlatform()
   if (platform === 'windows') {
     const result = runPowerShell(`Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Select-Object -First 1`, 3000)
     const pid = Number(result.stdout.trim())
-    return Number.isInteger(pid) && pid > 0 ? pid : null
+    if (Number.isInteger(pid) && pid > 0) return pid
+
+    const netstatResult = runProcess('netstat', ['-ano', '-p', 'tcp'], 3000)
+    return parseNetstatListeningPid(netstatResult.stdout, port)
   }
 
-  const lsofResult = runShell(`lsof -tiTCP:${port} -sTCP:LISTEN | head -n 1`, 3000)
-  const lsofPid = Number(lsofResult.stdout.trim())
-  if (Number.isInteger(lsofPid) && lsofPid > 0) return lsofPid
+  if (commandExists('lsof')) {
+    const lsofResult = runShell(`lsof -tiTCP:${port} -sTCP:LISTEN | head -n 1`, 3000)
+    const lsofPid = Number(lsofResult.stdout.trim())
+    if (Number.isInteger(lsofPid) && lsofPid > 0) return lsofPid
+  }
 
-  const ssResult = runShell(`ss -ltnp '( sport = :${port} )'`, 3000)
-  const match = ssResult.stdout.match(/pid=(\d+)/)
-  if (match?.[1]) {
-    const pid = Number(match[1])
-    if (Number.isInteger(pid) && pid > 0) return pid
+  if (commandExists('ss')) {
+    const ssResult = runShell(`ss -ltnp '( sport = :${port} )'`, 3000)
+    const match = ssResult.stdout.match(/pid=(\d+)/)
+    if (match?.[1]) {
+      const pid = Number(match[1])
+      if (Number.isInteger(pid) && pid > 0) return pid
+    }
   }
 
   return null
@@ -873,7 +955,32 @@ function inspectMount(path: string): MountSnapshot {
     }
   }
 
+  const platform = detectPlatform()
+  if (platform === 'windows') {
+    return {
+      path,
+      target: null,
+      source: null,
+      fstype: null,
+      options: null,
+      error: 'Mount details are not available from this diagnostic on Windows',
+    }
+  }
+
   if (!commandExists('findmnt')) {
+    if (platform === 'macos' && commandExists('df')) {
+      const result = runShell(`df -Pk ${shellQuote(path)} | tail -n 1`, 3000)
+      const parts = result.stdout.trim().split(/\s+/)
+      return {
+        path,
+        target: parts[5] ?? null,
+        source: parts[0] ?? null,
+        fstype: null,
+        options: null,
+        error: result.exitCode === 0 ? undefined : result.stderr.trim() || result.error,
+      }
+    }
+
     return {
       path,
       target: null,
@@ -921,6 +1028,38 @@ function inspectDiskUsage(path: string): DiskUsageSnapshot {
     }
   }
 
+  if (detectPlatform() === 'windows') {
+    const drive = path.match(/^([a-z]):/i)?.[1]
+    if (!drive) {
+      return {
+        path,
+        filesystem: null,
+        totalKb: null,
+        usedKb: null,
+        availableKb: null,
+        usePercent: null,
+        mountedOn: null,
+        error: 'Unable to infer Windows drive letter',
+      }
+    }
+
+    const result = runPowerShell(`Get-PSDrive -Name ${powerShellQuote(drive)} | Select-Object Name,Root,Used,Free | ConvertTo-Json -Compress`, 3000)
+    const driveInfo = parseJsonRecords(result.stdout)[0]
+    const usedBytes = parseInteger(String(driveInfo?.Used ?? ''))
+    const freeBytes = parseInteger(String(driveInfo?.Free ?? ''))
+    const totalBytes = usedBytes !== null && freeBytes !== null ? usedBytes + freeBytes : null
+    return {
+      path,
+      filesystem: driveInfo?.Name ? `${driveInfo.Name}:` : `${drive.toUpperCase()}:`,
+      totalKb: totalBytes !== null ? Math.round(totalBytes / 1024) : null,
+      usedKb: usedBytes !== null ? Math.round(usedBytes / 1024) : null,
+      availableKb: freeBytes !== null ? Math.round(freeBytes / 1024) : null,
+      usePercent: totalBytes && usedBytes !== null ? Math.round((usedBytes / totalBytes) * 1000) / 10 : null,
+      mountedOn: typeof driveInfo?.Root === 'string' ? driveInfo.Root : `${drive.toUpperCase()}:\\`,
+      ...(result.exitCode !== 0 || result.error ? { error: result.stderr.trim() || result.error || 'Unable to read Windows drive usage' } : {}),
+    }
+  }
+
   const result = runShell(`df -Pk ${shellQuote(path)} | tail -n 1`, 3000)
   if (result.exitCode !== 0 || !result.stdout.trim()) {
     return {
@@ -958,6 +1097,19 @@ function inspectInodeUsage(path: string): InodeUsageSnapshot {
       usePercent: null,
       mountedOn: null,
       error: 'Path does not exist',
+    }
+  }
+
+  if (detectPlatform() === 'windows') {
+    return {
+      path,
+      filesystem: null,
+      totalInodes: null,
+      usedInodes: null,
+      freeInodes: null,
+      usePercent: null,
+      mountedOn: null,
+      error: 'Inode usage is not applicable on Windows',
     }
   }
 
@@ -1593,7 +1745,35 @@ async function sampleRuntimeTrend(options: {
 }
 
 function listProcessRecords(): ProcessRecord[] {
-  const result = runShell(`ps -eo pid=,ppid=,etime=,pcpu=,pmem=,rss=,args= --sort=pid`, 5000)
+  const platform = detectPlatform()
+  if (platform === 'windows') {
+    const result = runPowerShell(
+      'Get-CimInstance Win32_Process | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress',
+      7000,
+    )
+    if (result.exitCode !== 0 || !result.stdout.trim()) return []
+
+    return parseJsonRecords(result.stdout)
+      .flatMap((entry): ProcessRecord[] => {
+        const pid = parseInteger(String(entry.ProcessId ?? ''))
+        if (!pid || pid <= 0) return []
+
+        return [{
+          pid,
+          ppid: parseInteger(String(entry.ParentProcessId ?? '')),
+          elapsed: null,
+          pcpu: null,
+          pmem: null,
+          rssKb: null,
+          args: String(entry.CommandLine ?? entry.Name ?? ''),
+        }]
+      })
+  }
+
+  const processCommand = platform === 'macos'
+    ? 'ps -axo pid=,ppid=,etime=,pcpu=,pmem=,rss=,command='
+    : 'ps -eo pid=,ppid=,etime=,pcpu=,pmem=,rss=,args= --sort=pid'
+  const result = runShell(processCommand, 5000)
   if (result.exitCode !== 0 || !result.stdout.trim()) return []
 
   return result.stdout
@@ -1601,10 +1781,10 @@ function listProcessRecords(): ProcessRecord[] {
     .map((line) => line.trim())
     .filter(Boolean)
     .flatMap((line) => {
-      const parts = line.split(/\s+/, 7)
-      if (parts.length < 7) return []
+      const match = line.match(/^(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)\s+(.+)$/)
+      if (!match) return []
 
-      const [pidRaw, ppidRaw, elapsedRaw, pcpuRaw, pmemRaw, rssRaw, argsRaw] = parts
+      const [, pidRaw, ppidRaw, elapsedRaw, pcpuRaw, pmemRaw, rssRaw, argsRaw] = match
       const pid = Number(pidRaw)
       if (!Number.isInteger(pid) || pid <= 0) return []
 
@@ -1622,7 +1802,7 @@ function listProcessRecords(): ProcessRecord[] {
 
 function findFirstProcessMatch(processes: ProcessRecord[], patterns: RegExp[]): ProcessRecord | null {
   for (const pattern of patterns) {
-    const match = processes.find((process) => pattern.test(process.args))
+    const match = processes.find((process) => pattern.test(process.args.replace(/\\/g, '/')))
     if (match) return match
   }
 
@@ -1756,7 +1936,7 @@ async function probeDns(hostname: string): Promise<DnsProbeResult> {
   const start = Date.now()
   try {
     const result = await dnsPromises.lookup(hostname, { all: true })
-    const addresses = Array.isArray(result) ? result.map((r: { address: string }) => r.address) : [result.address]
+    const addresses = result.map((record) => record.address)
     return {
       hostname,
       ok: true,
@@ -1932,7 +2112,7 @@ async function sampleRepeatedBackendProbes(options: {
     let processStat: string | null = null
     let processWchan: string | null = null
 
-    if (options.backendPid) {
+    if (options.backendPid && detectPlatform() !== 'windows' && commandExists('ps')) {
       const processSnapshot = runShell(
         `ps -p ${options.backendPid} -o stat=,wchan=`,
         Math.max(1500, probeTimeoutMs),
@@ -1971,12 +2151,12 @@ async function sampleRepeatedBackendProbes(options: {
 function resolveAppConfigDir(env: Record<string, string>): string {
   const configured = env.LOOPTROOP_CONFIG_DIR?.trim()
   if (configured) {
-    return isAbsolute(configured) ? configured : resolve(process.cwd(), configured)
+    return resolvePortablePath(configured)
   }
 
   const xdgConfigHome = env.XDG_CONFIG_HOME?.trim()
   const baseDir = xdgConfigHome
-    ? (isAbsolute(xdgConfigHome) ? xdgConfigHome : resolve(process.cwd(), xdgConfigHome))
+    ? resolvePortablePath(xdgConfigHome)
     : resolve(env.HOME?.trim() || homedir(), '.config')
 
   return resolve(baseDir, 'looptroop')
@@ -1985,7 +2165,7 @@ function resolveAppConfigDir(env: Record<string, string>): string {
 function resolveAppDbPath(env: Record<string, string>): string {
   const configured = env.LOOPTROOP_APP_DB_PATH?.trim()
   if (configured) {
-    return isAbsolute(configured) ? configured : resolve(process.cwd(), configured)
+    return resolvePortablePath(configured)
   }
 
   return resolve(resolveAppConfigDir(env), 'app.sqlite')
@@ -2154,15 +2334,20 @@ function readTicketExecutionLogPreview(
 }
 
 function inspectProjectDatabase(project: AttachedProjectRow): ProjectSnapshot {
-  const projectDbPath = resolve(project.folderPath, '.looptroop', 'db.sqlite')
-  const exists = existsSync(project.folderPath)
+  const projectRoot = resolvePortablePath(project.folderPath)
+  const projectDbPath = resolve(projectRoot, '.looptroop', 'db.sqlite')
+  const exists = existsSync(projectRoot)
   const projectDbExists = existsSync(projectDbPath)
   const pathCheckDetails: string[] = []
-  const mount = inspectMount(project.folderPath)
-  const diskUsage = inspectDiskUsage(project.folderPath)
-  const inodeUsage = inspectInodeUsage(project.folderPath)
+  const mount = inspectMount(projectRoot)
+  const diskUsage = inspectDiskUsage(projectRoot)
+  const inodeUsage = inspectInodeUsage(projectRoot)
   const latencyProbes: FsLatencyProbe[] = []
+  const pathResolutionDetail = describePortablePathResolution(project.folderPath, projectRoot)
 
+  if (pathResolutionDetail) {
+    pathCheckDetails.push(pathResolutionDetail)
+  }
   if (!exists) {
     pathCheckDetails.push('Project root path does not exist right now.')
   }
@@ -2174,6 +2359,7 @@ function inspectProjectDatabase(project: AttachedProjectRow): ProjectSnapshot {
     return {
       id: project.id,
       folderPath: project.folderPath,
+      resolvedFolderPath: projectRoot,
       exists,
       projectDbPath,
       projectDbExists,
@@ -2261,23 +2447,23 @@ function inspectProjectDatabase(project: AttachedProjectRow): ProjectSnapshot {
       : []
 
     const metaInspection = inspectTicketMetaFiles(
-      project.folderPath,
+      projectRoot,
       ticketRefs.map((ticket) => ticket.external_id),
     )
     const latestNonTerminalTicketLog = latestNonTerminalTicket
-      ? readTicketExecutionLogPreview(project.folderPath, latestNonTerminalTicket)
+      ? readTicketExecutionLogPreview(projectRoot, latestNonTerminalTicket)
       : null
 
     const latestExternalId = recentTickets[0]?.external_id ?? ticketRefs[0]?.external_id ?? null
-    const gitHeadPath = resolve(project.folderPath, '.git', 'HEAD')
-    const worktreesPath = resolve(project.folderPath, '.looptroop', 'worktrees')
+    const gitHeadPath = resolve(projectRoot, '.git', 'HEAD')
+    const worktreesPath = resolve(projectRoot, '.looptroop', 'worktrees')
     const latestMetaPath = latestExternalId
-      ? resolve(project.folderPath, '.looptroop', 'worktrees', latestExternalId, '.ticket', 'meta', 'ticket.meta.json')
+      ? resolve(projectRoot, '.looptroop', 'worktrees', latestExternalId, '.ticket', 'meta', 'ticket.meta.json')
       : null
 
     latencyProbes.push(
       measureFsLatency('stat project root', () => {
-        const stats = statSync(project.folderPath)
+        const stats = statSync(projectRoot)
         return `mode=${stats.mode} size=${stats.size} mtime=${stats.mtime.toISOString()}`
       }),
     )
@@ -2313,6 +2499,7 @@ function inspectProjectDatabase(project: AttachedProjectRow): ProjectSnapshot {
     return {
       id: project.id,
       folderPath: project.folderPath,
+      resolvedFolderPath: projectRoot,
       exists,
       projectDbPath,
       projectDbExists,
@@ -2887,6 +3074,9 @@ function printRepeatedBackendSamples(title: string, samples: RepeatedProbeSample
 function printProjectSnapshot(project: ProjectSnapshot) {
   heading(`Attached Project ${project.id}`)
   kv('Folder', project.folderPath)
+  if (project.resolvedFolderPath !== project.folderPath) {
+    kv('Resolved folder', project.resolvedFolderPath)
+  }
   kv('Path exists', project.exists)
   kv('Project DB', project.projectDbPath)
   kv('Project DB exists', project.projectDbExists)
@@ -3261,12 +3451,21 @@ async function main() {
   printProcessActivitySamples('LoopTroop Process Activity Sample', processActivities)
   printSystemProcessActivitySnapshot('System Resource Consumers During Sample', systemActivity)
 
-  if (backendInspectPid) {
-    const backendPs = runShell(`ps -p ${backendInspectPid} -o pid,ppid,etime,pcpu,pmem,stat,wchan:32,args`, 5000)
+  if (backendInspectPid && platform === 'windows') {
+    const backendPs = runPowerShell(`Get-Process -Id ${backendInspectPid} | Select-Object Id,ProcessName,CPU,WorkingSet64,StartTime | Format-List | Out-String`, 5000)
+    printCommandResult(`Backend Process ${backendInspectPid}`, backendPs)
+    printProcessIoSnapshot(`Backend /proc/${backendInspectPid}/io`, readProcessIo(backendInspectPid))
+  } else if (backendInspectPid && commandExists('ps')) {
+    const backendPsCommand = platform === 'macos'
+      ? `ps -p ${backendInspectPid} -o pid,ppid,etime,pcpu,pmem,stat,command`
+      : `ps -p ${backendInspectPid} -o pid,ppid,etime,pcpu,pmem,stat,wchan:32,args`
+    const backendPs = runShell(backendPsCommand, 5000)
     printCommandResult(`Backend Process ${backendInspectPid}`, backendPs)
 
-    const backendThreads = runShell(`ps -L -p ${backendInspectPid} -o pid,tid,pcpu,stat,wchan:32,comm`, 5000)
-    printCommandResult(`Backend Threads ${backendInspectPid}`, backendThreads)
+    if (platform === 'linux' || platform === 'wsl') {
+      const backendThreads = runShell(`ps -L -p ${backendInspectPid} -o pid,tid,pcpu,stat,wchan:32,comm`, 5000)
+      printCommandResult(`Backend Threads ${backendInspectPid}`, backendThreads)
+    }
     printProcessIoSnapshot(`Backend /proc/${backendInspectPid}/io`, readProcessIo(backendInspectPid))
 
     if (commandExists('lsof')) {
@@ -3286,14 +3485,28 @@ async function main() {
     printProcessIoSnapshot(`OpenCode /proc/${opencodeInspectPid}/io`, readProcessIo(opencodeInspectPid))
   }
 
-  const relevantProcessList = runShell(
-    `ps -eo pid,ppid,etime,pcpu,pmem,args --sort=pid | grep -E "vite|server/index.ts|dev-opencode|opencode serve|npm run dev|tsx watch server/index.ts|tsx scripts/dev.ts|tsx scripts/dev-backend.ts" | grep -v grep`,
-    5000,
-  )
+  const relevantPattern = 'vite|server/index.ts|dev-opencode|opencode serve|npm run dev|tsx watch server/index.ts|tsx scripts/dev.ts|tsx scripts/dev-backend.ts'
+  const relevantProcessList = platform === 'windows'
+    ? runPowerShell(`Get-CimInstance Win32_Process | Where-Object { $_.CommandLine -match ${powerShellQuote(relevantPattern)} } | Select-Object ProcessId,ParentProcessId,Name,CommandLine | Format-Table -AutoSize | Out-String`, 5000)
+    : runShell(
+      platform === 'macos'
+        ? `ps -axo pid,ppid,etime,pcpu,pmem,command | grep -E ${shellQuote(relevantPattern)} | grep -v grep`
+        : `ps -eo pid,ppid,etime,pcpu,pmem,args --sort=pid | grep -E ${shellQuote(relevantPattern)} | grep -v grep`,
+      5000,
+    )
   printCommandResult('Relevant Process List', relevantProcessList)
 
-  if (commandExists('ss')) {
+  if (platform === 'windows') {
+    const listeners = runPowerShell(
+      `Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Where-Object { $_.LocalPort -in @(${effectiveFrontendPort}, ${effectiveBackendPort}, 4096, 4097) } | Select-Object LocalAddress,LocalPort,OwningProcess | Format-Table -AutoSize | Out-String`,
+      5000,
+    )
+    printCommandResult('Listener Snapshot', listeners)
+  } else if (commandExists('ss')) {
     const listeners = runShell(`ss -ltnp | grep -E ":${effectiveFrontendPort}|:${effectiveBackendPort}|4096|4097" || true`, 5000)
+    printCommandResult('Listener Snapshot', listeners)
+  } else if (commandExists('lsof')) {
+    const listeners = runShell(`lsof -nP -iTCP:${effectiveFrontendPort} -iTCP:${effectiveBackendPort} -iTCP:4096 -iTCP:4097 -sTCP:LISTEN || true`, 5000)
     printCommandResult('Listener Snapshot', listeners)
   }
 
@@ -3306,37 +3519,48 @@ async function main() {
   const uptimeResult = runShell('uptime', 3000)
   printCommandResult('System Uptime', uptimeResult)
 
-  const loadavgResult = runShell('cat /proc/loadavg', 2000)
-  printCommandResult('Load Average Raw', loadavgResult)
+  if (platform === 'linux' || platform === 'wsl') {
+    const loadavgResult = runShell('cat /proc/loadavg', 2000)
+    printCommandResult('Load Average Raw', loadavgResult)
 
-  const freeResult = runShell('free -h', 3000)
-  printCommandResult('Memory Snapshot', freeResult)
+    const freeResult = runShell('free -h', 3000)
+    printCommandResult('Memory Snapshot', freeResult)
 
-  const topCpuResult = runShell(`ps -eo pid,ppid,etime,pcpu,pmem,rss,args --sort=-pcpu | head -n 20`, 5000)
-  printCommandResult('Top CPU Processes Snapshot', topCpuResult)
+    const topCpuResult = runShell(`ps -eo pid,ppid,etime,pcpu,pmem,rss,args --sort=-pcpu | head -n 20`, 5000)
+    printCommandResult('Top CPU Processes Snapshot', topCpuResult)
 
-  const topRssResult = runShell(`ps -eo pid,ppid,etime,pcpu,pmem,rss,args --sort=-rss | head -n 20`, 5000)
-  printCommandResult('Top RSS Processes Snapshot', topRssResult)
+    const topRssResult = runShell(`ps -eo pid,ppid,etime,pcpu,pmem,rss,args --sort=-rss | head -n 20`, 5000)
+    printCommandResult('Top RSS Processes Snapshot', topRssResult)
 
-  const meminfoResult = runShell(`grep -E 'MemTotal|MemAvailable|SwapTotal|SwapFree|Dirty|Writeback|Cached' /proc/meminfo || true`, 2000)
-  printCommandResult('Key /proc/meminfo Fields', meminfoResult)
+    const meminfoResult = runShell(`grep -E 'MemTotal|MemAvailable|SwapTotal|SwapFree|Dirty|Writeback|Cached' /proc/meminfo || true`, 2000)
+    printCommandResult('Key /proc/meminfo Fields', meminfoResult)
 
-  if (commandExists('dmesg')) {
-    const dmesgOomResult = runShell(`dmesg -T 2>/dev/null | grep -Ei 'out of memory|killed process|oom' | tail -n 40 || true`, 5000)
-    printCommandResult('Kernel OOM Scan', dmesgOomResult)
-  }
+    if (commandExists('dmesg')) {
+      const dmesgOomResult = runShell(`dmesg -T 2>/dev/null | grep -Ei 'out of memory|killed process|oom' | tail -n 40 || true`, 5000)
+      printCommandResult('Kernel OOM Scan', dmesgOomResult)
+    }
 
-  if (commandExists('vmstat')) {
-    const vmstatResult = runShell('vmstat 1 2', 4000)
-    printCommandResult('vmstat Sample', vmstatResult)
-  }
+    if (commandExists('vmstat')) {
+      const vmstatResult = runShell('vmstat 1 2', 4000)
+      printCommandResult('vmstat Sample', vmstatResult)
+    }
 
-  if (commandExists('iostat')) {
-    const iostatResult = runShell('iostat -xz 1 2', 5000)
-    printCommandResult('iostat Sample', iostatResult)
+    if (commandExists('iostat')) {
+      const iostatResult = runShell('iostat -xz 1 2', 5000)
+      printCommandResult('iostat Sample', iostatResult)
+    } else {
+      const diskstatsResult = runShell(`grep -E ' (sd|vd|nvme|dm-|loop)' /proc/diskstats || true`, 2000)
+      printCommandResult('/proc/diskstats Snapshot', diskstatsResult)
+    }
+  } else if (platform === 'macos') {
+    const topCpuResult = runShell('top -l 1 -n 20 -stats pid,command,cpu,mem,rsize 2>/dev/null | tail -n +13', 5000)
+    printCommandResult('Top CPU Processes Snapshot', topCpuResult)
   } else {
-    const diskstatsResult = runShell(`grep -E ' (sd|vd|nvme|dm-|loop)' /proc/diskstats || true`, 2000)
-    printCommandResult('/proc/diskstats Snapshot', diskstatsResult)
+    const windowsMemory = runPowerShell('Get-CimInstance Win32_OperatingSystem | Select-Object TotalVisibleMemorySize,FreePhysicalMemory,TotalVirtualMemorySize,FreeVirtualMemory | Format-List | Out-String', 5000)
+    printCommandResult('Memory Snapshot', windowsMemory)
+
+    const windowsTopCpu = runPowerShell('Get-Process | Sort-Object CPU -Descending | Select-Object -First 20 Id,ProcessName,CPU,WorkingSet64 | Format-Table -AutoSize | Out-String', 5000)
+    printCommandResult('Top CPU Processes Snapshot', windowsTopCpu)
   }
 
   banner('💾  STORAGE, MOUNTS & FILESYSTEM')
@@ -3376,24 +3600,27 @@ async function main() {
     printFileStats(`Project ${project.id} DB File Stats`, project.projectDbPath)
     printFileStats(`Project ${project.id} DB WAL Stats`, `${project.projectDbPath}-wal`)
     printFileStats(`Project ${project.id} DB SHM Stats`, `${project.projectDbPath}-shm`)
-    printFileStats(`Project ${project.id} Git Index Stats`, resolve(project.folderPath, '.git', 'index'))
+    printFileStats(`Project ${project.id} Git Index Stats`, resolve(project.resolvedFolderPath, '.git', 'index'))
   }
 
   banner('🔀  GIT RESPONSIVENESS')
   for (const project of projectSnapshots) {
-    const gitStatus = runShell(`git -C ${shellQuote(project.folderPath)} status --short --branch`, 5000)
+    const projectPathArg = commandShellQuote(project.resolvedFolderPath)
+    const gitStatus = runShell(`git -C ${projectPathArg} status --short --branch`, 5000)
     printCommandResult(`Project ${project.id} Git Status`, gitStatus)
 
     const gitStatusTrace = runShell(
-      `env GIT_TRACE2_PERF=1 git -C ${shellQuote(project.folderPath)} status --short --branch`,
+      platform === 'windows'
+        ? `$env:GIT_TRACE2_PERF = '1'; git -C ${powerShellQuote(project.resolvedFolderPath)} status --short --branch`
+        : `env GIT_TRACE2_PERF=1 git -C ${projectPathArg} status --short --branch`,
       7000,
     )
     printCommandResult(`Project ${project.id} Git Status Trace2`, gitStatusTrace)
 
-    const gitBranch = runShell(`git -C ${shellQuote(project.folderPath)} rev-parse --abbrev-ref HEAD`, 3000)
+    const gitBranch = runShell(`git -C ${projectPathArg} rev-parse --abbrev-ref HEAD`, 3000)
     printCommandResult(`Project ${project.id} Git Branch`, gitBranch)
 
-    const gitRemoteHead = runShell(`git -C ${shellQuote(project.folderPath)} symbolic-ref --quiet --short refs/remotes/origin/HEAD`, 3000)
+    const gitRemoteHead = runShell(`git -C ${projectPathArg} symbolic-ref --quiet --short refs/remotes/origin/HEAD`, 3000)
     printCommandResult(`Project ${project.id} Git Remote HEAD`, gitRemoteHead)
   }
 
@@ -3409,6 +3636,14 @@ async function main() {
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`
+}
+
+function powerShellQuote(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+function commandShellQuote(value: string): string {
+  return detectPlatform() === 'windows' ? powerShellQuote(value) : shellQuote(value)
 }
 
 await main()

@@ -40,6 +40,7 @@ import {
   archiveActivePhaseAttempts,
   createFreshPhaseAttempts,
   ensureActivePhaseAttempt,
+  listNonTerminalTickets,
   INTERVIEW_EDIT_RESTART_PHASES,
   PRD_EDIT_RESTART_PHASES,
   EXECUTION_SETUP_PLAN_RESTART_PHASES,
@@ -105,7 +106,7 @@ export const createTicketSchema = z.object({
 
 export const updateTicketSchema = z.object({
   title: z.string().min(1).max(200).optional(),
-  description: z.string().optional(),
+  description: z.string().max(10000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
 })
 
@@ -121,6 +122,7 @@ const uiStateScopeSchema = z.object({
 const upsertUiStateSchema = z.object({
   scope: z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/),
   data: z.unknown(),
+  clientRevision: z.number().int().nonnegative().optional(),
 })
 
 export const interviewAnswerPayloadSchema = z.object({
@@ -144,12 +146,14 @@ const interviewApprovalAnswerSchema = z.object({
   })).min(1),
 })
 
+const RAW_ARTIFACT_CONTENT_MAX_BYTES = 1_000_000
+
 const rawInterviewSaveSchema = z.object({
-  content: z.string(),
+  content: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES),
 })
 
 const rawPrdSaveSchema = z.object({
-  content: z.string(),
+  content: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES),
 })
 
 const structuredPrdSaveSchema = z.object({
@@ -159,7 +163,7 @@ const structuredPrdSaveSchema = z.object({
 })
 
 const rawExecutionSetupPlanSaveSchema = z.object({
-  content: z.string(),
+  content: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES),
 })
 
 const structuredExecutionSetupPlanSaveSchema = z.object({
@@ -173,12 +177,35 @@ const regenerateExecutionSetupPlanSchema = z.object({
   plan: z.custom<ExecutionSetupPlan>((value) => value === undefined || (Boolean(value) && typeof value === 'object'), {
     message: 'plan must be an object when provided',
   }).optional(),
-  rawContent: z.string().optional(),
+  rawContent: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES).optional(),
 })
 
 const opencodeQuestionReplySchema = z.object({
   answers: z.array(z.array(z.string())),
 })
+
+const devEventSchema = z.object({
+  type: z.enum([
+    'READY',
+    'APPROVE',
+    'DRAFTS_READY',
+    'REFINED',
+    'CHECKS_PASSED',
+    'EXECUTION_SETUP_PLAN_READY',
+    'APPROVE_EXECUTION_SETUP_PLAN',
+    'EXECUTION_SETUP_READY',
+    'BEAD_COMPLETE',
+    'ALL_BEADS_DONE',
+    'TESTS_PASSED',
+    'INTEGRATION_DONE',
+    'PULL_REQUEST_READY',
+    'MERGE_COMPLETE',
+    'CLOSE_UNMERGED_COMPLETE',
+    'CLEANUP_DONE',
+    'CANCEL',
+    'RETRY',
+  ]),
+}).passthrough()
 
 import { MAX_UI_STATE_BYTES } from '../lib/constants'
 
@@ -189,33 +216,54 @@ function uiStateArtifactType(scope: string): string {
   return `${UI_STATE_ARTIFACT_PREFIX}${scope}`
 }
 
-function readUiState(ticketId: string, scope: string): { data: unknown; updatedAt: string | null } | null {
+function readUiState(ticketId: string, scope: string): { data: unknown; updatedAt: string | null; clientRevision: number | null } | null {
   const artifact = getLatestPhaseArtifact(ticketId, uiStateArtifactType(scope), UI_STATE_PHASE)
   if (!artifact) return null
 
   try {
-    const parsed = JSON.parse(artifact.content) as { data?: unknown; updatedAt?: string | null }
+    const parsed = JSON.parse(artifact.content) as { data?: unknown; updatedAt?: string | null; clientRevision?: unknown }
     if (parsed && typeof parsed === 'object' && 'data' in parsed) {
       return {
         data: parsed.data,
         updatedAt: typeof parsed.updatedAt === 'string' ? parsed.updatedAt : artifact.createdAt,
+        clientRevision: typeof parsed.clientRevision === 'number' && Number.isFinite(parsed.clientRevision)
+          ? parsed.clientRevision
+          : null,
       }
     }
-    return { data: parsed, updatedAt: artifact.createdAt }
+    return { data: parsed, updatedAt: artifact.createdAt, clientRevision: null }
   } catch {
-    return { data: null, updatedAt: artifact.createdAt }
+    return { data: null, updatedAt: artifact.createdAt, clientRevision: null }
   }
 }
 
-function upsertUiState(ticketId: string, scope: string, data: unknown): { updatedAt: string } {
+function upsertUiState(
+  ticketId: string,
+  scope: string,
+  data: unknown,
+  clientRevision?: number,
+): { updatedAt: string; clientRevision: number | null; ignored: boolean } {
+  const existing = readUiState(ticketId, scope)
+  if (
+    typeof clientRevision === 'number'
+    && typeof existing?.clientRevision === 'number'
+    && existing.clientRevision > clientRevision
+  ) {
+    return {
+      updatedAt: existing.updatedAt ?? new Date().toISOString(),
+      clientRevision: existing.clientRevision,
+      ignored: true,
+    }
+  }
+
   const now = new Date().toISOString()
-  const payload = JSON.stringify({ data, updatedAt: now })
+  const payload = JSON.stringify({ data, updatedAt: now, clientRevision: clientRevision ?? null })
   if (Buffer.byteLength(payload, 'utf8') > MAX_UI_STATE_BYTES) {
     throw new Error(`UI state payload exceeds ${MAX_UI_STATE_BYTES} bytes`)
   }
 
   upsertLatestPhaseArtifact(ticketId, uiStateArtifactType(scope), UI_STATE_PHASE, payload)
-  return { updatedAt: now }
+  return { updatedAt: now, clientRevision: clientRevision ?? null, ignored: false }
 }
 
 function getProfileDefaults() {
@@ -667,6 +715,7 @@ export function handleGetUiState(c: Context) {
       exists: false,
       data: null,
       updatedAt: null,
+      clientRevision: null,
     })
   }
 
@@ -675,6 +724,7 @@ export function handleGetUiState(c: Context) {
     exists: true,
     data: state.data,
     updatedAt: state.updatedAt,
+    clientRevision: state.clientRevision,
   })
 }
 
@@ -689,8 +739,14 @@ export async function handlePutUiState(c: Context) {
   if (!getTicketByRef(ticketId)) return c.json({ error: 'Ticket not found' }, 404)
 
   try {
-    const result = upsertUiState(ticketId, parsed.data.scope, parsed.data.data)
-    return c.json({ success: true, scope: parsed.data.scope, updatedAt: result.updatedAt })
+    const result = upsertUiState(ticketId, parsed.data.scope, parsed.data.data, parsed.data.clientRevision)
+    return c.json({
+      success: true,
+      ignored: result.ignored,
+      scope: parsed.data.scope,
+      updatedAt: result.updatedAt,
+      clientRevision: result.clientRevision,
+    })
   } catch (err) {
     return c.json({ error: 'Failed to persist UI state', details: String(err) }, 500)
   }
@@ -1792,6 +1848,25 @@ export async function handleListOpenCodeQuestions(c: Context) {
   }
 }
 
+export async function handleListAllOpenCodeQuestions(c: Context) {
+  const questions: NonNullable<Awaited<ReturnType<typeof getTicketPendingOpenCodeQuestions>>> = []
+  const errors: Array<{ ticketId: string; message: string }> = []
+
+  for (const ticket of listNonTerminalTickets()) {
+    try {
+      const ticketQuestions = await getTicketPendingOpenCodeQuestions(ticket.id)
+      if (ticketQuestions?.length) questions.push(...ticketQuestions)
+    } catch (err) {
+      errors.push({ ticketId: ticket.id, message: getErrorMessage(err) })
+    }
+  }
+
+  return c.json({
+    questions,
+    ...(errors.length > 0 ? { errors } : {}),
+  })
+}
+
 export async function handleReplyOpenCodeQuestion(c: Context) {
   const ticketId = getTicketParam(c)
   const requestId = getRequiredRouteParam(c, 'requestId')
@@ -1879,12 +1954,27 @@ export async function handleRejectOpenCodeQuestion(c: Context) {
 }
 
 export async function handleDevEvent(c: Context) {
+  const enabled = process.env.LOOPTROOP_ENABLE_DEV_EVENT === '1'
+  const expectedToken = process.env.LOOPTROOP_DEV_EVENT_TOKEN?.trim()
+  if (!enabled || !expectedToken) {
+    return c.json({ error: 'Not found' }, 404)
+  }
+
+  const suppliedToken = c.req.header('x-looptroop-dev-event-token')?.trim()
+  if (suppliedToken !== expectedToken) {
+    return c.json({ error: 'Unauthorized' }, 401)
+  }
+
   const ticketId = getTicketParam(c)
   if (!getTicketByRef(ticketId)) return c.json({ error: 'Ticket not found' }, 404)
 
   try {
     const body = await c.req.json()
-    sendTicketEvent(ticketId, body)
+    const parsed = devEventSchema.safeParse(body)
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid dev event payload', details: parsed.error.flatten() }, 400)
+    }
+    sendTicketEvent(ticketId, parsed.data)
   } catch (err) {
     console.error(`[tickets] dev-event failed for ticket ${ticketId}:`, err)
     return c.json({ error: String(err) }, 500)

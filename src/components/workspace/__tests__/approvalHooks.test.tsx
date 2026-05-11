@@ -76,11 +76,18 @@ describe('useDebouncedApprovalUiState', () => {
       window.dispatchEvent(new Event('pagehide'))
     })
 
-    expect(fetchSpy).toHaveBeenCalledWith('/api/tickets/1:T-42/ui-state', {
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    const [url, init] = fetchSpy.mock.calls[0] ?? []
+    expect(url).toBe('/api/tickets/1:T-42/ui-state')
+    expect(init).toMatchObject({
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'approval_prd', data: { value: 'leaving' } }),
       keepalive: true,
+    })
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      scope: 'approval_prd',
+      data: { value: 'leaving' },
+      clientRevision: expect.any(Number),
     })
   })
 })

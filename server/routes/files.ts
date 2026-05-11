@@ -14,6 +14,8 @@ const filesRouter = new Hono()
 const VALID_FILES = ['interview', 'prd'] as const
 type ValidFile = typeof VALID_FILES[number]
 type LogChannel = 'normal' | 'debug' | 'ai'
+export const DEFAULT_LOG_ENTRY_LIMIT = 5_000
+export const MAX_LOG_ENTRY_LIMIT = 20_000
 
 function isValidFile(file: string): file is ValidFile {
   return VALID_FILES.includes(file as ValidFile)
@@ -27,6 +29,13 @@ function resolveTicketFilePath(ticketId: string, file: ValidFile): string | null
 
 function normalizeLogChannel(channel?: string): LogChannel {
   return channel === 'debug' || channel === 'ai' ? channel : 'normal'
+}
+
+function parseLogEntryLimit(value?: string): number | null {
+  if (value == null || value.trim() === '') return DEFAULT_LOG_ENTRY_LIMIT
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_LOG_ENTRY_LIMIT) return null
+  return parsed
 }
 
 function normalizeLogEntry(entry: unknown): Record<string, unknown> | null {
@@ -107,6 +116,12 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
 
+  const limit = parseLogEntryLimit(c.req.query('limit'))
+  if (limit == null) {
+    return c.json({ error: `Invalid limit parameter: must be an integer from 1 to ${MAX_LOG_ENTRY_LIMIT}` }, 400)
+  }
+  const tail = c.req.query('tail') !== 'false'
+
   const paths = getTicketPaths(ticketId)
   if (!paths) return c.json({ error: 'Ticket not found' }, 404)
   const channel = normalizeLogChannel(c.req.query('channel'))
@@ -142,7 +157,14 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
     if (!line.trim()) continue
     try {
       const normalized = normalizeLogEntry(JSON.parse(line))
-      if (normalized && logEntryMatchesFilters(normalized, filters)) entries.push(normalized)
+      if (normalized && logEntryMatchesFilters(normalized, filters)) {
+        if (tail) {
+          entries.push(normalized)
+          if (entries.length > limit) entries.shift()
+        } else if (entries.length < limit) {
+          entries.push(normalized)
+        }
+      }
     } catch {
       // Skip malformed lines.
     }
@@ -180,7 +202,7 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
       op: 'append',
     })
   }
-  return c.json(foldedEntries)
+  return c.json(tail && foldedEntries.length > limit ? foldedEntries.slice(-limit) : foldedEntries)
 })
 
 filesRouter.get('/files/:ticketId/:file', async (c) => {

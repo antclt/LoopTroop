@@ -527,6 +527,13 @@ function normalizeInterviewQuestions(content: string): ParsedInterviewQuestion[]
     .filter((question) => question.question.length > 0)
 }
 
+function formatInterviewQuestionDiffText(question: ParsedInterviewQuestion | null | undefined): string | undefined {
+  if (!question) return undefined
+  const text = question.question.trim()
+  if (!text) return undefined
+  return [question.phase.trim() ? `Phase: ${question.phase.trim()}` : '', text].filter(Boolean).join('\n')
+}
+
 function buildInterviewQuestionBlocks(content: string): DiffCandidateBlock[] {
   return normalizeInterviewQuestions(content).map((question) => ({
     key: `question:${question.id}`,
@@ -576,8 +583,8 @@ export function buildInterviewUiRefinementDiffArtifact(params: {
           label: refinedQuestion.id,
           beforeId: winnerQuestion.id,
           afterId: refinedQuestion.id,
-          beforeText: winnerQuestion.question,
-          afterText: refinedQuestion.question,
+          beforeText: formatInterviewQuestionDiffText(winnerQuestion),
+          afterText: formatInterviewQuestionDiffText(refinedQuestion),
         },
         sourceCandidates,
       ),
@@ -600,8 +607,8 @@ export function buildInterviewUiRefinementDiffArtifact(params: {
           label: after.id,
           beforeId: before.id,
           afterId: after.id,
-          beforeText: before.question,
-          afterText: after.question,
+          beforeText: formatInterviewQuestionDiffText(before),
+          afterText: formatInterviewQuestionDiffText(after),
         },
         sourceCandidates,
       ),
@@ -617,7 +624,7 @@ export function buildInterviewUiRefinementDiffArtifact(params: {
           itemKind: 'question',
           label: question.id,
           afterId: question.id,
-          afterText: question.question,
+          afterText: formatInterviewQuestionDiffText(question),
         },
         sourceCandidates,
       ),
@@ -633,7 +640,7 @@ export function buildInterviewUiRefinementDiffArtifact(params: {
           itemKind: 'question',
           label: question.id,
           beforeId: question.id,
-          beforeText: question.question,
+          beforeText: formatInterviewQuestionDiffText(question),
         },
         sourceCandidates,
       ),
@@ -677,8 +684,8 @@ export function buildInterviewUiRefinementDiffArtifactFromChanges(params: {
     const before = change.before ?? null
     const after = change.after ?? null
     const label = after?.id || before?.id || `Q${String(index + 1).padStart(2, '0')}`
-    const beforeText = before?.question
-    const afterText = after?.question
+    const beforeText = formatInterviewQuestionDiffText(before)
+    const afterText = formatInterviewQuestionDiffText(after)
     if (shouldDropNoOpUiRefinementDiffEntry(changeType, beforeText, afterText)) {
       return []
     }

@@ -1,9 +1,50 @@
 import { spawn } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { FORCE_KILL_DELAY_MS } from '../../lib/constants'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
+const MAX_COMMAND_OUTPUT_BYTES = 1_000_000
+
+function getCommandShell(): { bin: string; args: string[] } {
+  if (process.platform === 'win32') {
+    return {
+      bin: process.env.ComSpec || 'cmd.exe',
+      args: ['/d', '/s', '/c'],
+    }
+  }
+
+  return {
+    bin: existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh',
+    args: [existsSync('/bin/bash') ? '-lc' : '-c'],
+  }
+}
+
+function appendBoundedOutput(current: string, chunk: Buffer | string): string {
+  if (Buffer.byteLength(current, 'utf8') >= MAX_COMMAND_OUTPUT_BYTES) return current
+  const text = chunk.toString()
+  const remaining = MAX_COMMAND_OUTPUT_BYTES - Buffer.byteLength(current, 'utf8')
+  const next = `${current}${text.slice(0, remaining)}`
+  if (Buffer.byteLength(next, 'utf8') >= MAX_COMMAND_OUTPUT_BYTES) {
+    return `${next}\n[LoopTroop truncated command output at ${MAX_COMMAND_OUTPUT_BYTES} bytes]`
+  }
+  return next
+}
+
+function terminateProcessTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
+  if (!child.pid) return
+  if (process.platform === 'win32') {
+    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () => undefined)
+    return
+  }
+
+  try {
+    process.kill(-child.pid, signal)
+  } catch {
+    child.kill(signal)
+  }
+}
 
 // Lazy-load commandLogger to avoid vitest mock-resolution deadlock.
 function logCmd(
@@ -70,10 +111,12 @@ async function runCommand(
 ): Promise<FinalTestCommandResult> {
   const startedAt = Date.now()
   return await new Promise<FinalTestCommandResult>((resolve) => {
-    const child = spawn('/bin/bash', ['-lc', command], {
+    const shell = getCommandShell()
+    const child = spawn(shell.bin, [...shell.args, command], {
       cwd,
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
+      detached: process.platform !== 'win32',
     })
 
     let stdout = ''
@@ -98,10 +141,10 @@ async function runCommand(
     }
 
     child.stdout.on('data', (chunk: Buffer | string) => {
-      stdout += chunk.toString()
+      stdout = appendBoundedOutput(stdout, chunk)
     })
     child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr += chunk.toString()
+      stderr = appendBoundedOutput(stderr, chunk)
     })
     child.on('error', (error) => {
       stderr += error.message
@@ -114,8 +157,8 @@ async function runCommand(
     if (timeoutMs && timeoutMs > 0) {
       timeoutHandle = setTimeout(() => {
         timedOut = true
-        child.kill('SIGTERM')
-        setTimeout(() => child.kill('SIGKILL'), FORCE_KILL_DELAY_MS).unref()
+        terminateProcessTree(child, 'SIGTERM')
+        setTimeout(() => terminateProcessTree(child, 'SIGKILL'), FORCE_KILL_DELAY_MS).unref()
       }, timeoutMs)
     }
   })
@@ -138,11 +181,12 @@ export async function executeFinalTestCommands(input: {
 
   for (const command of input.commands) {
     const result = await runCommand(command, input.cwd, input.timeoutMs)
+    const shell = getCommandShell()
     commandResults.push(result)
 
     // Log the command execution to SYS
     if (result.exitCode === 0 && !result.timedOut) {
-      logCmd('/bin/bash', ['-lc', command], {
+      logCmd(shell.bin, [...shell.args, command], {
         ok: true,
         stdout: result.stdout.trim() || undefined,
         stderr: result.stderr.trim() || undefined,
@@ -151,7 +195,7 @@ export async function executeFinalTestCommands(input: {
       const errDetail = result.timedOut
         ? `timed out after ${result.durationMs}ms`
         : `exit code ${result.exitCode ?? 'unknown'}`
-      logCmd('/bin/bash', ['-lc', command], {
+      logCmd(shell.bin, [...shell.args, command], {
         ok: false,
         error: errDetail,
         stdout: result.stdout.trim() || undefined,

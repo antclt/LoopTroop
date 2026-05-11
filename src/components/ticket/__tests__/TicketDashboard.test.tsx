@@ -7,6 +7,7 @@ import { queryClient } from '@/lib/queryClient'
 import { makeTicket } from '@/test/factories'
 import { patchTicketStatusInCache } from '@/hooks/ticketStatusCache'
 import { WORKSPACE_PHASE_NAVIGATE_EVENT } from '@/lib/workspaceNavigation'
+import { INTERVIEW_BATCH_EVENT } from '@/lib/interviewBatchEvents'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { createJsonResponse } from '@/test/renderHelpers'
 import { useLogs } from '@/context/useLogContext'
@@ -350,6 +351,132 @@ describe('TicketDashboard', () => {
       expect(screen.getByText('[SYS] Live coding log arrived.')).toBeInTheDocument()
       expect(screen.getByTestId('workspace-log-count')).toHaveTextContent('2')
     })
+  })
+
+  it('renders app_error SSE events as application log errors', async () => {
+    const initialTicket = makeTicket({ status: 'CODING', id: selectedTicketId })
+
+    queryClient.setQueryData(['ticket', selectedTicketId], initialTicket)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${selectedTicketId}/logs`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}`)) {
+        return createJsonResponse(initialTicket)
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(latestSSEOptions?.ticketId).toBe(selectedTicketId)
+      expect(screen.getByTestId('workspace-log-count')).toHaveTextContent('1')
+    })
+
+    await act(async () => {
+      latestSSEOptions?.onEvent?.({
+        type: 'app_error',
+        data: {
+          ticketId: selectedTicketId,
+          phase: 'CODING',
+          message: 'Final test failed.',
+          timestamp: '2026-05-04T10:00:00.000Z',
+        },
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('[ERROR] Final test failed.')).toBeInTheDocument()
+      expect(screen.getByTestId('workspace-log-count')).toHaveTextContent('3')
+    })
+  })
+
+  it('forwards valid interview batch SSE payloads as typed custom events', async () => {
+    const initialTicket = makeTicket({ status: 'WAITING_INTERVIEW_ANSWERS', id: selectedTicketId })
+    const postMessageSpy = vi.spyOn(window, 'postMessage')
+    const dispatchSpy = vi.spyOn(window, 'dispatchEvent')
+
+    queryClient.setQueryData(['ticket', selectedTicketId], initialTicket)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${selectedTicketId}/logs`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}`)) {
+        return createJsonResponse(initialTicket)
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(latestSSEOptions?.ticketId).toBe(selectedTicketId)
+    })
+
+    const batch = {
+      questions: [
+        {
+          id: 'Q01',
+          question: 'Which target matters?',
+          phase: 'Scope',
+          source: 'compiled',
+        },
+      ],
+      progress: { current: 1, total: 2 },
+      isComplete: false,
+      isFinalFreeForm: false,
+      aiCommentary: 'Pick the highest-signal target.',
+      batchNumber: 1,
+      source: 'prom4',
+    }
+
+    await act(async () => {
+      latestSSEOptions?.onEvent?.({
+        type: 'needs_input',
+        data: {
+          type: 'interview_batch',
+          ticketId: selectedTicketId,
+          batch,
+        },
+      })
+    })
+
+    const customEvent = dispatchSpy.mock.calls
+      .map(([event]) => event)
+      .find((event) => event.type === INTERVIEW_BATCH_EVENT) as CustomEvent | undefined
+
+    expect(customEvent?.detail).toEqual({
+      type: 'interview_batch',
+      ticketId: selectedTicketId,
+      batch,
+    })
+    expect(postMessageSpy).not.toHaveBeenCalled()
+
+    dispatchSpy.mockClear()
+
+    await act(async () => {
+      latestSSEOptions?.onEvent?.({
+        type: 'needs_input',
+        data: {
+          type: 'interview_batch',
+          ticketId: selectedTicketId,
+          batch: { questions: 'invalid' },
+        },
+      })
+    })
+
+    expect(dispatchSpy.mock.calls.some(([event]) => event.type === INTERVIEW_BATCH_EVENT)).toBe(false)
   })
 
   it('keeps a manually selected past phase pinned across live transitions', async () => {

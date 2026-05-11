@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { HelpCircle, Minus, X } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { getApiUrl, waitForDevBackend } from '@/lib/devApi'
-import { SSE_RECONNECT_DELAY_MS, QUESTION_RECOVERY_INTERVAL_MS } from '@/lib/constants'
+import { QUESTION_RECOVERY_INTERVAL_MS } from '@/lib/constants'
 import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
 import { AIQuestionContext, type AIQuestionContextValue } from './aiQuestionContextDef'
@@ -97,70 +96,6 @@ function parseQuestionPayload(data: Record<string, unknown>): AIQuestionPayload 
     ...(typeof data.questionCount === 'number' ? { questionCount: data.questionCount } : {}),
     ...(typeof data.timestamp === 'string' ? { timestamp: data.timestamp } : {}),
   }
-}
-
-function AIQuestionTicketStream({
-  ticketId,
-  onPayload,
-}: {
-  ticketId: string
-  onPayload: (payload: AIQuestionPayload) => void
-}) {
-  const onPayloadRef = useRef(onPayload)
-  const lastEventIdRef = useRef('0')
-
-  useEffect(() => {
-    onPayloadRef.current = onPayload
-  }, [onPayload])
-
-  useEffect(() => {
-    let eventSource: EventSource | null = null
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
-    let closed = false
-
-    const connect = () => {
-      if (closed || eventSource) return
-      void (async () => {
-        try {
-          await waitForDevBackend()
-        } catch {
-          if (!closed) reconnectTimer = setTimeout(connect, SSE_RECONNECT_DELAY_MS)
-          return
-        }
-        if (closed || eventSource) return
-
-        const url = new URL(getApiUrl('/api/stream', { directInDevelopment: true }))
-        url.searchParams.set('ticketId', ticketId)
-        if (lastEventIdRef.current !== '0') url.searchParams.set('lastEventId', lastEventIdRef.current)
-
-        const source = new EventSource(url.toString())
-        eventSource = source
-        source.addEventListener('needs_input', (event) => {
-          lastEventIdRef.current = event.lastEventId || lastEventIdRef.current
-          try {
-            const parsed = parseQuestionPayload(JSON.parse(event.data) as Record<string, unknown>)
-            if (parsed) onPayloadRef.current(parsed)
-          } catch {
-            // Ignore malformed events from older backends.
-          }
-        })
-        source.onerror = () => {
-          source.close()
-          eventSource = null
-          if (!closed) reconnectTimer = setTimeout(connect, SSE_RECONNECT_DELAY_MS)
-        }
-      })()
-    }
-
-    connect()
-    return () => {
-      closed = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      eventSource?.close()
-    }
-  }, [ticketId])
-
-  return null
 }
 
 function QuestionAnswerForm({
@@ -326,6 +261,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
   const [minimized, setMinimized] = useState(false)
   const ticketsById = useMemo(() => new Map(tickets.map((ticket) => [ticket.id, ticket])), [tickets])
   const activeTickets = useMemo(() => tickets.filter((ticket) => !isTerminalStatus(ticket.status)), [tickets])
+  const activeTicketIds = useMemo(() => new Set(activeTickets.map((ticket) => ticket.id)), [activeTickets])
   const activeTicketKey = activeTickets.map((ticket) => ticket.id).join('|')
 
   const removeRequest = useCallback((requestId: string) => {
@@ -372,20 +308,19 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
     let cancelled = false
 
     const recover = async () => {
-      await Promise.all(activeTickets.map(async (ticket) => {
-        try {
-          const res = await fetch(`/api/tickets/${ticket.id}/opencode/questions`)
-          if (!res.ok) return
-          const body = await res.json() as { questions?: Array<Record<string, unknown>> }
-          if (cancelled || !Array.isArray(body.questions)) return
-          for (const raw of body.questions) {
-            const payload = parseQuestionPayload(raw)
-            if (payload) ingestPayload(payload)
-          }
-        } catch {
-          // Best-effort recovery; live SSE remains authoritative while connected.
+      if (activeTicketIds.size === 0) return
+      try {
+        const res = await fetch('/api/opencode/questions')
+        if (!res.ok) return
+        const body = await res.json() as { questions?: Array<Record<string, unknown>> }
+        if (cancelled || !Array.isArray(body.questions)) return
+        for (const raw of body.questions) {
+          const payload = parseQuestionPayload(raw)
+          if (payload && activeTicketIds.has(payload.ticketId)) ingestPayload(payload)
         }
-      }))
+      } catch {
+        // Best-effort recovery; the next aggregate poll can still pick up pending requests.
+      }
     }
 
     void recover()
@@ -394,7 +329,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
       cancelled = true
       clearInterval(interval)
     }
-  }, [activeTicketKey, activeTickets, ingestPayload])
+  }, [activeTicketIds, activeTicketKey, ingestPayload])
 
   const queue = useMemo<AIQuestionQueueItem[]>(() => {
     const items = Object.values(requests)
@@ -502,9 +437,6 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
   return (
     <AIQuestionContext.Provider value={value}>
       {children}
-      {activeTickets.map((ticket) => (
-        <AIQuestionTicketStream key={ticket.id} ticketId={ticket.id} onPayload={ingestPayload} />
-      ))}
       {activeItem && !minimized && (
         <AIQuestionPopup
           item={activeItem}

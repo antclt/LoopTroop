@@ -11,12 +11,17 @@ import { modelsRouter } from './routes/models'
 import { filesRouter } from './routes/files'
 import { beadsRouter } from './routes/beads'
 import { validateJson } from './middleware/validation'
-import { getBackendPort, getFrontendOrigin } from '../shared/appConfig'
+import { getAllowedBackendHost, getBackendPort, getFrontendOrigin, isLoopbackHost } from '../shared/appConfig'
 import { workflowRouter } from './routes/workflow'
 import { startUpsertBuffer, stopUpsertBuffer } from './log/upsertBuffer'
 import { createApiRateLimitMiddleware } from './middleware/rateLimit'
+import { createApiAuthMiddleware, API_TOKEN_HEADER } from './middleware/apiAuth'
+import { closeDatabase } from './db/index'
+import { clearProjectDatabaseCache } from './db/project'
+import { broadcaster } from './sse/broadcaster'
 
 const app = new Hono()
+const SHUTDOWN_FORCE_EXIT_MS = 5_000
 
 function isLocalhostRequest(c: Context): boolean {
   const host = c.req.header('Host')?.trim().toLowerCase()
@@ -54,9 +59,10 @@ app.use('/api/*', cors({
   origin: getFrontendOrigin(),
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   // Cache-Control is required for EventSource (browser sends Cache-Control: no-cache in CORS preflight)
-  allowHeaders: ['Content-Type', 'Last-Event-ID', 'Cache-Control'],
+  allowHeaders: ['Content-Type', 'Last-Event-ID', 'Cache-Control', 'Authorization', API_TOKEN_HEADER],
 }))
 app.use('/api/*', createApiRateLimitMiddleware())
+app.use('/api/*', createApiAuthMiddleware())
 app.use('/api/*', validateJson)
 
 // Mount routes
@@ -70,17 +76,53 @@ app.route('/api', filesRouter)
 app.route('/api', beadsRouter)
 app.route('/api', workflowRouter)
 
-process.on('SIGTERM', () => stopUpsertBuffer())
-process.on('SIGINT', () => stopUpsertBuffer())
-
 const port = getBackendPort()
+const hostname = getAllowedBackendHost()
+let serverHandle: ReturnType<typeof serve> | null = null
+let shutdownStarted = false
+
+async function closeHttpServer(): Promise<void> {
+  if (!serverHandle || typeof serverHandle.close !== 'function') return
+  await new Promise<void>((resolve) => {
+    serverHandle?.close(() => resolve())
+  })
+}
+
+async function shutdown(signal: NodeJS.Signals): Promise<void> {
+  if (shutdownStarted) return
+  shutdownStarted = true
+  console.log(`[server] Received ${signal}; shutting down LoopTroop backend.`)
+
+  const forceExit = setTimeout(() => {
+    console.error('[server] Graceful shutdown timed out; forcing exit.')
+    process.exit(1)
+  }, SHUTDOWN_FORCE_EXIT_MS)
+  forceExit.unref()
+
+  try {
+    await closeHttpServer()
+    stopUpsertBuffer()
+    broadcaster.stopAutoCleanup()
+    clearProjectDatabaseCache()
+    closeDatabase()
+    clearTimeout(forceExit)
+    process.exit(0)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[server] Shutdown failed: ${message}`)
+    process.exit(1)
+  }
+}
+
+process.on('SIGTERM', () => void shutdown('SIGTERM'))
+process.on('SIGINT', () => void shutdown('SIGINT'))
 
 async function startServer(): Promise<void> {
-  console.log(`[server] LoopTroop backend starting on port ${port}`)
+  console.log(`[server] LoopTroop backend starting on ${hostname}:${port}`)
   await startupSequence()
   startUpsertBuffer()
-  serve({ fetch: app.fetch, port })
-  console.log(`[server] LoopTroop backend running on http://localhost:${port}`)
+  serverHandle = serve({ fetch: app.fetch, port, hostname })
+  console.log(`[server] LoopTroop backend running on http://${hostname}:${port}`)
 }
 
 void startServer().catch((error: unknown) => {
@@ -91,3 +133,4 @@ void startServer().catch((error: unknown) => {
 
 export default app
 export { app }
+export { isLoopbackHost }

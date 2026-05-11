@@ -27,10 +27,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
+const REDACTED = '[redacted]'
+const CREDENTIAL_WORD_KEY_PATTERN = String.raw`(?:x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret)`
+const CREDENTIAL_VALUE_PATTERN = /(["']?(?:authorization|x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret)["']?\s*[:=]\s*)(["']?)(?:Bearer\s+)?([^"',\s}&]+)(\2)/gi
+const BEARER_TOKEN_PATTERN = /\b(Bearer\s+)([A-Za-z0-9._~+/-]+=*)/gi
+
 function redactSensitive(value: string): string {
   return value
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, '[redacted]')
-    .replace(/("?(?:api[_-]?key|token|authorization|password|secret)"?\s*[:=]\s*"?)([^"',\s}]+)/gi, '$1[redacted]')
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, REDACTED)
+    .replace(CREDENTIAL_VALUE_PATTERN, (_match, prefix: string, quote: string, _secret: string, closingQuote: string) =>
+      `${prefix}${quote}${REDACTED}${closingQuote}`,
+    )
+    .replace(new RegExp(String.raw`\b(${CREDENTIAL_WORD_KEY_PATTERN})\s+(?:is\s+)?(["']?)([^"',\s}&]+)(\2)`, 'gi'), (_match, key: string, quote: string, _secret: string, closingQuote: string) =>
+      `${key} ${quote}${REDACTED}${closingQuote}`,
+    )
+    .replace(BEARER_TOKEN_PATTERN, `$1${REDACTED}`)
 }
 
 function cleanString(value: unknown, maxLength = 1000): string | undefined {

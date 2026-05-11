@@ -7,6 +7,7 @@ import { useTicketArtifacts } from '@/hooks/useTicketArtifacts'
 import { getArtifactTargetPhases, parseIntegrationReport } from './phaseArtifactTypes'
 import type { Ticket } from '@/hooks/useTickets'
 import { cn } from '@/lib/utils'
+import { getSafeGitHubPullRequestUrl } from '@/lib/githubUrls'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface VerificationSummaryPanelProps {
@@ -68,7 +69,7 @@ export function VerificationSummaryPanel({ ticket, onMerge, onCloseUnmerged, isP
   const commitSha = runtime.candidateCommitSha ?? integrationReport?.candidateCommitSha
   const branchName = ticket.branchName ?? ticket.externalId
   const baseBranch = runtime.baseBranch ?? integrationReport?.baseBranch ?? 'main'
-  const prUrl = runtime.prUrl
+  const prUrl = getSafeGitHubPullRequestUrl(runtime.prUrl)
   const prState = runtime.prState
   const commitCount = integrationReport?.commitCount
   const testAttempts = finalTestReport?.attempt
@@ -132,11 +133,11 @@ export function VerificationSummaryPanel({ ticket, onMerge, onCloseUnmerged, isP
               )}
             </div>
             <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="font-mono truncate">{prUrl ?? 'No PR URL'}</div>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-center text-balance">{prUrl ?? undefined}</TooltipContent>
-                      </Tooltip>
+              <TooltipTrigger asChild>
+                <div className="font-mono truncate">{prUrl ?? (runtime.prUrl ? 'Invalid PR URL' : 'No PR URL')}</div>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center text-balance">{prUrl ?? undefined}</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 

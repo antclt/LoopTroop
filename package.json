@@ -58,8 +58,12 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "db:generate": "drizzle-kit generate",
-    "db:push": "drizzle-kit push"
+    "db:generate": "drizzle-kit generate --config=drizzle.app.config.ts",
+    "db:generate:app": "drizzle-kit generate --config=drizzle.app.config.ts",
+    "db:generate:project": "drizzle-kit generate --config=drizzle.project.config.ts",
+    "db:push": "drizzle-kit push --config=drizzle.app.config.ts",
+    "db:push:app": "drizzle-kit push --config=drizzle.app.config.ts",
+    "db:push:project": "drizzle-kit push --config=drizzle.project.config.ts"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.2",

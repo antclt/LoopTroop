@@ -8,7 +8,7 @@ import {
 } from './dev-maintenance'
 
 const verbose = process.env.LOOPTROOP_DEV_VERBOSE === '1'
-const install = ensureInstallIfNeeded({ verbose })
+const install = ensureInstallIfNeeded({ verbose, allowForceFallback: true })
 if (install.errors.length > 0) {
   for (const error of install.errors) {
     console.error(`[deps:sync] ${error}`)

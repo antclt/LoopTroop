@@ -96,20 +96,20 @@ npm install
 
 ## 4. Starting the Application
 
-The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. It also runs the normal startup maintenance checks for dependencies, npm audit fixes, and the local OpenCode CLI. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures it with ephemeral basic auth credentials when a new local server is needed.
+The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. Its default preflight is read-mostly: it restores missing local dependencies when needed, checks LoopTroop-owned ports, and leaves dependency upgrades, audit remediation, and OpenCode CLI upgrades behind explicit maintenance commands or `LOOPTROOP_DEV_FORCE_MAINTENANCE=1`. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures newly started local services with ephemeral credentials and an ephemeral API token when you have not configured your own.
 
 ```bash
 npm run dev
 ```
 
-For non-mutating startup, forced maintenance, verbose startup output, and manual maintenance commands, see [Operations Guide](operations.md).
+For forced maintenance, verbose startup output, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
 
 By default, the services run on these ports:
 
 | Service | Address |
 | --- | --- |
 | **Frontend** (UI) | `http://localhost:5173` |
-| **Backend** (API) | `http://localhost:3000` |
+| **Backend** (API) | `http://127.0.0.1:3000` |
 | **Docs** | `http://localhost:5174` |
 | **OpenCode** | `http://127.0.0.1:4096` |
 

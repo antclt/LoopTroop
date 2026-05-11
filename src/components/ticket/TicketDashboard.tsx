@@ -14,6 +14,7 @@ import { clearErrorTicketSeen, getErrorTicketSignature, markErrorTicketSeen } fr
 import { MAX_RAW_OUTPUT_LENGTH } from '@/lib/constants'
 import { WORKFLOW_PHASE_IDS } from '@shared/workflowMeta'
 import { getActiveErrorOccurrence, getTicketErrorOccurrences } from '@/lib/errorOccurrences'
+import { dispatchInterviewBatchEvent, parseInterviewBatchEventDetail } from '@/lib/interviewBatchEvents'
 import { INTERVIEW_APPROVAL_FOCUS_EVENT } from '@/lib/interviewDocument'
 import { PRD_APPROVAL_FOCUS_EVENT } from '@/lib/prdDocument'
 import { BEADS_APPROVAL_FOCUS_EVENT } from '@/lib/beadsDocument'
@@ -88,12 +89,12 @@ function SSELogConnector({
       return
     }
 
-    if (event.type === 'error') {
+    if (event.type === 'app_error') {
       const phase = String(event.data.phase ?? logCtx?.activePhase ?? currentStatus ?? '')
       if (phase) {
         logCtx?.addLog(
           phase,
-          `[DEBUG] sse.error ${toDebugJson(event.data)}`,
+          `[DEBUG] sse.app_error ${toDebugJson(event.data)}`,
           {
             source: 'debug',
             status: phase,
@@ -116,22 +117,14 @@ function SSELogConnector({
       return
     }
 
-    // Forward interview_batch needs_input events to InterviewQAView via window.postMessage
-    if (event.type === 'needs_input' && event.data.type === 'interview_batch') {
-      window.postMessage(JSON.stringify({
-        type: 'interview_batch',
-        ticketId: event.data.ticketId,
-        batch: event.data.batch,
-      }), '*')
-    }
-
-    // Forward interview_error events so InterviewQAView can show the error
-    if (event.type === 'needs_input' && event.data.type === 'interview_error') {
-      window.postMessage(JSON.stringify({
-        type: 'interview_error',
-        ticketId: event.data.ticketId,
-        error: event.data.error,
-      }), '*')
+    if (
+      event.type === 'needs_input'
+      && (event.data.type === 'interview_batch' || event.data.type === 'interview_error')
+    ) {
+      const interviewDetail = parseInterviewBatchEventDetail(event.data)
+      if (interviewDetail) {
+        dispatchInterviewBatchEvent(interviewDetail)
+      }
     }
 
     if (

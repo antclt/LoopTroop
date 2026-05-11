@@ -333,6 +333,10 @@ If two questions share the same normalized ID, the duplicate is assigned the nex
 
 **Warning:** *Renumbered duplicate question id Q01 at index 3 to Q05.*
 
+**Malformed structured question collections**
+
+When a response contains a structured `questions` collection, every entry in that collection must be question-shaped. LoopTroop no longer drops malformed entries and continues with the rest; the artifact fails validation with indexed diagnostics so the normal repair/retry path can ask the model for a complete replacement.
+
 **Phase normalization**
 
 The `phase` field is accepted case-insensitively. Valid values: `foundation`, `structure`, `assembly`.

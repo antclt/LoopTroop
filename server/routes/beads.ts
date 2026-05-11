@@ -8,12 +8,29 @@ import { clearExecutionSetupState } from '../phases/executionSetup/storage'
 import { upsertBeadsApprovalSnapshot } from '../phases/beads/document'
 
 const beadsRouter = new Hono()
+const FLOW_NAME_PATTERN = /^[A-Za-z0-9._/-]+$/
 
-function resolveBeadsPath(ticketId: string, flow?: string): string | null {
+function isSafeFlowName(flow: string): boolean {
+  if (!flow || path.isAbsolute(flow) || flow.includes('\\') || !FLOW_NAME_PATTERN.test(flow)) return false
+  return flow.split('/').every((segment) => Boolean(segment) && segment !== '.' && segment !== '..')
+}
+
+function resolveBeadsPath(ticketId: string, flow?: string): { filePath: string } | { error: string; status: 400 | 404 } {
   const paths = getTicketPaths(ticketId)
-  if (!paths) return null
+  if (!paths) return { error: 'Ticket not found', status: 404 }
   const resolvedFlow = flow?.trim() || paths.baseBranch
-  return path.join(paths.ticketDir, 'beads', resolvedFlow, '.beads', 'issues.jsonl')
+  if (!isSafeFlowName(resolvedFlow)) {
+    return { error: 'Invalid flow parameter', status: 400 }
+  }
+
+  const beadsRoot = path.resolve(paths.ticketDir, 'beads')
+  const filePath = path.resolve(beadsRoot, resolvedFlow, '.beads', 'issues.jsonl')
+  const relativePath = path.relative(beadsRoot, filePath)
+  if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
+    return { error: 'Invalid flow parameter', status: 400 }
+  }
+
+  return { filePath }
 }
 
 beadsRouter.get('/tickets/:id/beads', (c) => {
@@ -21,8 +38,9 @@ beadsRouter.get('/tickets/:id/beads', (c) => {
   if (!getTicketByRef(ticketId)) return c.json({ error: 'Ticket not found' }, 404)
 
   const flow = c.req.query('flow')
-  const filePath = resolveBeadsPath(ticketId, flow)
-  if (!filePath) return c.json({ error: 'Ticket not found' }, 404)
+  const resolved = resolveBeadsPath(ticketId, flow)
+  if ('error' in resolved) return c.json({ error: resolved.error }, resolved.status)
+  const { filePath } = resolved
 
   if (!fs.existsSync(filePath)) {
     return c.json([])
@@ -48,8 +66,9 @@ beadsRouter.put('/tickets/:id/beads', async (c) => {
     return c.json({ error: 'Request body must be a JSON array' }, 400)
   }
 
-  const filePath = resolveBeadsPath(ticketId, flow)
-  if (!filePath) return c.json({ error: 'Ticket not found' }, 404)
+  const resolved = resolveBeadsPath(ticketId, flow)
+  if ('error' in resolved) return c.json({ error: resolved.error }, resolved.status)
+  const { filePath } = resolved
 
   try {
     const jsonl = body.map((item: unknown) => JSON.stringify(item)).join('\n') + '\n'

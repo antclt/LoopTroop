@@ -7,6 +7,7 @@ import { validateModelSelection } from '../opencode/modelValidation'
 import { parseCouncilMembers } from '../council/members'
 
 const profileRouter = new Hono()
+const MAX_TIMEOUT_MS = 3_600_000
 
 const profileSchema = z.object({
   mainImplementer: z.string().optional(),
@@ -14,10 +15,10 @@ const profileSchema = z.object({
   councilMembers: z.string().optional(),
   councilMemberVariants: z.string().optional(),
   minCouncilQuorum: z.number().int().min(1).max(4).optional(),
-  perIterationTimeout: z.number().int().nonnegative().optional(), // 0 = no timeout
-  executionSetupTimeout: z.number().int().nonnegative().optional(), // 0 = no timeout
-  councilResponseTimeout: z.number().int().positive().optional(),
-  interviewQuestions: z.number().int().nonnegative().optional(), // 0 = infinite questions
+  perIterationTimeout: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(), // 0 = no timeout
+  executionSetupTimeout: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(), // 0 = no timeout
+  councilResponseTimeout: z.number().int().min(10_000).max(MAX_TIMEOUT_MS).optional(),
+  interviewQuestions: z.number().int().min(0).max(50).optional(), // 0 = infinite questions
   coverageFollowUpBudgetPercent: z.number().int().min(0).max(100).optional(),
   maxCoveragePasses: z.number().int().min(1).max(10).optional(),
   maxPrdCoveragePasses: z.number().int().min(2).max(20).optional(),

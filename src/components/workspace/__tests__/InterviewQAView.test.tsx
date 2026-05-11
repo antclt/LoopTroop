@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { InterviewSessionView, PersistedInterviewBatch } from '@shared/interviewSession'
 import { makeTicket, TEST } from '@/test/factories'
 import { createJsonResponse, renderWithProviders as sharedRenderWithProviders } from '@/test/renderHelpers'
+import { INTERVIEW_BATCH_EVENT } from '@/lib/interviewBatchEvents'
 import { InterviewQAView } from '../InterviewQAView'
 
 let submittedBody: { answers?: Record<string, string>; selectedOptions?: Record<string, string[]> } | null = null
@@ -47,6 +48,32 @@ function makeBatch(overrides: Partial<PersistedInterviewBatch> = {}): PersistedI
     source: 'prom4',
     ...overrides,
   }
+}
+
+function makeChoiceBatch(overrides: Partial<PersistedInterviewBatch> = {}): PersistedInterviewBatch {
+  return makeBatch({
+    questions: [
+      {
+        id: 'QF01',
+        phase: 'Assembly',
+        question: 'Which persistence mode should retries use?',
+        source: 'prompt_follow_up',
+        roundNumber: 1,
+        answerType: 'single_choice',
+        options: [
+          { id: 'memory', label: 'In-memory' },
+          { id: 'database', label: 'Database-backed' },
+        ],
+      },
+      {
+        id: 'Q03',
+        phase: 'Assembly',
+        question: 'What retry budget is acceptable?',
+        source: 'compiled',
+      },
+    ],
+    ...overrides,
+  })
 }
 
 describe('InterviewQAView', () => {
@@ -187,7 +214,7 @@ describe('InterviewQAView', () => {
     vi.stubGlobal('fetch', vi.fn(async (input, init) => {
       const url = String(input)
       if (url.endsWith(`/api/tickets/${TEST.ticketId}/answer-batch`)) {
-        submittedBody = init?.body ? JSON.parse(String(init.body)) as { answers?: Record<string, string> } : null
+        submittedBody = init?.body ? JSON.parse(String(init.body)) as { answers?: Record<string, string>; selectedOptions?: Record<string, string[]> } : null
         return createJsonResponse(makeBatch())
       }
       if (url.endsWith(`/api/tickets/${TEST.ticketId}/skip`)) {
@@ -383,5 +410,106 @@ describe('InterviewQAView', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('clears choice selections when a question is skipped before submitting', async () => {
+    interviewData.session!.currentBatch = makeChoiceBatch()
+
+    renderWithProviders(<InterviewQAView ticket={makeTicket({ status: 'WAITING_INTERVIEW_ANSWERS' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Which persistence mode should retries use?')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByLabelText('Database-backed'))
+    fireEvent.click(screen.getAllByRole('button', { name: /skip question/i })[0]!)
+    fireEvent.change(screen.getByPlaceholderText('Type your answer here.'), {
+      target: { value: 'Retry twice before falling back.' },
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+    })
+
+    expect(submittedBody).toEqual({
+      answers: {
+        QF01: '',
+        Q03: 'Retry twice before falling back.',
+      },
+      selectedOptions: {},
+    })
+  })
+
+  it('filters stale selected choice IDs for skipped questions before submit', async () => {
+    const batchKey = 'prom4:0:2'
+    interviewData.session!.currentBatch = makeChoiceBatch()
+    preSeededDrafts = {
+      draftAnswers: { [batchKey]: { Q03: 'Retry twice before falling back.' } },
+      skippedQuestions: { [batchKey]: ['QF01'] },
+      selectedOptions: { [batchKey]: { QF01: ['database'] } },
+    }
+
+    renderWithProviders(<InterviewQAView ticket={makeTicket({ status: 'WAITING_INTERVIEW_ANSWERS' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/This question will be skipped/i)).toBeInTheDocument()
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /submit/i }))
+    })
+
+    expect(submittedBody).toEqual({
+      answers: {
+        Q03: 'Retry twice before falling back.',
+      },
+      selectedOptions: {},
+    })
+  })
+
+  it('listens for validated interview batch custom events', async () => {
+    interviewData.session!.currentBatch = null
+    const streamedBatch = makeBatch({
+      questions: [
+        {
+          id: 'QNEW',
+          phase: 'Operations',
+          question: 'What deployment target is in scope?',
+          source: 'compiled',
+        },
+      ],
+    })
+
+    renderWithProviders(<InterviewQAView ticket={makeTicket({ status: 'WAITING_INTERVIEW_ANSWERS' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/Waiting for the next interview questions/i)).toBeInTheDocument()
+    })
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(INTERVIEW_BATCH_EVENT, {
+        detail: {
+          type: 'interview_batch',
+          ticketId: TEST.ticketId,
+          batch: { questions: 'not a batch' },
+        },
+      }))
+    })
+
+    expect(screen.queryByText('What deployment target is in scope?')).not.toBeInTheDocument()
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent(INTERVIEW_BATCH_EVENT, {
+        detail: {
+          type: 'interview_batch',
+          ticketId: TEST.ticketId,
+          batch: streamedBatch,
+        },
+      }))
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('What deployment target is in scope?')).toBeInTheDocument()
+    })
   })
 })

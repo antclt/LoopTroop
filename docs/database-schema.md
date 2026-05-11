@@ -15,7 +15,7 @@ That split is intentional:
 | App DB | `~/.config/looptroop/app.sqlite` | `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
 | Project DB | `<project>/.looptroop/db.sqlite` | derived from the attached project root |
 
-Both databases are opened with WAL mode enabled.
+Both databases are opened with WAL mode and SQLite foreign-key enforcement enabled. On project DB startup, LoopTroop removes orphan rows from dependent ticket tables before enabling enforcement so partially written or manually edited databases do not keep dangling references.
 
 ## App Database
 
@@ -199,6 +199,8 @@ erDiagram
     tickets ||--o{ ticket_error_occurrences : records
 ```
 
+Ticket-owned rows cascade when a ticket is deleted. `opencode_sessions.ticket_id` is nullable and is set to `NULL` if a referenced ticket is removed.
+
 ## What Is Not In SQLite
 
 SQLite is not the whole system.
@@ -241,7 +243,16 @@ npm run db:generate
 npm run db:push
 ```
 
-Use `db:generate` when you want a committed migration file in the repository. Use `db:push` for rapid local iteration when you do not yet need a migration record. Both commands target the databases defined in the Drizzle config at the project root.
+Use `db:generate` when you want a committed migration file in the repository. Use `db:push` for rapid local iteration when you do not yet need a migration record.
+
+The default `drizzle.config.ts` targets the app database through `drizzle.app.config.ts`. For project-local database work, use the explicit scripts and set `LOOPTROOP_PROJECT_DB_PATH`:
+
+```bash
+npm run db:generate:project
+npm run db:push:project
+```
+
+This split prevents accidental pushes to a repo-local project DB when the intended target is the app DB, or vice versa.
 
 ## Related Docs
 

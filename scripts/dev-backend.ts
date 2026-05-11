@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -7,9 +8,20 @@ const repoRoot = resolve(__dirname, '..')
 const binExtension = process.platform === 'win32' ? '.cmd' : ''
 const tsxBin = resolve(repoRoot, 'node_modules', '.bin', `tsx${binExtension}`)
 const explicitPolling = process.env.CHOKIDAR_USEPOLLING?.trim()
-const workspaceLooksMounted = process.platform !== 'win32' && repoRoot.startsWith('/mnt/')
+const workspaceLooksMounted = isWslRuntime() && /^\/mnt\/[a-z]\//i.test(repoRoot)
 
 const childEnv = { ...process.env }
+
+function isWslRuntime() {
+  if (process.platform !== 'linux') return false
+  if (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP) return true
+
+  try {
+    return readFileSync('/proc/version', 'utf8').toLowerCase().includes('microsoft')
+  } catch {
+    return false
+  }
+}
 
 function isTruthy(value: string) {
   return value !== '' && value !== '0' && value.toLowerCase() !== 'false'

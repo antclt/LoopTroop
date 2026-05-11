@@ -1,10 +1,5 @@
-import { defineConfig } from 'drizzle-kit'
+import appConfig from './drizzle.app.config'
 
-export default defineConfig({
-  schema: './server/db/schema.ts',
-  out: './server/db/migrations',
-  dialect: 'sqlite',
-  dbCredentials: {
-    url: '.looptroop/db.sqlite',
-  },
-})
+// Default Drizzle target for ad-hoc CLI usage is the app database.
+// Use drizzle.project.config.ts for per-project database commands.
+export default appConfig

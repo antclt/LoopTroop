@@ -213,15 +213,12 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
         }
       })
 
-      // Named 'error' event from the server (MessageEvent with data)
-      es.addEventListener('error', (e) => {
-        const me = e as MessageEvent
-        lastEventIdRef.current = me.lastEventId || lastEventIdRef.current
+      es.addEventListener('app_error', (e) => {
+        lastEventIdRef.current = e.lastEventId || lastEventIdRef.current
         persistLastEventId(ticketId, lastEventIdRef.current)
-        if (typeof me.data !== 'string') return
         try {
-          const data = JSON.parse(me.data) as Record<string, unknown>
-          onEventRef.current?.({ type: 'error', data })
+          const data = JSON.parse(e.data) as Record<string, unknown>
+          onEventRef.current?.({ type: 'app_error', data })
         } catch {
           // ignore parse errors
         }

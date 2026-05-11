@@ -1172,6 +1172,22 @@ function shouldSuppressNoOpUiDiffEntry(
   return beforeText.trim() === afterText.trim()
 }
 
+function splitInterviewQuestionDiffText(text: string | undefined): {
+  phase?: string
+  question?: string
+} {
+  if (typeof text !== 'string') return {}
+  const lines = text.split(/\r?\n/)
+  const phaseMatch = lines[0]?.match(/^Phase:\s*(.+)$/i)
+  if (!phaseMatch) return { question: text }
+
+  const question = lines.slice(1).join('\n').trim()
+  return {
+    phase: phaseMatch[1]?.trim(),
+    question: question || undefined,
+  }
+}
+
 export function buildInterviewDiffEntries(content: string | undefined): InterviewDiffEntry[] {
   if (!content) return []
   try {
@@ -1194,13 +1210,15 @@ export function buildInterviewDiffEntries(content: string | undefined): Intervie
           return []
         }
 
+        const before = splitInterviewQuestionDiffText(entry.beforeText)
+        const after = splitInterviewQuestionDiffText(entry.afterText)
         return [{
           key: entry.key,
           id,
           changeType: entry.changeType,
-          phase: phaseLookup.get(id),
-          before: entry.beforeText,
-          after: entry.afterText,
+          phase: phaseLookup.get(id) ?? after.phase ?? before.phase,
+          before: before.question,
+          after: after.question,
           ...(inspiration ? { inspiration } : {}),
           attributionStatus: normalizeInterviewDiffAttributionStatus(entry.attributionStatus) ?? 'model_unattributed',
         }]
@@ -1263,21 +1281,26 @@ export function buildInterviewDiffEntries(content: string | undefined): Intervie
       winnerId: parsed.winnerId ?? '',
       winnerDraftContent: parsed.originalContent,
       refinedContent: parsed.refinedContent,
-    }).entries.map((entry, index) => ({
-      key: entry.key,
-      id: entry.afterId || entry.beforeId || `Q${String(index + 1).padStart(2, '0')}`,
-      changeType: entry.changeType,
-      before: entry.beforeText,
-      after: entry.afterText,
-      inspiration: entry.inspiration
-        ? {
-            memberId: entry.inspiration.memberId,
-            question: entry.inspiration.sourceText ?? entry.inspiration.sourceLabel,
-            questionId: entry.inspiration.sourceId,
-          }
-        : null,
-      attributionStatus: normalizeInterviewDiffAttributionStatus(entry.attributionStatus) ?? 'model_unattributed',
-    }))
+    }).entries.map((entry, index) => {
+      const before = splitInterviewQuestionDiffText(entry.beforeText)
+      const after = splitInterviewQuestionDiffText(entry.afterText)
+      return {
+        key: entry.key,
+        id: entry.afterId || entry.beforeId || `Q${String(index + 1).padStart(2, '0')}`,
+        changeType: entry.changeType,
+        phase: after.phase ?? before.phase,
+        before: before.question,
+        after: after.question,
+        inspiration: entry.inspiration
+          ? {
+              memberId: entry.inspiration.memberId,
+              question: entry.inspiration.sourceText ?? entry.inspiration.sourceLabel,
+              questionId: entry.inspiration.sourceId,
+            }
+          : null,
+        attributionStatus: normalizeInterviewDiffAttributionStatus(entry.attributionStatus) ?? 'model_unattributed',
+      }
+    })
   } catch {
     return []
   }

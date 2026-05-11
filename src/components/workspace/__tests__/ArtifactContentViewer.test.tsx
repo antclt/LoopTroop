@@ -2906,6 +2906,26 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('npm test -- src/theme-scope.test.js')).toBeInTheDocument()
   })
 
+  it('does not render unsafe pull request report URLs as links', () => {
+    render(
+      <ArtifactContent
+        artifactId="pull-request-report"
+        phase="CREATING_PULL_REQUEST"
+        content={JSON.stringify({
+          status: 'passed',
+          completedAt: '2026-04-10T15:58:47.116Z',
+          prNumber: 42,
+          prUrl: 'javascript:alert(1)',
+          prState: 'draft',
+          message: 'Draft pull request ready.',
+        })}
+      />,
+    )
+
+    expect(screen.queryByRole('link', { name: /open draft pr in github/i })).not.toBeInTheDocument()
+    expect(screen.getByText('Recorded pull request URL is not a valid GitHub PR link.')).toBeInTheDocument()
+  })
+
   it('renders cleanup reports with counts and categorized path sections', () => {
     render(
       <ArtifactContent

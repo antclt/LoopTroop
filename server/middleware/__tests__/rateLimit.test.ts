@@ -45,4 +45,67 @@ describe('API rate limit middleware', () => {
     expect((await app.request('/api/tickets/1:TEST-1/start', { method: 'POST' })).status).toBe(200)
     expect((await app.request('/api/tickets/1:TEST-1/start', { method: 'POST' })).status).toBe(429)
   })
+
+  it('ignores forwarded IP headers unless proxy trust is explicitly enabled', async () => {
+    const app = createRateLimitApp({
+      writeLimitMax: 1,
+      trustProxy: false,
+    })
+
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.1' },
+    })).status).toBe(200)
+
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.2' },
+    })).status).toBe(429)
+  })
+
+  it('uses forwarded IP buckets only when proxy trust is enabled', async () => {
+    const app = createRateLimitApp({
+      writeLimitMax: 1,
+      trustProxy: true,
+    })
+
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.1' },
+    })).status).toBe(200)
+
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.2' },
+    })).status).toBe(200)
+  })
+
+  it('prunes stale buckets and caps bucket growth', async () => {
+    let now = 1_000
+    const buckets = new Map()
+    const app = createRateLimitApp({
+      buckets,
+      trustProxy: true,
+      maxBuckets: 2,
+      windowMs: 10,
+      now: () => now,
+    })
+
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.1' },
+    })).status).toBe(200)
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.2' },
+    })).status).toBe(200)
+
+    now = 1_011
+    expect((await app.request('/api/tickets/1:TEST-1/start', {
+      method: 'POST',
+      headers: { 'x-forwarded-for': '192.0.2.3' },
+    })).status).toBe(200)
+
+    expect(buckets.size).toBeLessThanOrEqual(2)
+  })
 })

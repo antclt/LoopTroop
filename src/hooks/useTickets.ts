@@ -6,6 +6,7 @@ import type { WorkflowAction } from '@shared/workflowMeta'
 import type { InterviewSessionSnapshot, InterviewSessionView, PersistedInterviewBatch } from '@shared/interviewSession'
 import { clearErrorTicketSeen } from '@/lib/errorTicketSeen'
 import type { TicketErrorOccurrence } from '@/lib/errorOccurrences'
+import { nextTicketUiStateRevision, rememberTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
 
 interface TicketRuntime {
   baseBranch: string
@@ -209,6 +210,7 @@ interface TicketUIStateResponse<T = unknown> {
   exists: boolean
   data: T | null
   updatedAt: string | null
+  clientRevision: number | null
 }
 
 async function fetchTicketUIState<T = unknown>(
@@ -229,11 +231,12 @@ async function saveTicketUIState(
   scope: string,
   data: unknown,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ success: boolean; scope: string; updatedAt: string }> {
+): Promise<{ success: boolean; ignored?: boolean; scope: string; updatedAt: string; clientRevision: number | null }> {
+  const clientRevision = nextTicketUiStateRevision(ticketId, scope)
   const res = await fetchImpl(`/api/tickets/${ticketId}/ui-state`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scope, data }),
+    body: JSON.stringify({ scope, data, clientRevision }),
   })
   if (!res.ok) {
     const err = await res.json()
@@ -381,6 +384,11 @@ export function useSaveTicketUIState() {
     mutationFn: ({ ticketId, scope, data }: { ticketId: string; scope: string; data: unknown }) =>
       saveTicketUIState(ticketId, scope, data, fetchImpl),
     onSuccess: (result, variables) => {
+      rememberTicketUiStateRevision(variables.ticketId, variables.scope, result.clientRevision)
+      if (result.ignored) {
+        queryClient.invalidateQueries({ queryKey: ['ticket-ui-state', variables.ticketId, variables.scope] })
+        return
+      }
       queryClient.setQueryData<TicketUIStateResponse<unknown>>(
         ['ticket-ui-state', variables.ticketId, variables.scope],
         () => ({
@@ -388,6 +396,7 @@ export function useSaveTicketUIState() {
           exists: true,
           data: variables.data,
           updatedAt: result.updatedAt,
+          clientRevision: result.clientRevision,
         }),
       )
     },

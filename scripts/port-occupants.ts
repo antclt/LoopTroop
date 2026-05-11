@@ -11,7 +11,7 @@ export type PortOccupantInfo = {
   program: string | null
   command: string | null
   cwd: string | null
-  source: 'lsof' | 'ss'
+  source: 'lsof' | 'ss' | 'netstat' | 'powershell'
 }
 
 export type PortOccupantInspection = {
@@ -23,11 +23,16 @@ export type PortOccupantInspection = {
 type PortInspectorDeps = {
   readCwd: (pid: number) => string | null
   runCommand: (file: string, args: string[]) => string | null
+  platform: NodeJS.Platform
 }
 
 function createDefaultDeps(): PortInspectorDeps {
   return {
     readCwd: (pid) => {
+      if (process.platform !== 'linux') {
+        return null
+      }
+
       try {
         return realpathSync(`/proc/${pid}/cwd`)
       } catch {
@@ -41,6 +46,7 @@ function createDefaultDeps(): PortInspectorDeps {
         return null
       }
     },
+    platform: process.platform,
   }
 }
 
@@ -111,6 +117,67 @@ function parseSsOccupants(output: string | null): PortOccupantInfo[] {
   return occupants
 }
 
+function addressTokenHasPort(token: string, port: number) {
+  const normalized = token.replace(/^\[/, '').replace(/\]$/, '')
+  return normalized.endsWith(`:${port}`) || normalized.endsWith(`.${port}`)
+}
+
+function parseNetstatOccupants(output: string | null, port: number): PortOccupantInfo[] {
+  if (!output) return []
+
+  const occupants: PortOccupantInfo[] = []
+
+  for (const line of output.split('\n')) {
+    const trimmed = line.trim()
+    if (!/^tcp/i.test(trimmed) || !/\bLISTEN(?:ING)?\b/i.test(trimmed)) continue
+
+    const parts = trimmed.split(/\s+/)
+    if (!parts.some((part) => addressTokenHasPort(part, port))) continue
+
+    const pid = parseInteger(parts.at(-1))
+    if (!pid) continue
+
+    occupants.push({
+      pid,
+      ppid: null,
+      program: null,
+      command: null,
+      cwd: null,
+      source: 'netstat',
+    })
+  }
+
+  return occupants
+}
+
+function parseJsonRecords(output: string | null): Array<Record<string, unknown>> {
+  if (!output) return []
+
+  try {
+    const parsed = JSON.parse(output) as unknown
+    if (Array.isArray(parsed)) {
+      return parsed.filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === 'object')
+    }
+    return parsed && typeof parsed === 'object' ? [parsed as Record<string, unknown>] : []
+  } catch {
+    return []
+  }
+}
+
+function parsePowerShellOccupants(output: string | null): PortOccupantInfo[] {
+  return parseJsonRecords(output)
+    .map((entry) => parseInteger(String(entry.OwningProcess ?? entry.ProcessId ?? '')))
+    .filter((pid): pid is number => Boolean(pid))
+    .map((pid) => ({
+      pid,
+      ppid: null,
+      program: null,
+      command: null,
+      cwd: null,
+      source: 'powershell' as const,
+    }))
+}
+
 function dedupeByPid(occupants: PortOccupantInfo[]) {
   const unique = new Map<number, PortOccupantInfo>()
 
@@ -136,12 +203,24 @@ function enrichOccupant(occupant: PortOccupantInfo, deps: PortInspectorDeps): Po
     .find(Boolean)
 
   const match = psLine?.match(/^(\d+)\s+(\d+)\s+(\S+)\s+(.+)$/)
+  const windowsProcess = match || deps.platform !== 'win32' ? null : parseJsonRecords(deps.runCommand('powershell.exe', [
+    '-NoProfile',
+    '-NonInteractive',
+    '-Command',
+    `Get-CimInstance Win32_Process -Filter "ProcessId = ${occupant.pid}" | Select-Object ProcessId,ParentProcessId,Name,CommandLine | ConvertTo-Json -Compress`,
+  ]))[0]
+  const windowsCommand = typeof windowsProcess?.CommandLine === 'string'
+    ? windowsProcess.CommandLine
+    : typeof windowsProcess?.Name === 'string'
+      ? windowsProcess.Name
+      : null
+  const windowsProgram = typeof windowsProcess?.Name === 'string' ? windowsProcess.Name : null
 
   return {
     pid: occupant.pid,
-    ppid: parseInteger(match?.[2]) ?? occupant.ppid,
-    program: match?.[3] ?? occupant.program,
-    command: normalizeCommand(match?.[4]) ?? occupant.command,
+    ppid: parseInteger(match?.[2]) ?? parseInteger(String(windowsProcess?.ParentProcessId ?? '')) ?? occupant.ppid,
+    program: match?.[3] ?? windowsProgram ?? occupant.program,
+    command: normalizeCommand(match?.[4] ?? windowsCommand) ?? occupant.command,
     cwd: deps.readCwd(occupant.pid),
     source: occupant.source,
   }
@@ -203,13 +282,30 @@ export function inspectPortOccupants(
   }
 
   const lsofOutput = deps.runCommand('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'])
-  const rawSocketSnapshot = normalizeSocketSnapshot(
-    deps.runCommand('ss', ['-ltnp', `( sport = :${port} )`]),
+  const ssOutput = deps.runCommand('ss', ['-ltnp', `( sport = :${port} )`])
+  const powerShellOutput = deps.platform === 'win32'
+    ? deps.runCommand('powershell.exe', [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object OwningProcess | ConvertTo-Json -Compress`,
+    ])
+    : null
+  const netstatOutput = deps.runCommand(
+    'netstat',
+    deps.platform === 'win32' ? ['-ano', '-p', 'tcp'] : ['-anv', '-p', 'tcp'],
   )
+  const rawSocketSnapshot = normalizeSocketSnapshot(ssOutput) ?? normalizeSocketSnapshot(netstatOutput)
 
   const discoveredOccupants = parseLsofOccupants(lsofOutput)
   const occupants = dedupeByPid(
-    discoveredOccupants.length > 0 ? discoveredOccupants : parseSsOccupants(rawSocketSnapshot),
+    discoveredOccupants.length > 0
+      ? discoveredOccupants
+      : parseSsOccupants(ssOutput).length > 0
+        ? parseSsOccupants(ssOutput)
+        : parsePowerShellOccupants(powerShellOutput).length > 0
+          ? parsePowerShellOccupants(powerShellOutput)
+          : parseNetstatOccupants(netstatOutput, port),
   ).map((occupant) => enrichOccupant(occupant, deps))
 
   return {

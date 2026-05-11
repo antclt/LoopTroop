@@ -13,6 +13,8 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
 
+When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `X-LoopTroop-Token: <token>`, `Authorization: Bearer <token>`, or the SSE-safe `apiToken=<token>` query parameter. `npm run dev` generates and wires an ephemeral token automatically.
+
 All `/api/*` routes share a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. When a limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying.
 
 ## Health, Models, Workflow Meta, And Streaming
@@ -25,9 +27,9 @@ All `/api/*` routes share a global per-client rate limit, with separate buckets 
 | `POST` | `/api/health/startup/restore-notice/dismiss` | Dismiss startup restore notice |
 | `GET` | `/api/models` | Connected and full model catalog |
 | `GET` | `/api/workflow/meta` | Current workflow groups and phases |
-| `GET` | `/api/stream?ticketId=<id>` | Ticket-scoped SSE stream |
+| `GET` | `/api/stream?ticketId=<id>` | Ticket-scoped SSE stream; validates the ticket and enforces stream caps |
 
-`/api/stream` also accepts `lastEventId` as a query parameter. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible.
+`/api/stream` also accepts `lastEventId` and `apiToken` query parameters. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible.
 
 Example health payload:
 
@@ -163,6 +165,7 @@ Example UI-state payload:
 ```json
 {
   "scope": "interview-drafts",
+  "clientRevision": 12,
   "data": {
     "draftAnswers": {},
     "skippedQuestions": {},
@@ -182,9 +185,12 @@ Example UI-state response:
     "skippedQuestions": {},
     "selectedOptions": {}
   },
-  "updatedAt": "2026-04-23T09:00:00.000Z"
+  "updatedAt": "2026-04-23T09:00:00.000Z",
+  "clientRevision": 12
 }
 ```
+
+`clientRevision` is optional for direct callers but recommended. When present, stale lower revisions are ignored so delayed autosaves cannot overwrite newer UI state.
 
 ### Workflow Actions
 
@@ -201,7 +207,7 @@ Example UI-state response:
 | `POST` | `/api/tickets/:id/close-unmerged` | Close without merge |
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
 | `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase |
-| `POST` | `/api/tickets/:id/dev-event` | Development event injection endpoint |
+| `POST` | `/api/tickets/:id/dev-event` | Disabled by default; requires `LOOPTROOP_ENABLE_DEV_EVENT=1`, `LOOPTROOP_DEV_EVENT_TOKEN`, and `X-LoopTroop-Dev-Event-Token` |
 
 The cancel endpoint accepts an optional JSON request body to trigger cleanup at cancellation time. Both fields default to `false`; the ticket record itself is never deleted.
 
@@ -323,6 +329,7 @@ Regeneration payload:
 
 | Method | Route | Notes |
 | --- | --- | --- |
+| `GET` | `/api/opencode/questions` | Aggregate pending OpenCode question requests across active tickets |
 | `GET` | `/api/tickets/:id/opencode/questions` | List pending OpenCode question requests |
 | `POST` | `/api/tickets/:id/opencode/questions/:requestId/reply` | Submit question answers |
 | `POST` | `/api/tickets/:id/opencode/questions/:requestId/reject` | Reject a question request |
@@ -357,7 +364,7 @@ These routes are intentionally narrow.
 | `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 | `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 
-Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`.
+Log routes accept optional `status`, `phase`, `phaseAttempt`, `limit`, and `tail` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. `limit` defaults to `5000` and is capped at `20000`; by default the endpoint returns the tail of matching entries. Set `tail=false` to return the first matching entries up to the limit.
 
 There is no generic filesystem browser or arbitrary file read route under `/api/files`.
 
@@ -365,9 +372,11 @@ There is no generic filesystem browser or arbitrary file read route under `/api/
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| `GET` | `/api/tickets/:id/beads` | Read bead plan; accepts optional `?flow=` |
-| `PUT` | `/api/tickets/:id/beads` | Replace bead plan; accepts optional `?flow=` |
+| `GET` | `/api/tickets/:id/beads` | Read bead plan; accepts optional safe relative `?flow=` |
+| `PUT` | `/api/tickets/:id/beads` | Replace bead plan; accepts optional safe relative `?flow=` |
 | `GET` | `/api/tickets/:id/beads/:beadId/diff` | Read diff artifact for a bead |
+
+The `flow` value must be a safe relative branch/flow name. Absolute paths, backslashes, `.` segments, and `..` traversal segments are rejected.
 
 ## SSE Events
 
@@ -383,7 +392,7 @@ The stream endpoint emits two categories of events:
 - `state_change`
 - `log`
 - `progress`
-- `error`
+- `app_error`
 - `bead_complete`
 - `needs_input`
 - `artifact_change`

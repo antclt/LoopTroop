@@ -164,6 +164,29 @@ describe('filesRouter GET /files/:ticketId/logs', () => {
     expect(aiPayload.map((entry) => entry.content)).toEqual(['thinking latest'])
     expect(aiPayload.every((entry) => entry.audience === 'ai')).toBe(true)
   })
+
+  it('returns a bounded tail of log entries by default-compatible limit parameters', async () => {
+    const { ticket, paths } = createProjectTicket()
+    writeJsonl(paths.debugLogPath, [
+      { timestamp: '2026-03-13T12:00:00.000Z', message: 'first' },
+      { timestamp: '2026-03-13T12:00:01.000Z', message: 'second' },
+      { timestamp: '2026-03-13T12:00:02.000Z', message: 'third' },
+    ])
+
+    const response = await app.request(`/api/files/${encodeURIComponent(ticket.id)}/logs?channel=debug&limit=2`)
+
+    expect(response.status).toBe(200)
+    const payload = await response.json() as Array<Record<string, unknown>>
+    expect(payload.map((entry) => entry.message)).toEqual(['second', 'third'])
+  })
+
+  it('rejects invalid log limits', async () => {
+    const { ticket } = createProjectTicket()
+
+    const response = await app.request(`/api/files/${encodeURIComponent(ticket.id)}/logs?limit=20001`)
+
+    expect(response.status).toBe(400)
+  })
 })
 
 describe('recoverTicketRuntimeArtifacts', () => {
