@@ -893,11 +893,19 @@ export async function handleStartTicket(c: Context) {
   const lockedMaxBeadsCoveragePasses = profile?.maxBeadsCoveragePasses
     ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses
   const lockedMainImplementerVariant = profile?.mainImplementerVariant ?? null
-  const lockedCouncilMemberVariants: Record<string, string> | null = profile?.councilMemberVariants
-    ? (typeof profile.councilMemberVariants === 'string'
-      ? JSON.parse(profile.councilMemberVariants)
-      : profile.councilMemberVariants)
-    : null
+  let lockedCouncilMemberVariants: Record<string, string> | null = null
+  if (profile?.councilMemberVariants) {
+    if (typeof profile.councilMemberVariants === 'string') {
+      try {
+        lockedCouncilMemberVariants = JSON.parse(profile.councilMemberVariants)
+      } catch (err) {
+        console.warn(`[tickets] Invalid councilMemberVariants configuration for ticket ${ticketId}:`, err)
+        return c.json({ error: 'Invalid configuration: malformed councilMemberVariants' }, 500)
+      }
+    } else {
+      lockedCouncilMemberVariants = profile.councilMemberVariants
+    }
+  }
   const startedAt = new Date().toISOString()
 
   emitRoutePhaseLog(ticketId, startPhase, 'info', 'Locking start configuration.')

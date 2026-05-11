@@ -115,11 +115,18 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
     : channel === 'ai'
       ? paths.aiLogPath
       : paths.executionLogPath
-  if (!fs.existsSync(logPath)) return c.json([])
+  try {
+    await fs.promises.access(logPath)
+  } catch {
+    return c.json([])
+  }
   const statusFilter = c.req.query('status')
   const phaseFilter = c.req.query('phase')
   const phaseAttemptFilterRaw = c.req.query('phaseAttempt')
   const phaseAttemptFilter = phaseAttemptFilterRaw != null ? Number(phaseAttemptFilterRaw) : undefined
+  if (phaseAttemptFilter !== undefined && !Number.isFinite(phaseAttemptFilter)) {
+    return c.json({ error: 'Invalid phaseAttempt parameter: must be a number' }, 400)
+  }
   const filters = {
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(phaseFilter ? { phase: phaseFilter } : {}),
@@ -176,7 +183,7 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
   return c.json(foldedEntries)
 })
 
-filesRouter.get('/files/:ticketId/:file', (c) => {
+filesRouter.get('/files/:ticketId/:file', async (c) => {
   const ticketId = c.req.param('ticketId')
   const file = c.req.param('file')
 
@@ -188,11 +195,13 @@ filesRouter.get('/files/:ticketId/:file', (c) => {
   const filePath = resolveTicketFilePath(ticketId, file)
   if (!filePath) return c.json({ error: 'Ticket not found' }, 404)
 
-  if (!fs.existsSync(filePath)) {
+  try {
+    await fs.promises.access(filePath)
+  } catch {
     return c.json({ content: '', exists: false })
   }
 
-  const content = fs.readFileSync(filePath, 'utf-8')
+  const content = await fs.promises.readFile(filePath, 'utf-8')
   return c.json({ content, exists: true })
 })
 
