@@ -9,15 +9,11 @@ export const SKIP_ALL_INTERVIEW_COVERAGE_RESPONSE = 'Coverage skipped by user sh
 export const phaseIntermediate = new Map<string, PhaseIntermediateData>()
 
 /**
- * Cancel all running phases for a ticket by aborting its AbortController.
- * Cleans up in-memory phase state for the ticket.
+ * Remove in-memory workflow state for a ticket without aborting any active work.
+ * Call this when a ticket reaches a terminal state naturally.
  */
-export function cancelTicket(ticketId: string) {
-  const controller = ticketAbortControllers.get(ticketId)
-  if (controller) {
-    controller.abort()
-    ticketAbortControllers.delete(ticketId)
-  }
+export function cleanupTicketState(ticketId: string) {
+  ticketAbortControllers.delete(ticketId)
 
   // Clean up runningPhases entries for this ticket
   for (const key of runningPhases) {
@@ -35,6 +31,19 @@ export function cancelTicket(ticketId: string) {
 
   // Clean up interview QA session
   interviewQASessions.delete(ticketId)
+}
+
+/**
+ * Cancel all running phases for a ticket by aborting its AbortController.
+ * Cleans up in-memory phase state for the ticket.
+ */
+export function cancelTicket(ticketId: string) {
+  const controller = ticketAbortControllers.get(ticketId)
+  if (controller) {
+    controller.abort()
+  }
+
+  cleanupTicketState(ticketId)
 }
 
 export function getOrCreateAbortSignal(ticketId: string): AbortSignal {

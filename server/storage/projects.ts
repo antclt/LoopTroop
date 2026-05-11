@@ -105,6 +105,12 @@ function ensureLocalProject(projectRoot: string, input?: {
 
   ensureProjectStorageDirs(projectRoot)
   const { db } = getProjectDatabase(projectRoot)
+  const existingAfterOpen = db.select().from(projects).limit(1).get()
+  if (existingAfterOpen) return existingAfterOpen
+
+  // Project metadata lives in the per-project SQLite file while attachment state
+  // lives in the app database. Retrying attachProject() after a partial failure is
+  // safe because each step re-checks for an existing row before inserting.
   return db.insert(projects)
     .values({
       name: input.name,
@@ -271,9 +277,27 @@ export function updateProject(id: number, patch: Partial<Pick<LocalProjectRow, '
   return hydrateProject(context.attached, updated)
 }
 
+const DETACHABLE_TICKET_STATUSES = new Set(['DRAFT', 'COMPLETED', 'CANCELED'])
+
+function hasActiveProjectTickets(projectRoot: string): boolean {
+  const projectDb = getExistingProjectDatabase(projectRoot)
+  if (!projectDb) return false
+
+  const rows = projectDb.db.select({ status: tickets.status }).from(tickets).all()
+  return rows.some(ticket => !DETACHABLE_TICKET_STATUSES.has(ticket.status))
+}
+
+/**
+ * Detaching a project is intentionally non-destructive: it only removes the
+ * app-level attachment row so the existing on-disk LoopTroop state can be
+ * re-attached later. Refuse to detach while tickets are still active.
+ */
 export function detachProject(id: number): boolean {
   const attached = getAttachedRow(id)
   if (!attached) return false
+  if (hasActiveProjectTickets(attached.folderPath)) {
+    throw new Error('Cannot detach project while tickets are still active. Complete or cancel them first.')
+  }
   appDb.delete(attachedProjects).where(eq(attachedProjects.id, id)).run()
   return true
 }

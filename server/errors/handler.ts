@@ -19,8 +19,13 @@ export function createError(
   }
 }
 
+function getConsoleErrorMessage(message: string): string {
+  const [firstLine] = message.split(/\r?\n/, 1)
+  return firstLine || message
+}
+
 export function handleError(ticketId: string, error: LoopTroopError) {
-  console.error(`[error] ${error.code} in ${error.phase}: ${error.message}`)
+  console.error(`[error] ${error.code} in ${error.phase}: ${getConsoleErrorMessage(error.message)}`)
 
   // Broadcast error to connected clients
   broadcaster.broadcast(ticketId, 'error', {

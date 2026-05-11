@@ -74,6 +74,7 @@ export default defineConfig({
     ],
   },
   build: {
+    sourcemap: false,
     chunkSizeWarningLimit: 2100,
     rollupOptions: {
       output: {

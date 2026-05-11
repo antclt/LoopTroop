@@ -9,13 +9,15 @@ type LocalPhaseArtifactRow = typeof phaseArtifacts.$inferSelect
 
 export type PublicPhaseArtifactRow = ArtifactSnapshot
 
+const UNKNOWN_ARTIFACT_TYPE = 'UNKNOWN'
+
 function toPublicPhaseArtifact(ticketRef: string, artifact: LocalPhaseArtifactRow): PublicPhaseArtifactRow {
   return {
     id: artifact.id,
     ticketId: ticketRef,
     phase: artifact.phase,
     phaseAttempt: artifact.phaseAttempt ?? 1,
-    artifactType: artifact.artifactType ?? '',
+    artifactType: artifact.artifactType ?? UNKNOWN_ARTIFACT_TYPE,
     filePath: null,
     content: artifact.content,
     createdAt: artifact.createdAt,
@@ -110,7 +112,7 @@ export function insertPhaseArtifact(ticketRef: string, artifact: Omit<typeof pha
     phaseAttempt,
     updatedAt: artifact.updatedAt ?? timestamp,
   }).returning().get()
-  broadcastArtifactChange(ticketRef, artifact.phase, artifact.artifactType ?? '', inserted)
+  broadcastArtifactChange(ticketRef, artifact.phase, artifact.artifactType ?? UNKNOWN_ARTIFACT_TYPE, inserted)
 }
 
 export function upsertLatestPhaseArtifact(
