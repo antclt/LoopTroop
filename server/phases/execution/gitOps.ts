@@ -128,8 +128,11 @@ function runGitOpSafe(worktreePath: string, args: string[]): { ok: boolean; stdo
   }
 }
 
-function probeStagedChanges(worktreePath: string): { hasStagedChanges: boolean; error?: string } {
+function probeStagedChanges(worktreePath: string, paths?: string[]): { hasStagedChanges: boolean; error?: string } {
   const fullArgs = ['-C', worktreePath, 'diff', '--cached', '--quiet']
+  if (paths?.length) {
+    fullArgs.push('--', ...paths)
+  }
   const result = spawnSync('git', fullArgs, {
     encoding: 'utf8',
     maxBuffer: GIT_OP_MAX_BUFFER_BYTES,
@@ -212,8 +215,9 @@ export function commitBeadChanges(
     return { committed: false, pushed: false, error: `git add failed: ${addResult.error}` }
   }
 
-  // Check if there's anything staged
-  const stagedProbe = probeStagedChanges(worktreePath)
+  // Check whether the allowlisted paths have staged changes. The index may
+  // already contain unrelated files, but workflow commits must stay allowlisted.
+  const stagedProbe = probeStagedChanges(worktreePath, allowedFiles)
   if (stagedProbe.error) {
     return { committed: false, pushed: false, error: `git diff --cached --quiet failed: ${stagedProbe.error}` }
   }
@@ -223,7 +227,7 @@ export function commitBeadChanges(
 
   // Commit
   const commitMsg = `bead(${beadId}): ${beadTitle}`
-  const commitResult = runGitOpSafe(worktreePath, ['commit', '-m', commitMsg])
+  const commitResult = runGitOpSafe(worktreePath, ['commit', '-m', commitMsg, '--', ...allowedFiles])
   if (!commitResult.ok) {
     return { committed: false, pushed: false, error: `git commit failed: ${commitResult.error}` }
   }

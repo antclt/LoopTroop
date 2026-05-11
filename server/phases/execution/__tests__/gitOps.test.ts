@@ -335,4 +335,34 @@ describe('commitBeadChanges', () => {
     const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
     expect(status).toContain('photo.png')
   })
+
+  it('does not commit pre-staged disallowed files alongside allowlisted changes', () => {
+    const dir = makeFreshRepo()
+    writeFileSync(join(dir, 'secret.bin'), 'do not commit\n')
+    execFileSync('git', ['-C', dir, 'add', 'secret.bin'], { stdio: 'pipe' })
+    writeFileSync(join(dir, 'app.ts'), 'export const app = 1\n')
+
+    const result = commitBeadChanges(dir, 'bead-6', 'Skip staged blocked file')
+
+    expect(result.committed).toBe(true)
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-only',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    expect(committedFiles).toContain('app.ts')
+    expect(committedFiles).not.toContain('secret.bin')
+
+    const treeFiles = execFileSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', 'HEAD'], {
+      encoding: 'utf8',
+    })
+    expect(treeFiles).not.toContain('secret.bin')
+
+    const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
+    expect(status).toContain('secret.bin')
+  })
 })
