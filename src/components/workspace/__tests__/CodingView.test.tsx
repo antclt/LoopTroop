@@ -5,10 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeTicket } from '@/test/factories'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
 import type { Ticket } from '@/hooks/useTickets'
-
-const { useLogsMock } = vi.hoisted(() => ({
-  useLogsMock: vi.fn(),
-}))
+import { useLogs } from '@/context/useLogContext'
 
 vi.mock('@/hooks/useTickets', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTickets')>('@/hooks/useTickets')
@@ -19,7 +16,7 @@ vi.mock('@/hooks/useTickets', async () => {
 })
 
 vi.mock('@/context/useLogContext', () => ({
-  useLogs: useLogsMock,
+  useLogs: vi.fn(),
 }))
 
 vi.mock('../PhaseArtifactsPanel', () => ({
@@ -70,7 +67,7 @@ beforeEach(() => {
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify([]), { status: 200 }),
   )
-  useLogsMock.mockReturnValue(null)
+  vi.mocked(useLogs).mockReturnValue(null)
 })
 
 afterEach(() => {
@@ -468,7 +465,7 @@ describe('CodingView', () => {
       setActivePhase: vi.fn(),
       clearLogs: vi.fn(),
     }
-    useLogsMock.mockReturnValue(logContext)
+    vi.mocked(useLogs).mockReturnValue(logContext)
 
     renderCoding({
       runtime: {

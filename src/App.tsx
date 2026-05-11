@@ -22,10 +22,15 @@ import { useStartupStatus } from '@/hooks/useStartupStatus'
 import { useQueryClient } from '@tanstack/react-query'
 import { clearOpenCodeModelsQuery } from '@/hooks/useOpenCodeModels'
 
+const ROUTE_ROOT = '/'
+const ROUTE_CONFIG = '/config'
+const ROUTE_PROJECT_NEW = '/project/new'
+const ROUTE_TICKET_NEW = '/ticket/new'
+
 function getInitialModal(pathname: string): 'profile' | 'project' | 'ticket' | null {
-  if (pathname === '/config') return 'profile'
-  if (pathname === '/project/new') return 'project'
-  if (pathname === '/ticket/new') return 'ticket'
+  if (pathname === ROUTE_CONFIG) return 'profile'
+  if (pathname === ROUTE_PROJECT_NEW) return 'project'
+  if (pathname === ROUTE_TICKET_NEW) return 'ticket'
   return null
 }
 
@@ -50,7 +55,7 @@ function App() {
       return true
     }
   })
-  const prevPathRef = useRef('/')
+  const prevPathRef = useRef(ROUTE_ROOT)
   const showRestorePopup = !showWelcome
     && startupStatus?.storage.kind === 'restored'
     && startupStatus.ui.restoreNotice.shouldShow === true
@@ -95,7 +100,7 @@ function App() {
   useEffect(() => {
     const handlePop = () => {
       const p = window.location.pathname
-      if (p === '/' || p === '') dispatch({ type: 'CLOSE_TICKET' })
+      if (p === ROUTE_ROOT || p === '') dispatch({ type: 'CLOSE_TICKET' })
       else if (p.startsWith('/ticket/')) {
         const externalId = p.split('/')[2] ?? ''
         if (externalId && externalId !== 'new') {
@@ -112,7 +117,7 @@ function App() {
   const openProfile = () => {
     clearOpenCodeModelsQuery(queryClient)
     prevPathRef.current = window.location.pathname
-    window.history.pushState(null, '', '/config')
+    window.history.pushState(null, '', ROUTE_CONFIG)
     setShowProfile(true)
   }
   const closeProfile = () => {
@@ -121,7 +126,7 @@ function App() {
   }
   const openProject = () => {
     prevPathRef.current = window.location.pathname
-    window.history.pushState(null, '', '/project/new')
+    window.history.pushState(null, '', ROUTE_PROJECT_NEW)
     setShowProject(true)
   }
   const closeProject = () => {
@@ -130,7 +135,7 @@ function App() {
   }
   const openTicket = () => {
     prevPathRef.current = window.location.pathname
-    window.history.pushState(null, '', '/ticket/new')
+    window.history.pushState(null, '', ROUTE_TICKET_NEW)
     setShowTicket(true)
   }
   const closeTicket = () => {

@@ -8,7 +8,7 @@ import {
 } from '../scripts/dev-preflight-utils'
 import { formatPortOccupantSummary } from '../scripts/port-occupants'
 
-const repoRoot = '/mnt/d/LoopTroop'
+const repoRoot = process.cwd()
 
 describe('dev preflight helpers', () => {
   it('detects the repo dev process shapes that the preflight must reclaim', () => {
@@ -27,9 +27,9 @@ describe('dev preflight helpers', () => {
   it('reclaims the owning watcher tree for a spawned server/index.ts occupant', () => {
     const processes = parseProcessTable([
       '100 1 sh -c CHOKIDAR_USEPOLLING=1 tsx watch server/index.ts',
-      '101 100 node /mnt/d/LoopTroop/node_modules/.bin/tsx watch server/index.ts',
-      '102 101 node /mnt/d/LoopTroop/server/index.ts',
-      '200 1 node /mnt/d/LoopTroop/node_modules/.bin/vite',
+      `101 100 node ${repoRoot}/node_modules/.bin/tsx watch server/index.ts`,
+      `102 101 node ${repoRoot}/server/index.ts`,
+      `200 1 node ${repoRoot}/node_modules/.bin/vite`,
     ].join('\n'))
     const graph = buildProcessGraph(processes)
 
