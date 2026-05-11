@@ -1,11 +1,25 @@
 const DEFAULT_FRONTEND_PORT = 5173
 const DEFAULT_DOCS_PORT = 5174
 const DEFAULT_BACKEND_PORT = 3000
+const DEFAULT_FRONTEND_ORIGIN = `http://localhost:${DEFAULT_FRONTEND_PORT}`
 export const DEFAULT_OPENCODE_BASE_URL = 'http://127.0.0.1:4096'
 
 function parsePort(value: string | undefined, fallback: number): number {
   const parsed = Number(value)
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function parseOrigin(value: string | undefined, fallback: string, envName: string): string {
+  if (!value) {
+    return fallback
+  }
+
+  try {
+    return new URL(value).origin
+  } catch {
+    console.warn(`[config] Invalid ${envName}: ${value}. Falling back to ${fallback}.`)
+    return fallback
+  }
 }
 
 export function getFrontendPort(): number {
@@ -21,8 +35,7 @@ export function getBackendPort(): number {
 }
 
 export function getFrontendOrigin(): string {
-  return process.env.LOOPTROOP_FRONTEND_ORIGIN
-    ?? `http://localhost:${getFrontendPort()}`
+  return parseOrigin(process.env.LOOPTROOP_FRONTEND_ORIGIN, DEFAULT_FRONTEND_ORIGIN, 'LOOPTROOP_FRONTEND_ORIGIN')
 }
 
 export function getDocsOrigin(): string {

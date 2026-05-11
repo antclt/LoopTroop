@@ -41,7 +41,7 @@ export function recoverTicketRuntimeArtifacts() {
   }
 }
 
-export function startupSequence() {
+export async function startupSequence(): Promise<void> {
   console.log('[startup] Step 1: Initialize database')
   initializeDatabase()
 
@@ -63,15 +63,16 @@ export function startupSequence() {
 
   console.log('[startup] Step 4: OpenCode health check')
   const adapter = getOpenCodeAdapter()
-  adapter.checkHealth().then(health => {
+  try {
+    const health = await adapter.checkHealth()
     if (health.available) {
       console.log(`[startup] OpenCode is reachable (version: ${health.version ?? 'unknown'})`)
     } else {
       console.warn(`[startup] OpenCode is NOT reachable: ${health.error ?? 'unknown error'}. Start it with \`opencode serve\`.`)
     }
-  }).catch(err => {
+  } catch (err) {
     console.warn(`[startup] OpenCode health check failed: ${getErrorMessage(err)}`)
-  })
+  }
 
   console.log('[startup] Step 5: Hydrate XState actors from attached project databases')
   const hydrated = hydrateAllTickets()
@@ -85,7 +86,9 @@ export function startupSequence() {
     return
   }
 
-  adapter.listSessions().then(async () => {
+  try {
+    await adapter.listSessions()
+
     const sessionManager = new SessionManager(adapter)
     let reconnected = 0
     let abandoned = 0
@@ -125,9 +128,9 @@ export function startupSequence() {
     }
 
     console.log(`[startup] Reconnected ${reconnected} OpenCode sessions, cleaned up ${abandoned} stale entries`)
-  }).catch((err: unknown) => {
+  } catch (err) {
     console.warn(`[startup] OpenCode session reconnection failed: ${getErrorMessage(err)}`)
-  }).finally(() => {
-    console.log('[startup] Startup complete')
-  })
+  }
+
+  console.log('[startup] Startup complete')
 }
