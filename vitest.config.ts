@@ -78,11 +78,13 @@ export default defineConfig({
         extends: true,
         plugins: [react()],
         test: {
+          // jsdom tests need isolation (DOM/localStorage state must not leak between files).
+          // maxWorkers: 4 = 16 total workers across all projects, matching CPU count exactly.
           name: 'client-dom',
           environment: 'jsdom',
           pool: 'forks',
           fileParallelism: true,
-          maxWorkers: 6,
+          maxWorkers: 4,
           isolate: true,
           sequence: { groupOrder: 0 },
           setupFiles: ['./src/test/setup.ts'],
@@ -95,12 +97,13 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          // Pure client logic tests (no DOM) — safe to share module graph within each worker.
           name: 'client-node',
           environment: 'node',
           pool: 'threads',
           fileParallelism: true,
-          maxWorkers: 6,
-          isolate: true,
+          maxWorkers: 4,
+          isolate: false,
           sequence: { groupOrder: 0 },
           include: [...clientNodeTests],
           env: sharedEnv,
@@ -109,12 +112,14 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          // Pure server logic tests — safe to share module graph (no DB, no global state).
+          // isolate: false dramatically reduces per-file import overhead (was 28s aggregate).
           name: 'server-pure',
           environment: 'node',
           pool: 'threads',
           fileParallelism: true,
-          maxWorkers: 6,
-          isolate: true,
+          maxWorkers: 4,
+          isolate: false,
           sequence: { groupOrder: 0 },
           setupFiles: ['./server/test/setup.ts'],
           include: ['server/**/*.test.ts', 'tests/**/*.test.ts', 'shared/**/*.test.ts'],
@@ -127,11 +132,13 @@ export default defineConfig({
       {
         extends: true,
         test: {
+          // Integration tests touch the DB and git filesystem — keep forks + isolation.
+          // Reduce workers from 6→4 to avoid CPU contention when running alongside client-dom.
           name: 'server-integration',
           environment: 'node',
           pool: 'forks',
           fileParallelism: true,
-          maxWorkers: 6,
+          maxWorkers: 4,
           isolate: true,
           sequence: { groupOrder: 0 },
           setupFiles: ['./server/test/setup.ts'],
