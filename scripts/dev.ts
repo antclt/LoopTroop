@@ -3,7 +3,7 @@ import concurrently from 'concurrently'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getDocsPort, getFrontendPort } from '../shared/appConfig'
-import { readDevPreflightReport } from './dev-maintenance'
+import { readDevPreflightReport, type DependencySyncReport } from './dev-maintenance'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
 import { getErrorMessage } from '../shared/typeGuards'
 
@@ -12,7 +12,6 @@ const repoRoot = resolve(__dirname, '..')
 const requestedBaseUrl = process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim() || DEFAULT_OPENCODE_BASE_URL
 const hasExplicitBaseUrl = Boolean(process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim())
 const childEnv = { ...process.env }
-const isStartupMaintenanceOptedIn = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
 const preflightReport = readDevPreflightReport()
 let shutdownSignal: NodeJS.Signals | null = null
 let shutdownStartedAtMs: number | null = null
@@ -101,6 +100,10 @@ function formatMaintenanceTimestamp(timestamp?: string) {
   }).format(date)
 }
 
+function getHeldDependencyCount(report: DependencySyncReport) {
+  return (report.heldDependencies?.length ?? 0) + (report.heldDevDependencies?.length ?? 0)
+}
+
 const services: DevService[] = [
   {
     name: 'OPEN',
@@ -144,9 +147,7 @@ if (preflightReport) {
   } else if (preflightReport.opencode.deferred) {
     printSummaryLine(
       'OpenCode CLI',
-      isStartupMaintenanceOptedIn && preflightReport.opencode.lastCompletedAt
-        ? `Deferred opt-in upgrade check; last completed today at ${formatMaintenanceTimestamp(preflightReport.opencode.lastCompletedAt)}`
-        : 'Not run during startup; use npm run opencode:upgrade or LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev',
+      `Deferred daily upgrade check; last completed today at ${formatMaintenanceTimestamp(preflightReport.opencode.lastCompletedAt)}`,
     )
   } else if (!preflightReport.opencode.available) {
     printSummaryLine('OpenCode CLI', 'Local opencode binary not found; skipped automatic CLI upgrade')
@@ -169,17 +170,27 @@ if (preflightReport) {
   } else if (preflightReport.dependencySync.deferred) {
     printSummaryLine(
       'Dependencies',
-      isStartupMaintenanceOptedIn && preflightReport.dependencySync.lastCompletedAt
-        ? `Deferred opt-in npm latest check; last completed today at ${formatMaintenanceTimestamp(preflightReport.dependencySync.lastCompletedAt)}`
-        : 'Not run during startup; use npm run deps:sync or LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev',
+      `Deferred daily release-age check; last completed today at ${formatMaintenanceTimestamp(preflightReport.dependencySync.lastCompletedAt)}`,
     )
   } else if (preflightReport.dependencySync.alreadyCurrent) {
     printSummaryLine('Dependencies', 'All direct dependencies already matched npm latest stable')
+  } else if (
+    preflightReport.dependencySync.updatedDependencies.length === 0 &&
+    preflightReport.dependencySync.updatedDevDependencies.length === 0 &&
+    getHeldDependencyCount(preflightReport.dependencySync) > 0
+  ) {
+    const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
+    printSummaryLine(
+      'Dependencies',
+      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} inside the 7-day delay`,
+    )
   } else {
+    const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
     printSummaryLine(
       'Dependencies',
       `Updated ${preflightReport.dependencySync.updatedDependencies.length} runtime and ` +
-      `${preflightReport.dependencySync.updatedDevDependencies.length} dev packages to latest stable` +
+      `${preflightReport.dependencySync.updatedDevDependencies.length} dev packages to eligible releases` +
+      (heldCount > 0 ? `; held ${heldCount}` : '') +
       (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : ''),
     )
   }
@@ -189,9 +200,7 @@ if (preflightReport) {
   } else if (preflightReport.audit.deferred) {
     printSummaryLine(
       'Audit',
-      isStartupMaintenanceOptedIn && preflightReport.audit.lastCompletedAt
-        ? `Deferred opt-in remediation; last completed today at ${formatMaintenanceTimestamp(preflightReport.audit.lastCompletedAt)}`
-        : 'Not run during startup; use npm run audit:remediate or LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev',
+      `Deferred daily remediation; last completed today at ${formatMaintenanceTimestamp(preflightReport.audit.lastCompletedAt)}`,
     )
   } else if (preflightReport.audit.unresolved.length === 0) {
     printSummaryLine('Audit', 'No remaining npm audit findings after remediation')
@@ -209,7 +218,7 @@ if (preflightReport) {
 
 printDivider('Service Plan')
 console.log('[dev] Step 1        Preflight checks already completed before this launcher started.')
-console.log('[dev]               Purpose: install missing packages, validate ports, and leave dependency/audit/OpenCode maintenance to explicit opt-in commands.')
+console.log('[dev]               Purpose: install missing packages, validate ports, and run daily dependency/audit/OpenCode maintenance.')
 
 services.forEach((service, index) => {
   const stepNumber = index + 2

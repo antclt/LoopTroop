@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  chooseAgedDependencyTarget,
   decideDailyMaintenanceTask,
   recordDailyMaintenanceSuccess,
   type DailyMaintenanceState,
@@ -95,5 +96,72 @@ describe('daily dev maintenance decisions', () => {
     expect(decision.shouldRun).toBe(true)
     expect(decision.reason).toBe('new-day')
     expect(decision.deferred).toBe(false)
+  })
+})
+
+describe('aged dependency update selection', () => {
+  const now = new Date('2026-05-12T12:00:00.000Z')
+
+  it('chooses the newest newer stable version that has passed the release delay', () => {
+    const selection = chooseAgedDependencyTarget({
+      currentVersion: '1.0.0',
+      latestVersion: '1.3.0',
+      now,
+      publishTimes: {
+        '1.0.0': '2026-04-01T00:00:00.000Z',
+        '1.1.0': '2026-05-01T00:00:00.000Z',
+        '1.2.0': '2026-05-06T00:00:00.000Z',
+        '1.3.0': '2026-05-10T00:00:00.000Z',
+      },
+    })
+
+    expect(selection.targetVersion).toBe('1.1.0')
+    expect(selection.nextEligibleAt).toBe('2026-05-13T00:00:00.000Z')
+  })
+
+  it('holds updates when every newer stable version is still inside the delay window', () => {
+    const selection = chooseAgedDependencyTarget({
+      currentVersion: '2.0.0',
+      latestVersion: '2.2.0',
+      now,
+      publishTimes: {
+        '2.0.0': '2026-04-01T00:00:00.000Z',
+        '2.1.0': '2026-05-08T00:00:00.000Z',
+        '2.2.0': '2026-05-11T00:00:00.000Z',
+      },
+    })
+
+    expect(selection.targetVersion).toBeUndefined()
+    expect(selection.reason).toBe('no-aged-version')
+    expect(selection.nextEligibleAt).toBe('2026-05-15T00:00:00.000Z')
+  })
+
+  it('ignores prerelease versions when choosing an aged stable target', () => {
+    const selection = chooseAgedDependencyTarget({
+      currentVersion: '3.0.0',
+      latestVersion: '3.2.0',
+      now,
+      publishTimes: {
+        '3.1.0-beta.1': '2026-04-01T00:00:00.000Z',
+        '3.1.0': '2026-05-01T00:00:00.000Z',
+        '3.2.0': '2026-05-11T00:00:00.000Z',
+      },
+    })
+
+    expect(selection.targetVersion).toBe('3.1.0')
+  })
+
+  it('allows OpenCode-scoped updates to bypass the release delay', () => {
+    const selection = chooseAgedDependencyTarget({
+      currentVersion: '1.0.0',
+      latestVersion: '1.1.0',
+      now,
+      bypassAgeGate: true,
+      publishTimes: {
+        '1.1.0': '2026-05-12T11:00:00.000Z',
+      },
+    })
+
+    expect(selection.targetVersion).toBe('1.1.0')
   })
 })

@@ -16,6 +16,9 @@ const requiredDevBins = ['tsx', 'vite', 'vitepress', 'concurrently']
 export const devPreflightReportPath = resolve(repoRoot, 'tmp', 'dev-preflight-report.json')
 export const devMaintenanceStatePath = resolve(repoRoot, 'tmp', 'dev-maintenance-state.json')
 const DAILY_MAINTENANCE_STATE_VERSION = 1
+const DEPENDENCY_RELEASE_DELAY_DAYS = 7
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+const OPENCODE_IMMEDIATE_NPM_PACKAGES = new Set(['@opencode-ai/sdk'])
 
 const KNOWN_AUDIT_LEFTOVERS: Record<string, { note: string; url: string }> = {
   'drizzle-kit': {
@@ -48,8 +51,25 @@ export interface DependencySyncReport {
   errors: string[]
   updatedDependencies: string[]
   updatedDevDependencies: string[]
+  heldDependencies: HeldDependencyUpdate[]
+  heldDevDependencies: HeldDependencyUpdate[]
   lastCompletedAt?: string
   nextEligibleAt?: string
+}
+
+export interface HeldDependencyUpdate {
+  name: string
+  current?: string
+  latest?: string
+  nextEligibleAt?: string
+  reason: 'metadata-unavailable' | 'missing-version' | 'non-semver-current' | 'no-aged-version'
+}
+
+export interface AgedDependencyTargetSelection {
+  targetVersion?: string
+  targetPublishedAt?: string
+  nextEligibleAt?: string
+  reason?: HeldDependencyUpdate['reason']
 }
 
 export interface AuditTotals {
@@ -113,6 +133,20 @@ interface OutdatedEntry {
   current?: string
   wanted?: string
   latest?: string
+}
+
+interface StableSemver {
+  major: number
+  minor: number
+  patch: number
+}
+
+interface DependencyUpdatePlan {
+  name: string
+  current: string
+  targetVersion: string
+  targetPublishedAt?: string
+  bypassedAgeGate: boolean
 }
 
 interface NpmCommandResult {
@@ -474,6 +508,141 @@ function parseJson<T>(text: string): T | null {
   }
 }
 
+function parseStableSemver(version: string | undefined): StableSemver | null {
+  const match = version?.trim().match(/^v?(\d+)\.(\d+)\.(\d+)(?:\+[0-9A-Za-z.-]+)?$/)
+  if (!match) {
+    return null
+  }
+
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+  }
+}
+
+function compareStableSemver(left: StableSemver, right: StableSemver) {
+  if (left.major !== right.major) return left.major - right.major
+  if (left.minor !== right.minor) return left.minor - right.minor
+  return left.patch - right.patch
+}
+
+function isFiniteTimestamp(timestamp: number) {
+  return Number.isFinite(timestamp) && timestamp > 0
+}
+
+function toIsoTimestamp(timestamp: number | null) {
+  return timestamp == null || !isFiniteTimestamp(timestamp) ? undefined : new Date(timestamp).toISOString()
+}
+
+function getPackagePublishTimes(packageName: string) {
+  const result = runCommand(['view', packageName, 'time', '--json'], `npm view ${packageName} time`, { verbose: false })
+  if (result.status !== 0 || !result.stdout) {
+    return {
+      times: null,
+      error: result.stderr || result.stdout || `npm view ${packageName} time failed with code ${result.status ?? 'unknown'}`,
+    }
+  }
+
+  const times = parseJson<Record<string, string>>(result.stdout)
+  if (!times) {
+    return {
+      times: null,
+      error: result.stderr || result.stdout || `Unable to parse npm publish times for ${packageName}`,
+    }
+  }
+
+  return { times, error: null }
+}
+
+export function chooseAgedDependencyTarget(options: {
+  currentVersion?: string
+  latestVersion?: string
+  publishTimes?: Record<string, string> | null
+  now?: Date
+  minimumAgeDays?: number
+  bypassAgeGate?: boolean
+}): AgedDependencyTargetSelection {
+  const {
+    currentVersion,
+    latestVersion,
+    publishTimes,
+    now = new Date(),
+    minimumAgeDays = DEPENDENCY_RELEASE_DELAY_DAYS,
+    bypassAgeGate = false,
+  } = options
+
+  if (!currentVersion || !latestVersion) {
+    return { reason: 'missing-version' }
+  }
+
+  if (currentVersion === latestVersion) {
+    return { reason: 'no-aged-version' }
+  }
+
+  if (bypassAgeGate) {
+    return {
+      targetVersion: latestVersion,
+      targetPublishedAt: publishTimes?.[latestVersion],
+    }
+  }
+
+  const current = parseStableSemver(currentVersion)
+  if (!current) {
+    return { reason: 'non-semver-current' }
+  }
+
+  if (!publishTimes) {
+    return { reason: 'metadata-unavailable' }
+  }
+
+  const minimumAgeMs = Math.max(0, minimumAgeDays) * MS_PER_DAY
+  const cutoffMs = now.getTime() - minimumAgeMs
+  let bestVersion: string | undefined
+  let bestParsed: StableSemver | null = null
+  let bestPublishedAt: string | undefined
+  let nextEligibleAtMs: number | null = null
+
+  for (const [version, publishedAt] of Object.entries(publishTimes)) {
+    const parsed = parseStableSemver(version)
+    if (!parsed || compareStableSemver(parsed, current) <= 0) {
+      continue
+    }
+
+    const publishedAtMs = Date.parse(publishedAt)
+    if (!isFiniteTimestamp(publishedAtMs)) {
+      continue
+    }
+
+    if (publishedAtMs <= cutoffMs) {
+      if (!bestParsed || compareStableSemver(parsed, bestParsed) > 0) {
+        bestVersion = version
+        bestParsed = parsed
+        bestPublishedAt = publishedAt
+      }
+      continue
+    }
+
+    const eligibleAtMs = publishedAtMs + minimumAgeMs
+    if (eligibleAtMs > now.getTime() && (nextEligibleAtMs == null || eligibleAtMs < nextEligibleAtMs)) {
+      nextEligibleAtMs = eligibleAtMs
+    }
+  }
+
+  if (bestVersion) {
+    return {
+      targetVersion: bestVersion,
+      targetPublishedAt: bestPublishedAt,
+      nextEligibleAt: toIsoTimestamp(nextEligibleAtMs),
+    }
+  }
+
+  return {
+    reason: 'no-aged-version',
+    nextEligibleAt: toIsoTimestamp(nextEligibleAtMs),
+  }
+}
+
 function summarizeAuditIssues(vulnerabilities: Record<string, {
   name: string
   severity: keyof AuditTotals
@@ -553,6 +722,72 @@ export function ensureInstallIfNeeded(
   }
 }
 
+function planDependencyUpdates(
+  outdated: Record<string, OutdatedEntry>,
+  manifestDependencies: Record<string, string> | undefined,
+  { now = new Date(), verbose = false }: { now?: Date; verbose?: boolean } = {},
+) {
+  const updates: DependencyUpdatePlan[] = []
+  const held: HeldDependencyUpdate[] = []
+
+  for (const [name, entry] of Object.entries(outdated)) {
+    if (manifestDependencies?.[name] == null) {
+      continue
+    }
+
+    const bypassAgeGate = OPENCODE_IMMEDIATE_NPM_PACKAGES.has(name)
+    const publishTimesResult = bypassAgeGate
+      ? { times: null as Record<string, string> | null, error: null as string | null }
+      : getPackagePublishTimes(name)
+
+    if (!bypassAgeGate && publishTimesResult.error) {
+      if (verbose) {
+        console.warn(`[dev-preflight] Holding ${name}; unable to verify npm publish times: ${publishTimesResult.error}`)
+      }
+      held.push({
+        name,
+        current: entry.current,
+        latest: entry.latest,
+        reason: 'metadata-unavailable',
+      })
+      continue
+    }
+
+    const selection = chooseAgedDependencyTarget({
+      currentVersion: entry.current,
+      latestVersion: entry.latest,
+      publishTimes: publishTimesResult.times,
+      now,
+      bypassAgeGate,
+    })
+
+    if (selection.targetVersion && entry.current) {
+      updates.push({
+        name,
+        current: entry.current,
+        targetVersion: selection.targetVersion,
+        targetPublishedAt: selection.targetPublishedAt,
+        bypassedAgeGate: bypassAgeGate,
+      })
+      continue
+    }
+
+    held.push({
+      name,
+      current: entry.current,
+      latest: entry.latest,
+      nextEligibleAt: selection.nextEligibleAt,
+      reason: selection.reason ?? 'no-aged-version',
+    })
+  }
+
+  return { updates, held }
+}
+
+function formatDependencyUpdateSpecs(updates: DependencyUpdatePlan[]) {
+  return updates.map((update) => `${update.name}@${update.targetVersion}`)
+}
+
 export function syncDirectDependencies(
   { verbose = false, skip = false }: { verbose?: boolean; skip?: boolean } = {},
 ): DependencySyncReport {
@@ -566,6 +801,8 @@ export function syncDirectDependencies(
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      heldDependencies: [],
+      heldDevDependencies: [],
     }
   }
 
@@ -580,6 +817,8 @@ export function syncDirectDependencies(
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      heldDependencies: [],
+      heldDevDependencies: [],
     }
   }
 
@@ -595,20 +834,25 @@ export function syncDirectDependencies(
       errors: message ? [`Unable to parse npm outdated output: ${message}`] : [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      heldDependencies: [],
+      heldDevDependencies: [],
     }
   }
 
   const manifest = readPackageManifest()
-  const updatedDependencies = Object.entries(outdated)
-    .filter(([, entry]) => entry.current && entry.latest && entry.current !== entry.latest)
-    .map(([name]) => name)
-    .filter((name) => manifest.dependencies?.[name] != null)
-  const updatedDevDependencies = Object.entries(outdated)
-    .filter(([, entry]) => entry.current && entry.latest && entry.current !== entry.latest)
-    .map(([name]) => name)
-    .filter((name) => manifest.devDependencies?.[name] != null)
+  const runtimePlan = planDependencyUpdates(outdated, manifest.dependencies, { verbose })
+  const devPlan = planDependencyUpdates(outdated, manifest.devDependencies, { verbose })
+  const updatedDependencies = runtimePlan.updates.map((update) => update.name)
+  const updatedDevDependencies = devPlan.updates.map((update) => update.name)
+  const heldDependencies = runtimePlan.held
+  const heldDevDependencies = devPlan.held
 
-  if (updatedDependencies.length === 0 && updatedDevDependencies.length === 0) {
+  if (
+    updatedDependencies.length === 0 &&
+    updatedDevDependencies.length === 0 &&
+    heldDependencies.length === 0 &&
+    heldDevDependencies.length === 0
+  ) {
     return {
       skipped: false,
       deferred: false,
@@ -618,6 +862,8 @@ export function syncDirectDependencies(
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      heldDependencies: [],
+      heldDevDependencies: [],
     }
   }
 
@@ -628,11 +874,11 @@ export function syncDirectDependencies(
     if (updatedDependencies.length > 0) {
       console.log(
         `[dev-preflight] Updating ${updatedDependencies.length} direct runtime ` +
-        `${updatedDependencies.length === 1 ? 'dependency' : 'dependencies'} to latest stable.`,
+        `${updatedDependencies.length === 1 ? 'dependency' : 'dependencies'} to eligible stable releases.`,
       )
       const result = runInstallCommand(
-        ['install', ...npmInstallFlags, ...updatedDependencies.map((name) => `${name}@latest`)],
-        'npm install <dependencies>@latest',
+        ['install', ...npmInstallFlags, ...formatDependencyUpdateSpecs(runtimePlan.updates)],
+        'npm install <dependencies>@<aged-version>',
         { verbose, allowForceFallback: true },
       )
       isForced = isForced || result.isForced
@@ -641,11 +887,11 @@ export function syncDirectDependencies(
     if (updatedDevDependencies.length > 0) {
       console.log(
         `[dev-preflight] Updating ${updatedDevDependencies.length} direct dev ` +
-        `${updatedDevDependencies.length === 1 ? 'dependency' : 'dependencies'} to latest stable.`,
+        `${updatedDevDependencies.length === 1 ? 'dependency' : 'dependencies'} to eligible stable releases.`,
       )
       const result = runInstallCommand(
-        ['install', ...npmInstallFlags, '-D', ...updatedDevDependencies.map((name) => `${name}@latest`)],
-        'npm install -D <dependencies>@latest',
+        ['install', ...npmInstallFlags, '-D', ...formatDependencyUpdateSpecs(devPlan.updates)],
+        'npm install -D <dependencies>@<aged-version>',
         { verbose, allowForceFallback: true },
       )
       isForced = isForced || result.isForced
@@ -663,6 +909,8 @@ export function syncDirectDependencies(
     errors,
     updatedDependencies,
     updatedDevDependencies,
+    heldDependencies,
+    heldDevDependencies,
   }
 }
 

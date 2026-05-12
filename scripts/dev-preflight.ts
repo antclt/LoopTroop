@@ -38,7 +38,7 @@ const packageLockPath = resolve(repoRoot, 'package-lock.json')
 const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
 const shouldSkipDependencyMaintenance = process.env.LOOPTROOP_DEV_SKIP_DEPS === '1'
 const shouldSkipOpenCodeUpgrade = process.env.LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE === '1'
-const shouldRunStartupMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
+const shouldForceDailyMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
 
 const configuredPorts = [
   { label: 'frontend', port: getFrontendPort() },
@@ -244,7 +244,7 @@ if (installReport.errors.length > 0) {
 const dependencySyncDecision = decideDailyMaintenanceTask({
   taskName: 'dependencySync',
   state: maintenanceState,
-  force: shouldRunStartupMaintenance,
+  force: shouldForceDailyMaintenance,
   invalidatedByPaths: [packageJsonPath],
 })
 
@@ -253,7 +253,7 @@ const dependencySyncReport = shouldSkipDependencyMaintenance
     verbose: isVerboseLogging,
     skip: true,
   })
-  : shouldRunStartupMaintenance && dependencySyncDecision.shouldRun
+  : dependencySyncDecision.shouldRun
     ? syncDirectDependencies({
       verbose: isVerboseLogging,
       skip: false,
@@ -267,6 +267,8 @@ const dependencySyncReport = shouldSkipDependencyMaintenance
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      heldDependencies: [],
+      heldDevDependencies: [],
       lastCompletedAt: dependencySyncDecision.lastCompletedAt,
       nextEligibleAt: dependencySyncDecision.nextEligibleAt,
     }
@@ -277,14 +279,14 @@ for (const error of dependencySyncReport.errors) {
 if (dependencySyncReport.errors.length > 0) {
   process.exit(1)
 }
-if (!shouldSkipDependencyMaintenance && shouldRunStartupMaintenance && dependencySyncDecision.shouldRun && dependencySyncReport.checked && dependencySyncReport.errors.length === 0) {
+if (!shouldSkipDependencyMaintenance && dependencySyncDecision.shouldRun && dependencySyncReport.checked && dependencySyncReport.errors.length === 0) {
   recordDailyMaintenanceSuccess(maintenanceState, 'dependencySync')
 }
 
 const auditDecision = decideDailyMaintenanceTask({
   taskName: 'audit',
   state: maintenanceState,
-  force: shouldRunStartupMaintenance,
+  force: shouldForceDailyMaintenance,
   invalidatedByPaths: [packageJsonPath, packageLockPath],
 })
 
@@ -293,7 +295,7 @@ const auditReport = shouldSkipDependencyMaintenance
     verbose: isVerboseLogging,
     skip: true,
   })
-  : shouldRunStartupMaintenance && auditDecision.shouldRun
+  : auditDecision.shouldRun
     ? remediateAudit({
       verbose: isVerboseLogging,
       skip: false,
@@ -323,14 +325,14 @@ for (const error of auditReport.errors) {
 if (auditReport.errors.length > 0) {
   process.exit(1)
 }
-if (!shouldSkipDependencyMaintenance && shouldRunStartupMaintenance && auditDecision.shouldRun && auditReport.errors.length === 0) {
+if (!shouldSkipDependencyMaintenance && auditDecision.shouldRun && auditReport.errors.length === 0) {
   recordDailyMaintenanceSuccess(maintenanceState, 'audit')
 }
 
 const opencodeDecision = decideDailyMaintenanceTask({
   taskName: 'opencode',
   state: maintenanceState,
-  force: shouldRunStartupMaintenance,
+  force: shouldForceDailyMaintenance,
 })
 
 const opencodeReport = shouldSkipOpenCodeUpgrade
@@ -338,7 +340,7 @@ const opencodeReport = shouldSkipOpenCodeUpgrade
     verbose: isVerboseLogging,
     skip: true,
   })
-  : shouldRunStartupMaintenance && opencodeDecision.shouldRun
+  : opencodeDecision.shouldRun
     ? upgradeOpenCodeCli({
       verbose: isVerboseLogging,
       skip: false,
@@ -361,7 +363,7 @@ for (const error of opencodeReport.errors) {
 if (opencodeReport.errors.length > 0) {
   process.exit(1)
 }
-if (!shouldSkipOpenCodeUpgrade && shouldRunStartupMaintenance && opencodeDecision.shouldRun && opencodeReport.errors.length === 0 && opencodeReport.available) {
+if (!shouldSkipOpenCodeUpgrade && opencodeDecision.shouldRun && opencodeReport.errors.length === 0 && opencodeReport.available) {
   recordDailyMaintenanceSuccess(maintenanceState, 'opencode')
 }
 
@@ -443,24 +445,32 @@ for (const { label, port } of configuredPorts) {
 
 if (shouldSkipDependencyMaintenance) {
   console.log('[dev-preflight] Skipped dependency sync and audit remediation because LOOPTROOP_DEV_SKIP_DEPS=1.')
-} else if (!shouldRunStartupMaintenance) {
-  console.log(
-    '[dev-preflight] Dependency sync and npm audit remediation are opt-in; run `npm run deps:sync`, ' +
-    '`npm run audit:remediate`, or set LOOPTROOP_DEV_FORCE_MAINTENANCE=1 before `npm run dev`.',
-  )
 } else {
+  const heldDependencyUpdates = [
+    ...(dependencySyncReport.heldDependencies ?? []),
+    ...(dependencySyncReport.heldDevDependencies ?? []),
+  ]
   if (dependencySyncReport.deferred) {
     console.log(
       `[dev-preflight] Skipped daily dependency sync; it already ran today at ${formatTimestamp(dependencySyncReport.lastCompletedAt)}.`,
     )
   } else if (dependencySyncReport.alreadyCurrent) {
     console.log('[dev-preflight] Direct dependencies are already on the latest stable releases.')
+  } else if (dependencySyncReport.updatedDependencies.length === 0 && dependencySyncReport.updatedDevDependencies.length === 0) {
+    console.log(
+      `[dev-preflight] Direct dependency sync complete: held ${heldDependencyUpdates.length} ` +
+      `${heldDependencyUpdates.length === 1 ? 'newer release' : 'newer releases'} until the 7-day release delay passes.`,
+    )
   } else {
     console.log(
       `[dev-preflight] Direct dependency sync complete: ` +
       `${dependencySyncReport.updatedDependencies.length} runtime and ` +
-      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated.`,
+      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated to eligible releases.`,
     )
+  }
+  for (const held of heldDependencyUpdates.slice(0, 5)) {
+    const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
+    console.log(`[dev-preflight] - held ${held.name}${held.latest ? ` latest=${held.latest}` : ''}${nextEligible}`)
   }
 
   if (auditReport.deferred) {
@@ -482,11 +492,6 @@ if (shouldSkipDependencyMaintenance) {
 
 if (opencodeReport.skipped) {
   console.log('[dev-preflight] Skipped OpenCode CLI upgrade because LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1.')
-} else if (!shouldRunStartupMaintenance) {
-  console.log(
-    '[dev-preflight] OpenCode CLI upgrade is opt-in; run `npm run opencode:upgrade` or set ' +
-    'LOOPTROOP_DEV_FORCE_MAINTENANCE=1 before `npm run dev`.',
-  )
 } else if (opencodeReport.deferred) {
   console.log(
     `[dev-preflight] Skipped daily OpenCode CLI upgrade check; it already ran today at ${formatTimestamp(opencodeReport.lastCompletedAt)}.`,

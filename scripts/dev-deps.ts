@@ -31,10 +31,18 @@ if (report.errors.length > 0) {
 
 if (report.alreadyCurrent) {
   console.log('[deps:sync] All direct dependencies are already on the latest stable releases.')
+} else if (report.updatedDependencies.length === 0 && report.updatedDevDependencies.length === 0) {
+  const heldCount = report.heldDependencies.length + report.heldDevDependencies.length
+  console.log(
+    `[deps:sync] Held ${heldCount} newer direct dependency ` +
+    `${heldCount === 1 ? 'release' : 'releases'} until the 7-day release delay passes.`,
+  )
 } else {
+  const heldCount = report.heldDependencies.length + report.heldDevDependencies.length
   console.log(
     `[deps:sync] Updated ${report.updatedDependencies.length} runtime and ` +
-    `${report.updatedDevDependencies.length} dev dependencies to latest stable.`,
+    `${report.updatedDevDependencies.length} dev dependencies to eligible stable releases` +
+    (heldCount > 0 ? `; held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'}.` : '.'),
   )
 }
 

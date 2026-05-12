@@ -96,13 +96,13 @@ npm install
 
 ## 4. Starting the Application
 
-The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. Its default preflight is read-mostly: it restores missing local dependencies when needed, checks LoopTroop-owned ports, and leaves dependency upgrades, audit remediation, and OpenCode CLI upgrades behind explicit maintenance commands or `LOOPTROOP_DEV_FORCE_MAINTENANCE=1`. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures newly started local services with ephemeral credentials and an ephemeral API token when you have not configured your own. The API token is wired into the backend and Vite dev proxy, not embedded into the frontend bundle.
+The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. Its preflight restores missing local dependencies when needed, checks LoopTroop-owned ports, and runs daily maintenance for direct dependencies, npm audit remediation, and the OpenCode CLI. Direct npm dependency sync only installs stable releases that are newer than the current version and at least 7 days old; if npm `latest` is too fresh, LoopTroop installs the newest eligible older release instead. OpenCode updates are exempt from that release-age delay. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures newly started local services with ephemeral credentials and an ephemeral API token when you have not configured your own. The API token is wired into the backend and Vite dev proxy, not embedded into the frontend bundle.
 
 ```bash
 npm run dev
 ```
 
-For forced maintenance, verbose startup output, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
+For non-mutating startup, forced maintenance, verbose startup output, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
 
 By default, the services run on these ports:
 

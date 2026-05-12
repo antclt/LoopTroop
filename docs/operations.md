@@ -7,7 +7,9 @@ This guide covers the parts of LoopTroop you deal with after the first run: star
 | Task | Start here |
 | --- | --- |
 | Start the full local stack | `npm run dev` |
-| Run dependency/audit/OpenCode maintenance during startup | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
+| Start once without dependency/audit mutation | `LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev` |
+| Skip only the local OpenCode CLI upgrade | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev` |
+| Force all startup maintenance now | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
 | Show raw maintenance output | `LOOPTROOP_DEV_VERBOSE=1 npm run dev` |
 | Diagnose slow UI or ticket refresh stalls | `npm run diagnose:stall` |
 | Clean tracked LoopTroop runtime paths from a project | `git rm --cached -r .looptroop` inside the attached project |
@@ -27,12 +29,16 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 
 ## Startup Maintenance
 
-`npm run dev` starts the frontend, backend, docs server, and OpenCode watcher stack. Before those services launch, LoopTroop runs a read-mostly dev preflight that:
+`npm run dev` starts the frontend, backend, docs server, and OpenCode watcher stack. Before those services launch, LoopTroop runs a dev preflight that:
 
 - verifies required local dev binaries exist, using `npm ci` when dependencies need to be restored
+- checks direct dependencies against npm publish metadata
+- updates stale direct dependencies only to stable releases that are newer than the current installed version and at least 7 days old
+- holds newer releases that are still inside that 7-day delay, and installs the newest eligible older release when one exists
+- runs `npm audit fix` without `--force`
+- upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
 - prints the startup plan for each dev service
-- defers dependency sync, audit remediation, and OpenCode CLI upgrades unless `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` is set
 
 `npm run dev` also resolves the local OpenCode server endpoint before the dev services launch:
 
@@ -41,7 +47,9 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - **Ephemeral auth:** if `OPENCODE_SERVER_PASSWORD` is not set and a new local OpenCode server is about to start, `npm run dev` generates a random credential and sets `OPENCODE_SERVER_USERNAME` to `opencode`. This credential is propagated automatically to all child processes — backend and watcher — for the duration of the session.
 - **Ephemeral API token:** if `LOOPTROOP_API_TOKEN` is not set, `npm run dev` generates one for the backend and Vite dev proxy so local same-origin `/api/*` calls are protected without embedding the token in the frontend bundle.
 
-By default, `npm run dev` does not update dependency versions and does not run `npm audit fix`. The networked maintenance work is available through explicit commands or by opting the next dev startup into it with `LOOPTROOP_DEV_FORCE_MAINTENANCE=1`.
+That means `npm run dev` can intentionally mutate local dependency files when aged direct dependency updates or audit fixes are available. The expensive networked maintenance work is daily-gated during normal startup. Direct dependency sync, npm audit remediation, and OpenCode CLI upgrade checks run on the first local dev start of the day. If `package.json` or `package-lock.json` changes later the same day, the affected maintenance step runs again immediately.
+
+The 7-day release delay applies to direct npm package updates selected by dependency sync. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
 
 ## Maintenance Commands
 
@@ -56,6 +64,8 @@ npm run opencode:upgrade
 Use one-run startup flags when you want to change `npm run dev` behavior:
 
 ```bash
+LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev
+LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev
 LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev
 LOOPTROOP_DEV_VERBOSE=1 npm run dev
 ```
@@ -138,9 +148,9 @@ The app database is runtime-bootstrapped by `server/db/init.ts`. The committed m
 | `LOOPTROOP_APP_DB_PATH` | Override the app database path directly |
 | `LOOPTROOP_PROJECT_DB_PATH` | Project database target for explicit Drizzle project DB commands |
 | `LOOPTROOP_DEV_VERBOSE=1` | Print full dependency, audit, and process details during dev preflight |
-| `LOOPTROOP_DEV_SKIP_DEPS=1` | Skip dependency sync and audit remediation even when startup maintenance is explicitly requested |
-| `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1` | Skip OpenCode CLI upgrades even when startup maintenance is explicitly requested |
-| `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` | Opt the next `npm run dev` into dependency sync, audit remediation, and OpenCode CLI upgrade checks |
+| `LOOPTROOP_DEV_SKIP_DEPS=1` | Skip automatic dependency sync and audit remediation during `npm run dev` |
+| `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1` | Skip the automatic local OpenCode CLI upgrade during `npm run dev` |
+| `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` | Bypass the once-per-day maintenance gate and force all startup maintenance checks now |
 | `LOOPTROOP_OPENCODE_MODE` | Set to `mock` to use the mock adapter instead of the real SDK adapter |
 | `CHOKIDAR_USEPOLLING` | Set to `1` to force chokidar polling for file watching; auto-set on mounted WSL drives, but can be overridden manually |
 | `OPENCODE_SERVER_USERNAME` | Basic auth username for the local OpenCode dev server; defaults to `opencode` when `OPENCODE_SERVER_PASSWORD` is also set |
