@@ -6,6 +6,7 @@ import { CollapsiblePhaseLogSection } from './CollapsiblePhaseLogSection'
 import { useTicketArtifacts } from '@/hooks/useTicketArtifacts'
 import { PhaseAttemptSelector } from './PhaseAttemptSelector'
 import { useTicketPhaseAttempts } from '@/hooks/useTicketPhaseAttempts'
+import { getTicketCouncilMembers } from '@/lib/ticketNormalization'
 
 import type { Ticket } from '@/hooks/useTickets'
 
@@ -62,8 +63,8 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
       }
     : undefined)
   const councilMemberNames = useMemo(
-    () => ticket.lockedCouncilMembers.filter((memberId) => memberId.trim().length > 0),
-    [ticket.lockedCouncilMembers],
+    () => getTicketCouncilMembers(ticket),
+    [ticket],
   )
   const councilMemberCount = councilMemberNames.length || 3
 

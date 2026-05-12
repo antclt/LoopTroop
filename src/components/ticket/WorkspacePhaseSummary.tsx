@@ -7,6 +7,7 @@ import { getStatusUserLabel, WORKFLOW_GROUPS } from '@/lib/workflowMeta'
 import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
 import { type DBartifact, useTicketArtifacts } from '@/hooks/useTicketArtifacts'
+import { getTicketRuntime } from '@/lib/ticketNormalization'
 import { findLatestArtifactByType, findLatestCompanionArtifact, parseArtifactCompanionPayload } from '@/components/workspace/artifactCompanionUtils'
 import { buildCoverageArtifactContent, parseCoverageArtifact } from '@/components/workspace/phaseArtifactTypes'
 import type { WorkflowContextKey } from '@shared/workflowMeta'
@@ -193,6 +194,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(true)
   const phaseMeta = getWorkflowPhaseMeta(phase)
+  const runtime = getTicketRuntime(ticket)
   const descriptionId = useId()
   const logCtx = useLogs()
   const shouldTrackCoverageVersion = isCoveragePhase(phase)
@@ -206,10 +208,10 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
     : undefined
 
   const basePhaseLabel = useMemo(() => getStatusUserLabel(phase, {
-    currentBead: ticket.runtime.currentBead,
-    totalBeads: ticket.runtime.totalBeads,
+    currentBead: runtime.currentBead,
+    totalBeads: runtime.totalBeads,
     errorMessage,
-  }), [errorMessage, phase, ticket.runtime.currentBead, ticket.runtime.totalBeads])
+  }), [errorMessage, phase, runtime.currentBead, runtime.totalBeads])
   const coverageVersion = useMemo(() => {
     if (!shouldTrackCoverageVersion) return null
 
@@ -243,13 +245,13 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
         >
           <ChevronRight className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90')} />
           <span>{phaseLabel}</span>
-          {phase === 'CODING' && ticket.runtime.activeBeadId && ticket.runtime.perIterationTimeoutMs ? (() => {
-            const activeBead = ticket.runtime.beads?.find(b => b.id === ticket.runtime.activeBeadId)
+          {phase === 'CODING' && runtime.activeBeadId && runtime.perIterationTimeoutMs ? (() => {
+            const activeBead = runtime.beads?.find(b => b.id === runtime.activeBeadId)
             if (activeBead?.status === 'in_progress' && activeBead.startedAt) {
               return (
                 <ActiveBeadCountdown
                   startedAt={activeBead.startedAt}
-                  perIterationTimeoutMs={ticket.runtime.perIterationTimeoutMs}
+                  perIterationTimeoutMs={runtime.perIterationTimeoutMs}
                 />
               )
             }

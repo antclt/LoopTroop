@@ -117,6 +117,24 @@ describe('DashboardHeader', () => {
     expect(screen.getByRole('button', { name: /cancel…/i })).toBeInTheDocument()
   })
 
+  it('renders status and actions with defaults when cached ticket data is partial', () => {
+    const ticket = {
+      ...makeTicket({ status: 'CODING', currentBead: 1, totalBeads: 3 }),
+      runtime: undefined,
+      availableActions: undefined,
+      lockedCouncilMembers: null,
+    } as unknown as ReturnType<typeof makeTicket>
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    expect(screen.getByText('Implementing (Bead 1/3)')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /cancel/i })).not.toBeInTheDocument()
+  })
+
   it('shows the cancel button labeled "Cancel" (no ellipsis) for a DRAFT ticket', () => {
     const ticket = makeTicket({ status: 'DRAFT', availableActions: ['cancel'] })
 

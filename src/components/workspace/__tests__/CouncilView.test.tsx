@@ -18,12 +18,20 @@ vi.mock('../PhaseArtifactsPanel', () => ({
   PhaseArtifactsPanel: ({
     phase,
     ticketId,
+    councilMemberCount,
+    councilMemberNames,
     preloadedArtifacts,
   }: {
     phase: string
     ticketId?: string
+    councilMemberCount?: number
+    councilMemberNames?: string[]
     preloadedArtifacts?: Array<{ content?: string | null }>
-  }) => <div data-testid="phase-artifacts-panel">{phase}:{ticketId}:{preloadedArtifacts?.[0]?.content ?? ''}</div>,
+  }) => (
+    <div data-testid="phase-artifacts-panel">
+      {phase}:{ticketId}:{councilMemberCount ?? 0}:{councilMemberNames?.join(',') ?? ''}:{preloadedArtifacts?.[0]?.content ?? ''}
+    </div>
+  ),
 }))
 
 vi.mock('../CollapsiblePhaseLogSection', () => ({
@@ -50,9 +58,21 @@ describe('CouncilView', () => {
 
     expect(screen.getByText('AI Council — PRD Drafting')).toBeInTheDocument()
     expect(screen.getByText('Each council model is independently generating a prd draft.')).toBeInTheDocument()
-    expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent(`DRAFTING_PRD:${TEST.ticketId}`)
+    expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent(`DRAFTING_PRD:${TEST.ticketId}:2:${TEST.councilMembers.join(',')}`)
     expect(screen.getByTestId('phase-log-section')).toHaveTextContent('DRAFTING_PRD')
     expect(screen.queryByText('Loading phase data…')).not.toBeInTheDocument()
+  })
+
+  it('renders with an empty council fallback when cached ticket data is partial', () => {
+    const partialTicket = {
+      ...makeTicket({ status: 'COUNCIL_VOTING_INTERVIEW' }),
+      lockedCouncilMembers: null,
+    } as unknown as ReturnType<typeof makeTicket>
+
+    render(<CouncilView phase="COUNCIL_VOTING_INTERVIEW" ticket={partialTicket} />)
+
+    expect(screen.getByText('AI Council — Interview Voting')).toBeInTheDocument()
+    expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent(`COUNCIL_VOTING_INTERVIEW:${TEST.ticketId}:3::`)
   })
 
   it('shows archived live-phase versions as soon as a fresh active attempt exists', () => {

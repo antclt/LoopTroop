@@ -9,6 +9,7 @@ import type { Ticket } from '@/hooks/useTickets'
 import { useProfile } from '@/hooks/useProfile'
 import { useProjects } from '@/hooks/useProjects'
 import { getStatusUserLabel } from '@/lib/workflowMeta'
+import { getTicketAvailableActions, getTicketCouncilMembers, getTicketRuntime } from '@/lib/ticketNormalization'
 import { getStatusProgress, getStatusRingColor } from '@/components/kanban/ticketCardUtils'
 import { ProgressRing } from '@/components/kanban/ProgressRing'
 import { EffortBadge } from '@/components/shared/EffortBadge'
@@ -165,15 +166,18 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
       requestAnimationFrame(() => handleScroll())
     })
   }, [handleScroll])
-  const canCancel = ticket.availableActions.includes('cancel')
+  const runtime = getTicketRuntime(ticket)
+  const availableActions = getTicketAvailableActions(ticket)
+  const lockedCouncilMembers = getTicketCouncilMembers(ticket)
+  const canCancel = availableActions.includes('cancel')
   const canDelete = NON_CANCELABLE.includes(ticket.status)
   const isActionPending = isPending || isCancelPending
   const isDraft = ticket.status === 'DRAFT'
   const { data: projects = [] } = useProjects()
   const project = projects.find(p => p.id === ticket.projectId)
   const statusLabel = getStatusUserLabel(ticket.status, {
-    currentBead: ticket.runtime.currentBead,
-    totalBeads: ticket.runtime.totalBeads,
+    currentBead: runtime.currentBead,
+    totalBeads: runtime.totalBeads,
     errorMessage: ticket.errorMessage,
   })
   const progress = getStatusProgress(ticket.status)
@@ -339,7 +343,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                 : (ticket.lockedCouncilMemberVariants ?? {})
               const rawMembers: string[] = isDraft
                 ? (profile?.councilMembers ? JSON.parse(profile.councilMembers) as string[] : [])
-                : ticket.lockedCouncilMembers
+                : lockedCouncilMembers
               const otherMembers = (rawMembers.length > 0 && rawMembers[0] === mainModel) ? rawMembers.slice(1) : rawMembers
               if (!mainModel && otherMembers.length === 0) return null
               return (
@@ -386,42 +390,42 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                 </div>
                 <div className="shrink-0 text-right">
                   <span className="text-xs font-medium text-muted-foreground">Base Branch</span>
-                  <p className="font-mono mt-0.5">{ticket.runtime.baseBranch}</p>
+                  <p className="font-mono mt-0.5">{runtime.baseBranch}</p>
                 </div>
               </div>
             )}
-            {ticket.runtime.totalBeads > 0 && (
+            {runtime.totalBeads > 0 && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Beads</span>
-                <p className="mt-0.5">{ticket.runtime.completedBeads} / {ticket.runtime.totalBeads}</p>
+                <p className="mt-0.5">{runtime.completedBeads} / {runtime.totalBeads}</p>
               </div>
             )}
-            {ticket.runtime.totalBeads > 0 && (
+            {runtime.totalBeads > 0 && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Completion</span>
-                <p className="mt-0.5">{Math.round(ticket.runtime.percentComplete)}%</p>
+                <p className="mt-0.5">{Math.round(runtime.percentComplete)}%</p>
               </div>
             )}
-            {ticket.runtime.activeBeadIteration && ticket.runtime.activeBeadIteration > 0 && (
+            {runtime.activeBeadIteration && runtime.activeBeadIteration > 0 && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Active Iteration</span>
                 <p className="mt-0.5">
-                  {ticket.runtime.activeBeadIteration}
-                  {ticket.runtime.maxIterationsPerBead && ticket.runtime.maxIterationsPerBead > 0 ? ` / ${ticket.runtime.maxIterationsPerBead}` : ''}
-                  {ticket.runtime.activeBeadId ? ` (${ticket.runtime.activeBeadId})` : ''}
+                  {runtime.activeBeadIteration}
+                  {runtime.maxIterationsPerBead && runtime.maxIterationsPerBead > 0 ? ` / ${runtime.maxIterationsPerBead}` : ''}
+                  {runtime.activeBeadId ? ` (${runtime.activeBeadId})` : ''}
                 </p>
               </div>
             )}
             {!ticket.branchName && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Base Branch</span>
-                <p className="font-mono mt-0.5">{ticket.runtime.baseBranch}</p>
+                <p className="font-mono mt-0.5">{runtime.baseBranch}</p>
               </div>
             )}
-            {ticket.runtime.candidateCommitSha && (
+            {runtime.candidateCommitSha && (
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Candidate Commit</span>
-                <p className="font-mono mt-0.5">{ticket.runtime.candidateCommitSha}</p>
+                <p className="font-mono mt-0.5">{runtime.candidateCommitSha}</p>
               </div>
             )}
             {ticket.errorMessage && (
@@ -429,7 +433,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
             )}
             {project && ticket.status !== 'DRAFT' && (
               <div className="col-span-2 border-t-[2px] border-border/70 pt-2 mt-1">
-                <CopyablePathRow label="Artifacts Location" path={ticket.runtime.artifactRoot || `${project.folderPath}/.looptroop/worktrees/${ticket.externalId}`} />
+                <CopyablePathRow label="Artifacts Location" path={runtime.artifactRoot || `${project.folderPath}/.looptroop/worktrees/${ticket.externalId}`} />
               </div>
             )}
             {ticket.description && (

@@ -19,6 +19,7 @@ import { INTERVIEW_APPROVAL_FOCUS_EVENT } from '@/lib/interviewDocument'
 import { PRD_APPROVAL_FOCUS_EVENT } from '@/lib/prdDocument'
 import { BEADS_APPROVAL_FOCUS_EVENT } from '@/lib/beadsDocument'
 import { WORKSPACE_PHASE_NAVIGATE_EVENT, type WorkspacePhaseNavigateDetail } from '@/lib/workspaceNavigation'
+import { normalizeTicketForRender } from '@/lib/ticketNormalization'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
@@ -242,8 +243,12 @@ export function TicketDashboard() {
       reviewCutoffStatus: reviewCutoffStatus ?? ticket.reviewCutoffStatus,
     }
   }, [currentStatus, previousStatus, reviewCutoffStatus, ticket])
-  const errorSignature = effectiveTicket ? getErrorTicketSignature(effectiveTicket) : null
-  const ticketErrorOccurrences = useMemo(() => (effectiveTicket ? getTicketErrorOccurrences(effectiveTicket) : []), [effectiveTicket])
+  const renderTicket = useMemo(
+    () => effectiveTicket ? normalizeTicketForRender(effectiveTicket) : null,
+    [effectiveTicket],
+  )
+  const errorSignature = renderTicket ? getErrorTicketSignature(renderTicket) : null
+  const ticketErrorOccurrences = useMemo(() => (renderTicket ? getTicketErrorOccurrences(renderTicket) : []), [renderTicket])
   const selectedErrorOccurrenceId = errorSelection.ticketId === ticketId ? errorSelection.occurrenceId : null
   const selectedErrorOccurrence = useMemo(
     () => selectedErrorOccurrenceId != null
@@ -256,11 +261,11 @@ export function TicketDashboard() {
     : null
   const selectedPhaseForWorkspace = selectedPhase ?? currentStatus
   const liveErrorOccurrence = useMemo(() => {
-    if (!effectiveTicket) return null
+    if (!renderTicket) return null
     if (selectedPhase && selectedPhase !== currentStatus) return null
     if (selectedErrorOccurrence) return selectedErrorOccurrence
-    return currentStatus === 'BLOCKED_ERROR' ? getActiveErrorOccurrence(effectiveTicket) : null
-  }, [currentStatus, effectiveTicket, selectedErrorOccurrence, selectedPhase])
+    return currentStatus === 'BLOCKED_ERROR' ? getActiveErrorOccurrence(renderTicket) : null
+  }, [currentStatus, renderTicket, selectedErrorOccurrence, selectedPhase])
   const contextPhase = selectedErrorOccurrence?.blockedFromStatus
     ?? liveErrorOccurrence?.blockedFromStatus
     ?? selectedPhaseForWorkspace
@@ -477,14 +482,14 @@ export function TicketDashboard() {
     </div>
   )
 
-  if (!effectiveTicket) return null
+  if (!renderTicket) return null
 
   const activePhase = selectedPhase ?? currentStatus
   const activeErrorOccurrenceId = liveErrorOccurrence?.id ?? selectedErrorOccurrenceId
   const summaryPhase = activeErrorOccurrenceId ? 'BLOCKED_ERROR' : activePhase
   const summaryErrorMessage = selectedErrorOccurrence?.errorMessage
     ?? liveErrorOccurrence?.errorMessage
-    ?? effectiveTicket.errorMessage
+    ?? renderTicket.errorMessage
   const isReconnecting = liveUpdatesState === 'reconnecting'
 
   return (
@@ -501,7 +506,7 @@ export function TicketDashboard() {
         onConnectionStateChange={setLiveUpdatesState}
       />
       <div className="fixed inset-0 z-[60] bg-background flex flex-col">
-        <DashboardHeader ticket={effectiveTicket} />
+        <DashboardHeader ticket={renderTicket} />
         {isReconnecting && (
           <div
             className="border-b border-amber-200 bg-amber-50/90 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/40"
@@ -564,8 +569,8 @@ export function TicketDashboard() {
                 </div>
                 <div className="flex-1 overflow-hidden">
                   <NavigatorPanel
-                    ticketId={ticket.id}
-                    ticket={effectiveTicket}
+                    ticketId={renderTicket.id}
+                    ticket={renderTicket}
                     currentStatus={currentStatus}
                     selectedPhase={activePhase}
                     selectedErrorOccurrenceId={selectedErrorOccurrenceId}
@@ -598,8 +603,8 @@ export function TicketDashboard() {
               style={{ width: navWidth }}
             >
               <NavigatorPanel
-                ticketId={ticket.id}
-                ticket={effectiveTicket}
+                ticketId={renderTicket.id}
+                ticket={renderTicket}
                 currentStatus={currentStatus}
                 selectedPhase={activePhase}
                 selectedErrorOccurrenceId={selectedErrorOccurrenceId}
@@ -617,14 +622,14 @@ export function TicketDashboard() {
             <div className="flex flex-col flex-1 overflow-hidden">
               {!fullLogOpen && (
                 <WorkspacePhaseSummary
-                  key={effectiveTicket.id}
+                  key={renderTicket.id}
                   phase={summaryPhase}
-                  ticket={effectiveTicket}
+                  ticket={renderTicket}
                   errorMessage={summaryErrorMessage}
                 />
               )}
               <ActiveWorkspace
-                ticket={effectiveTicket}
+                ticket={renderTicket}
                 selectedPhase={activePhase}
                 selectedErrorOccurrenceId={activeErrorOccurrenceId}
                 previousStatus={previousStatus}

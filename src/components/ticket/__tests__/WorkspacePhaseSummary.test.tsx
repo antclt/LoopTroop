@@ -94,6 +94,22 @@ describe('WorkspacePhaseSummary', () => {
     expect(screen.getByText(/A phase failure paused the workflow\./)).toBeInTheDocument()
   })
 
+  it('renders with runtime defaults when cached ticket data is partial', () => {
+    const ticket = {
+      ...makeTicket({ status: 'CODING' }),
+      runtime: undefined,
+      currentBead: 2,
+      totalBeads: 4,
+    } as unknown as ReturnType<typeof makeTicket>
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="CODING" ticket={ticket} />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Implementing (Bead 2/4)' })).toBeInTheDocument()
+    expect(screen.getByText(/AI coding agent executes beads one at a time/)).toBeInTheDocument()
+  })
+
   it('shows the next live PRD coverage version in the main title when revision work starts', async () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input)
