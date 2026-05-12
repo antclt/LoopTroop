@@ -6,6 +6,9 @@ export const WRITE_RATE_LIMIT_MAX = 120
 export const AUTOSAVE_RATE_LIMIT_MAX = 300
 export const RATE_LIMIT_MAX_BUCKETS = 1_000
 
+const LOCAL_CLIENT_IP = 'local'
+const MILLISECONDS_PER_SECOND = 1_000
+const MIN_RETRY_AFTER_SECONDS = 1
 const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
 
 export type RateLimitBucketKind = 'read' | 'write' | 'autosave'
@@ -26,10 +29,10 @@ export interface ApiRateLimitOptions {
   now?: () => number
 }
 
-function getClientIp(c: Context, trustProxy: boolean): string {
-  if (!trustProxy) return 'local'
+function getClientIp(c: Context, shouldTrustProxy: boolean): string {
+  if (!shouldTrustProxy) return LOCAL_CLIENT_IP
   const forwardedFor = c.req.header('x-forwarded-for')?.split(',')[0]?.trim()
-  return forwardedFor || c.req.header('x-real-ip')?.trim() || 'local'
+  return forwardedFor || c.req.header('x-real-ip')?.trim() || LOCAL_CLIENT_IP
 }
 
 function isAutosaveRequest(c: Context): boolean {
@@ -47,7 +50,7 @@ export function createApiRateLimitMiddleware(options: ApiRateLimitOptions = {}) 
   const writeLimitMax = options.writeLimitMax ?? WRITE_RATE_LIMIT_MAX
   const autosaveLimitMax = options.autosaveLimitMax ?? AUTOSAVE_RATE_LIMIT_MAX
   const maxBuckets = options.maxBuckets ?? RATE_LIMIT_MAX_BUCKETS
-  const trustProxy = options.trustProxy ?? process.env.LOOPTROOP_TRUST_PROXY === '1'
+  const shouldTrustProxy = options.trustProxy ?? process.env.LOOPTROOP_TRUST_PROXY === '1'
   const buckets = options.buckets ?? new Map<string, RateLimitBucket>()
   const nowFn = options.now ?? Date.now
   let lastPrunedAt = 0
@@ -80,7 +83,7 @@ export function createApiRateLimitMiddleware(options: ApiRateLimitOptions = {}) 
       : bucketKind === 'write'
         ? writeLimitMax
         : readLimitMax
-    const key = `${bucketKind}:${getClientIp(c, trustProxy)}`
+    const key = `${bucketKind}:${getClientIp(c, shouldTrustProxy)}`
     const currentBucket = buckets.get(key)
 
     if (!currentBucket || currentBucket.resetAt <= now) {
@@ -90,7 +93,10 @@ export function createApiRateLimitMiddleware(options: ApiRateLimitOptions = {}) 
     }
 
     if (currentBucket.count >= limit) {
-      c.header('Retry-After', String(Math.max(1, Math.ceil((currentBucket.resetAt - now) / 1000))))
+      c.header(
+        'Retry-After',
+        String(Math.max(MIN_RETRY_AFTER_SECONDS, Math.ceil((currentBucket.resetAt - now) / MILLISECONDS_PER_SECOND))),
+      )
       return c.json({ error: 'Too many requests. Please retry shortly.' }, 429)
     }
 

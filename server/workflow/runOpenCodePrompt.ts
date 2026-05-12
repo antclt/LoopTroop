@@ -90,6 +90,14 @@ export interface OpenCodeAttemptMeta {
   errorDetails?: unknown
 }
 
+const TIMEOUT_ERROR_MESSAGE = 'Timeout'
+
+interface TimeoutSignalState {
+  signal?: AbortSignal
+  timedOut: () => boolean
+  cleanup: () => void
+}
+
 const sessionPromptDispatchCounts = new Map<string, number>()
 
 export function clearOpenCodePromptDispatchCount(sessionId: string): void {
@@ -151,32 +159,32 @@ function buildAttemptMeta(
   responseMeta: OpenCodeResponseMeta,
   erroredSessionPolicy: OpenCodeErroredSessionPolicy | undefined,
 ): OpenCodeAttemptMeta {
-  const sessionErrored = Boolean(responseMeta.sessionErrored)
-  const latestAssistantErrored = Boolean(responseMeta.latestAssistantHasError)
-  const erroredSessionDetected = sessionErrored || latestAssistantErrored
-  const discardedResponse = erroredSessionDetected && erroredSessionPolicy === 'discard_errored_session_output'
-  const errorSource = sessionErrored
+  const isSessionErrored = Boolean(responseMeta.sessionErrored)
+  const isLatestAssistantErrored = Boolean(responseMeta.latestAssistantHasError)
+  const hasErroredSession = isSessionErrored || isLatestAssistantErrored
+  const shouldDiscardResponse = hasErroredSession && erroredSessionPolicy === 'discard_errored_session_output'
+  const errorSource = isSessionErrored
     ? 'session_error'
-    : latestAssistantErrored
+    : isLatestAssistantErrored
       ? 'assistant_error'
       : undefined
-  const error = sessionErrored
+  const error = isSessionErrored
     ? responseMeta.sessionError
-    : latestAssistantErrored
+    : isLatestAssistantErrored
       ? responseMeta.latestAssistantError
       : undefined
-  const errorDetails = sessionErrored
+  const errorDetails = isSessionErrored
     ? responseMeta.sessionErrorDetails
-    : latestAssistantErrored
+    : isLatestAssistantErrored
       ? responseMeta.latestAssistantErrorInfo
       : undefined
 
   return {
-    outcome: erroredSessionDetected ? 'errored_session' : 'clean',
-    responseAccepted: !discardedResponse,
-    discardedResponse,
-    sessionErrored,
-    latestAssistantErrored,
+    outcome: hasErroredSession ? 'errored_session' : 'clean',
+    responseAccepted: !shouldDiscardResponse,
+    discardedResponse: shouldDiscardResponse,
+    sessionErrored: isSessionErrored,
+    latestAssistantErrored: isLatestAssistantErrored,
     ...(errorSource ? { errorSource } : {}),
     ...(error ? { error } : {}),
     ...(errorDetails !== undefined ? { errorDetails } : {}),
@@ -189,7 +197,10 @@ function resolveSessionCreateOptions(): OpenCodeSessionCreateOptions {
   }
 }
 
-function createTimeoutSignal(signal: AbortSignal | undefined, timeoutMs: number | undefined) {
+function createTimeoutSignal(
+  signal: AbortSignal | undefined,
+  timeoutMs: number | undefined,
+): TimeoutSignalState {
   if (timeoutMs === undefined || timeoutMs <= 0) {
     return {
       signal,
@@ -225,7 +236,7 @@ function isPromptTransportFailure(error: unknown): boolean {
   if (error instanceof DOMException && error.name === 'AbortError') return true
   if (!(error instanceof Error)) return true
   return error.name === 'AbortError' ||
-    error.message === 'Timeout' ||
+    error.message === TIMEOUT_ERROR_MESSAGE ||
     error.message.startsWith('Failed to prompt OpenCode session')
 }
 
@@ -288,7 +299,7 @@ export async function runOpenCodePrompt({
       : await adapter.createSession(projectPath, acquisitionDeadline.signal, sessionCreateOptions)
   } catch (error) {
     if (acquisitionDeadline.timedOut()) {
-      throw new Error('Timeout')
+      throw new Error(TIMEOUT_ERROR_MESSAGE)
     }
     throw error
   } finally {
@@ -364,7 +375,7 @@ export async function runOpenCodeSessionPrompt({
       }, validationDeadline.signal)
     } catch (error) {
       if (validationDeadline.timedOut()) {
-        throw new Error('Timeout')
+        throw new Error(TIMEOUT_ERROR_MESSAGE)
       }
       throw error
     } finally {
@@ -427,18 +438,20 @@ export async function runOpenCodeSessionPrompt({
       }
     }
     if (deadlineController?.signal.aborted) {
-      throw new Error('Timeout')
+      throw new Error(TIMEOUT_ERROR_MESSAGE)
     }
     response = await adapter.promptSession(resolvedSession.id, parts, combinedSignal, promptOptions)
     // Adapter completed but deadline may have fired during execution;
     // enforce the timeout even if the adapter didn't respect the signal.
     if (deadlineController?.signal.aborted) {
-      throw new Error('Timeout')
+      throw new Error(TIMEOUT_ERROR_MESSAGE)
     }
   } catch (error) {
     if (deadlineController?.signal.aborted) {
       await adapter.abortSession(resolvedSession.id)
-      const timeoutError = error instanceof Error && error.message === 'Timeout' ? error : new Error('Timeout')
+      const timeoutError = error instanceof Error && error.message === TIMEOUT_ERROR_MESSAGE
+        ? error
+        : new Error(TIMEOUT_ERROR_MESSAGE)
       if (sessionManager && !sessionOwnership?.keepActive) {
         await sessionManager.abandonSession(resolvedSession.id)
         clearOpenCodePromptDispatchCount(resolvedSession.id)

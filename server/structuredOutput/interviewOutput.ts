@@ -42,6 +42,10 @@ import { MAX_INTERVIEW_BATCH_SIZE } from '../lib/constants'
 import { buildStructuredOutputFailure } from './failure'
 import { getErrorMessage } from '@shared/typeGuards'
 
+const INTERVIEW_ID_PREFIX = 'Q'
+const INTERVIEW_ID_PAD_WIDTH = 2
+const INTERVIEW_ID_PATTERN = /q?(\d+)/i
+const INTERVIEW_QUESTION_KEY_SEPARATOR = '\u241f'
 const PHASE_ORDER = new Map([
   ['foundation', 0],
   ['structure', 1],
@@ -93,17 +97,17 @@ function normalizeInterviewPhase(value: string): 'foundation' | 'structure' | 'a
 }
 
 function normalizeInterviewId(rawId: string): string {
-  const match = rawId.trim().match(/q?(\d+)/i)
+  const match = rawId.trim().match(INTERVIEW_ID_PATTERN)
   if (!match?.[1]) return rawId.trim()
-  return `Q${match[1].padStart(2, '0')}`
+  return `${INTERVIEW_ID_PREFIX}${match[1].padStart(INTERVIEW_ID_PAD_WIDTH, '0')}`
 }
 
 function buildInterviewQuestionKey(question: NormalizedInterviewQuestion): string {
-  return `${question.id}\u241f${question.phase}\u241f${question.question}`
+  return `${question.id}${INTERVIEW_QUESTION_KEY_SEPARATOR}${question.phase}${INTERVIEW_QUESTION_KEY_SEPARATOR}${question.question}`
 }
 
 function buildInterviewQuestionIdentityKey(question: NormalizedInterviewQuestion): string {
-  return `${question.id}\u241f${question.phase}`
+  return `${question.id}${INTERVIEW_QUESTION_KEY_SEPARATOR}${question.phase}`
 }
 
 function buildInterviewQuestionLookup(questions: NormalizedInterviewQuestion[]) {
@@ -149,7 +153,7 @@ function normalizeParsedInterviewQuestionList(
   // renumbered above the current ceiling instead of throwing.
   let maxNumericId = 0
   for (const question of parsed) {
-    const match = question.id.trim().match(/q?(\d+)/i)
+    const match = question.id.trim().match(INTERVIEW_ID_PATTERN)
     if (match?.[1]) {
       maxNumericId = Math.max(maxNumericId, Number(match[1]))
     }
@@ -164,7 +168,7 @@ function normalizeParsedInterviewQuestionList(
     if (!text) throw new Error(`Empty question text at index ${index}`)
 
     if (seenIds.has(id)) {
-      const newId = `Q${String(nextAvailableId).padStart(2, '0')}`
+      const newId = `${INTERVIEW_ID_PREFIX}${String(nextAvailableId).padStart(INTERVIEW_ID_PAD_WIDTH, '0')}`
       repairWarnings.push(`Renumbered duplicate question id ${id} at index ${index} to ${newId}.`)
       id = newId
       nextAvailableId += 1
@@ -1167,7 +1171,7 @@ function normalizeInterviewBatchPayload(value: unknown): {
   }
 }
 
-function normalizeInterviewCompletePayload(value: unknown, allowQuestionsOnly: boolean): {
+function normalizeInterviewCompletePayload(value: unknown, shouldAllowQuestionsOnly: boolean): {
   normalizedContent: string
   repairWarnings: string[]
 } {
@@ -1202,7 +1206,7 @@ function normalizeInterviewCompletePayload(value: unknown, allowQuestionsOnly: b
   if (!hasQuestions && !hasAnswers) {
     throw new Error('Interview complete output is missing questions or answers')
   }
-  if (!allowQuestionsOnly && !hasFinalSchemaKeys && !hasAuditSummaryKeys) {
+  if (!shouldAllowQuestionsOnly && !hasFinalSchemaKeys && !hasAuditSummaryKeys) {
     throw new Error('Interview complete output is missing final interview schema fields')
   }
 

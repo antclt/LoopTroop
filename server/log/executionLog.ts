@@ -18,6 +18,9 @@ const STRUCTURED_KEYS: ReadonlySet<string> = new Set([
 const INTERNAL_KEYS: ReadonlySet<string> = new Set([
   'suppressDebugMirror',
 ])
+const DEFAULT_PHASE_ATTEMPT = 1
+const FINALIZE_LOG_OPERATION = 'finalize'
+const UPSERT_LOG_OPERATION = 'upsert'
 
 function pickStructuredFields(data?: Record<string, unknown>): Partial<LogEvent> {
   if (!data) return {}
@@ -78,7 +81,7 @@ function resolvePhaseAttemptSafely(
   try {
     return resolvePhaseAttempt(ticketId, phase, phaseAttempt)
   } catch {
-    return 1
+    return DEFAULT_PHASE_ATTEMPT
   }
 }
 
@@ -161,12 +164,12 @@ export function appendLogEvent(
 
   // Streaming upserts are NOT persisted — only delivered via SSE (see budget
   // note above). The finalize event carries the complete final content.
-  if (event.op === 'upsert' && event.streaming && event.entryId) {
+  if (event.op === UPSERT_LOG_OPERATION && event.streaming && event.entryId) {
     return
   }
 
   // Finalize supersedes any buffered upsert for this entryId
-  if (event.op === 'finalize' && event.entryId) {
+  if (event.op === FINALIZE_LOG_OPERATION && event.entryId) {
     removeBuffered(event.entryId)
   }
 

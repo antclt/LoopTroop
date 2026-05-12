@@ -10,6 +10,8 @@ export const FORCE_KILL_DELAY_MS = 5000
 export const SQLITE_BUSY_TIMEOUT_MS = 5000
 /** Default context window limit for provider catalog */
 export const DEFAULT_CONTEXT_WINDOW_LIMIT = 200_000
+/** Default token budget for OpenCode prompt context assembly */
+export const DEFAULT_OPENCODE_TOKEN_BUDGET = 100_000
 /** Min timeout for OpenCode prompt operations */
 export const PROMPT_MIN_TIMEOUT_MS = 10_000
 /** Max timeout for OpenCode prompt operations */

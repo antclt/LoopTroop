@@ -1,6 +1,7 @@
 import type { PromptPart } from './types'
-import { logIfVerbose, warnIfVerbose } from '../runtime'
 import { encode } from 'gpt-tokenizer'
+import { DEFAULT_OPENCODE_TOKEN_BUDGET } from '../lib/constants'
+import { logIfVerbose, warnIfVerbose } from '../runtime'
 
 // Phase allowlists — only specified sources are included
 // Phase allowlists derived from cl-prompt.md PROM context_input specs
@@ -52,7 +53,7 @@ const PHASE_ALLOWLISTS: Record<string, string[]> = {
 }
 
 // Token budget per call (approximate)
-const DEFAULT_TOKEN_BUDGET = 100000
+const DEFAULT_CONTEXT_TOKEN_BUDGET = DEFAULT_OPENCODE_TOKEN_BUDGET
 // Trim order: lowest priority sources removed first
 // Maps trim key to the source names used in parts[]
 const TRIM_PRIORITY: { key: string; sources: string[] }[] = [
@@ -83,13 +84,13 @@ function estimateTokens(text: string): number {
 // Context slice cache per ticket — avoids redundant file-tree reads within
 // a 5-minute window for the same ticket and context slice.
 const contextCache = new Map<string, { content: string; timestamp: number }>()
-const CACHE_TTL = 300000 // 5 minutes
+const CONTEXT_CACHE_TTL_MS = 300_000 // 5 minutes
 
-const MAX_CONTEXT_CACHE_SIZE = 200
+const MAX_CONTEXT_CACHE_ENTRIES = 200
 
 function getCachedContext(key: string): string | null {
   const cached = contextCache.get(key)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+  if (cached && Date.now() - cached.timestamp < CONTEXT_CACHE_TTL_MS) {
     return cached.content
   }
   contextCache.delete(key)
@@ -98,7 +99,7 @@ function getCachedContext(key: string): string | null {
 
 function setCachedContext(key: string, content: string) {
   // Evict oldest entries if cache exceeds max size
-  if (contextCache.size >= MAX_CONTEXT_CACHE_SIZE) {
+  if (contextCache.size >= MAX_CONTEXT_CACHE_ENTRIES) {
     const oldestKey = contextCache.keys().next().value
     if (oldestKey !== undefined) contextCache.delete(oldestKey)
   }
@@ -319,10 +320,10 @@ export function buildMinimalContext(
   // Apply token budget and trimming
   let totalTokens = orderedParts.reduce((sum, p) => sum + estimateTokens(p.content), 0)
 
-  if (totalTokens > DEFAULT_TOKEN_BUDGET) {
+  if (totalTokens > DEFAULT_CONTEXT_TOKEN_BUDGET) {
     // Trim in priority order (lowest priority trimmed first)
     for (const { key, sources } of TRIM_PRIORITY) {
-      if (totalTokens <= DEFAULT_TOKEN_BUDGET) break
+      if (totalTokens <= DEFAULT_CONTEXT_TOKEN_BUDGET) break
       const matchSources = [key, ...sources]
       const idx = orderedParts.findIndex((p) => matchSources.includes(p.source))
       if (idx !== -1) {

@@ -15,25 +15,29 @@ interface PromptTemplate {
   toolPolicy: OpenCodeToolPolicy
 }
 
+const DEFAULT_VOTE_CATEGORY_SCORE = 15
+const MAX_VOTE_CATEGORY_SCORE = 20
+const MAX_VOTE_TOTAL_SCORE = 100
+const EXAMPLE_DRAFT_A_SCORES = [18, 17, 16, 15, 18]
+const EXAMPLE_DRAFT_B_SCORES = [14, 15, 14, 16, 13]
+
 function buildStrictVoteOutputInstruction(categories: string[]): string {
-  const exampleScoresA = [18, 17, 16, 15, 18]
-  const exampleScoresB = [14, 15, 14, 16, 13]
   const renderExampleDraft = (label: string, scores: number[]) => [
     `  ${label}:`,
-    ...categories.map((category, index) => `    ${category}: ${scores[index] ?? 15}`),
-    `    total_score: ${categories.reduce((sum, _, index) => sum + (scores[index] ?? 15), 0)}`,
+    ...categories.map((category, index) => `    ${category}: ${scores[index] ?? DEFAULT_VOTE_CATEGORY_SCORE}`),
+    `    total_score: ${categories.reduce((sum, _, index) => sum + (scores[index] ?? DEFAULT_VOTE_CATEGORY_SCORE), 0)}`,
   ].join('\n')
 
   return [
     'Output Format: Output strict machine-readable YAML. The top-level key MUST be `draft_scores`. Under `draft_scores`, include one mapping entry per presented draft using the exact provided draft label as the key (for example: `Draft 1`, `Draft 2`).',
     `Each draft entry MUST contain exactly ${categories.length + 1} integer fields on single lines: ${categories.map(category => `\`${category}\``).join(', ')}, and \`total_score\`.`,
-    'All category scores MUST be plain integers from 0 to 20. `total_score` MUST be a plain integer from 0 to 100 and MUST equal the sum of the category scores for that draft.',
+    `All category scores MUST be plain integers from 0 to ${MAX_VOTE_CATEGORY_SCORE}. \`total_score\` MUST be a plain integer from 0 to ${MAX_VOTE_TOTAL_SCORE} and MUST equal the sum of the category scores for that draft.`,
     'Do not output prose, explanations, markdown fences, comments, rankings, winners, averages, extra keys, or omitted drafts.',
     'Example:',
     '```yaml',
     'draft_scores:',
-    renderExampleDraft('Draft 1', exampleScoresA),
-    renderExampleDraft('Draft 2', exampleScoresB),
+    renderExampleDraft('Draft 1', EXAMPLE_DRAFT_A_SCORES),
+    renderExampleDraft('Draft 2', EXAMPLE_DRAFT_B_SCORES),
     '```',
   ].join('\n')
 }

@@ -6,6 +6,10 @@ import { warnIfVerbose } from '../runtime'
 import { getTicketByRef } from '../storage/tickets'
 
 const streamRouter = new Hono()
+const INITIAL_STREAM_EVENT_ID = '0'
+const STREAM_CONNECTED_EVENT = 'connected'
+const STREAM_HEARTBEAT_EVENT = 'heartbeat'
+const STREAM_HEARTBEAT_INTERVAL_MS = 30_000
 export const MAX_SSE_CONNECTIONS_PER_TICKET = 6
 export const MAX_SSE_CONNECTIONS_TOTAL = 100
 
@@ -38,12 +42,12 @@ streamRouter.get('/stream', (c) => {
   return streamSSE(c, async (stream) => {
     const clientId = `${safeTicketId}-${Date.now()}-${randomBytes(6).toString('hex')}`
     let resolveStream: () => void = () => {}
-    let cleanedUp = false
+    let isCleanedUp = false
     let interval: ReturnType<typeof setInterval> | null = null
 
     function safeCleanup() {
-      if (cleanedUp) return
-      cleanedUp = true
+      if (isCleanedUp) return
+      isCleanedUp = true
       cleanupStreamClient(safeTicketId, clientId, interval ?? undefined)
     }
 
@@ -51,13 +55,13 @@ streamRouter.get('/stream', (c) => {
     interval = setInterval(async () => {
       try {
         await stream.writeSSE({
-          event: 'heartbeat',
+          event: STREAM_HEARTBEAT_EVENT,
           data: JSON.stringify({ timestamp: new Date().toISOString() }),
         })
       } catch {
         safeCleanup()
       }
-    }, 30000)
+    }, STREAM_HEARTBEAT_INTERVAL_MS)
 
     // Register client with broadcaster
     broadcaster.addClient(safeTicketId, {
@@ -78,9 +82,9 @@ streamRouter.get('/stream', (c) => {
     try {
       // Send initial connection event
       await stream.writeSSE({
-        event: 'connected',
+        event: STREAM_CONNECTED_EVENT,
         data: JSON.stringify({ ticketId: safeTicketId, clientId, timestamp: new Date().toISOString() }),
-        id: '0',
+        id: INITIAL_STREAM_EVENT_ID,
       })
 
       // Replay missed events if reconnecting

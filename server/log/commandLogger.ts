@@ -76,6 +76,7 @@ export async function withCommandLoggingAsync<T>(
 
 // Dedup window: suppress identical command log lines emitted within this interval
 const CMD_LOG_DEDUP_WINDOW_MS = 1000
+const COMMAND_LOG_OUTPUT_PREVIEW_LENGTH = 2500
 
 function emitCommandLog(
   ctx: CommandLogContext,
@@ -164,13 +165,14 @@ export function logCommand(
   let content: string
   let type: 'info' | 'error'
 
+  const shouldUseStructuredOutput = shouldRenderStructuredCommandOutput(result)
+
   if (result.ok) {
-    const shouldUseStructuredOutput = shouldRenderStructuredCommandOutput(result)
     const probeOutcome = shouldUseStructuredOutput
       ? null
       : formatKnownGitProbeSuccess(commandText, result.stdout, result.stderr)
     if (probeOutcome) {
-      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(probeOutcome, 2500)}`
+      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(probeOutcome, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`
       type = 'info'
       emitCommandLog(ctx, type, content)
       return
@@ -181,16 +183,15 @@ export function logCommand(
     } else {
       const outputStr = formatCompactCommandOutput(result.stdout, result.stderr)
       const silentOutcome = outputStr ? null : formatKnownSilentSuccess(bin, args)
-      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(outputStr || silentOutcome || 'ok', 2500)}`
+      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(outputStr || silentOutcome || 'ok', COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`
     }
     type = 'info'
   } else {
-    const shouldUseStructuredOutput = shouldRenderStructuredCommandOutput(result)
     const benignProbeFailure = shouldUseStructuredOutput
       ? null
       : formatKnownGitProbeFailure(commandText, result.error)
     if (benignProbeFailure) {
-      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(benignProbeFailure, 2500)}`
+      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(benignProbeFailure, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`
       type = 'info'
       emitCommandLog(ctx, type, content)
       return
@@ -200,7 +201,7 @@ export function logCommand(
       content = formatStructuredCommandLog(cmdStr, result)
     } else {
       const error = compactCommandText(result.error)
-      content = `[CMD] $ ${cmdStr}  →  error: ${truncateOutput(error, 2500)}`
+      content = `[CMD] $ ${cmdStr}  →  error: ${truncateOutput(error, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`
     }
     type = 'error'
   }
@@ -270,22 +271,22 @@ function formatStructuredCommandLog(cmdStr: string, result: LoggedCommandResult)
   const stderr = normalizeCommandText(result.stderr)
 
   if (stdin) {
-    sections.push(`STDIN:\n${truncateOutput(stdin, 2500)}`)
+    sections.push(`STDIN:\n${truncateOutput(stdin, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`)
   }
 
   if (!result.ok) {
     const detail = normalizeCommandText(result.error)
     if (shouldIncludeErrorSection(detail, stdout, stderr)) {
-      sections.push(`ERROR:\n${truncateOutput(detail, 2500)}`)
+      sections.push(`ERROR:\n${truncateOutput(detail, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`)
     }
   }
 
   if (stdout) {
-    sections.push(`STDOUT:\n${truncateOutput(stdout, 2500)}`)
+    sections.push(`STDOUT:\n${truncateOutput(stdout, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`)
   }
 
   if (stderr) {
-    sections.push(`STDERR:\n${truncateOutput(stderr, 2500)}`)
+    sections.push(`STDERR:\n${truncateOutput(stderr, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`)
   }
 
   return [`[CMD] $ ${cmdStr}`, ...sections].join('\n')
