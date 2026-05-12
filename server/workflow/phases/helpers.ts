@@ -60,7 +60,7 @@ const DEFAULT_TOOL_LOG_LIMITS: ToolLogLimits = {
   errorMaxChars: PROFILE_DEFAULTS.toolErrorMaxChars,
 }
 
-const STREAMING_LOG_MIN_INTERVAL_MS = 25
+const STREAMING_LOG_MIN_INTERVAL_MS = 10
 const LIVE_DEBUG_LOG_MAX_CHARS = 8000
 
 let _cachedToolLogLimits: ToolLogLimits = { ...DEFAULT_TOOL_LOG_LIMITS }

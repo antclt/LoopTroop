@@ -194,7 +194,7 @@ describe('OpenCode log canonicalization', () => {
     })
   })
 
-  it('broadcasts progressive text upserts on the 25ms live cadence while only persisting the final row', () => {
+  it('broadcasts progressive text upserts on the 10ms live cadence while only persisting the final row', () => {
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1000)
     const state = createOpenCodeStreamState()
 
@@ -219,7 +219,7 @@ describe('OpenCode log canonicalization', () => {
         complete: false,
       }, state)
 
-      nowSpy.mockReturnValue(1025)
+      nowSpy.mockReturnValue(1010)
       emitOpenCodeStreamEvent('1:T-42', 'T-42', 'DRAFTING_PRD', 'openai/gpt-5-codex', 'ses-throttle', {
         type: 'text',
         sessionId: 'ses-throttle',
