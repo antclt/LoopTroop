@@ -1,7 +1,7 @@
 import type { LogEvent, LogEventType, LogSource } from './types'
 import { safeAtomicAppend } from '../io/atomicAppend'
 import { getTicketPaths } from '../storage/tickets'
-import { removeBuffered } from './upsertBuffer'
+import { clearRecentLogDedup, shouldSkipRecentLog } from './upsertBuffer'
 import { resolvePhaseAttempt } from '../storage/ticketPhaseAttempts'
 
 type StructuredLogFields = Omit<LogEvent, 'timestamp' | 'type' | 'ticketId' | 'phase' | 'message' | 'source' | 'status' | 'data'>
@@ -17,9 +17,9 @@ const STRUCTURED_KEYS: ReadonlySet<string> = new Set([
 // Internal-only keys that should never be persisted in the log file.
 const INTERNAL_KEYS: ReadonlySet<string> = new Set([
   'suppressDebugMirror',
+  'timestamp',
 ])
 const DEFAULT_PHASE_ATTEMPT = 1
-const FINALIZE_LOG_OPERATION = 'finalize'
 const UPSERT_LOG_OPERATION = 'upsert'
 
 function pickStructuredFields(data?: Record<string, unknown>): Partial<LogEvent> {
@@ -100,14 +100,19 @@ function resolvePhaseAttemptSafely(
  *    session produces ~90 progressive snapshots with quadratic content growth
  *    in the normal lifecycle log.
  *
- * 2. DEBUG MIRROR ENTRIES ARE NOT PERSISTED. emitPhaseLog() auto-creates a
+ * 2. EXACT RECENT DUPLICATES ARE DROPPED. A content-hash dedupe window filters
+ *    near-identical events emitted milliseconds apart before they are written to
+ *    disk, independent of ticket path layout. Fingerprints still provide the
+ *    stronger idempotency guard for explicitly-identified events.
+ *
+ * 3. DEBUG MIRROR ENTRIES ARE NOT PERSISTED. emitPhaseLog() auto-creates a
  *    debug copy of every non-debug log entry. These mirrors are broadcast
  *    via SSE for the real-time DEBUG tab but are NOT written to disk. Direct
  *    emitDebugLog() calls (e.g., opencode response logging) still persist to
  *    execution-log.debug.jsonl. See the `persist` parameter on emitDebugLog in
  *    helpers.ts.
  *
- * 3. REDUNDANT DATA FIELDS ARE STRIPPED. Structured fields already promoted
+ * 4. REDUNDANT DATA FIELDS ARE STRIPPED. Structured fields already promoted
  *    to top-level event properties (entryId, sessionId, etc.) and internal
  *    flags (suppressDebugMirror) are removed from `data` before serializing.
  *
@@ -168,17 +173,20 @@ export function appendLogEvent(
     return
   }
 
-  // Finalize supersedes any buffered upsert for this entryId
-  if (event.op === FINALIZE_LOG_OPERATION && event.entryId) {
-    removeBuffered(event.entryId)
-  }
-
   appendEventToChannel(ticketId, primaryChannel, primaryLogPath, event, phase, phaseAttempt, fingerprint)
 }
 
 const MAX_PERSISTED_FINGERPRINTS_PER_TICKET = 256
 const MAX_FINGERPRINT_TICKETS = 100
 const persistedFingerprintsByTicket = new Map<string, Map<string, number>>()
+
+function buildRecentLogScope(channel: 'emit' | PersistedLogChannel, phase: string, phaseAttempt: number) {
+  return {
+    channel,
+    phase,
+    phaseAttempt,
+  } as const
+}
 
 function appendEventToChannel(
   ticketId: string,
@@ -193,22 +201,26 @@ function appendEventToChannel(
     return
   }
 
+  if (shouldSkipRecentLog(ticketId, buildRecentLogScope(channel, phase, phaseAttempt), event)) {
+    return
+  }
+
   safeAtomicAppend(logPath, JSON.stringify(event))
   if (fingerprint) {
     rememberPersistedFingerprint(ticketId, channel, phase, phaseAttempt, fingerprint)
   }
 }
 
-function buildFingerprintScopeKey(channel: PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): string {
+function buildFingerprintScopeKey(channel: 'emit' | PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): string {
   return `${channel}:${phase}:${phaseAttempt}:${fingerprint}`
 }
 
-function hasPersistedFingerprint(ticketId: string, channel: PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): boolean {
+function hasPersistedFingerprint(ticketId: string, channel: 'emit' | PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): boolean {
   const key = buildFingerprintScopeKey(channel, phase, phaseAttempt, fingerprint)
   return persistedFingerprintsByTicket.get(ticketId)?.has(key) ?? false
 }
 
-function rememberPersistedFingerprint(ticketId: string, channel: PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): void {
+function rememberPersistedFingerprint(ticketId: string, channel: 'emit' | PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): void {
   // Evict oldest ticket buckets if the outer map exceeds max size
   if (!persistedFingerprintsByTicket.has(ticketId) && persistedFingerprintsByTicket.size >= MAX_FINGERPRINT_TICKETS) {
     const oldestTicketKey = persistedFingerprintsByTicket.keys().next().value
@@ -233,6 +245,35 @@ function rememberPersistedFingerprint(ticketId: string, channel: PersistedLogCha
 
 export function clearTicketFingerprints(ticketId: string): void {
   persistedFingerprintsByTicket.delete(ticketId)
+  clearRecentLogDedup(ticketId)
+}
+
+export function shouldSkipLogEmission(
+  ticketId: string,
+  type: LogEventType,
+  phase: string,
+  message: string,
+  data?: Record<string, unknown>,
+  source?: LogSource,
+  status?: string,
+  extra?: Partial<StructuredLogFields>,
+): boolean {
+  const event = createLogEvent(ticketId, type, phase, message, data, source, status, extra)
+  const phaseAttempt = event.phaseAttempt ?? DEFAULT_PHASE_ATTEMPT
+  const fingerprint = typeof event.fingerprint === 'string' && event.fingerprint
+    ? event.fingerprint
+    : undefined
+
+  if (fingerprint && hasPersistedFingerprint(ticketId, 'emit', phase, phaseAttempt, fingerprint)) {
+    return true
+  }
+
+  const shouldSkip = shouldSkipRecentLog(ticketId, buildRecentLogScope('emit', phase, phaseAttempt), event)
+  if (!shouldSkip && fingerprint) {
+    rememberPersistedFingerprint(ticketId, 'emit', phase, phaseAttempt, fingerprint)
+  }
+
+  return shouldSkip
 }
 
 export function createLogEvent(

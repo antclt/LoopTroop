@@ -3307,10 +3307,11 @@ describe.concurrent('structured output normalization', () => {
           '        label: "Warn only, never block"',
           '</INTERVIEW_BATCH>',
         ].join('\n')),
-        assertOptions: (result: StructuredOutputSuccess<InterviewTurnOutput>) => {
-          expect(result.value.kind).toBe('batch')
-          if (result.value.kind !== 'batch') return
-          expect(result.value.batch.questions[0]!.options).toEqual(expectedOptions)
+        assertOptions: (result: unknown) => {
+          const parsed = result as StructuredOutputSuccess<InterviewTurnOutput>
+          expect(parsed.value.kind).toBe('batch')
+          if (parsed.value.kind !== 'batch') return
+          expect(parsed.value.batch.questions[0]!.options).toEqual(expectedOptions)
         },
       },
       {
@@ -3344,8 +3345,9 @@ describe.concurrent('structured output normalization', () => {
           '      - id: opt4',
           '        label: "Warn only, never block"',
         ].join('\n')),
-        assertOptions: (result: StructuredOutputSuccess<CoverageResultEnvelope>) => {
-          expect(result.value.followUpQuestions[0]!.options).toEqual(expectedOptions)
+        assertOptions: (result: unknown) => {
+          const parsed = result as StructuredOutputSuccess<CoverageResultEnvelope>
+          expect(parsed.value.followUpQuestions[0]!.options).toEqual(expectedOptions)
         },
       },
     ]
@@ -3385,14 +3387,15 @@ describe.concurrent('structured output normalization', () => {
           '        label: "Second"',
           '</INTERVIEW_BATCH>',
         ].join('\n')),
-        assertResult: (result: StructuredOutputSuccess<InterviewTurnOutput>) => {
-          expect(result.value.kind).toBe('batch')
-          if (result.value.kind !== 'batch') return
-          expect(result.value.batch.questions[0]!.options).toEqual([
+        assertResult: (result: unknown) => {
+          const parsed = result as StructuredOutputSuccess<InterviewTurnOutput>
+          expect(parsed.value.kind).toBe('batch')
+          if (parsed.value.kind !== 'batch') return
+          expect(parsed.value.batch.questions[0]!.options).toEqual([
             { id: 'opt1', label: 'First' },
             { id: 'opt2', label: 'Second' },
           ])
-          expect(result.repairWarnings.join('\n')).toContain('Interview batch question Q01: removed duplicate option ids opt1')
+          expect(parsed.repairWarnings.join('\n')).toContain('Interview batch question Q01: removed duplicate option ids opt1')
         },
       },
       {
@@ -3415,12 +3418,13 @@ describe.concurrent('structured output normalization', () => {
           '      - id: opt2',
           '        label: "Second"',
         ].join('\n')),
-        assertResult: (result: StructuredOutputSuccess<CoverageResultEnvelope>) => {
-          expect(result.value.followUpQuestions[0]!.options).toEqual([
+        assertResult: (result: unknown) => {
+          const parsed = result as StructuredOutputSuccess<CoverageResultEnvelope>
+          expect(parsed.value.followUpQuestions[0]!.options).toEqual([
             { id: 'opt1', label: 'First' },
             { id: 'opt2', label: 'Second' },
           ])
-          expect(result.repairWarnings.join('\n')).toContain('Coverage follow-up question FU1: removed duplicate option ids opt1')
+          expect(parsed.repairWarnings.join('\n')).toContain('Coverage follow-up question FU1: removed duplicate option ids opt1')
         },
       },
     ]

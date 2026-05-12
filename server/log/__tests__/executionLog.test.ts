@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLogEvent, appendLogEvent } from '../executionLog'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { appendLogEvent, clearTicketFingerprints, createLogEvent, shouldSkipLogEmission } from '../executionLog'
 import * as ticketsModule from '../../storage/tickets'
 import * as atomicAppendModule from '../../io/atomicAppend'
 
@@ -37,8 +37,14 @@ describe('createLogEvent', () => {
 
 describe('appendLogEvent', () => {
   beforeEach(() => {
+    vi.useRealTimers()
     mockAppend.mockClear()
     mockGetTicketPaths.mockClear()
+    clearTicketFingerprints('1:T-42')
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('does not persist streaming upserts to disk', () => {
@@ -152,8 +158,9 @@ describe('appendLogEvent', () => {
 
     expect(mockAppend).toHaveBeenCalledOnce()
     const written = JSON.parse(mockAppend.mock.calls[0]![1]!)
-    // Internal flag should be gone
+    // Internal flag and redundant timestamp should be gone
     expect(written.data?.suppressDebugMirror).toBeUndefined()
+    expect(written.data?.timestamp).toBeUndefined()
     // Structured keys should be gone from data (they're top-level)
     expect(written.data?.entryId).toBeUndefined()
     expect(written.data?.sessionId).toBeUndefined()
@@ -256,6 +263,127 @@ describe('appendLogEvent', () => {
     )
 
     expect(mockAppend).toHaveBeenCalledOnce()
+  })
+
+  it('dedupes recent append events by content hash when no fingerprint is provided', () => {
+    appendLogEvent(
+      '1:T-42',
+      'info',
+      'CODING',
+      'Status update',
+      { timestamp: '2026-03-13T12:00:00.000Z' },
+      'system',
+      'CODING',
+    )
+
+    appendLogEvent(
+      '1:T-42',
+      'info',
+      'CODING',
+      'Status update',
+      { timestamp: '2026-03-13T12:00:00.050Z' },
+      'system',
+      'CODING',
+    )
+
+    expect(mockAppend).toHaveBeenCalledOnce()
+  })
+
+  it('dedupes recent AI finalize events separately per persisted channel', () => {
+    const writeAiResult = (timestamp: string) => appendLogEvent(
+      '1:T-42',
+      'model_output',
+      'CODING',
+      'final model output',
+      { timestamp },
+      'opencode',
+      'CODING',
+      {
+        audience: 'ai',
+        kind: 'text',
+        op: 'finalize',
+        entryId: 'session:output',
+        streaming: false,
+      },
+    )
+
+    writeAiResult('2026-03-13T12:00:00.000Z')
+    writeAiResult('2026-03-13T12:00:00.050Z')
+
+    expect(mockAppend).toHaveBeenCalledTimes(2)
+    expect(mockAppend.mock.calls.map((call) => call[0])).toEqual([
+      '/tmp/test-execution-log.ai.jsonl',
+      '/tmp/test-execution-log.jsonl',
+    ])
+  })
+
+  it('allows the same emission again after the dedup window expires', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-03-13T12:00:00.000Z'))
+
+    expect(shouldSkipLogEmission(
+      '1:T-42',
+      'info',
+      'CODING',
+      'Status update',
+      { timestamp: '2026-03-13T12:00:00.000Z' },
+      'system',
+      'CODING',
+    )).toBe(false)
+
+    vi.setSystemTime(new Date('2026-03-13T12:00:00.200Z'))
+    expect(shouldSkipLogEmission(
+      '1:T-42',
+      'info',
+      'CODING',
+      'Status update',
+      { timestamp: '2026-03-13T12:00:00.200Z' },
+      'system',
+      'CODING',
+    )).toBe(true)
+
+    vi.setSystemTime(new Date('2026-03-13T12:00:01.500Z'))
+    expect(shouldSkipLogEmission(
+      '1:T-42',
+      'info',
+      'CODING',
+      'Status update',
+      { timestamp: '2026-03-13T12:00:01.500Z' },
+      'system',
+      'CODING',
+    )).toBe(false)
+  })
+
+  it('dedupes fingerprinted emissions across the universal emit scope', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-04-20T10:00:00.000Z'))
+
+    expect(shouldSkipLogEmission(
+      '1:T-42',
+      'info',
+      'CODING',
+      '[QUESTION] AI question answered.',
+      {
+        timestamp: '2026-04-20T10:00:00.000Z',
+        fingerprint: 'opencode-question:session-1:req-1:replied',
+      },
+      'opencode',
+      'CODING',
+    )).toBe(false)
+
+    vi.setSystemTime(new Date('2026-04-20T10:00:05.000Z'))
+    expect(shouldSkipLogEmission(
+      '1:T-42',
+      'info',
+      'CODING',
+      '[QUESTION] AI question answered.',
+      {
+        timestamp: '2026-04-20T10:00:05.000Z',
+        fingerprint: 'opencode-question:session-1:req-1:replied',
+      },
+      'opencode',
+      'CODING',
+    )).toBe(true)
   })
 
   it('dedupes fingerprints separately for AI detail and normal channels', () => {

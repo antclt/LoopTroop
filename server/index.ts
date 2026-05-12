@@ -13,7 +13,6 @@ import { beadsRouter } from './routes/beads'
 import { validateJson } from './middleware/validation'
 import { getAllowedBackendHost, getBackendPort, getFrontendOrigin, isLoopbackHost } from '../shared/appConfig'
 import { workflowRouter } from './routes/workflow'
-import { startUpsertBuffer, stopUpsertBuffer } from './log/upsertBuffer'
 import { createApiRateLimitMiddleware } from './middleware/rateLimit'
 import { createApiAuthMiddleware, API_TOKEN_HEADER } from './middleware/apiAuth'
 import { closeDatabase } from './db/index'
@@ -107,8 +106,6 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   try {
     console.log('[server] Closing HTTP server...')
     await closeHttpServer()
-    console.log('[server] Stopping log upsert buffer...')
-    stopUpsertBuffer()
     console.log('[server] Stopping broadcaster auto-cleanup...')
     broadcaster.stopAutoCleanup()
     console.log('[server] Clearing project database cache...')
@@ -132,7 +129,6 @@ process.on('SIGINT', () => void shutdown('SIGINT'))
 async function startServer(): Promise<void> {
   console.log(`[server] LoopTroop backend starting on ${hostname}:${port}`)
   await startupSequence()
-  startUpsertBuffer()
   serverHandle = serve({ fetch: app.fetch, port, hostname })
   console.log(`[server] LoopTroop backend running on http://${hostname}:${port}`)
 }

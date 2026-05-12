@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { createHash } from 'node:crypto'
 import { LOG_TRUNCATION_LENGTH } from '../lib/constants'
 
 interface CommandLogContext {
@@ -8,7 +9,7 @@ interface CommandLogContext {
   fields?: Record<string, unknown>
   state: {
     isEmittingCommandLog: boolean
-    lastCommandLogContent: string
+    lastCommandLogHash: string
     lastCommandLogTimestamp: number
   }
   /** Emitter callback for SYS log entries. */
@@ -21,8 +22,12 @@ interface CommandLogContext {
 // separate module instance whose commandLogStore is a different object —
 // making logCommand() always see undefined context and silently no-op.
 const STORE_KEY = Symbol.for('looptroop:commandLogStore')
+type GlobalCommandLogStore = typeof globalThis & {
+  [key: symbol]: AsyncLocalStorage<CommandLogContext> | undefined
+}
+
 function getSharedStore(): AsyncLocalStorage<CommandLogContext> {
-  const g = globalThis as unknown as Record<symbol, AsyncLocalStorage<CommandLogContext> | undefined>
+  const g = globalThis as GlobalCommandLogStore
   if (!g[STORE_KEY]) {
     g[STORE_KEY] = new AsyncLocalStorage<CommandLogContext>()
   }
@@ -51,7 +56,7 @@ export function withCommandLogging<T>(
     externalId,
     phase,
     emit,
-    state: { isEmittingCommandLog: false, lastCommandLogContent: '', lastCommandLogTimestamp: 0 },
+    state: { isEmittingCommandLog: false, lastCommandLogHash: '', lastCommandLogTimestamp: 0 },
   }, fn)
 }
 
@@ -70,13 +75,17 @@ export async function withCommandLoggingAsync<T>(
     externalId,
     phase,
     emit,
-    state: { isEmittingCommandLog: false, lastCommandLogContent: '', lastCommandLogTimestamp: 0 },
+    state: { isEmittingCommandLog: false, lastCommandLogHash: '', lastCommandLogTimestamp: 0 },
   }, fn)
 }
 
 // Dedup window: suppress identical command log lines emitted within this interval
 const CMD_LOG_DEDUP_WINDOW_MS = 1000
 const COMMAND_LOG_OUTPUT_PREVIEW_LENGTH = 2500
+
+function hashCommandContent(content: string): string {
+  return createHash('sha256').update(content).digest('hex')
+}
 
 function emitCommandLog(
   ctx: CommandLogContext,
@@ -89,13 +98,14 @@ function emitCommandLog(
 
   // Skip exact-duplicate log lines within the dedup window
   const now = Date.now()
+  const contentHash = hashCommandContent(content)
   if (
-    content === ctx.state.lastCommandLogContent
+    contentHash === ctx.state.lastCommandLogHash
     && now - ctx.state.lastCommandLogTimestamp < CMD_LOG_DEDUP_WINDOW_MS
   ) {
     return
   }
-  ctx.state.lastCommandLogContent = content
+  ctx.state.lastCommandLogHash = contentHash
   ctx.state.lastCommandLogTimestamp = now
 
   ctx.state.isEmittingCommandLog = true

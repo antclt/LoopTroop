@@ -1,5 +1,5 @@
 import { broadcaster } from '../../sse/broadcaster'
-import { appendLogEvent } from '../../log/executionLog'
+import { appendLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
 import type { LogEventType, LogSource } from '../../log/types'
 import { buildOpenCodeQuestionLogIdentity } from '@shared/logIdentity'
 import { type TicketState } from '../../opencode/contextBuilder'
@@ -113,6 +113,11 @@ export function emitPhaseLog(
     ...(typeof data?.streaming === 'boolean' ? { streaming: data.streaming } : {}),
   }
   const timestamp = new Date().toISOString()
+  const emissionData = data ? { ...data, timestamp } : { timestamp }
+  if (shouldSkipLogEmission(ticketId, type, phase, content, emissionData, source as LogSource | undefined, phase, structuredExtra)) {
+    return
+  }
+
   broadcaster.broadcast(ticketId, 'log', {
     ticketId,
     phase,
@@ -126,7 +131,7 @@ export function emitPhaseLog(
     type,
     phase,
     content,
-    data ? { ...data, timestamp } : { timestamp },
+    emissionData,
     source as LogSource | undefined,
     phase,
     structuredExtra,
@@ -187,6 +192,15 @@ export function emitDebugLog(
     ? (payload as Record<string, unknown>)
     : (payload !== undefined ? { value: payload } : undefined)
   const timestamp = new Date().toISOString()
+  const logData = debugData ? { ...debugData, timestamp } : { timestamp }
+  if (shouldSkipLogEmission(ticketId, 'debug', phase, content, logData, 'debug', phase, {
+    audience: 'debug',
+    kind: 'session',
+    op: 'append',
+    streaming: false,
+  })) {
+    return
+  }
 
   // Always broadcast via SSE so the real-time log viewer DEBUG tab works.
   broadcaster.broadcast(ticketId, 'log', {
@@ -204,7 +218,7 @@ export function emitDebugLog(
 
   // Only persist to disk when this is a direct (non-mirror) debug call.
   if (persist) {
-    appendLogEvent(ticketId, 'debug', phase, content, debugData ? { ...debugData, timestamp } : { timestamp }, 'debug', phase, {
+    appendLogEvent(ticketId, 'debug', phase, content, logData, 'debug', phase, {
       audience: 'debug',
       kind: 'session',
       op: 'append',

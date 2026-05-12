@@ -17,7 +17,7 @@ import { abortTicketSessions, listOpenCodeSessionsForTicket } from '../opencode/
 import { clearContextCache } from '../opencode/contextBuilder'
 import { getOpenCodeAdapter, isMockOpenCodeMode } from '../opencode/factory'
 import { broadcaster } from '../sse/broadcaster'
-import { appendLogEvent } from '../log/executionLog'
+import { appendLogEvent, shouldSkipLogEmission } from '../log/executionLog'
 import { cancelTicket, handleInterviewQABatch, processInterviewBatchAsync, skipAllInterviewQuestionsToApproval } from '../workflow/runner'
 import { abortTicketWork } from '../workflow/phases/state'
 import { createTicket as createTicketRecord } from '../ticket/create'
@@ -404,6 +404,15 @@ function emitRoutePhaseLog(
     timestamp,
     ...(data ?? {}),
   }
+  const emissionData = data ? { ticketId, ...data, timestamp } : { ticketId, timestamp }
+  if (shouldSkipLogEmission(ticketId, type, phase, content, emissionData, source, phase, {
+    audience: 'all',
+    kind,
+    op: 'append',
+    streaming: false,
+  })) {
+    return
+  }
 
   broadcaster.broadcast(ticketId, 'log', payload)
   appendLogEvent(
@@ -411,7 +420,7 @@ function emitRoutePhaseLog(
     type,
     phase,
     content,
-    data ? { ticketId, ...data, timestamp } : { ticketId, timestamp },
+    emissionData,
     source,
     phase,
     {
@@ -460,6 +469,19 @@ function emitOpenCodeQuestionLog(
     ...(data.sessionId ? { sessionId: data.sessionId } : {}),
     timestamp,
   }
+  const emissionData = { ticketId, requestId: data.requestId, fingerprint: identity.fingerprint, timestamp }
+  if (shouldSkipLogEmission(ticketId, logType, phase, content, emissionData, source, phase, {
+    audience: 'ai',
+    kind: data.kind ?? 'session',
+    op: 'append',
+    streaming: false,
+    entryId: identity.entryId,
+    fingerprint: identity.fingerprint,
+    ...(data.modelId ? { modelId: data.modelId } : {}),
+    ...(data.sessionId ? { sessionId: data.sessionId } : {}),
+  })) {
+    return
+  }
 
   broadcaster.broadcast(ticketId, 'log', payload)
   appendLogEvent(
@@ -467,7 +489,7 @@ function emitOpenCodeQuestionLog(
     logType,
     phase,
     content,
-    { ticketId, requestId: data.requestId, fingerprint: identity.fingerprint, timestamp },
+    emissionData,
     source,
     phase,
     {

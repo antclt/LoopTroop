@@ -5,8 +5,8 @@ function wrapPlan(body: string): string {
   return `<EXECUTION_SETUP_PLAN>\n${body}\n</EXECUTION_SETUP_PLAN>`
 }
 
-function buildPlanWithSteps(steps: unknown[]): string {
-  return wrapPlan(JSON.stringify({
+function buildPlanPayload(steps: unknown[]) {
+  return {
     schema_version: 1,
     ticket_id: 'T-1',
     artifact: 'execution_setup_plan',
@@ -33,7 +33,11 @@ function buildPlanWithSteps(steps: unknown[]): string {
       full_project_fallback: 'never-block-on-unrelated-baseline',
     },
     cautions: [],
-  }))
+  }
+}
+
+function buildPlanWithSteps(steps: unknown[]): string {
+  return wrapPlan(JSON.stringify(buildPlanPayload(steps)))
 }
 
 describe('parseExecutionSetupPlanResult', () => {
@@ -85,6 +89,24 @@ describe('parseExecutionSetupPlanResult', () => {
       'Filled missing execution setup plan step title at index 0 from existing purpose text.',
       'Filled missing execution setup plan step rationale at index 0 from existing purpose text.',
     ])
+  })
+
+  it('repairs execution_setup_plan wrapper objects around the payload', () => {
+    const parsed = parseExecutionSetupPlanResult(wrapPlan(JSON.stringify({
+      execution_setup_plan: buildPlanPayload([
+        {
+          id: 'step-1-bootstrap',
+          purpose: 'Install locked dependencies before running project-native tests.',
+          commands: ['project bootstrap'],
+          required: true,
+        },
+      ]),
+    })))
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.plan?.artifact).toBe('execution_setup_plan')
+    expect(parsed.repairApplied).toBe(true)
+    expect(parsed.repairWarnings).toContain('Removed wrapper key "execution_setup_plan" from top level.')
   })
 
   it('still rejects setup steps that do not provide purpose text', () => {

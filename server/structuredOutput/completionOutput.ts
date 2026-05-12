@@ -669,52 +669,27 @@ export function normalizeExecutionSetupPlanOutput(rawContent: string): Structure
         repairWarnings: candidateWarnings,
       })
 
-      const maybeUnwrapped = maybeUnwrapRecord(parsedCandidate, [
+      const parsed = maybeUnwrapRecord(parsedCandidate, [
         'executionsetupplan',
         'execution_setup_plan',
-        'executionsetupplanresult',
-        'execution_setup_plan_result',
         'plan',
         'data',
         'result',
       ])
-      if (maybeUnwrapped !== parsedCandidate) {
-        parsedCandidate = maybeUnwrapped
-        appendStructuredCandidateRecoveryWarning(candidateWarnings, rawContent, candidate, { tag: 'EXECUTION_SETUP_PLAN' })
-      }
-
-      if (!isRecord(parsedCandidate)) {
+      if (!isRecord(parsed)) {
         throw new Error('Execution setup plan payload is not a YAML/JSON object')
       }
-
-      const explicitWrapperPath = findExplicitWrapperPath(parsedCandidate, [
-        'executionsetupplan',
-        'execution_setup_plan',
-        'executionsetupplanresult',
-        'execution_setup_plan_result',
-        'plan',
-      ])
-      if (explicitWrapperPath) {
-        const unwrapped = unwrapExplicitWrapperRecord(parsedCandidate, explicitWrapperPath)
-        if (isRecord(unwrapped) && unwrapped !== parsedCandidate) {
-          parsedCandidate = unwrapped
-          appendWrapperKeyRepairWarning(candidateWarnings, explicitWrapperPath)
-        }
-      } else {
-        const wrappedPlan = maybeUnwrapRecord(parsedCandidate, [
+      if (parsed !== parsedCandidate && isRecord(parsedCandidate)) {
+        appendWrapperKeyRepairWarning(candidateWarnings, findMaybeUnwrappedWrapperPath(parsedCandidate, [
           'executionsetupplan',
           'execution_setup_plan',
-          'executionsetupplanresult',
-          'execution_setup_plan_result',
           'plan',
-        ])
-        if (wrappedPlan !== parsedCandidate) {
-          parsedCandidate = wrappedPlan
-          appendStructuredCandidateRecoveryWarning(candidateWarnings, rawContent, candidate, { tag: 'EXECUTION_SETUP_PLAN' })
-        }
+          'data',
+          'result',
+        ]))
       }
 
-      const value = normalizeExecutionSetupPlan(parsedCandidate, candidateWarnings)
+      const value = normalizeExecutionSetupPlan(parsed, candidateWarnings)
       return {
         ok: true,
         value,
