@@ -3724,15 +3724,12 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
   const isPrdCoverage = phase === 'VERIFYING_PRD_COVERAGE' || phase === 'WAITING_PRD_APPROVAL'
   const status = coverageResult.status ?? coverageResult.parsed?.status ?? (coverageResult.hasGaps ? 'gaps' : 'clean')
   const finalCandidateVersion = coverageResult.finalCandidateVersion ?? coverageResult.attempts?.[coverageResult.attempts.length - 1]?.candidateVersion
-  const gaps = coverageResult.remainingGaps?.length
-    ? coverageResult.remainingGaps
-    : coverageResult.gaps ?? (Array.isArray(coverageResult.parsed?.gaps) ? coverageResult.parsed.gaps : [])
   const followUpQuestions = isPrdCoverage
     ? []
     : normalizeCoverageFollowUpArtifacts(
         coverageResult.parsed?.followUpQuestions ?? coverageResult.parsed?.follow_up_questions,
     )
-  const hasStructuredCoverage = gaps.length > 0 || status === 'clean' || (!isPrdCoverage && followUpQuestions.length > 0)
+  const hasStructuredFollowUps = !isPrdCoverage && followUpQuestions.length > 0
   const summaryText = buildCoverageSummaryText(coverageResult, phase)
   const terminationSummary = coverageResult.terminationReason === 'coverage_pass_limit_reached'
     ? 'Retry cap reached; moving to approval with unresolved gaps.'
@@ -3775,39 +3772,24 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
         </div>
       )}
 
-      {hasStructuredCoverage && (
+      {hasStructuredFollowUps && (
         <div className="space-y-3">
-          {gaps.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Suggested Follow-up Questions</div>
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Open Coverage Gaps</div>
-              <div className="space-y-2">
-                {gaps.map((gap, index) => (
-                  <div key={`${gap}-${index}`} className="rounded-md border border-border bg-background px-3 py-2 text-xs">
-                    {gap}
+              {followUpQuestions.map((question, index) => (
+                <div key={`${question.id ?? 'follow-up'}-${index}`} className="rounded-md border border-border bg-background px-3 py-2 space-y-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {question.id && <span className="font-mono text-[10px] text-muted-foreground">{question.id}</span>}
+                    {question.phase && <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{question.phase}</span>}
+                    {question.priority && <span className="text-[10px] text-blue-500">{question.priority}</span>}
                   </div>
-                ))}
-              </div>
+                  <div className="text-xs font-medium">{question.question}</div>
+                  {question.rationale && <div className="text-[10px] italic text-muted-foreground">{question.rationale}</div>}
+                </div>
+              ))}
             </div>
-          )}
-
-          {!isPrdCoverage && followUpQuestions.length > 0 && (
-            <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Suggested Follow-up Questions</div>
-              <div className="space-y-2">
-                {followUpQuestions.map((question, index) => (
-                  <div key={`${question.id ?? 'follow-up'}-${index}`} className="rounded-md border border-border bg-background px-3 py-2 space-y-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      {question.id && <span className="font-mono text-[10px] text-muted-foreground">{question.id}</span>}
-                      {question.phase && <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{question.phase}</span>}
-                      {question.priority && <span className="text-[10px] text-blue-500">{question.priority}</span>}
-                    </div>
-                    <div className="text-xs font-medium">{question.question}</div>
-                    {question.rationale && <div className="text-[10px] italic text-muted-foreground">{question.rationale}</div>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       )}
     </div>

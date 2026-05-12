@@ -2966,7 +2966,7 @@ describe('PhaseArtifactsPanel', () => {
     expect(screen.getByText('Coverage answer.')).toBeInTheDocument()
   })
 
-  it('renders parsed interview coverage gaps and follow-up questions before raw audit output', () => {
+  it('renders interview coverage summaries and follow-up questions before raw audit output', () => {
     const coverageArtifact = makeArtifact({
       phase: 'VERIFYING_INTERVIEW_COVERAGE',
       artifactType: 'interview_coverage',
@@ -3012,7 +3012,8 @@ describe('PhaseArtifactsPanel', () => {
     expect(screen.getByText('This pass found 1 gap between the compiled interview and the submitted answers.')).toBeInTheDocument()
     expect(screen.getByText('Retry cap reached; moving to approval with unresolved gaps.')).toBeInTheDocument()
     expect(screen.getByText('Follow-up budget: 10/10 used (20%) · 0 remaining')).toBeInTheDocument()
-    expect(screen.getByText('Missing fallback behavior for skipped answers.')).toBeInTheDocument()
+    expect(screen.queryByText('Open Coverage Gaps')).not.toBeInTheDocument()
+    expect(screen.queryByText('Missing fallback behavior for skipped answers.')).not.toBeInTheDocument()
     expect(screen.getByText('Which fallback should be used?')).toBeInTheDocument()
     expect(screen.getByText('Close the final interview gap before PRD generation.')).toBeInTheDocument()
   })

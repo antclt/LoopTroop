@@ -1168,7 +1168,7 @@ describe('ArtifactContentViewer', () => {
     ).toBeInTheDocument()
   })
 
-  it('hides PRD coverage follow-up questions while preserving gap and termination summaries', () => {
+  it('hides PRD coverage gap details and follow-up questions while preserving summaries', () => {
     const coverageContent = JSON.stringify({
       winnerId: 'openai/gpt-5.2',
       response: [
@@ -1212,7 +1212,8 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Coverage review found gaps')).toBeInTheDocument()
     expect(screen.getByText('This check found 1 gap between the current PRD candidate and the winner Full Answers.')).toBeInTheDocument()
     expect(screen.getByText('Retry cap reached; moving to approval with unresolved gaps.')).toBeInTheDocument()
-    expect(screen.getByText('Missing PRD approval sequencing.')).toBeInTheDocument()
+    expect(screen.queryByText('Open Coverage Gaps')).not.toBeInTheDocument()
+    expect(screen.queryByText('Missing PRD approval sequencing.')).not.toBeInTheDocument()
     expect(screen.queryByText('Follow-up Questions')).not.toBeInTheDocument()
     expect(screen.queryByText('Which approval step should trigger Beads?')).not.toBeInTheDocument()
 
