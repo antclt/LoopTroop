@@ -17,6 +17,8 @@ const mockState = vi.hoisted(() => ({
   },
 }))
 
+const MISSING_TICKET_EXTERNAL_ID = 'test-ticket-1'
+
 vi.mock('@/components/layout/AppShell', () => ({
   AppShell: ({ children }: { children: ReactNode }) => <div data-testid="app-shell">{children}</div>,
 }))
@@ -295,7 +297,7 @@ describe('App startup notices', () => {
     localStorage.setItem(WELCOME_DISCLAIMER_STORAGE_KEY, 'true')
     localStorage.setItem('looptroop-ui-state', JSON.stringify({
       selectedTicketId: 'missing-ticket',
-      selectedTicketExternalId: 'RST-1',
+      selectedTicketExternalId: MISSING_TICKET_EXTERNAL_ID,
       activeView: 'ticket',
       sidebarOpen: true,
       logPanelHeight: 300,

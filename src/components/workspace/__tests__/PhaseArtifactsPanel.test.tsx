@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { TEST } from '@/test/factories'
 import { renderWithProviders } from '@/test/renderHelpers'
@@ -44,6 +44,10 @@ async function expectFirstInspirationTooltip(bodyText: string | string[]) {
 function expectCoverageAttributionUiHidden() {
   expect(document.querySelector('.lucide-lightbulb')).toBeNull()
   expect(screen.queryAllByText('No source recorded')).toHaveLength(0)
+}
+
+async function expectDialogClosed() {
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
 }
 
 const { makeArtifact, resetArtifactIds } = createArtifactFactory()
@@ -1065,105 +1069,101 @@ describe('PhaseArtifactsPanel', () => {
     }
   })
 
-  it('shows only PRD Candidate and Coverage Report during PRD coverage verification', async () => {
-    const coverageInputArtifact = makeArtifact({
-      phase: 'VERIFYING_PRD_COVERAGE',
-      artifactType: 'prd_coverage_input',
-      content: JSON.stringify({
-        candidateVersion: 1,
-        refinedContent: buildPrdDocumentContent({
-          epicTitle: 'Coverage input candidate',
-          storyTitle: 'Inspect the candidate under review',
+  it('shows only the coverage input artifact and Coverage Report during coverage verification', async () => {
+    const coverageVerificationCases = [
+      {
+        phase: 'VERIFYING_PRD_COVERAGE' as const,
+        coverageInputArtifactType: 'prd_coverage_input' as const,
+        coverageArtifactType: 'prd_coverage' as const,
+        coverageInputContent: {
+          candidateVersion: 1,
+          refinedContent: buildPrdDocumentContent({
+            epicTitle: 'Coverage input candidate',
+            storyTitle: 'Inspect the candidate under review',
+          }),
+        },
+        artifactButtonName: /PRD Candidate v1/i,
+        hiddenText: '1 beads',
+        hiddenModel: /GPT-5\.2/i,
+        detailText: 'The PRD version currently being checked.',
+        candidateContentText: undefined,
+        expectDiffUiHidden: true,
+      },
+      {
+        phase: 'VERIFYING_BEADS_COVERAGE' as const,
+        coverageInputArtifactType: 'beads_coverage_input' as const,
+        coverageArtifactType: 'beads_coverage' as const,
+        coverageInputContent: {
+          candidateVersion: 1,
+          refinedContent: buildBeadsDocumentContent([
+            { id: 'bead-1', title: 'Inspect the implementation plan under review' },
+          ]),
+        },
+        artifactButtonName: /Implementation Plan v1/i,
+        hiddenText: undefined,
+        hiddenModel: /gpt-5\.2/i,
+        detailText: 'The implementation plan version currently being checked.',
+        candidateContentText: 'Inspect the implementation plan under review',
+        expectDiffUiHidden: false,
+      },
+    ]
+
+    for (const [index, testCase] of coverageVerificationCases.entries()) {
+      if (index > 0) {
+        cleanup()
+      }
+
+      const coverageInputArtifact = makeArtifact({
+        phase: testCase.phase,
+        artifactType: testCase.coverageInputArtifactType,
+        content: JSON.stringify(testCase.coverageInputContent),
+      })
+
+      const coverageArtifact = makeArtifact({
+        phase: testCase.phase,
+        artifactType: testCase.coverageArtifactType,
+        content: JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          hasGaps: true,
+          coverageRunNumber: 1,
+          maxCoveragePasses: 2,
+          limitReached: false,
         }),
-      }),
-    })
+      })
 
-    const coverageArtifact = makeArtifact({
-      phase: 'VERIFYING_PRD_COVERAGE',
-      artifactType: 'prd_coverage',
-      content: JSON.stringify({
-        winnerId: 'openai/gpt-5.2',
-        hasGaps: true,
-        coverageRunNumber: 1,
-        maxCoveragePasses: 2,
-        limitReached: false,
-      }),
-    })
+      renderWithProviders(
+        <PhaseArtifactsPanel
+          phase={testCase.phase}
+          isCompleted={false}
+          councilMemberNames={['openai/gpt-5.2']}
+          preloadedArtifacts={[coverageInputArtifact, coverageArtifact]}
+        />,
+      )
 
-    renderWithProviders(
-      <PhaseArtifactsPanel
-        phase="VERIFYING_PRD_COVERAGE"
-        isCompleted={false}
-        councilMemberNames={['openai/gpt-5.2']}
-        preloadedArtifacts={[coverageInputArtifact, coverageArtifact]}
-      />,
-    )
+      expect(screen.getByRole('button', { name: testCase.artifactButtonName })).toBeInTheDocument()
+      const coverageButton = screen.getByRole('button', { name: /Coverage Report/i })
+      expect(coverageButton).toBeInTheDocument()
+      expect(coverageButton).not.toHaveTextContent(/lines/i)
+      if (testCase.hiddenText) {
+        expect(screen.queryByText(testCase.hiddenText)).not.toBeInTheDocument()
+      }
+      expect(screen.queryByText(testCase.hiddenModel)).not.toBeInTheDocument()
 
-    expect(screen.getByRole('button', { name: /PRD Candidate v1/i })).toBeInTheDocument()
-    const coverageButton = screen.getByRole('button', { name: /Coverage Report/i })
-    expect(coverageButton).toBeInTheDocument()
-    expect(coverageButton).not.toHaveTextContent(/lines/i)
-    expect(screen.queryByText('1 beads')).not.toBeInTheDocument()
-    expect(screen.queryByText(/GPT-5\.2/i)).not.toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: testCase.artifactButtonName }))
+      expect(screen.getByText(testCase.detailText)).toBeInTheDocument()
+      if (testCase.candidateContentText) {
+        expect(screen.getByText(testCase.candidateContentText)).toBeInTheDocument()
+      }
+      if (testCase.expectDiffUiHidden) {
+        expect(screen.queryByRole('button', { name: /^Diff(?: \(\d+\))?$/i })).not.toBeInTheDocument()
+        expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
+      }
+      fireEvent.click(screen.getByRole('button', { name: /Close/i }))
+      await expectDialogClosed()
 
-    fireEvent.click(screen.getByRole('button', { name: /PRD Candidate v1/i }))
-    expect(screen.getByText('The PRD version currently being checked.')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Diff(?: \(\d+\))?$/i })).not.toBeInTheDocument()
-    expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Close/i }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: /Coverage Report/i }))
-    expect(screen.getByText('Shows what each coverage pass found, what changed, and why.')).toBeInTheDocument()
-  })
-
-  it('shows only Implementation Plan and Coverage Report during Beads coverage verification', async () => {
-    const coverageInputArtifact = makeArtifact({
-      phase: 'VERIFYING_BEADS_COVERAGE',
-      artifactType: 'beads_coverage_input',
-      content: JSON.stringify({
-        candidateVersion: 1,
-        refinedContent: buildBeadsDocumentContent([
-          { id: 'bead-1', title: 'Inspect the implementation plan under review' },
-        ]),
-      }),
-    })
-
-    const coverageArtifact = makeArtifact({
-      phase: 'VERIFYING_BEADS_COVERAGE',
-      artifactType: 'beads_coverage',
-      content: JSON.stringify({
-        winnerId: 'openai/gpt-5.2',
-        hasGaps: true,
-        coverageRunNumber: 1,
-        maxCoveragePasses: 2,
-        limitReached: false,
-      }),
-    })
-
-    renderWithProviders(
-      <PhaseArtifactsPanel
-        phase="VERIFYING_BEADS_COVERAGE"
-        isCompleted={false}
-        councilMemberNames={['openai/gpt-5.2']}
-        preloadedArtifacts={[coverageInputArtifact, coverageArtifact]}
-      />,
-    )
-
-    expect(screen.getByRole('button', { name: /Implementation Plan v1/i })).toBeInTheDocument()
-    const coverageButton = screen.getByRole('button', { name: /Coverage Report/i })
-    expect(coverageButton).toBeInTheDocument()
-    expect(coverageButton).not.toHaveTextContent(/lines/i)
-    expect(screen.queryByText(/gpt-5\.2/i)).not.toBeInTheDocument()
-
-    fireEvent.click(screen.getByRole('button', { name: /Implementation Plan v1/i }))
-    expect(screen.getByText('The implementation plan version currently being checked.')).toBeInTheDocument()
-    expect(screen.getByText('Inspect the implementation plan under review')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /Close/i }))
-    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-
-    fireEvent.click(screen.getByRole('button', { name: /Coverage Report/i }))
-    expect(screen.getByText('Shows what each coverage pass found, what changed, and why.')).toBeInTheDocument()
+      fireEvent.click(screen.getByRole('button', { name: /Coverage Report/i }))
+      expect(screen.getByText('Shows what each coverage pass found, what changed, and why.')).toBeInTheDocument()
+    }
   })
 
   it('shows expanded plan and expansion diff during Beads expansion', () => {

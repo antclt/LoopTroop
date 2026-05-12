@@ -9,7 +9,7 @@ import {
   buildPrdUiRefinementDiffArtifactFromChanges,
 } from '../refinementDiffArtifacts'
 
-const TICKET_ID = 'TEST-1'
+const TICKET_ID = 'test-ticket-1'
 
 function buildPrdDocument(options: {
   epicTitle?: string

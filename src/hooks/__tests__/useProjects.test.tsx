@@ -17,6 +17,10 @@ function createWrapper(queryClient: QueryClient) {
   }
 }
 
+const TEST_PROJECT_ROOT = '/projects/test-restored-project'
+const DELETED_TICKET_ID = 'test-ticket-1'
+const KEPT_TICKET_ID = 'test-ticket-2'
+
 describe('useProjects', () => {
   afterEach(() => {
     vi.unstubAllGlobals()
@@ -41,7 +45,7 @@ describe('useProjects', () => {
       await result.current.mutateAsync({
         name: 'Restored Project',
         shortname: 'RST',
-        folderPath: '/work/restored-project',
+        folderPath: TEST_PROJECT_ROOT,
       })
     })
 
@@ -57,14 +61,14 @@ describe('useProjects', () => {
       ok: true,
       json: async () => ({
         success: true,
-        projectRoot: '/work/restored-project',
+        projectRoot: TEST_PROJECT_ROOT,
       }),
     })))
 
     const queryClient = createTestQueryClient()
     const deletedProjectId = 7
-    const deletedTicketId = '7-RST-1'
-    const keptTicketId = '8-KEP-1'
+    const deletedTicketId = DELETED_TICKET_ID
+    const keptTicketId = KEPT_TICKET_ID
     const deletedTicket = { id: deletedTicketId, projectId: deletedProjectId, title: 'Deleted ticket' }
     const keptTicket = { id: keptTicketId, projectId: 8, title: 'Kept ticket' }
 

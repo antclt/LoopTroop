@@ -16,12 +16,14 @@ function createRateLimitApp(options: Parameters<typeof createApiRateLimitMiddlew
   return app
 }
 
+const TEST_TICKET_ROUTE = '/api/tickets/test-ticket-1'
+
 describe('API rate limit middleware', () => {
   it('allows a normal autosave cadence within the default local-tool budget', async () => {
     const app = createRateLimitApp()
 
     for (let index = 0; index < 60; index += 1) {
-      const response = await app.request('/api/tickets/1:TEST-1/ui-state', { method: 'PUT' })
+      const response = await app.request(`${TEST_TICKET_ROUTE}/ui-state`, { method: 'PUT' })
       expect(response.status).toBe(200)
     }
 
@@ -35,15 +37,15 @@ describe('API rate limit middleware', () => {
       windowMs: 60_000,
     })
 
-    expect((await app.request('/api/tickets/1:TEST-1/ui-state', { method: 'PUT' })).status).toBe(200)
-    expect((await app.request('/api/tickets/1:TEST-1/ui-state', { method: 'PUT' })).status).toBe(200)
+    expect((await app.request(`${TEST_TICKET_ROUTE}/ui-state`, { method: 'PUT' })).status).toBe(200)
+    expect((await app.request(`${TEST_TICKET_ROUTE}/ui-state`, { method: 'PUT' })).status).toBe(200)
 
-    const autosaveLimited = await app.request('/api/tickets/1:TEST-1/ui-state', { method: 'PUT' })
+    const autosaveLimited = await app.request(`${TEST_TICKET_ROUTE}/ui-state`, { method: 'PUT' })
     expect(autosaveLimited.status).toBe(429)
     expect(autosaveLimited.headers.get('Retry-After')).toBe('60')
 
-    expect((await app.request('/api/tickets/1:TEST-1/start', { method: 'POST' })).status).toBe(200)
-    expect((await app.request('/api/tickets/1:TEST-1/start', { method: 'POST' })).status).toBe(429)
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, { method: 'POST' })).status).toBe(200)
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, { method: 'POST' })).status).toBe(429)
   })
 
   it('ignores forwarded IP headers unless proxy trust is explicitly enabled', async () => {
@@ -52,12 +54,12 @@ describe('API rate limit middleware', () => {
       trustProxy: false,
     })
 
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.1' },
     })).status).toBe(200)
 
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.2' },
     })).status).toBe(429)
@@ -69,12 +71,12 @@ describe('API rate limit middleware', () => {
       trustProxy: true,
     })
 
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.1' },
     })).status).toBe(200)
 
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.2' },
     })).status).toBe(200)
@@ -91,17 +93,17 @@ describe('API rate limit middleware', () => {
       now: () => now,
     })
 
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.1' },
     })).status).toBe(200)
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.2' },
     })).status).toBe(200)
 
     now = 1_011
-    expect((await app.request('/api/tickets/1:TEST-1/start', {
+    expect((await app.request(`${TEST_TICKET_ROUTE}/start`, {
       method: 'POST',
       headers: { 'x-forwarded-for': '192.0.2.3' },
     })).status).toBe(200)

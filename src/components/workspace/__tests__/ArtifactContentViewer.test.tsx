@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fireEvent, render as baseRender, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render as baseRender, screen, within } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
 import { encode } from 'gpt-tokenizer'
 import { deriveStructuredInterventions } from '@shared/structuredInterventions'
@@ -26,6 +26,13 @@ function render(ui: ReactNode) {
   return baseRender(<TooltipProvider>{ui}</TooltipProvider>)
 }
 
+async function clickCopyRawOutput() {
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await Promise.resolve()
+  })
+}
+
 function openFoundationGroup() {
   fireEvent.click(screen.getByText('Foundation').closest('button')!)
 }
@@ -41,6 +48,19 @@ function hasTextContent(text: string) {
 function openNotice(title: string) {
   fireEvent.click(screen.getByText(title).closest('button')!)
 }
+
+function mockClipboard() {
+  const writeTextMock = vi.fn(() => Promise.resolve())
+  Object.defineProperty(globalThis.navigator, 'clipboard', {
+    configurable: true,
+    value: { writeText: writeTextMock },
+  })
+  return writeTextMock
+}
+
+const LONG_EXPANDING_BLUEPRINT_TOKEN = `expanded-${'executionfield'.repeat(24)}`
+const LONG_GLOBAL_THEME_PROMPT = 'For this test ticket, is the goal simply to replace the current default global theme with a pink-based one for all users, with no runtime theme switching?'
+const LONG_PALETTE_PROMPT = 'For this test ticket, is the goal simply to replace the current default app palette with a single pink palette (no theme switcher), and is that the full definition of done?'
 
 function futureStructuredOutput(output: ArtifactStructuredOutputData): ArtifactStructuredOutputData {
   const repairWarnings = output.repairWarnings ?? []
@@ -904,13 +924,12 @@ describe('ArtifactContentViewer', () => {
   })
 
   it('wraps Expanding Blueprint raw output without horizontal overflow', () => {
-    const longToken = `expanded-${'executionfield'.repeat(24)}`
     const semanticPlanContent = buildBeadsDraftContent({
       title: 'Expand raw output without clipping',
     })
     const expandedContent = JSON.stringify([
       {
-        id: longToken,
+        id: LONG_EXPANDING_BLUEPRINT_TOKEN,
         title: 'Expand raw output without clipping',
         prdRefs: [TEST.epicId, TEST.storyId],
         description: 'Render the raw expanded payload inside the artifact dialog.',
@@ -920,14 +939,14 @@ describe('ArtifactContentViewer', () => {
         },
         acceptanceCriteria: ['The raw tab wraps long embedded payload lines.'],
         tests: ['The raw tab does not clip generated execution fields.'],
-        testCommands: [`npm run test -- --filter ${longToken}`],
+        testCommands: [`npm run test -- --filter ${LONG_EXPANDING_BLUEPRINT_TOKEN}`],
         priority: 1,
         status: 'pending',
         issueType: 'task',
         externalRef: TEST.externalId,
-        labels: [`ticket:${TEST.externalId}`, longToken],
+        labels: [`ticket:${TEST.externalId}`, LONG_EXPANDING_BLUEPRINT_TOKEN],
         dependencies: { blocked_by: [], blocks: [] },
-        targetFiles: [`src/${longToken}.tsx`],
+        targetFiles: [`src/${LONG_EXPANDING_BLUEPRINT_TOKEN}.tsx`],
       },
     ])
 
@@ -948,7 +967,7 @@ describe('ArtifactContentViewer', () => {
 
     const rawPre = screen.getByText((_text, element) =>
       element?.tagName === 'PRE'
-      && Boolean(element.textContent?.includes(longToken)),
+      && Boolean(element.textContent?.includes(LONG_EXPANDING_BLUEPRINT_TOKEN)),
     )
     expect(rawPre).toHaveClass('whitespace-pre-wrap', 'overflow-x-hidden', 'break-all')
     expect(rawPre.className).toContain('[overflow-wrap:anywhere]')
@@ -1334,12 +1353,8 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Draft 2: draft-a')).toBeInTheDocument()
   })
 
-  it('switches vote raw tabs between all models, exact voter raw, and validated voter output', () => {
-    const writeTextMock = vi.fn(() => Promise.resolve())
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: writeTextMock },
-    })
+  it('switches vote raw tabs between all models, exact voter raw, and validated voter output', async () => {
+    const writeTextMock = mockClipboard()
 
     const firstRawResponse = '<think>Scoring each draft.</think>\n\ndraft_scores:\n  Draft 1:\n    total_score: 91'
     const firstNormalizedResponse = 'draft_scores:\n  Draft 1:\n    total_score: 91\n'
@@ -1392,7 +1407,7 @@ describe('ArtifactContentViewer', () => {
       && !element.textContent.includes('\\n  Draft 1'),
     )
     expect(allModelsPre).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(content)
 
     fireEvent.click(within(voterAGroup).getByRole('button', { name: /voter-a$/ }))
@@ -1403,7 +1418,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText(`${encode(firstRawResponse).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === firstRawResponse)).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
 
     expect(writeTextMock).toHaveBeenLastCalledWith(firstRawResponse)
 
@@ -1411,7 +1426,7 @@ describe('ArtifactContentViewer', () => {
 
     expect(within(voterAGroup).getByRole('button', { name: /voter-a Validated/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === firstNormalizedResponse)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(firstNormalizedResponse)
   })
 
@@ -1592,12 +1607,8 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === content)).toBeInTheDocument()
   })
 
-  it('switches draft raw tabs between raw output and validated version when both exist', () => {
-    const writeTextMock = vi.fn(() => Promise.resolve())
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: writeTextMock },
-    })
+  it('switches draft raw tabs between raw output and validated version when both exist', async () => {
+    const writeTextMock = mockClipboard()
 
     const rawDraftResponse = '<think>Building interview questions.</think>\n\nquestions:\n  - text: What is the scope?'
     const validatedDraftResponse = 'questions:\n  - text: What is the scope?\n'
@@ -1626,12 +1637,12 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(within(draftGroup).getByRole('button', { name: /draft-a Raw Output/ }))
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rawDraftResponse)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(rawDraftResponse)
 
     fireEvent.click(within(draftGroup).getByRole('button', { name: /draft-a Validated/ }))
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === validatedDraftResponse)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(validatedDraftResponse)
   })
 
@@ -1997,91 +2008,77 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByRole('group', { name: /draft-a raw output/i })).not.toBeInTheDocument()
   })
 
-  it('classifies no-op diff cleanup in the parser notice copy', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: [
-        'Dropped no-op interview refinement modified at index 0 because the question is unchanged across the winning and final drafts.',
-      ],
-      autoRetryCount: 0,
-    }), 'diff')
-
-    expect(copy).toMatchObject({
-      title: 'LoopTroop adjusted this diff.',
-      summary: '1 intervention: No Op Change.',
-    })
-    expect(copy?.interventions).toEqual([
-      expect.objectContaining({ category: 'dropped', code: 'dropped_no_op_change' }),
-    ])
-  })
-
-  it('classifies normalization repairs in the parser notice copy', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: ['Inferred missing PRD refinement item_type at index 0 as epic.'],
-      autoRetryCount: 0,
-    }), 'diff')
-
-    expect(copy?.title).toBe('LoopTroop adjusted this diff.')
-    expect(copy?.summary).toBe('1 intervention: Missing Field Inference.')
-    expect(copy?.interventions).toEqual([
-      expect.objectContaining({ category: 'synthesized', code: 'synthesized_inferred_detail' }),
-    ])
-  })
-
-  it('classifies formatting cleanup in the parser notice copy', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: ['Removed surrounding markdown code fence before parsing the final test commands.'],
-      autoRetryCount: 0,
-    }), 'final-test')
-
-    expect(copy?.title).toBe('LoopTroop adjusted this final test plan.')
-    expect(copy?.summary).toBe('1 intervention: Markdown Fence Unwrap.')
-    expect(copy?.interventions).toEqual([
-      expect.objectContaining({ category: 'parser_fix', code: 'parser_markdown_fence' }),
-    ])
-  })
-
-  it('derives exact correction details for canonicalized metadata warnings', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: [
-        'Canonicalized generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
-      ],
-      autoRetryCount: 0,
-    }), 'full-answers')
-
-    expect(copy?.interventions).toEqual([
-      expect.objectContaining({
-        code: 'cleanup_winner_model',
-        exactCorrection: 'Changed generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
-        rule: {
-          id: 'cleanup_winner_model',
-          label: 'Winner Model',
-        },
-        examples: [
-          {
-            scope: 'generated_by.winner_model',
-            before: 'openai/gpt-5.4',
-            after: 'github-copilot/gpt-4.1',
-          },
+  it('classifies common parser notice repairs across structured artifacts', () => {
+    const parserNoticeCases = [
+      {
+        artifactType: 'diff' as const,
+        repairWarnings: [
+          'Dropped no-op interview refinement modified at index 0 because the question is unchanged across the winning and final drafts.',
         ],
-      }),
-    ])
-  })
+        expectedTitle: 'LoopTroop adjusted this diff.',
+        expectedSummary: '1 intervention: No Op Change.',
+        expectedIntervention: { category: 'dropped', code: 'dropped_no_op_change' },
+      },
+      {
+        artifactType: 'diff' as const,
+        repairWarnings: ['Inferred missing PRD refinement item_type at index 0 as epic.'],
+        expectedTitle: 'LoopTroop adjusted this diff.',
+        expectedSummary: '1 intervention: Missing Field Inference.',
+        expectedIntervention: { category: 'synthesized', code: 'synthesized_inferred_detail' },
+      },
+      {
+        artifactType: 'final-test' as const,
+        repairWarnings: ['Removed surrounding markdown code fence before parsing the final test commands.'],
+        expectedTitle: 'LoopTroop adjusted this final test plan.',
+        expectedSummary: '1 intervention: Markdown Fence Unwrap.',
+        expectedIntervention: { category: 'parser_fix', code: 'parser_markdown_fence' },
+      },
+      {
+        artifactType: 'full-answers' as const,
+        repairWarnings: [
+          'Canonicalized generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
+        ],
+        expectedIntervention: {
+          code: 'cleanup_winner_model',
+          exactCorrection: 'Changed generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
+          rule: {
+            id: 'cleanup_winner_model',
+            label: 'Winner Model',
+          },
+          examples: [
+            {
+              scope: 'generated_by.winner_model',
+              before: 'openai/gpt-5.4',
+              after: 'github-copilot/gpt-4.1',
+            },
+          ],
+        },
+      },
+      {
+        artifactType: 'diff' as const,
+        repairWarnings: ['Synthesized missing PRD refinement change at index 0 from the validated records.'],
+        expectedSummary: '1 intervention: Missing Detail.',
+        expectedIntervention: { category: 'synthesized', code: 'synthesized_missing_detail' },
+      },
+    ]
 
-  it('classifies synthesized change repairs in the parser notice copy', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: ['Synthesized missing PRD refinement change at index 0 from the validated records.'],
-      autoRetryCount: 0,
-    }), 'diff')
+    for (const testCase of parserNoticeCases) {
+      const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
+        repairApplied: true,
+        repairWarnings: testCase.repairWarnings,
+        autoRetryCount: 0,
+      }), testCase.artifactType)
 
-    expect(copy?.summary).toBe('1 intervention: Missing Detail.')
-    expect(copy?.interventions).toEqual([
-      expect.objectContaining({ category: 'synthesized', code: 'synthesized_missing_detail' }),
-    ])
+      if (testCase.expectedTitle) {
+        expect(copy?.title).toBe(testCase.expectedTitle)
+      }
+      if (testCase.expectedSummary) {
+        expect(copy?.summary).toBe(testCase.expectedSummary)
+      }
+      expect(copy?.interventions).toEqual([
+        expect.objectContaining(testCase.expectedIntervention),
+      ])
+    }
   })
 
   it('describes retry-only parser interventions in the parser notice copy', () => {
@@ -2182,22 +2179,40 @@ describe('ArtifactContentViewer', () => {
     expect(copy).toBeNull()
   })
 
-  it('uses output-specific wording for Full Answers metadata cleanup', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: [
-        'Canonicalized resolved interview status from "approved" to "draft".',
-        'Cleared approval fields for the AI-generated Full Answers artifact.',
-        'Canonicalized generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
-      ],
-      autoRetryCount: 0,
-    }), 'full-answers')
+  it('uses output-specific wording for Full Answers cleanup notices', () => {
+    const metadataCleanupWarnings = [
+      'Canonicalized resolved interview status from "approved" to "draft".',
+      'Cleared approval fields for the AI-generated Full Answers artifact.',
+      'Canonicalized generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
+    ]
 
-    expect(copy?.title).toBe('LoopTroop adjusted these Full Answers.')
-    expect(copy?.summary).toBe('3 interventions: Interview Status, Approval Fields, Winner Model.')
-    expect(copy?.badges).toEqual([
-      expect.objectContaining({ label: 'Cleanup', count: 3 }),
-    ])
+    for (const testCase of [
+      {
+        options: undefined,
+        expectedTitle: 'LoopTroop adjusted these Full Answers.',
+        expectedBody: undefined,
+      },
+      {
+        options: { fullAnswersOrigin: 'reused-approved-interview' as const },
+        expectedTitle: 'LoopTroop reused the approved interview for these answers.',
+        expectedBody: /copied the approved interview/i,
+      },
+    ]) {
+      const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
+        repairApplied: true,
+        repairWarnings: metadataCleanupWarnings,
+        autoRetryCount: 0,
+      }), 'full-answers', testCase.options)
+
+      expect(copy?.title).toBe(testCase.expectedTitle)
+      expect(copy?.summary).toBe('3 interventions: Interview Status, Approval Fields, Winner Model.')
+      expect(copy?.badges).toEqual([
+        expect.objectContaining({ label: 'Cleanup', count: 3 }),
+      ])
+      if (testCase.expectedBody) {
+        expect(copy?.body).toMatch(testCase.expectedBody)
+      }
+    }
   })
 
   it('shows specific cleanup copy for selected option id repairs in Full Answers notices', () => {
@@ -2220,21 +2235,6 @@ describe('ArtifactContentViewer', () => {
     ])
   })
 
-  it('uses reused-approved-interview wording for synthetic Full Answers artifacts', () => {
-    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
-      repairApplied: true,
-      repairWarnings: [
-        'Canonicalized resolved interview status from "approved" to "draft".',
-        'Cleared approval fields for the AI-generated Full Answers artifact.',
-        'Canonicalized generated_by.winner_model from "openai/gpt-5.4" to "github-copilot/gpt-4.1".',
-      ],
-      autoRetryCount: 0,
-    }), 'full-answers', { fullAnswersOrigin: 'reused-approved-interview' })
-
-    expect(copy?.title).toBe('LoopTroop reused the approved interview for these answers.')
-    expect(copy?.summary).toBe('3 interventions: Interview Status, Approval Fields, Winner Model.')
-    expect(copy?.body).toMatch(/copied the approved interview/i)
-  })
 
   it('suppresses parser notices when a bare repair flag has no details', () => {
     const copy = buildArtifactProcessingNoticeCopy({
@@ -2282,12 +2282,12 @@ describe('ArtifactContentViewer', () => {
     expect(copy?.interventions).toHaveLength(1)
   })
 
-  it('shows a collapsed parser notice for council draft artifacts', () => {
-    render(
-      <ArtifactContent
-        artifactId="prd-draft-member-openai%2Fgpt-5.2"
-        phase="DRAFTING_PRD"
-        content={JSON.stringify({
+  it('shows collapsed parser notices for common structured artifact variants', () => {
+    const parserNoticeCases = [
+      {
+        artifactId: 'prd-draft-member-openai%2Fgpt-5.2',
+        phase: 'DRAFTING_PRD' as const,
+        content: JSON.stringify({
           drafts: [
             {
               memberId: 'openai/gpt-5.2',
@@ -2299,25 +2299,95 @@ describe('ArtifactContentViewer', () => {
               }),
             },
           ],
-        })}
-      />,
-    )
+        }),
+        title: 'LoopTroop adjusted this PRD draft.',
+        badge: 'Synthesized 1',
+        expandedCopy: /LoopTroop validated this PRD draft and recorded the intervention details below/i,
+        warningText: /Inferred missing PRD refinement item_type at index 0 as epic/i,
+        afterOpen: () => {
+          expect(screen.getByText(/Exact correction:/i)).toBeInTheDocument()
+          expect(screen.getByText(/Rule:/i)).toBeInTheDocument()
+          expect(screen.getByText(/Before:/i)).toBeInTheDocument()
+          expect(screen.getByText(/\[missing\]/i)).toBeInTheDocument()
+          expect(screen.getByText(/After:/i)).toBeInTheDocument()
+          expect(screen.getByText(/^epic$/i)).toBeInTheDocument()
+          expect(screen.getByText(/What:/i)).toBeInTheDocument()
+        },
+      },
+      {
+        artifactId: 'prd-coverage-result',
+        phase: 'VERIFYING_PRD_COVERAGE' as const,
+        content: JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          response: 'status: gaps\ngaps:\n  - "Missing approval sequencing."',
+          hasGaps: true,
+          coverageRunNumber: 1,
+          maxCoveragePasses: 2,
+          parsed: {
+            status: 'gaps',
+            gaps: ['Missing approval sequencing.'],
+            followUpQuestions: [],
+          },
+          structuredOutput: futureStructuredOutput({
+            repairApplied: true,
+            repairWarnings: ['Trimmed empty PRD coverage gap strings before persisting the normalized result.'],
+          }),
+        }),
+        title: 'LoopTroop adjusted this coverage review.',
+        badge: 'Cleanup 1',
+        expandedCopy: /LoopTroop validated this coverage review and recorded the intervention details below/i,
+        warningText: /Trimmed empty PRD coverage gap strings before persisting the normalized result/i,
+      },
+      {
+        artifactId: 'relevant-files-scan',
+        phase: 'PREPARING_CONTEXT' as const,
+        content: JSON.stringify({
+          fileCount: 1,
+          files: [
+            {
+              path: 'src/app.ts',
+              rationale: 'Main app entry point.',
+              relevance: 'high',
+              likely_action: 'modify',
+              contentPreview: 'export function app() {}',
+              contentLength: 25,
+            },
+          ],
+          structuredOutput: futureStructuredOutput({
+            repairApplied: true,
+            repairWarnings: ['Removed surrounding markdown code fence before parsing the relevant files result.'],
+          }),
+        }),
+        title: 'LoopTroop adjusted this relevant files scan.',
+        badge: 'Parser Fix 1',
+        expandedCopy: /LoopTroop validated this relevant files scan and recorded the intervention details below/i,
+        warningText: /Removed surrounding markdown code fence before parsing the relevant files result/i,
+      },
+    ]
 
-    expect(screen.getByText('LoopTroop adjusted this PRD draft.')).toBeInTheDocument()
-    expect(screen.getByText('Synthesized 1')).toBeInTheDocument()
-    expect(screen.queryByText(/LoopTroop validated this PRD draft and recorded the intervention details below/i)).not.toBeInTheDocument()
+    for (const [index, testCase] of parserNoticeCases.entries()) {
+      if (index > 0) {
+        cleanup()
+      }
 
-    openNotice('LoopTroop adjusted this PRD draft.')
+      render(
+        <ArtifactContent
+          artifactId={testCase.artifactId}
+          phase={testCase.phase}
+          content={testCase.content}
+        />,
+      )
 
-    expect(screen.getByText(/LoopTroop validated this PRD draft and recorded the intervention details below/i)).toBeInTheDocument()
-    expect(screen.getByText(/Exact correction:/i)).toBeInTheDocument()
-    expect(screen.getByText(/Rule:/i)).toBeInTheDocument()
-    expect(screen.getByText(/Before:/i)).toBeInTheDocument()
-    expect(screen.getByText(/\[missing\]/i)).toBeInTheDocument()
-    expect(screen.getByText(/After:/i)).toBeInTheDocument()
-    expect(screen.getByText(/^epic$/i)).toBeInTheDocument()
-    expect(screen.getByText(/What:/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/Inferred missing PRD refinement item_type at index 0 as epic/i).length).toBeGreaterThan(0)
+      expect(screen.getByText(testCase.title)).toBeInTheDocument()
+      expect(screen.getByText(testCase.badge)).toBeInTheDocument()
+      expect(screen.queryByText(testCase.expandedCopy)).not.toBeInTheDocument()
+
+      openNotice(testCase.title)
+
+      expect(screen.getByText(testCase.expandedCopy)).toBeInTheDocument()
+      expect(screen.getAllByText(testCase.warningText).length).toBeGreaterThan(0)
+      testCase.afterOpen?.()
+    }
   })
 
   it('renders exact correction, rule, and before/after blocks for explicit interventions', () => {
@@ -2374,74 +2444,6 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText(`${TEST.shortname}-123`)).toBeInTheDocument()
   })
 
-  it('shows a collapsed parser notice for coverage review artifacts', () => {
-    render(
-      <ArtifactContent
-        artifactId="prd-coverage-result"
-        phase="VERIFYING_PRD_COVERAGE"
-        content={JSON.stringify({
-          winnerId: 'openai/gpt-5.2',
-          response: 'status: gaps\ngaps:\n  - "Missing approval sequencing."',
-          hasGaps: true,
-          coverageRunNumber: 1,
-          maxCoveragePasses: 2,
-          parsed: {
-            status: 'gaps',
-            gaps: ['Missing approval sequencing.'],
-            followUpQuestions: [],
-          },
-          structuredOutput: futureStructuredOutput({
-            repairApplied: true,
-            repairWarnings: ['Trimmed empty PRD coverage gap strings before persisting the normalized result.'],
-          }),
-        })}
-      />,
-    )
-
-    expect(screen.getByText('LoopTroop adjusted this coverage review.')).toBeInTheDocument()
-    expect(screen.getByText('Cleanup 1')).toBeInTheDocument()
-    expect(screen.queryByText(/LoopTroop validated this coverage review and recorded the intervention details below/i)).not.toBeInTheDocument()
-
-    openNotice('LoopTroop adjusted this coverage review.')
-
-    expect(screen.getByText(/LoopTroop validated this coverage review and recorded the intervention details below/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/Trimmed empty PRD coverage gap strings before persisting the normalized result/i).length).toBeGreaterThan(0)
-  })
-
-  it('shows a collapsed parser notice for relevant files scans', () => {
-    render(
-      <ArtifactContent
-        artifactId="relevant-files-scan"
-        phase="PREPARING_CONTEXT"
-        content={JSON.stringify({
-          fileCount: 1,
-          files: [
-            {
-              path: 'src/app.ts',
-              rationale: 'Main app entry point.',
-              relevance: 'high',
-              likely_action: 'modify',
-              contentPreview: 'export function app() {}',
-              contentLength: 25,
-            },
-          ],
-          structuredOutput: futureStructuredOutput({
-            repairApplied: true,
-            repairWarnings: ['Removed surrounding markdown code fence before parsing the relevant files result.'],
-          }),
-        })}
-      />,
-    )
-
-    expect(screen.getByText('LoopTroop adjusted this relevant files scan.')).toBeInTheDocument()
-    expect(screen.getByText('Parser Fix 1')).toBeInTheDocument()
-    expect(screen.queryByText(/LoopTroop validated this relevant files scan and recorded the intervention details below/i)).not.toBeInTheDocument()
-
-    openNotice('LoopTroop adjusted this relevant files scan.')
-
-    expect(screen.getByText(/LoopTroop validated this relevant files scan and recorded the intervention details below/i)).toBeInTheDocument()
-    expect(screen.getAllByText(/Removed surrounding markdown code fence before parsing the relevant files result/i).length).toBeGreaterThan(0)
-  })
 
   it('shows invalid YAML escape parser repairs with specific details', () => {
     const warning = 'Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.'
@@ -2513,7 +2515,7 @@ describe('ArtifactContentViewer', () => {
   })
 
   it('renders relevant files raw JSON strings with real line breaks and wrapped display text', () => {
-    const longQuestion = 'For this test ticket, is the goal simply to replace the current default global theme with a pink-based one for all users, with no runtime theme switching?'
+    const longQuestion = LONG_GLOBAL_THEME_PROMPT
     render(
       <ArtifactContent
         artifactId="relevant-files-scan"
@@ -2551,14 +2553,10 @@ describe('ArtifactContentViewer', () => {
     expect(rawPre).toHaveClass('whitespace-pre-wrap', 'overflow-x-hidden')
   })
 
-  it('renders simple folded YAML scalars in raw tabs as quoted single-line values', () => {
-    const writeTextMock = vi.fn(() => Promise.resolve())
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: writeTextMock },
-    })
+  it('renders simple folded YAML scalars in raw tabs as quoted single-line values', async () => {
+    const writeTextMock = mockClipboard()
 
-    const prompt = 'For this test ticket, is the goal simply to replace the current default app palette with a single pink palette (no theme switcher), and is that the full definition of done?'
+    const prompt = LONG_PALETTE_PROMPT
     const content = [
       'questions:',
       '  - id: Q01',
@@ -2587,16 +2585,12 @@ describe('ArtifactContentViewer', () => {
     expect(rawPre.textContent).not.toContain('no\n      theme switcher')
     expect(rawPre.textContent).toContain('    source: compiled')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(content)
   })
 
-  it('renders folded YAML scalars inside JSON artifact content fields without altering copy content', () => {
-    const writeTextMock = vi.fn(() => Promise.resolve())
-    Object.defineProperty(globalThis.navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText: writeTextMock },
-    })
+  it('renders folded YAML scalars inside JSON artifact content fields without altering copy content', async () => {
+    const writeTextMock = mockClipboard()
 
     const prompt = 'Should every PRD draft keep long interview prompts readable when viewing aggregate raw artifacts?'
     const draftContent = [
@@ -2630,12 +2624,12 @@ describe('ArtifactContentViewer', () => {
     expect(rawPre.textContent).not.toContain('prompt: >-')
     expect(rawPre.textContent).not.toContain('readable\n        when viewing')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Copy raw output' }))
+    await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(content)
   })
 
   it('renders final interview raw JSON wrappers with real line breaks', () => {
-    const longPrompt = 'For this test ticket, is the goal simply to replace the current default global theme with a pink-based one for all users, with no runtime theme switching?'
+    const longPrompt = LONG_GLOBAL_THEME_PROMPT
     const refinedContent = [
       'artifact: interview',
       'questions:',
@@ -2955,39 +2949,39 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText(/EBUSY/i)).toBeInTheDocument()
   })
 
-  it('falls back to the raw viewer for malformed integration reports', () => {
-    render(
-      <ArtifactContent
-        artifactId="commit-summary"
-        phase="WAITING_PR_REVIEW"
-        content="not valid integration json"
-      />,
-    )
+  it('falls back to the raw viewer for malformed report payloads', () => {
+    const malformedReportCases = [
+      {
+        artifactId: 'commit-summary',
+        phase: 'WAITING_PR_REVIEW' as const,
+        content: 'not valid integration json',
+      },
+      {
+        artifactId: 'pull-request-report',
+        phase: 'CREATING_PULL_REQUEST' as const,
+        content: 'not valid pull request json',
+      },
+      {
+        artifactId: 'cleanup-report',
+        phase: 'CLEANING_ENV' as const,
+        content: 'not valid cleanup json',
+      },
+    ]
 
-    expect(screen.getByText('not valid integration json')).toBeInTheDocument()
-  })
+    for (const [index, testCase] of malformedReportCases.entries()) {
+      if (index > 0) {
+        cleanup()
+      }
 
-  it('falls back to the raw viewer for malformed pull request reports', () => {
-    render(
-      <ArtifactContent
-        artifactId="pull-request-report"
-        phase="CREATING_PULL_REQUEST"
-        content="not valid pull request json"
-      />,
-    )
+      render(
+        <ArtifactContent
+          artifactId={testCase.artifactId}
+          phase={testCase.phase}
+          content={testCase.content}
+        />,
+      )
 
-    expect(screen.getByText('not valid pull request json')).toBeInTheDocument()
-  })
-
-  it('falls back to the raw viewer for malformed cleanup reports', () => {
-    render(
-      <ArtifactContent
-        artifactId="cleanup-report"
-        phase="CLEANING_ENV"
-        content="not valid cleanup json"
-      />,
-    )
-
-    expect(screen.getByText('not valid cleanup json')).toBeInTheDocument()
+      expect(screen.getByText(testCase.content)).toBeInTheDocument()
+    }
   })
 })
