@@ -584,18 +584,35 @@ function isAssistantMessage(message: Message): boolean {
   return message.role === 'assistant' || message.info?.role === 'assistant'
 }
 
-function selectAssistantMessageForDetailBackfill(
+function selectAssistantMessagesForDetailBackfill(
   messages: Message[],
   latestAssistantMessageId?: string,
-): Message | undefined {
-  if (latestAssistantMessageId) {
-    const matching = messages.find((message) =>
-      isAssistantMessage(message) && getAssistantMessageId(message) === latestAssistantMessageId,
-    )
-    if (matching) return matching
+): Message[] {
+  let latestIndex = latestAssistantMessageId
+    ? messages.findIndex((message) =>
+        isAssistantMessage(message) && getAssistantMessageId(message) === latestAssistantMessageId,
+      )
+    : -1
+  if (latestIndex < 0) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const message = messages[index]
+      if (message && isAssistantMessage(message)) {
+        latestIndex = index
+        break
+      }
+    }
   }
+  if (latestIndex < 0) return []
 
-  return [...messages].reverse().find(isAssistantMessage)
+  let startIndex = 0
+  for (let index = latestIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index]
+    if (!message || !isAssistantMessage(message)) {
+      startIndex = index + 1
+      break
+    }
+  }
+  return messages.slice(startIndex, latestIndex + 1).filter(isAssistantMessage)
 }
 
 type ToolStatus = Extract<StreamEvent, { type: 'tool' }>['status']
@@ -631,94 +648,94 @@ function emitAssistantMessagePartDetails(
   phase: string,
   memberId: string,
   sessionId: string,
-  message: Message | undefined,
+  messages: Message[],
   state?: OpenCodeStreamState,
   beadId?: string,
 ) {
-  if (!message?.parts?.length) return
-
-  const messageId = getAssistantMessageId(message)
   const source = memberId ? `model:${memberId}` : 'opencode'
-  for (const part of message.parts) {
-    const partRecord = part as MessagePart & Record<string, unknown>
-    const partId = getString(partRecord.id)
-    if (!partId) continue
+  for (const message of messages) {
+    const messageId = getAssistantMessageId(message)
+    for (const part of message.parts ?? []) {
+      const partRecord = part as MessagePart & Record<string, unknown>
+      const partId = getString(partRecord.id)
+      if (!partId) continue
 
-    const entryId = getPartEntryId(sessionId, partId)
-    const commonFields = {
-      entryId,
-      audience: 'ai' as const,
-      source,
-      modelId: memberId || undefined,
-      sessionId,
-      ...(beadId ? { beadId } : {}),
-    }
-
-    if (part.type === 'reasoning') {
-      const text = getString(partRecord.text)?.trimEnd() ?? ''
-      if (!text) continue
-      emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'model_output', text, state, {
-        ...commonFields,
-        kind: 'reasoning',
-        op: 'finalize',
-      })
-      continue
-    }
-
-    if (part.type === 'tool') {
-      const stateRecord = getRecord(partRecord.state)
-      const tool = getString(partRecord.tool) ?? 'tool'
-      const status = normalizeToolStatus(stateRecord?.status)
-      const input = getRecord(stateRecord?.input) ?? undefined
-      const output = getString(stateRecord?.output)
-      const error = getString(stateRecord?.error)
-      const title = getString(stateRecord?.title)
-      const content = formatToolState({
-        type: 'tool',
+      const entryId = getPartEntryId(sessionId, partId)
+      const commonFields = {
+        entryId,
+        audience: 'ai' as const,
+        source,
+        modelId: memberId || undefined,
         sessionId,
-        ...(messageId ? { messageId } : {}),
-        partId,
-        tool,
-        callId: getString(partRecord.callID) ?? partId,
-        status,
-        ...(title ? { title } : {}),
-        ...(input ? { input } : {}),
-        ...(output ? { output } : {}),
-        ...(error ? { error } : {}),
-        complete: true,
-      })
-      emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'info', content, state, {
-        ...commonFields,
-        kind: 'tool',
-        op: 'finalize',
-      })
-      continue
-    }
+        ...(beadId ? { beadId } : {}),
+      }
 
-    if (part.type === 'step-start') {
-      emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'info', 'Step started.', state, {
-        ...commonFields,
-        kind: 'step',
-        op: 'append',
-      })
-      continue
-    }
+      if (part.type === 'reasoning') {
+        const text = getString(partRecord.text)?.trimEnd() ?? ''
+        if (!text) continue
+        emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'model_output', text, state, {
+          ...commonFields,
+          kind: 'reasoning',
+          op: 'finalize',
+        })
+        continue
+      }
 
-    if (part.type === 'step-finish') {
-      const reason = getString(partRecord.reason)
-      emitBackfilledAiDetail(
-        ticketId,
-        ticketExternalId,
-        phase,
-        'info',
-        `Step finished${reason ? `: ${reason}` : '.'}`,
-        state,
-        {
+      if (part.type === 'tool') {
+        const stateRecord = getRecord(partRecord.state)
+        const tool = getString(partRecord.tool) ?? 'tool'
+        const status = normalizeToolStatus(stateRecord?.status)
+        const input = getRecord(stateRecord?.input) ?? undefined
+        const output = getString(stateRecord?.output)
+        const error = getString(stateRecord?.error)
+        const title = getString(stateRecord?.title)
+        const content = formatToolState({
+          type: 'tool',
+          sessionId,
+          ...(messageId ? { messageId } : {}),
+          partId,
+          tool,
+          callId: getString(partRecord.callID) ?? partId,
+          status,
+          ...(title ? { title } : {}),
+          ...(input ? { input } : {}),
+          ...(output ? { output } : {}),
+          ...(error ? { error } : {}),
+          complete: true,
+        })
+        emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'info', content, state, {
+          ...commonFields,
+          kind: 'tool',
+          op: 'finalize',
+        })
+        continue
+      }
+
+      if (part.type === 'step-start') {
+        emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'info', 'Step started.', state, {
           ...commonFields,
           kind: 'step',
-          op: 'finalize',
-        },
-      )
+          op: 'append',
+        })
+        continue
+      }
+
+      if (part.type === 'step-finish') {
+        const reason = getString(partRecord.reason)
+        emitBackfilledAiDetail(
+          ticketId,
+          ticketExternalId,
+          phase,
+          'info',
+          `Step finished${reason ? `: ${reason}` : '.'}`,
+          state,
+          {
+            ...commonFields,
+            kind: 'step',
+            op: 'finalize',
+          },
+        )
+      }
     }
   }
 }
@@ -1141,7 +1158,7 @@ export function emitOpenCodeSessionLogs(
   const hasCanonicalStreamedText = latestTextEntryId
     ? state?.finalizedTextEntryIds.has(latestTextEntryId) ?? false
     : false
-  const latestAssistantMessage = selectAssistantMessageForDetailBackfill(messages, latestAssistantMessageId)
+  const assistantMessages = selectAssistantMessagesForDetailBackfill(messages, latestAssistantMessageId)
 
   emitAssistantMessagePartDetails(
     ticketId,
@@ -1149,7 +1166,7 @@ export function emitOpenCodeSessionLogs(
     phase,
     memberId,
     sessionId,
-    latestAssistantMessage,
+    assistantMessages,
     state,
     beadId,
   )

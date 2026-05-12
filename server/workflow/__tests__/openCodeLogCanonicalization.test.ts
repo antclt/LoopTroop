@@ -418,6 +418,129 @@ describe('OpenCode log canonicalization', () => {
     expect(aiEntries.find((entry) => entry.entryId === 'ses-snapshot:tool-1')?.content).toContain('Output:\nsrc/App.tsx')
   })
 
+  it('backfills AI detail rows from every assistant message in a tool-use session snapshot', () => {
+    const state = createOpenCodeStreamState()
+
+    emitOpenCodeSessionLogs(
+      '1:T-42',
+      'T-42',
+      'SCANNING_RELEVANT_FILES',
+      'openai/gpt-5.3-codex',
+      'ses-tools',
+      'relevant_files_scan',
+      '<RELEVANT_FILES_RESULT>done</RELEVANT_FILES_RESULT>',
+      [
+        {
+          id: 'msg-previous-user',
+          role: 'user',
+          content: 'Previous prompt',
+        },
+        {
+          id: 'msg-previous-assistant',
+          role: 'assistant',
+          parts: [
+            {
+              id: 'previous-tool-call',
+              sessionID: 'ses-tools',
+              messageID: 'msg-previous-assistant',
+              type: 'tool',
+              callID: 'call-previous-tool',
+              tool: 'bash',
+              state: {
+                status: 'completed',
+                title: 'Previous command',
+                input: { command: 'echo previous' },
+                output: 'previous',
+              },
+            },
+          ],
+        },
+        {
+          id: 'msg-current-user',
+          role: 'user',
+          content: 'Current prompt',
+        },
+        {
+          id: 'msg-tool-turn',
+          role: 'assistant',
+          parts: [
+            {
+              id: 'tool-turn-step-start',
+              sessionID: 'ses-tools',
+              messageID: 'msg-tool-turn',
+              type: 'step-start',
+            },
+            {
+              id: 'tool-turn-reasoning',
+              sessionID: 'ses-tools',
+              messageID: 'msg-tool-turn',
+              type: 'reasoning',
+              text: 'I need to inspect theme files before answering.',
+            },
+            {
+              id: 'tool-turn-call',
+              sessionID: 'ses-tools',
+              messageID: 'msg-tool-turn',
+              type: 'tool',
+              callID: 'call-tool-turn',
+              tool: 'read',
+              state: {
+                status: 'completed',
+                title: 'Read theme variables',
+                input: { filePath: 'ui/src/scss/_vars.scss' },
+                output: '$primaryColor: #e91e63;',
+              },
+            },
+            {
+              id: 'tool-turn-step-finish',
+              sessionID: 'ses-tools',
+              messageID: 'msg-tool-turn',
+              type: 'step-finish',
+              reason: 'tool',
+            },
+          ],
+        },
+        {
+          id: 'msg-final-turn',
+          role: 'assistant',
+          content: '<RELEVANT_FILES_RESULT>done</RELEVANT_FILES_RESULT>',
+          parts: [
+            {
+              id: 'final-text',
+              sessionID: 'ses-tools',
+              messageID: 'msg-final-turn',
+              type: 'text',
+              text: '<RELEVANT_FILES_RESULT>done</RELEVANT_FILES_RESULT>',
+            },
+          ],
+        },
+      ],
+      state,
+    )
+
+    const aiEntries = getAiPersistedEntries()
+    expect(aiEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        entryId: 'ses-tools:tool-turn-reasoning',
+        kind: 'reasoning',
+        content: 'I need to inspect theme files before answering.',
+      }),
+      expect.objectContaining({
+        entryId: 'ses-tools:tool-turn-call',
+        kind: 'tool',
+        content: expect.stringContaining('[TOOL] read completed: Read theme variables'),
+      }),
+      expect.objectContaining({
+        entryId: 'ses-tools:msg-final-turn:text',
+        kind: 'text',
+        content: '<RELEVANT_FILES_RESULT>done</RELEVANT_FILES_RESULT>',
+      }),
+    ]))
+    expect(aiEntries.find((entry) => entry.entryId === 'ses-tools:tool-turn-call')?.content)
+      .toContain('ui/src/scss/_vars.scss')
+    expect(aiEntries.some((entry) => entry.entryId === 'ses-tools:previous-tool-call')).toBe(false)
+  })
+
   it('does not duplicate AI part rows already finalized from the live stream', () => {
     const state = createOpenCodeStreamState()
 
