@@ -238,8 +238,17 @@ describe('runOpenCodePrompt', () => {
     list?: (...args: unknown[]) => Promise<unknown>
     messages?: (...args: unknown[]) => Promise<unknown>
     subscribe?: (...args: unknown[]) => Promise<{ stream: AsyncIterable<unknown> }>
+    eventSubscribe?: (...args: unknown[]) => Promise<{ stream: AsyncIterable<unknown> }>
+    globalEvent?: (...args: unknown[]) => Promise<{ stream: AsyncIterable<unknown> }>
     get?: (...args: unknown[]) => Promise<unknown>
   } = {}) {
+    const defaultSubscribe = async () => ({
+      stream: (async function* () {
+        yield { type: 'session.idle', properties: { info: { id: 'ses-1' } } }
+      })(),
+    })
+    const eventSubscribe = overrides.eventSubscribe ?? overrides.subscribe ?? defaultSubscribe
+    const globalEvent = overrides.globalEvent ?? overrides.subscribe ?? defaultSubscribe
     return {
       session: {
         create: overrides.create ?? (async () => ({ data: { id: 'ses-1', directory: '/tmp/project' } })),
@@ -250,11 +259,14 @@ describe('runOpenCodePrompt', () => {
         get: overrides.get ?? (async () => ({ data: { directory: '/tmp/project' } })),
       },
       event: {
-        subscribe: overrides.subscribe ?? (async () => ({
-          stream: (async function* () {
-            yield { type: 'session.idle', properties: { info: { id: 'ses-1' } } }
-          })(),
-        })),
+        subscribe: eventSubscribe,
+      },
+      global: {
+        health: async () => ({ data: { version: 'test' } }),
+        event: globalEvent,
+      },
+      config: {
+        providers: async () => ({ data: { providers: [] } }),
       },
     }
   }
@@ -1067,8 +1079,8 @@ describe('runOpenCodePrompt', () => {
         }),
         abort: async () => ({ data: {} }),
       },
-      event: {
-        subscribe: async () => ({
+      global: {
+        event: async () => ({
           stream: (async function* () {
             await new Promise((resolve) => setTimeout(resolve, 20))
             latestAssistantText = [
@@ -1284,6 +1296,158 @@ describe('runOpenCodePrompt', () => {
     }
 
     expect(events.some(e => e.type === 'done')).toBe(false)
+  })
+
+  it('subscribeToEvents reads OpenCode global events without using the legacy directory event stream', async () => {
+    let legacyEventSubscribeCalls = 0
+    let globalEventCalls = 0
+    const fakeClient = createFakeSdkClient({
+      get: async () => ({ data: { directory: '/tmp/project' } }),
+      eventSubscribe: async () => {
+        legacyEventSubscribeCalls += 1
+        throw new Error('legacy event stream should not be used')
+      },
+      globalEvent: async () => {
+        globalEventCalls += 1
+        return {
+          stream: (async function* () {
+            yield {
+              directory: '/tmp/project',
+              payload: {
+                type: 'message.updated',
+                properties: {
+                  info: { id: 'msg-1', sessionID: 'ses-1', role: 'assistant' },
+                },
+              },
+            }
+            yield {
+              directory: '/tmp/project',
+              payload: {
+                type: 'message.part.updated',
+                properties: {
+                  part: {
+                    id: 'part-text-1',
+                    type: 'text',
+                    text: 'live answer',
+                    sessionID: 'ses-1',
+                    messageID: 'msg-1',
+                    time: { end: Date.now() },
+                  },
+                },
+              },
+            }
+            yield {
+              directory: '/tmp/other-project',
+              payload: {
+                type: 'file.edited',
+                properties: { file: 'unrelated.ts' },
+              },
+            }
+            yield {
+              directory: '/tmp/project',
+              payload: {
+                type: 'session.idle',
+                properties: { sessionID: 'ses-1' },
+              },
+            }
+          })(),
+        }
+      },
+    })
+    const sdkAdapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+
+    const events: StreamEvent[] = []
+    for await (const event of sdkAdapter.subscribeToEvents('ses-1')) {
+      events.push(event)
+    }
+
+    expect(legacyEventSubscribeCalls).toBe(0)
+    expect(globalEventCalls).toBe(1)
+    expect(events).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: 'text',
+        text: 'live answer',
+        complete: true,
+      }),
+      expect.objectContaining({ type: 'done' }),
+    ]))
+    expect(events.some((event) => event.type === 'file_edited' && event.file === 'unrelated.ts')).toBe(false)
+  })
+
+  it('subscribeToEvents filters user prompt parts from the OpenCode global event stream', async () => {
+    const fakeClient = createFakeSdkClient({
+      get: async () => ({ data: { directory: '/tmp/project' } }),
+      globalEvent: async () => ({
+        stream: (async function* () {
+          yield {
+            directory: '/tmp/project',
+            payload: {
+              type: 'message.updated',
+              properties: {
+                info: { id: 'msg-user', sessionID: 'ses-1', role: 'user' },
+              },
+            },
+          }
+          yield {
+            directory: '/tmp/project',
+            payload: {
+              type: 'message.part.updated',
+              properties: {
+                part: {
+                  id: 'part-user',
+                  type: 'text',
+                  text: 'Prompt body that should not appear as model output',
+                  sessionID: 'ses-1',
+                  messageID: 'msg-user',
+                  time: { end: Date.now() },
+                },
+              },
+            },
+          }
+          yield {
+            directory: '/tmp/project',
+            payload: {
+              type: 'message.updated',
+              properties: {
+                info: { id: 'msg-assistant', sessionID: 'ses-1', role: 'assistant' },
+              },
+            },
+          }
+          yield {
+            directory: '/tmp/project',
+            payload: {
+              type: 'message.part.updated',
+              properties: {
+                part: {
+                  id: 'part-assistant',
+                  type: 'text',
+                  text: 'Assistant answer',
+                  sessionID: 'ses-1',
+                  messageID: 'msg-assistant',
+                  time: { end: Date.now() },
+                },
+              },
+            },
+          }
+          yield {
+            directory: '/tmp/project',
+            payload: {
+              type: 'session.idle',
+              properties: { sessionID: 'ses-1' },
+            },
+          }
+        })(),
+      }),
+    })
+    const sdkAdapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+
+    const events: StreamEvent[] = []
+    for await (const event of sdkAdapter.subscribeToEvents('ses-1')) {
+      events.push(event)
+    }
+
+    const textEvents = events.filter((event): event is Extract<StreamEvent, { type: 'text' }> => event.type === 'text')
+    expect(textEvents.map((event) => event.text)).toEqual(['Assistant answer'])
   })
 
   it('uses the final snapshot after early stream close without emitting synthetic done for prompt echoes', async () => {

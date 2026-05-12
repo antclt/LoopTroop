@@ -106,6 +106,8 @@ If OpenCode cannot list sessions because the server is down or restarting, valid
 
 OpenCode stream events are consumed server-side and then translated into LoopTroop's own ticket event model.
 
+The SDK adapter subscribes to OpenCode's global event stream, unwraps `{ directory, payload }` frames, and filters them back to the owned session before emitting LoopTroop events. This keeps live model detail working when the directory-scoped OpenCode event endpoint closes early, while still preventing unrelated project/session events from entering the ticket log.
+
 The prompt runner tracks:
 
 - text events
@@ -116,6 +118,8 @@ The prompt runner tracks:
 - session error events
 
 The frontend never talks directly to OpenCode. It receives normalized ticket events over `/api/stream`.
+
+AI detail rows are emitted as throttled upserts while a text or reasoning part is still changing, finalized when the part completes, and written to `.ticket/runtime/execution-log.ai.jsonl`. After a prompt completes, the prompt runner also backfills finalized assistant message parts from `session.messages()` so thinking/tool/output history is durable even if no browser was watching the ticket in real time.
 
 ## Questions And Human Input
 

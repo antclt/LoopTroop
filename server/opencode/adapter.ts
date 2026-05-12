@@ -452,13 +452,11 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
 
   async *subscribeToEvents(sessionId: string, signal?: AbortSignal, stepFinishSafetyMs?: number): AsyncGenerator<StreamEvent> {
     const directory = await this.resolveSessionDirectory(sessionId, signal)
-    const eventStream = await this.client.event.subscribe(
-      directory ? { directory } : undefined,
-      this.requestOptions(signal),
-    )
+    const eventStream = await this.client.global.event(this.requestOptions(signal))
 
     const partCache = new Map<string, GenericMessagePart>()
     const finalizedPartIds = new Set<string>()
+    const messageRoles = new Map<string, string>()
     let emittedDone = false
     let lastStatus: string | undefined
     let safetyActive = false
@@ -499,9 +497,9 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       const rawEvent = this.unwrapRawEvent(result.value)
       if (!rawEvent) continue
 
-      if (!this.eventBelongsToSession(rawEvent, sessionId)) continue
+      if (!this.eventBelongsToSession(rawEvent, sessionId, directory)) continue
 
-      const normalized = this.normalizeStreamEvent(rawEvent, sessionId, partCache, finalizedPartIds)
+      const normalized = this.normalizeStreamEvent(rawEvent, sessionId, partCache, finalizedPartIds, messageRoles)
       if (!normalized) continue
 
       if (normalized.type === 'session_status') {
@@ -803,7 +801,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     ])
   }
 
-  private eventBelongsToSession(event: RawEvent, sessionId: string): boolean {
+  private eventBelongsToSession(event: RawEvent, sessionId: string, sessionDirectory?: string): boolean {
     this.pruneRecentDirectoryEventKeys()
     const props = event.properties ?? {}
     const part = this.getRecord(props.part)
@@ -821,6 +819,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
 
     if (eventSessionId) return eventSessionId === sessionId
     if (!this.isSessionAgnosticDebugEvent(event.type)) return false
+    if (sessionDirectory && event.directory && event.directory !== sessionDirectory) return false
 
     const dedupeKey = `${event.directory ?? ''}:${event.workspace ?? ''}:${event.type}:${this.safeStableStringify(props)}`
     if (this.recentDirectoryEventKeys.has(dedupeKey)) return false
@@ -833,13 +832,19 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     sessionId: string,
     partCache: Map<string, GenericMessagePart>,
     finalizedPartIds: Set<string>,
+    messageRoles: Map<string, string>,
   ): StreamEvent | null {
     const props = event.properties ?? {}
 
     switch (event.type) {
+      case 'message.updated':
+        this.rememberMessageRole(props.info ?? props.message, messageRoles)
+        return null
+
       case 'message.part.updated': {
         const part = this.getRecord(props.part) as GenericMessagePart | null
         if (!part?.id) return null
+        if (this.isKnownNonAssistantMessagePart(part, messageRoles)) return null
         const partId = String(part.id)
         if (finalizedPartIds.has(partId)) return null
 
@@ -864,6 +869,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         if (finalizedPartIds.has(partId)) return null
         const part = partCache.get(partId)
         if (!part) return null
+        if (this.isKnownNonAssistantMessagePart(part, messageRoles)) return null
         return this.mapPartDelta(part, delta)
       }
 
@@ -990,6 +996,24 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       default:
         return null
     }
+  }
+
+  private rememberMessageRole(value: unknown, messageRoles: Map<string, string>) {
+    const info = this.getRecord(value)
+    const messageId = typeof info?.id === 'string'
+      ? info.id
+      : typeof info?.messageID === 'string'
+        ? info.messageID
+        : undefined
+    const role = typeof info?.role === 'string' ? info.role : undefined
+    if (messageId && role) messageRoles.set(messageId, role)
+  }
+
+  private isKnownNonAssistantMessagePart(part: GenericMessagePart, messageRoles: Map<string, string>) {
+    const messageId = typeof part.messageID === 'string' ? part.messageID : undefined
+    if (!messageId) return false
+    const role = messageRoles.get(messageId)
+    return role !== undefined && role !== 'assistant'
   }
 
   private isToolPart(part: GenericMessagePart): part is GenericMessagePart & ToolMessagePart {

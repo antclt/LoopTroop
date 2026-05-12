@@ -28,6 +28,7 @@ All notable changes to LoopTroop will be documented in this file.
 - `errorDiagnostics` `modelId` and similar fields now computed once and reused instead of double-sanitising.
 
 ### Bug Fixes
+- OpenCode live AI detail streaming now reads the SDK global event feed and filters it back to the active session, restoring real-time thinking/tool/output rows after the `@opencode-ai/sdk` 1.14.48 event behavior change while keeping the existing streaming throttle.
 - AI detail logs now backfill finalized thinking, tool, and step rows from all OpenCode assistant message parts for the completed prompt, so AI/model tabs can restore extended tool-use histories even when the browser was not open during the phase or the live event stream closed early.
 - Ticket dashboards now normalize partially cached ticket runtime/action/model data before rendering, preventing a full-page crash during fast start and workflow phase transitions.
 - `isRecord` type guard now correctly excludes `Date`, `Map`, and `Set` instances.
