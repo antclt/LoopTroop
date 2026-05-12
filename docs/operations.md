@@ -126,6 +126,7 @@ All commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview). The 
 | `LOOPTROOP_BACKEND_HOST` | Backend bind host; defaults to `127.0.0.1` |
 | `LOOPTROOP_BACKEND_PORT` | Override backend port |
 | `LOOPTROOP_ALLOW_REMOTE_API=1` | Required before binding the backend to a non-loopback host |
+| `LOOPTROOP_ALLOW_UNAUTHENTICATED=1` | Disable API token enforcement entirely; **do not combine with `LOOPTROOP_ALLOW_REMOTE_API=1`** — doing so exposes all endpoints with no authentication; a startup warning is logged when both are set |
 | `LOOPTROOP_API_TOKEN` | Optional token required by `/api/*`; `npm run dev` generates an ephemeral value when unset |
 | `LOOPTROOP_TRUST_PROXY=1` | Trust `x-forwarded-for` / `x-real-ip` for rate-limit buckets; leave unset unless a trusted proxy owns those headers |
 | `LOOPTROOP_ENABLE_DEV_EVENT=1` | Enable the development-only ticket event injection route when paired with `LOOPTROOP_DEV_EVENT_TOKEN` |
