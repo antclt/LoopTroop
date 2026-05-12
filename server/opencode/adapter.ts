@@ -234,9 +234,13 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       return Array.from(messageParts.values()).join('').trim()
     }
     let resolveStreamDoneResponse: ((value: string | null) => void) | null = null
+    let resolveStreamClosed: (() => void) | null = null
     let streamDoneObserved = false
     const streamDoneResponse = new Promise<string | null>((resolve) => {
       resolveStreamDoneResponse = resolve
+    })
+    const streamClosed = new Promise<void>((resolve) => {
+      resolveStreamClosed = resolve
     })
     const streamDrain = this.consumeStreamEvents(
       sessionId,
@@ -256,7 +260,22 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       },
       streamSignal,
       promptOptions.stepFinishSafetyMs,
-    )
+    ).finally(() => {
+      resolveStreamClosed?.()
+    })
+    const readSnapshotAfterStreamClose = async (): Promise<string> => {
+      await streamClosed
+      if (streamDoneObserved) {
+        return (await streamDoneResponse)?.trim() ?? ''
+      }
+      try {
+        const snapshot = await this.readAssistantSnapshotWithRetry(sessionId)
+        return (snapshot.responseText || buildStreamedTextResponse()).trim()
+      } catch (err) {
+        warnIfVerbose('[adapter] Snapshot retry failed after stream close, falling back to streamed text', err)
+        return buildStreamedTextResponse().trim()
+      }
+    }
 
     try {
       const sdkPromptResponse = (async () => {
@@ -318,6 +337,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       if (responseText && looksLikePromptEcho(responseText) && !streamDoneObserved) {
         const terminalResponse = await Promise.race([
           streamDoneResponse.then((snapshot) => snapshot?.trim() ?? ''),
+          readSnapshotAfterStreamClose(),
           ...(signalAbort ? [signalAbort] : []),
         ])
         if (terminalResponse) {
@@ -442,6 +462,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     let emittedDone = false
     let lastStatus: string | undefined
     let safetyActive = false
+    let shouldEmitSyntheticDone = false
 
     const rawIterator = (eventStream.stream as AsyncIterable<RawEvent>)[Symbol.asyncIterator]()
 
@@ -462,6 +483,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         if (winner === expired) {
           // Stream hung after step-finish — suppress pending iterator rejection
           void nextPromise.catch(() => undefined)
+          shouldEmitSyntheticDone = true
           break
         }
         result = winner
@@ -469,7 +491,10 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         result = await rawIterator.next()
       }
 
-      if (result.done) break
+      if (result.done) {
+        shouldEmitSyntheticDone = safetyActive
+        break
+      }
 
       const rawEvent = this.unwrapRawEvent(result.value)
       if (!rawEvent) continue
@@ -501,7 +526,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       }
     }
 
-    if (!emittedDone && !signal?.aborted) {
+    if (!emittedDone && !signal?.aborted && shouldEmitSyntheticDone) {
       yield { type: 'done', sessionId }
     }
   }

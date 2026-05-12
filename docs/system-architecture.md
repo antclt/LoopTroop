@@ -46,7 +46,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 | `.ticket/beads/<flow>/.beads/issues.jsonl` | The current bead plan for a given flow or base branch | Stored as line-oriented JSONL, but rewritten atomically on updates |
 | `.ticket/runtime/execution-log.jsonl` | Durable normal execution and phase log stream | Read by `/api/files/:ticketId/logs` and folded for UI display; internal CMD rows are result-only summaries rather than recurring progress streams |
 | `.ticket/runtime/execution-log.debug.jsonl` | Persisted debug/forensic execution log stream | Read by `/api/files/:ticketId/logs?channel=debug`; supports the same log filters |
-| `.ticket/runtime/execution-log.ai.jsonl` | Persisted AI detail log stream for prompts, thinking, tool calls, and streamed model rows | Read by `/api/files/:ticketId/logs?channel=ai`; folded into AI/model log views |
+| `.ticket/runtime/execution-log.ai.jsonl` | Persisted AI detail log stream for prompts, thinking, tool calls, and streamed model rows | Read by `/api/files/:ticketId/logs?channel=ai`; folded into AI/model log views; finalized message parts are also backfilled from `session.messages()` so detail history does not depend on a browser or live SSE stream being open |
 | `.ticket/runtime/state.yaml` | Runtime state projection for the active execution | Used for restart and status projection |
 | `.ticket/runtime/execution-setup-profile.json` | Concrete execution environment profile | Separate from the reviewable setup plan artifact |
 | `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps |

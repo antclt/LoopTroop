@@ -41,6 +41,12 @@ function getNormalPersistedEntries() {
     .map(([, payload]) => JSON.parse(payload))
 }
 
+function getAiPersistedEntries() {
+  return mockAppend.mock.calls
+    .filter(([logPath]) => logPath === '/tmp/test-execution-log.ai.jsonl')
+    .map(([, payload]) => JSON.parse(payload))
+}
+
 function getPersistedTextEntries() {
   return getNormalPersistedEntries().filter((entry) => entry.kind === 'text')
 }
@@ -315,6 +321,157 @@ describe('OpenCode log canonicalization', () => {
       }),
     ])
     expect(getPersistedEntries().some((entry) => entry.entryId === 'ses-3:transcript-summary')).toBe(false)
+  })
+
+  it('backfills reasoning, tool, and step AI detail rows from completed session messages', () => {
+    const state = createOpenCodeStreamState()
+
+    emitOpenCodeSessionLogs(
+      '1:T-42',
+      'T-42',
+      'SCANNING_RELEVANT_FILES',
+      'openai/gpt-5.3-codex',
+      'ses-snapshot',
+      'relevant_files_scan',
+      '<RESULT>done</RESULT>',
+      [
+        {
+          id: 'msg-snapshot',
+          role: 'assistant',
+          content: '<RESULT>done</RESULT>',
+          parts: [
+            {
+              id: 'step-start-1',
+              sessionID: 'ses-snapshot',
+              messageID: 'msg-snapshot',
+              type: 'step-start',
+            },
+            {
+              id: 'reasoning-1',
+              sessionID: 'ses-snapshot',
+              messageID: 'msg-snapshot',
+              type: 'reasoning',
+              text: 'thinking through relevant files',
+            },
+            {
+              id: 'tool-1',
+              sessionID: 'ses-snapshot',
+              messageID: 'msg-snapshot',
+              type: 'tool',
+              callID: 'call-1',
+              tool: 'bash',
+              state: {
+                status: 'completed',
+                title: 'List source',
+                input: { command: 'rg --files src' },
+                output: 'src/App.tsx',
+              },
+            },
+            {
+              id: 'text-1',
+              sessionID: 'ses-snapshot',
+              messageID: 'msg-snapshot',
+              type: 'text',
+              text: '<RESULT>done</RESULT>',
+            },
+            {
+              id: 'step-finish-1',
+              sessionID: 'ses-snapshot',
+              messageID: 'msg-snapshot',
+              type: 'step-finish',
+              reason: 'stop',
+            },
+          ],
+        },
+      ],
+      state,
+    )
+
+    const aiEntries = getAiPersistedEntries()
+    expect(aiEntries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        entryId: 'ses-snapshot:step-start-1',
+        kind: 'step',
+        op: 'append',
+        content: 'Step started.',
+      }),
+      expect.objectContaining({
+        entryId: 'ses-snapshot:reasoning-1',
+        kind: 'reasoning',
+        op: 'finalize',
+        content: 'thinking through relevant files',
+      }),
+      expect.objectContaining({
+        entryId: 'ses-snapshot:tool-1',
+        kind: 'tool',
+        op: 'finalize',
+        content: expect.stringContaining('[TOOL] bash completed: List source'),
+      }),
+      expect.objectContaining({
+        entryId: 'ses-snapshot:step-finish-1',
+        kind: 'step',
+        op: 'finalize',
+        content: 'Step finished: stop',
+      }),
+    ]))
+    expect(aiEntries.find((entry) => entry.entryId === 'ses-snapshot:tool-1')?.content).toContain('"command": "rg --files src"')
+    expect(aiEntries.find((entry) => entry.entryId === 'ses-snapshot:tool-1')?.content).toContain('Output:\nsrc/App.tsx')
+  })
+
+  it('does not duplicate AI part rows already finalized from the live stream', () => {
+    const state = createOpenCodeStreamState()
+
+    emitOpenCodeStreamEvent('1:T-42', 'T-42', 'CODING', 'openai/gpt-5.4', 'ses-live', {
+      type: 'tool',
+      sessionId: 'ses-live',
+      messageId: 'msg-live',
+      partId: 'part-tool',
+      tool: 'bash',
+      callId: 'call-live',
+      status: 'completed',
+      title: 'Run tests',
+      input: { command: 'npm test' },
+      output: 'pass',
+      complete: true,
+    }, state, 'bead-1')
+
+    emitOpenCodeSessionLogs(
+      '1:T-42',
+      'T-42',
+      'CODING',
+      'openai/gpt-5.4',
+      'ses-live',
+      'coding_main',
+      '<BEAD_STATUS>{"status":"done"}</BEAD_STATUS>',
+      [
+        {
+          id: 'msg-live',
+          role: 'assistant',
+          content: '<BEAD_STATUS>{"status":"done"}</BEAD_STATUS>',
+          parts: [
+            {
+              id: 'part-tool',
+              sessionID: 'ses-live',
+              messageID: 'msg-live',
+              type: 'tool',
+              callID: 'call-live',
+              tool: 'bash',
+              state: {
+                status: 'completed',
+                title: 'Run tests',
+                input: { command: 'npm test' },
+                output: 'pass',
+              },
+            },
+          ],
+        },
+      ],
+      state,
+      'bead-1',
+    )
+
+    const aiToolEntries = getAiPersistedEntries().filter((entry) => entry.entryId === 'ses-live:part-tool')
+    expect(aiToolEntries).toHaveLength(1)
   })
 
   it('retains beadId on finalized streamed text rows', () => {

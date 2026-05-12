@@ -5,7 +5,7 @@ import { buildOpenCodeQuestionLogIdentity } from '@shared/logIdentity'
 import { type TicketState } from '../../opencode/contextBuilder'
 import { analyzeAssistantMessages } from '../../opencode/assistantMessageAnalysis'
 import { hasRichModelErrorInfo, summarizeModelErrorForLog } from '../../opencode/errorDetails'
-import type { Message, PromptPart, StreamEvent } from '../../opencode/types'
+import type { Message, MessagePart, PromptPart, StreamEvent } from '../../opencode/types'
 import { PROM5, PROM13, PROM23 } from '../../prompts/index'
 import type {
   DraftProgressEvent,
@@ -262,6 +262,7 @@ export function createOpenCodeStreamState(): OpenCodeStreamState {
     liveTextMessages: new Map(),
     textPartToMessageIds: new Map(),
     finalizedTextEntryIds: new Set(),
+    finalizedDetailEntryIds: new Set(),
   }
 }
 
@@ -297,6 +298,17 @@ function shouldEmitStreamingLogUpdate(
 
 function getTextMessageEntryId(sessionId: string, messageId: string): string {
   return `${sessionId}:${messageId}:text`
+}
+
+function getPartEntryId(sessionId: string, partId: string): string {
+  return `${sessionId}:${partId}`
+}
+
+function rememberFinalizedDetailEntry(
+  state: OpenCodeStreamState | undefined,
+  entryId: string,
+) {
+  state?.finalizedDetailEntryIds.add(entryId)
 }
 
 function getOrCreateLiveTextMessage(
@@ -508,6 +520,7 @@ export function finalizeOpenCodeParts(
         },
       )
       state.finalizedTextEntryIds.add(message.entryId)
+      rememberFinalizedDetailEntry(state, message.entryId)
     }
     state.liveStreamEmissions.delete(message.entryId)
   }
@@ -530,18 +543,19 @@ export function finalizeOpenCodeParts(
       phase,
       LOG_TYPE_BY_KIND[kind] ?? 'info',
       content,
-        {
-          entryId,
-          audience: 'ai',
-          kind,
-          op: 'finalize',
-          source,
-          modelId: memberId || undefined,
-          sessionId,
-          ...(beadId ? { beadId } : {}),
-          streaming: false,
-        },
-      )
+      {
+        entryId,
+        audience: 'ai',
+        kind,
+        op: 'finalize',
+        source,
+        modelId: memberId || undefined,
+        sessionId,
+        ...(beadId ? { beadId } : {}),
+        streaming: false,
+      },
+    )
+    rememberFinalizedDetailEntry(state, entryId)
     state.liveStreamEmissions.delete(entryId)
   }
   state.liveTextMessages.clear()
@@ -550,6 +564,163 @@ export function finalizeOpenCodeParts(
   state.liveContents.clear()
   state.liveStreamEmissions.clear()
   state.todoStatuses.clear()
+}
+
+function getRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null
+}
+
+function getString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined
+}
+
+function getAssistantMessageId(message: Message): string | undefined {
+  return message.id || message.info?.id || undefined
+}
+
+function isAssistantMessage(message: Message): boolean {
+  return message.role === 'assistant' || message.info?.role === 'assistant'
+}
+
+function selectAssistantMessageForDetailBackfill(
+  messages: Message[],
+  latestAssistantMessageId?: string,
+): Message | undefined {
+  if (latestAssistantMessageId) {
+    const matching = messages.find((message) =>
+      isAssistantMessage(message) && getAssistantMessageId(message) === latestAssistantMessageId,
+    )
+    if (matching) return matching
+  }
+
+  return [...messages].reverse().find(isAssistantMessage)
+}
+
+type ToolStatus = Extract<StreamEvent, { type: 'tool' }>['status']
+const TOOL_STATUSES: ReadonlySet<string> = new Set(['pending', 'running', 'completed', 'error'])
+
+function normalizeToolStatus(value: unknown): ToolStatus {
+  return typeof value === 'string' && TOOL_STATUSES.has(value)
+    ? value as ToolStatus
+    : 'completed'
+}
+
+function emitBackfilledAiDetail(
+  ticketId: string,
+  ticketExternalId: string,
+  phase: string,
+  type: LogEventType,
+  content: string,
+  state: OpenCodeStreamState | undefined,
+  fields: StructuredLogFields,
+) {
+  if (state?.finalizedDetailEntryIds.has(fields.entryId)) return
+  emitAiDetail(ticketId, ticketExternalId, phase, type, content, {
+    ...fields,
+    op: fields.op === 'upsert' ? 'finalize' : fields.op,
+    streaming: false,
+  })
+  rememberFinalizedDetailEntry(state, fields.entryId)
+}
+
+function emitAssistantMessagePartDetails(
+  ticketId: string,
+  ticketExternalId: string,
+  phase: string,
+  memberId: string,
+  sessionId: string,
+  message: Message | undefined,
+  state?: OpenCodeStreamState,
+  beadId?: string,
+) {
+  if (!message?.parts?.length) return
+
+  const messageId = getAssistantMessageId(message)
+  const source = memberId ? `model:${memberId}` : 'opencode'
+  for (const part of message.parts) {
+    const partRecord = part as MessagePart & Record<string, unknown>
+    const partId = getString(partRecord.id)
+    if (!partId) continue
+
+    const entryId = getPartEntryId(sessionId, partId)
+    const commonFields = {
+      entryId,
+      audience: 'ai' as const,
+      source,
+      modelId: memberId || undefined,
+      sessionId,
+      ...(beadId ? { beadId } : {}),
+    }
+
+    if (part.type === 'reasoning') {
+      const text = getString(partRecord.text)?.trimEnd() ?? ''
+      if (!text) continue
+      emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'model_output', text, state, {
+        ...commonFields,
+        kind: 'reasoning',
+        op: 'finalize',
+      })
+      continue
+    }
+
+    if (part.type === 'tool') {
+      const stateRecord = getRecord(partRecord.state)
+      const tool = getString(partRecord.tool) ?? 'tool'
+      const status = normalizeToolStatus(stateRecord?.status)
+      const input = getRecord(stateRecord?.input) ?? undefined
+      const output = getString(stateRecord?.output)
+      const error = getString(stateRecord?.error)
+      const title = getString(stateRecord?.title)
+      const content = formatToolState({
+        type: 'tool',
+        sessionId,
+        ...(messageId ? { messageId } : {}),
+        partId,
+        tool,
+        callId: getString(partRecord.callID) ?? partId,
+        status,
+        ...(title ? { title } : {}),
+        ...(input ? { input } : {}),
+        ...(output ? { output } : {}),
+        ...(error ? { error } : {}),
+        complete: true,
+      })
+      emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'info', content, state, {
+        ...commonFields,
+        kind: 'tool',
+        op: 'finalize',
+      })
+      continue
+    }
+
+    if (part.type === 'step-start') {
+      emitBackfilledAiDetail(ticketId, ticketExternalId, phase, 'info', 'Step started.', state, {
+        ...commonFields,
+        kind: 'step',
+        op: 'append',
+      })
+      continue
+    }
+
+    if (part.type === 'step-finish') {
+      const reason = getString(partRecord.reason)
+      emitBackfilledAiDetail(
+        ticketId,
+        ticketExternalId,
+        phase,
+        'info',
+        `Step finished${reason ? `: ${reason}` : '.'}`,
+        state,
+        {
+          ...commonFields,
+          kind: 'step',
+          op: 'finalize',
+        },
+      )
+    }
+  }
 }
 
 export function emitOpenCodeStreamEvent(
@@ -608,6 +779,7 @@ export function emitOpenCodeStreamEvent(
       },
     )
     if (event.complete) {
+      rememberFinalizedDetailEntry(state, entryId)
       state.liveKinds.delete(partId)
       state.liveContents.delete(partId)
       state.liveStreamEmissions.delete(entryId)
@@ -669,6 +841,7 @@ export function emitOpenCodeStreamEvent(
       },
     )
     if (event.complete) {
+      rememberFinalizedDetailEntry(state, `${sessionId}:${partId}`)
       state.liveKinds.delete(partId)
       state.liveContents.delete(partId)
     }
@@ -698,6 +871,7 @@ export function emitOpenCodeStreamEvent(
         streaming: false,
       },
     )
+    rememberFinalizedDetailEntry(state, `${sessionId}:${partId}`)
     if (event.complete) {
       state.liveKinds.delete(partId)
       state.liveContents.delete(partId)
@@ -967,6 +1141,18 @@ export function emitOpenCodeSessionLogs(
   const hasCanonicalStreamedText = latestTextEntryId
     ? state?.finalizedTextEntryIds.has(latestTextEntryId) ?? false
     : false
+  const latestAssistantMessage = selectAssistantMessageForDetailBackfill(messages, latestAssistantMessageId)
+
+  emitAssistantMessagePartDetails(
+    ticketId,
+    ticketExternalId,
+    phase,
+    memberId,
+    sessionId,
+    latestAssistantMessage,
+    state,
+    beadId,
+  )
 
   if (fallbackContent && !hasCanonicalStreamedText) {
     const entryId = latestTextEntryId
@@ -993,6 +1179,7 @@ export function emitOpenCodeSessionLogs(
     if (latestTextEntryId) {
       state?.finalizedTextEntryIds.add(latestTextEntryId)
     }
+    rememberFinalizedDetailEntry(state, entryId)
   }
 
   if (responseMeta.latestAssistantHasError && hasRichModelErrorInfo(responseMeta.latestAssistantErrorInfo)) {

@@ -1264,6 +1264,88 @@ describe('runOpenCodePrompt', () => {
     expect(events[events.length - 1]?.type).toBe('done')
   })
 
+  it('subscribeToEvents does not synthesize completion when a stream closes before a terminal session event', async () => {
+    const fakeClient = createFakeSdkClient({
+      get: async () => ({ data: { directory: '/tmp/project' } }),
+      subscribe: async () => ({
+        stream: (async function* () {
+          yield {
+            type: 'workspace.ready',
+            properties: {},
+          }
+        })(),
+      }),
+    })
+    const sdkAdapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+
+    const events: StreamEvent[] = []
+    for await (const event of sdkAdapter.subscribeToEvents('ses-1', undefined, 50)) {
+      events.push(event)
+    }
+
+    expect(events.some(e => e.type === 'done')).toBe(false)
+  })
+
+  it('uses the final snapshot after early stream close without emitting synthetic done for prompt echoes', async () => {
+    const fakeClient = createFakeSdkClient({
+      get: async () => ({ data: { directory: '/tmp/project' } }),
+      prompt: async () => ({
+        data: {
+          info: { id: 'msg-echo' },
+          parts: [
+            {
+              type: 'text',
+              text: [
+                'CRITICAL OUTPUT RULE:',
+                'Return strict machine-readable output.',
+                '',
+                'CONTEXT REFRESH:',
+                'Use the latest ticket context.',
+              ].join('\n'),
+            },
+          ],
+        },
+      }),
+      messages: async () => ({
+        data: [
+          {
+            info: { id: 'msg-final', role: 'assistant', time: { created: Date.now() } },
+            parts: [
+              {
+                id: 'part-final',
+                type: 'text',
+                text: '<FINAL_RESULT>done</FINAL_RESULT>',
+                sessionID: 'ses-1',
+                messageID: 'msg-final',
+                time: { end: Date.now() },
+              },
+            ],
+          },
+        ],
+      }),
+      subscribe: async () => ({
+        stream: (async function* () {
+          yield {
+            type: 'workspace.ready',
+            properties: {},
+          }
+        })(),
+      }),
+    })
+    const sdkAdapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+    const events: StreamEvent[] = []
+
+    const response = await sdkAdapter.promptSession(
+      'ses-1',
+      [{ type: 'text', content: 'Prompt body' }],
+      undefined,
+      { onEvent: event => events.push(event) },
+    )
+
+    expect(response).toBe('<FINAL_RESULT>done</FINAL_RESULT>')
+    expect(events.some(event => event.type === 'done')).toBe(false)
+  })
+
   it('preserves OpenCode tool input, output, and error details in stream events', async () => {
     const fakeClient = createFakeSdkClient({
       get: async () => ({ data: { directory: '/tmp/project' } }),

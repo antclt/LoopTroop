@@ -28,6 +28,7 @@ All notable changes to LoopTroop will be documented in this file.
 - `errorDiagnostics` `modelId` and similar fields now computed once and reused instead of double-sanitising.
 
 ### Bug Fixes
+- AI detail logs now backfill finalized thinking, tool, and step rows from OpenCode `session.messages()` parts after each prompt completes, so AI/model tabs can restore extended logs even when the browser was not open during the phase or the live event stream closed early.
 - Ticket dashboards now normalize partially cached ticket runtime/action/model data before rendering, preventing a full-page crash during fast start and workflow phase transitions.
 - `isRecord` type guard now correctly excludes `Date`, `Map`, and `Set` instances.
 - `parsePort` now accepts only digit-only TCP port strings so malformed values like `"3000abc"`, `"123.4"`, or `"300e0"` fall back instead of being partially accepted.

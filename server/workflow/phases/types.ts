@@ -50,4 +50,5 @@ export interface OpenCodeStreamState {
   }>
   textPartToMessageIds: Map<string, string>
   finalizedTextEntryIds: Set<string>
+  finalizedDetailEntryIds: Set<string>
 }
