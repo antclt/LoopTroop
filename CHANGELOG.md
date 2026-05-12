@@ -20,6 +20,8 @@ All notable changes to LoopTroop will be documented in this file.
 - Basic auth header builder now validates that the username does not contain `:` (RFC 7617 compliance).
 
 ### Performance
+- `npm run dev` startup logs are quieter by default: held dependency/audit details, raw npm install output, socket snapshots, and the full service plan now require `LOOPTROOP_DEV_VERBOSE=1`.
+- Dev port inspection now avoids `netstat` unless earlier inspectors cannot identify the listener, removing noisy platform warnings during normal startup while preserving fallback diagnostics in verbose mode.
 - `contextCache` in `contextBuilder.ts` now evicts stale entries on cache misses, preventing unbounded accumulation in long-running processes.
 - `persistedFingerprintsByTicket` map capped at 100 entries to prevent unbounded memory growth.
 - Pre-compiled credential-redaction regex in `errorDiagnostics.ts` (was re-created on every call).

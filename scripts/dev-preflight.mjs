@@ -23,6 +23,7 @@ const binExtension = process.platform === 'win32' ? '.cmd' : ''
 const tsxBin = resolve(repoRoot, 'node_modules', '.bin', `tsx${binExtension}`)
 const installStamp = resolve(repoRoot, 'node_modules', '.package-lock.json')
 const npmInstallFlags = ['--no-fund', '--no-audit']
+const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
 const trackedManifests = [
   resolve(repoRoot, 'package.json'),
   resolve(repoRoot, 'package-lock.json'),
@@ -76,7 +77,9 @@ if (reasons.length > 0) {
 
   const result = spawnSync(npmCommand, ['install', ...npmInstallFlags], {
     cwd: repoRoot,
-    stdio: 'inherit',
+    encoding: 'utf8',
+    stdio: isVerboseLogging ? 'inherit' : 'pipe',
+    windowsHide: true,
   })
 
   if (result.error) {
@@ -84,6 +87,13 @@ if (reasons.length > 0) {
     process.exit(1)
   }
   if (result.status !== 0) {
+    const output = [result.stdout, result.stderr]
+      .filter(Boolean)
+      .join('\n')
+      .trim()
+    if (output) {
+      console.error(output)
+    }
     process.exit(result.status ?? 1)
   }
 }

@@ -90,6 +90,113 @@ describe('port occupant inspection', () => {
     expect(pids).toEqual([15556])
   })
 
+  it('does not call netstat when earlier inspectors identify the listener', () => {
+    const calls: string[] = []
+    const pids = listPortOccupantPids(5173, {
+      platform: 'linux',
+      runCommand: (file, args) => {
+        calls.push(`${file} ${args.join(' ')}`)
+
+        if (file === 'lsof') {
+          return null
+        }
+
+        if (file === 'ss') {
+          return [
+            'State  Recv-Q Send-Q  Local Address:Port  Peer Address:PortProcess',
+            'LISTEN 0      511     127.0.0.1:5173     0.0.0.0:*    users:(("node",pid=15556,fd=28))',
+          ].join('\n')
+        }
+
+        if (file === 'ps' && args[1] === '15556') {
+          return '15556 15500 node /mnt/d/LoopTroop/node_modules/.bin/vite'
+        }
+
+        return null
+      },
+      readCwd: () => '/mnt/d/LoopTroop',
+    })
+
+    expect(pids).toEqual([15556])
+    expect(calls.some((call) => call.startsWith('netstat '))).toBe(false)
+  })
+
+  it('can collect a fallback netstat snapshot for verbose diagnostics', () => {
+    const inspection = inspectPortOccupants(5173, {
+      includeFallbackSnapshot: true,
+      platform: 'linux',
+      runCommand: (file, args) => {
+        if (file === 'lsof') {
+          return null
+        }
+
+        if (file === 'ss') {
+          return [
+            'State  Recv-Q Send-Q  Local Address:Port  Peer Address:PortProcess',
+            'LISTEN 0      511     127.0.0.1:5173     0.0.0.0:*    users:(("node",pid=15556,fd=28))',
+          ].join('\n')
+        }
+
+        if (file === 'netstat') {
+          expect(args).toEqual(['-ltnp'])
+          return [
+            'Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name',
+            'tcp        0      0 127.0.0.1:5173          0.0.0.0:*               LISTEN      15556/node',
+          ].join('\n')
+        }
+
+        if (file === 'ps' && args[1] === '15556') {
+          return '15556 15500 node /mnt/d/LoopTroop/node_modules/.bin/vite'
+        }
+
+        return null
+      },
+      readCwd: () => '/mnt/d/LoopTroop',
+    })
+
+    expect(inspection.occupants.map((occupant) => occupant.pid)).toEqual([15556])
+    expect(inspection.rawSocketSnapshot).toContain('users:(("node",pid=15556')
+    expect(inspection.rawSocketSnapshot).toContain('15556/node')
+  })
+
+  it('uses netstat as a last-resort fallback and parses Linux pid/program tokens', () => {
+    const inspection = inspectPortOccupants(3000, {
+      platform: 'linux',
+      runCommand: (file, args) => {
+        if (file === 'lsof' || file === 'ss') {
+          return null
+        }
+
+        if (file === 'netstat') {
+          expect(args).toEqual(['-ltnp'])
+          return [
+            'Proto Recv-Q Send-Q Local Address           Foreign Address         State       PID/Program name',
+            'tcp        0      0 127.0.0.1:3000          0.0.0.0:*               LISTEN      300/python',
+          ].join('\n')
+        }
+
+        if (file === 'ps' && args[1] === '300') {
+          return '300 1 python python -m http.server 3000'
+        }
+
+        return null
+      },
+      readCwd: () => '/tmp/example',
+    })
+
+    expect(inspection.rawSocketSnapshot).toContain('127.0.0.1:3000')
+    expect(inspection.occupants).toEqual([
+      {
+        pid: 300,
+        ppid: 1,
+        program: 'python',
+        command: 'python -m http.server 3000',
+        cwd: '/tmp/example',
+        source: 'netstat',
+      },
+    ])
+  })
+
   it('caps formatted output to the first two occupants and appends the overflow count', () => {
     const label = formatPortOccupantLabel([
       { pid: 1, program: 'alpha', command: 'alpha serve' },

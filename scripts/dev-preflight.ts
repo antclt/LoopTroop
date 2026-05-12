@@ -153,7 +153,7 @@ async function reclaimOccupiedPorts(ports: number[]) {
   const unresolvedOccupants: Array<{ port: number; summary: string }> = []
 
   for (const port of ports) {
-    const inspection = inspectPortOccupants(port)
+    const inspection = inspectPortOccupants(port, { includeFallbackSnapshot: isVerboseLogging })
     const occupantPids = inspection.occupants
       .map((occupant) => occupant.pid)
       .filter((pid): pid is number => typeof pid === 'number' && Number.isInteger(pid) && pid > 0 && pid !== process.pid)
@@ -228,6 +228,14 @@ function formatTimestamp(timestamp?: string) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(date)
+}
+
+function formatVerboseDetailHint(detailCount: number, detailLabel = 'details') {
+  if (isVerboseLogging || detailCount <= 0) {
+    return ''
+  }
+
+  return ` Set LOOPTROOP_DEV_VERBOSE=1 for ${detailLabel}.`
 }
 
 ensureDistinctConfiguredPorts()
@@ -341,11 +349,13 @@ const opencodeReport = shouldSkipOpenCodeUpgrade
   ? upgradeOpenCodeCli({
     verbose: isVerboseLogging,
     skip: true,
+    logPrefix: isVerboseLogging ? 'dev-preflight' : '',
   })
   : opencodeDecision.shouldRun
     ? upgradeOpenCodeCli({
       verbose: isVerboseLogging,
       skip: false,
+      logPrefix: isVerboseLogging ? 'dev-preflight' : '',
     })
     : {
       skipped: false,
@@ -429,7 +439,7 @@ for (const { label, port } of configuredPorts) {
     try {
       await ensurePortFree(port)
     } catch (retryError) {
-      const updatedInspection = inspectPortOccupants(port)
+      const updatedInspection = inspectPortOccupants(port, { includeFallbackSnapshot: isVerboseLogging })
       const message = retryError instanceof Error ? retryError.message : String(retryError)
       console.error(`[dev-preflight] Cannot start LoopTroop ${label} service on port ${port}: ${message}`)
       console.error(`[dev-preflight] ${describePortOccupants(port, updatedInspection)}`)
@@ -461,18 +471,22 @@ if (shouldSkipDependencyMaintenance) {
   } else if (dependencySyncReport.updatedDependencies.length === 0 && dependencySyncReport.updatedDevDependencies.length === 0) {
     console.log(
       `[dev-preflight] Direct dependency sync complete: held ${heldDependencyUpdates.length} ` +
-      `${heldDependencyUpdates.length === 1 ? 'newer release' : 'newer releases'} until the 7-day release delay passes.`,
+      `${heldDependencyUpdates.length === 1 ? 'newer release' : 'newer releases'} until the 7-day release delay passes.` +
+      formatVerboseDetailHint(heldDependencyUpdates.length, 'held-package details'),
     )
   } else {
     console.log(
       `[dev-preflight] Direct dependency sync complete: ` +
       `${dependencySyncReport.updatedDependencies.length} runtime and ` +
-      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated to eligible releases.`,
+      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated to eligible releases.` +
+      formatVerboseDetailHint(heldDependencyUpdates.length, 'held-package details'),
     )
   }
-  for (const held of heldDependencyUpdates.slice(0, 5)) {
-    const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
-    console.log(`[dev-preflight] - held ${held.name}${held.latest ? ` latest=${held.latest}` : ''}${nextEligible}`)
+  if (isVerboseLogging) {
+    for (const held of heldDependencyUpdates.slice(0, 5)) {
+      const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
+      console.log(`[dev-preflight] - held ${held.name}${held.latest ? ` latest=${held.latest}` : ''}${nextEligible}`)
+    }
   }
 
   if (auditReport.deferred) {
@@ -483,11 +497,14 @@ if (shouldSkipDependencyMaintenance) {
     if (auditReport.fixHeld) {
       console.log(
         `[dev-preflight] npm audit remediation held ${auditReport.heldPackageUpdates.length} ` +
-        `${auditReport.heldPackageUpdates.length === 1 ? 'package release' : 'package releases'} until the 7-day release delay passes.`,
+        `${auditReport.heldPackageUpdates.length === 1 ? 'package release' : 'package releases'} until the 7-day release delay passes.` +
+        formatVerboseDetailHint(auditReport.heldPackageUpdates.length, 'held audit package details'),
       )
-      for (const held of auditReport.heldPackageUpdates.slice(0, 5)) {
-        const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
-        console.log(`[dev-preflight] - held audit fix ${held.name}${held.version ? `@${held.version}` : ''}${nextEligible}`)
+      if (isVerboseLogging) {
+        for (const held of auditReport.heldPackageUpdates.slice(0, 5)) {
+          const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
+          console.log(`[dev-preflight] - held audit fix ${held.name}${held.version ? `@${held.version}` : ''}${nextEligible}`)
+        }
       }
     }
 
@@ -496,10 +513,13 @@ if (shouldSkipDependencyMaintenance) {
     } else {
       console.log(
         `[dev-preflight] npm audit summary: ${auditReport.totals.total} remaining ` +
-        `(high=${auditReport.totals.high}, moderate=${auditReport.totals.moderate}).`,
+        `(high=${auditReport.totals.high}, moderate=${auditReport.totals.moderate}).` +
+        formatVerboseDetailHint(auditReport.unresolved.length, 'audit finding details'),
       )
-      for (const issue of auditReport.unresolved.slice(0, 5)) {
-        console.log(`[dev-preflight] - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
+      if (isVerboseLogging) {
+        for (const issue of auditReport.unresolved.slice(0, 5)) {
+          console.log(`[dev-preflight] - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
+        }
       }
     }
   }

@@ -13,6 +13,7 @@ const requestedBaseUrl = process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim() || DEFA
 const hasExplicitBaseUrl = Boolean(process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim())
 const childEnv = { ...process.env }
 const preflightReport = readDevPreflightReport()
+const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
 let shutdownSignal: NodeJS.Signals | null = null
 let shutdownStartedAtMs: number | null = null
 
@@ -102,6 +103,14 @@ function formatMaintenanceTimestamp(timestamp?: string) {
 
 function getHeldDependencyCount(report: DependencySyncReport) {
   return (report.heldDependencies?.length ?? 0) + (report.heldDevDependencies?.length ?? 0)
+}
+
+function formatVerboseDetailHint(detailCount: number, detailLabel = 'details') {
+  if (isVerboseLogging || detailCount <= 0) {
+    return ''
+  }
+
+  return ` Set LOOPTROOP_DEV_VERBOSE=1 for ${detailLabel}.`
 }
 
 const services: DevService[] = [
@@ -214,23 +223,28 @@ if (preflightReport) {
     printSummaryLine(
       'Audit',
       `${preflightReport.audit.totals.total} remaining finding(s): ` +
-      `high=${preflightReport.audit.totals.high}, moderate=${preflightReport.audit.totals.moderate}`,
+      `high=${preflightReport.audit.totals.high}, moderate=${preflightReport.audit.totals.moderate}.` +
+      formatVerboseDetailHint(preflightReport.audit.unresolved.length, 'audit finding details'),
     )
-    for (const issue of preflightReport.audit.unresolved.slice(0, 3)) {
-      console.log(`[dev]   - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
+    if (isVerboseLogging) {
+      for (const issue of preflightReport.audit.unresolved.slice(0, 3)) {
+        console.log(`[dev]   - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
+      }
     }
   }
 }
 
-printDivider('Service Plan')
-console.log('[dev] Step 1        Preflight checks already completed before this launcher started.')
-console.log('[dev]               Purpose: install missing packages, validate ports, and run daily dependency/audit/OpenCode maintenance.')
+if (isVerboseLogging) {
+  printDivider('Service Plan')
+  console.log('[dev] Step 1        Preflight checks already completed before this launcher started.')
+  console.log('[dev]               Purpose: install missing packages, validate ports, and run daily dependency/audit/OpenCode maintenance.')
 
-services.forEach((service, index) => {
-  const stepNumber = index + 2
-  console.log(`[dev] Step ${String(stepNumber).padEnd(8)} ${service.name}  ${service.displayCommand}`)
-  console.log(`[dev]               Purpose: ${service.description}`)
-})
+  services.forEach((service, index) => {
+    const stepNumber = index + 2
+    console.log(`[dev] Step ${String(stepNumber).padEnd(8)} ${service.name}  ${service.displayCommand}`)
+    console.log(`[dev]               Purpose: ${service.description}`)
+  })
+}
 
 printDivider('Live Services')
 console.log('[dev] Launching frontend, backend, docs, and OpenCode watchers...')

@@ -1169,12 +1169,7 @@ export function remediateAudit(
         heldPackageUpdates.push(...findHeldAuditPackageUpdates(lockfileUpdates.updates, { verbose }))
         fixHeld = heldPackageUpdates.length > 0
 
-        if (fixHeld) {
-          console.log(
-            `[dev-preflight] Holding npm audit fix because ${heldPackageUpdates.length} proposed ` +
-            `${heldPackageUpdates.length === 1 ? 'package release is' : 'package releases are'} inside the 7-day delay.`,
-          )
-        } else {
+        if (!fixHeld) {
           try {
             didFixRun = true
             runCommand(['audit', 'fix'], 'npm audit fix', { verbose })

@@ -10,7 +10,7 @@ This guide covers the parts of LoopTroop you deal with after the first run: star
 | Start once without dependency/audit mutation | `LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev` |
 | Skip only the local OpenCode CLI upgrade | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev` |
 | Force all startup maintenance now | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
-| Show raw maintenance output | `LOOPTROOP_DEV_VERBOSE=1 npm run dev` |
+| Show raw maintenance output and full startup diagnostics | `LOOPTROOP_DEV_VERBOSE=1 npm run dev` |
 | Diagnose slow UI or ticket refresh stalls | `npm run diagnose:stall` |
 | Clean tracked LoopTroop runtime paths from a project | `git rm --cached -r .looptroop` inside the attached project |
 
@@ -38,7 +38,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - previews `npm audit fix` lockfile changes and runs the fix only when every proposed npm package version has passed the same 7-day delay
 - upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
-- prints the startup plan for each dev service
+- prints concise startup summaries by default, with held-package lists, audit finding details, raw npm install output, socket snapshots, and the full service plan available through `LOOPTROOP_DEV_VERBOSE=1`
 
 `npm run dev` also resolves the local OpenCode server endpoint before the dev services launch:
 
@@ -49,7 +49,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 
 That means `npm run dev` can intentionally mutate local dependency files when aged direct dependency updates or audit fixes are available. The expensive networked maintenance work is daily-gated during normal startup. Direct dependency sync, npm audit remediation, and OpenCode CLI upgrade checks run on the first local dev start of the day. If `package.json` or `package-lock.json` changes later the same day, the affected maintenance step runs again immediately.
 
-The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held package. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
+The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held count during normal startup. Use `LOOPTROOP_DEV_VERBOSE=1` to print the exact held packages, next eligible times, and known audit finding notes. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
 
 ## Maintenance Commands
 
@@ -147,7 +147,7 @@ The app database is runtime-bootstrapped by `server/db/init.ts`. The committed m
 | `LOOPTROOP_CONFIG_DIR` | Override the app config directory |
 | `LOOPTROOP_APP_DB_PATH` | Override the app database path directly |
 | `LOOPTROOP_PROJECT_DB_PATH` | Project database target for explicit Drizzle project DB commands |
-| `LOOPTROOP_DEV_VERBOSE=1` | Print full dependency, audit, and process details during dev preflight |
+| `LOOPTROOP_DEV_VERBOSE=1` | Print full dependency, audit, npm install, service-plan, and process details during dev preflight |
 | `LOOPTROOP_DEV_SKIP_DEPS=1` | Skip automatic dependency sync and audit remediation during `npm run dev` |
 | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1` | Skip the automatic local OpenCode CLI upgrade during `npm run dev` |
 | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` | Bypass the once-per-day maintenance gate and force all startup maintenance checks now |

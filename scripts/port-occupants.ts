@@ -21,6 +21,7 @@ export type PortOccupantInspection = {
 }
 
 type PortInspectorDeps = {
+  includeFallbackSnapshot: boolean
   readCwd: (pid: number) => string | null
   runCommand: (file: string, args: string[]) => string | null
   platform: NodeJS.Platform
@@ -28,6 +29,7 @@ type PortInspectorDeps = {
 
 function createDefaultDeps(): PortInspectorDeps {
   return {
+    includeFallbackSnapshot: false,
     readCwd: (pid) => {
       if (process.platform !== 'linux') {
         return null
@@ -41,7 +43,11 @@ function createDefaultDeps(): PortInspectorDeps {
     },
     runCommand: (file, args) => {
       try {
-        return execFileSync(file, args, { encoding: 'utf8' }).trimEnd()
+        return execFileSync(file, args, {
+          encoding: 'utf8',
+          stdio: ['ignore', 'pipe', 'pipe'],
+          windowsHide: true,
+        }).trimEnd()
       } catch {
         return null
       }
@@ -69,6 +75,14 @@ function normalizeSocketSnapshot(output: string | null) {
     .filter(Boolean)
 
   return lines.length > 1 ? lines.join('\n') : null
+}
+
+function combineSocketSnapshots(...snapshots: Array<string | null>) {
+  const normalized = snapshots
+    .map((snapshot) => normalizeSocketSnapshot(snapshot))
+    .filter((snapshot): snapshot is string => Boolean(snapshot))
+
+  return normalized.length > 0 ? normalized.join('\n') : null
 }
 
 function parseLsofOccupants(output: string | null): PortOccupantInfo[] {
@@ -134,7 +148,7 @@ function parseNetstatOccupants(output: string | null, port: number): PortOccupan
     const parts = trimmed.split(/\s+/)
     if (!parts.some((part) => addressTokenHasPort(part, port))) continue
 
-    const pid = parseInteger(parts.at(-1))
+    const pid = parseNetstatPid(parts.at(-1))
     if (!pid) continue
 
     occupants.push({
@@ -148,6 +162,23 @@ function parseNetstatOccupants(output: string | null, port: number): PortOccupan
   }
 
   return occupants
+}
+
+function parseNetstatPid(value: string | undefined) {
+  if (!value) return null
+  return parseInteger(value) ?? parseInteger(value.match(/^(\d+)(?:\/|$)/)?.[1])
+}
+
+function getNetstatArgs(platform: NodeJS.Platform) {
+  if (platform === 'win32') {
+    return ['-ano', '-p', 'tcp']
+  }
+
+  if (platform === 'linux') {
+    return ['-ltnp']
+  }
+
+  return ['-an', '-p', 'tcp']
 }
 
 function parseJsonRecords(output: string | null): Array<Record<string, unknown>> {
@@ -283,7 +314,9 @@ export function inspectPortOccupants(
 
   const lsofOutput = deps.runCommand('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'])
   const ssOutput = deps.runCommand('ss', ['-ltnp', `( sport = :${port} )`])
-  const powerShellOutput = deps.platform === 'win32'
+  const lsofOccupants = parseLsofOccupants(lsofOutput)
+  const ssOccupants = parseSsOccupants(ssOutput)
+  const powerShellOutput = deps.platform === 'win32' && lsofOccupants.length === 0 && ssOccupants.length === 0
     ? deps.runCommand('powershell.exe', [
       '-NoProfile',
       '-NonInteractive',
@@ -291,21 +324,24 @@ export function inspectPortOccupants(
       `Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue | Select-Object OwningProcess | ConvertTo-Json -Compress`,
     ])
     : null
-  const netstatOutput = deps.runCommand(
-    'netstat',
-    deps.platform === 'win32' ? ['-ano', '-p', 'tcp'] : ['-anv', '-p', 'tcp'],
-  )
-  const rawSocketSnapshot = normalizeSocketSnapshot(ssOutput) ?? normalizeSocketSnapshot(netstatOutput)
+  const powerShellOccupants = parsePowerShellOccupants(powerShellOutput)
+  const shouldTryNetstat =
+    deps.includeFallbackSnapshot ||
+    (lsofOccupants.length === 0 &&
+      ssOccupants.length === 0 &&
+      powerShellOccupants.length === 0)
+  const netstatOutput = shouldTryNetstat ? deps.runCommand('netstat', getNetstatArgs(deps.platform)) : null
+  const netstatOccupants = parseNetstatOccupants(netstatOutput, port)
+  const rawSocketSnapshot = combineSocketSnapshots(ssOutput, netstatOutput)
 
-  const discoveredOccupants = parseLsofOccupants(lsofOutput)
   const occupants = dedupeByPid(
-    discoveredOccupants.length > 0
-      ? discoveredOccupants
-      : parseSsOccupants(ssOutput).length > 0
-        ? parseSsOccupants(ssOutput)
-        : parsePowerShellOccupants(powerShellOutput).length > 0
-          ? parsePowerShellOccupants(powerShellOutput)
-          : parseNetstatOccupants(netstatOutput, port),
+    lsofOccupants.length > 0
+      ? lsofOccupants
+      : ssOccupants.length > 0
+        ? ssOccupants
+        : powerShellOccupants.length > 0
+          ? powerShellOccupants
+          : netstatOccupants,
   ).map((occupant) => enrichOccupant(occupant, deps))
 
   return {
