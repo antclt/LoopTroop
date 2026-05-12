@@ -79,12 +79,11 @@ export default defineConfig({
         plugins: [react()],
         test: {
           // jsdom tests need isolation (DOM/localStorage state must not leak between files).
-          // maxWorkers: 4 = 16 total workers across all projects, matching CPU count exactly.
           name: 'client-dom',
           environment: 'jsdom',
           pool: 'forks',
           fileParallelism: true,
-          maxWorkers: 4,
+          maxWorkers: 6,
           isolate: true,
           sequence: { groupOrder: 0 },
           setupFiles: ['./src/test/setup.ts'],
@@ -102,7 +101,7 @@ export default defineConfig({
           environment: 'node',
           pool: 'threads',
           fileParallelism: true,
-          maxWorkers: 4,
+          maxWorkers: 6,
           isolate: false,
           sequence: { groupOrder: 0 },
           include: [...clientNodeTests],
@@ -118,7 +117,7 @@ export default defineConfig({
           environment: 'node',
           pool: 'threads',
           fileParallelism: true,
-          maxWorkers: 4,
+          maxWorkers: 6,
           isolate: false,
           sequence: { groupOrder: 0 },
           setupFiles: ['./server/test/setup.ts'],
@@ -133,12 +132,11 @@ export default defineConfig({
         extends: true,
         test: {
           // Integration tests touch the DB and git filesystem — keep forks + isolation.
-          // Reduce workers from 6→4 to avoid CPU contention when running alongside client-dom.
           name: 'server-integration',
           environment: 'node',
           pool: 'forks',
           fileParallelism: true,
-          maxWorkers: 4,
+          maxWorkers: 6,
           isolate: true,
           sequence: { groupOrder: 0 },
           setupFiles: ['./server/test/setup.ts'],
