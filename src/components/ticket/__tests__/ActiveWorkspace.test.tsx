@@ -36,10 +36,6 @@ vi.mock('@/components/workspace/ErrorView', () => ({
   ),
 }))
 
-vi.mock('@/components/workspace/DoneView', () => ({
-  DoneView: () => <div>done view</div>,
-}))
-
 vi.mock('@/components/workspace/CanceledView', () => ({
   CanceledView: () => <div>canceled view</div>,
 }))

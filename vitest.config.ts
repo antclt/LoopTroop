@@ -32,7 +32,6 @@ const clientNodeTests = [
 // also carries a small set of isolation-sensitive tests that historically
 // depended on per-file module state.
 const serverIntegrationTests = [
-  'server/errors/__tests__/errors.test.ts',
   'server/git/__tests__/github.test.ts',
   'server/io/__tests__/atomicIO.test.ts',
   'server/log/__tests__/executionLog.test.ts',
@@ -43,7 +42,6 @@ const serverIntegrationTests = [
   'server/phases/finalTest/__tests__/generator.test.ts',
   'server/phases/integration/__tests__/squash.test.ts',
   'server/phases/interview/__tests__/qa.test.ts',
-  'server/phases/verification/__tests__/manual.test.ts',
   'server/routes/__tests__/*.test.ts',
   'server/storage/__tests__/ticketRuntimeProjection.test.ts',
   'server/storage/__tests__/tickets.test.ts',

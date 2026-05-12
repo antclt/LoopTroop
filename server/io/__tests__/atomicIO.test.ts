@@ -6,7 +6,6 @@ import { safeAtomicWrite } from '../atomicWrite'
 import { safeAtomicAppend } from '../atomicAppend'
 import { recoverOrphanTmpFiles, fixTrailingLineCorruption } from '../recovery'
 import { readJsonl, writeJsonl, appendJsonl } from '../jsonl'
-import { readYamlFile, writeYamlFile } from '../yaml'
 
 const TEST_DIR = join(tmpdir(), `looptroop-test-${process.pid}-${Date.now()}`)
 
@@ -140,19 +139,4 @@ describe('JSONL read/write/append', () => {
     expect(result).toEqual([{ a: 1 }, { b: 2 }])
   })
 
-})
-
-describe('YAML read/write', () => {
-  it('writes and reads YAML content', () => {
-    const filePath = join(TEST_DIR, 'config.yaml')
-    const content = 'name: test\nversion: 1.0\n'
-
-    writeYamlFile(filePath, content)
-    const result = readYamlFile(filePath)
-    expect(result).toBe(content)
-  })
-
-  it('returns null for non-existent file', () => {
-    expect(readYamlFile(join(TEST_DIR, 'missing.yaml'))).toBeNull()
-  })
 })

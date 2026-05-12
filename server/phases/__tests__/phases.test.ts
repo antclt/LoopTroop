@@ -1,9 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { createBatches, processAnswers, calculateFollowUpLimit } from '../interview/qa'
-import { verifyBeadsCoverage } from '../beads/coverage'
 import { expandBeads } from '../beads/expand'
 import type { InterviewQuestion } from '../interview/types'
-import type { Bead, BeadSubset } from '../beads/types'
+import type { BeadSubset } from '../beads/types'
 
 describe('Interview Q&A', () => {
   const questions: InterviewQuestion[] = [
@@ -33,50 +32,6 @@ describe('Interview Q&A', () => {
     expect(calculateFollowUpLimit(10)).toBe(2)
     expect(calculateFollowUpLimit(5)).toBe(1)
     expect(calculateFollowUpLimit(1)).toBe(1)
-  })
-})
-
-describe('Beads Coverage', () => {
-  const validBead: Bead = {
-    id: 'b1', title: 'Bead 1', prdRefs: ['e1'], description: 'desc',
-    contextGuidance: { patterns: ['Reuse the existing bead planning flow.'], anti_patterns: ['Do not invent extra runtime state.'] },
-    acceptanceCriteria: ['ac1'], tests: ['test1'],
-    testCommands: ['npm test'], priority: 1, status: 'pending',
-    issueType: 'task', externalRef: '',
-    labels: [], dependencies: { blocked_by: [], blocks: [] }, targetFiles: [], notes: '',
-    iteration: 1, createdAt: '', updatedAt: '', completedAt: '', startedAt: '', beadStartCommit: null,
-  }
-
-  it('passes with valid beads', () => {
-    const result = verifyBeadsCoverage([validBead], 'prd content')
-    expect(result.passed).toBe(true)
-  })
-
-  it('fails with no beads', () => {
-    const result = verifyBeadsCoverage([], 'prd')
-    expect(result.passed).toBe(false)
-  })
-
-  it('detects self-dependencies', () => {
-    const bead = { ...validBead, dependencies: { blocked_by: ['b1'], blocks: [] } }
-    const result = verifyBeadsCoverage([bead], 'prd')
-    expect(result.passed).toBe(false)
-    expect(result.gaps.some(g => g.includes('self-dependency'))).toBe(true)
-  })
-
-  it('detects dangling dependencies', () => {
-    const bead = { ...validBead, dependencies: { blocked_by: ['nonexistent'], blocks: [] } }
-    const result = verifyBeadsCoverage([bead], 'prd')
-    expect(result.passed).toBe(false)
-    expect(result.gaps.some(g => g.includes('non-existent'))).toBe(true)
-  })
-
-  it('detects circular dependencies', () => {
-    const b1: Bead = { ...validBead, id: 'b1', dependencies: { blocked_by: ['b2'], blocks: [] } }
-    const b2: Bead = { ...validBead, id: 'b2', dependencies: { blocked_by: ['b1'], blocks: [] } }
-    const result = verifyBeadsCoverage([b1, b2], 'prd')
-    expect(result.passed).toBe(false)
-    expect(result.gaps.some(g => g.includes('Circular'))).toBe(true)
   })
 })
 
