@@ -234,16 +234,16 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
 
   return (
     <>
-      <div className="shrink-0 border-b border-border bg-muted/20 px-4 py-3">
+      <div className="shrink-0 border-b border-border bg-muted/20 px-4 py-1.5">
         <button
           type="button"
           onClick={() => setExpanded((value) => !value)}
           aria-expanded={expanded}
           aria-controls={descriptionId}
           aria-label={phaseLabel}
-          className="flex items-center gap-1 py-1 text-sm font-medium text-foreground transition-colors hover:text-foreground/80"
+          className="flex items-center gap-1 py-0 text-[13px] font-medium text-foreground transition-colors hover:text-foreground/80"
         >
-          <ChevronRight className={cn('h-4 w-4 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90')} />
+          <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90')} />
           <span>{phaseLabel}</span>
           {phase === 'CODING' && runtime.activeBeadId && runtime.perIterationTimeoutMs ? (() => {
             const activeBead = runtime.beads?.find(b => b.id === runtime.activeBeadId)
@@ -259,7 +259,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
           })() : null}
         </button>
         {expanded ? (
-          <p id={descriptionId} className="mt-1 ml-5 text-[11px] text-muted-foreground">
+          <p id={descriptionId} className="mt-px ml-5 text-[11px] leading-[15px] text-muted-foreground">
             {phaseMeta.description}
             {' '}
             <Tooltip>

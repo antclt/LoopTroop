@@ -70,7 +70,7 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="p-4 space-y-3 shrink-0">
+      <div className="px-4 py-2 space-y-1.5 shrink-0">
         {attempts.length > 1 ? (
           <PhaseAttemptSelector
             attempts={attempts}
@@ -80,14 +80,14 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
         ) : null}
 
         <Card>
-          <CardHeader className="py-3">
-            <CardTitle className="text-sm flex items-center gap-2">
-              {archivedAttemptNumber == null ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          <CardHeader className="px-3 py-1.5">
+            <CardTitle className="text-[13px] flex items-center gap-1.5">
+              {archivedAttemptNumber == null ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               AI Council — {domain} {step}
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3 pb-3">
-            <p className="text-xs text-muted-foreground">
+          <CardContent className="px-3 pb-1.5 pt-0">
+            <p className="text-[11px] leading-[15px] text-muted-foreground">
               {phase === 'SCANNING_RELEVANT_FILES' && 'AI is reading relevant source files to build richer context for council deliberation.'}
               {isDrafting && phase !== 'SCANNING_RELEVANT_FILES' && `Each council model is independently generating a ${domain.toLowerCase()} draft.`}
               {isVoting && `Council members are scoring all ${domain.toLowerCase()} drafts.`}

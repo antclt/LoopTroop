@@ -154,12 +154,14 @@ Several UI components exist specifically to inspect durable workflow state:
 | --- | --- |
 | `PhaseArtifactsPanel` | Phase-specific artifact viewer |
 | `PrdApprovalPane` | PRD approval editor plus compact read-only Full Answers context for the winning draft |
-| `WorkspacePhaseSummary` | Compact summary for the selected phase |
+| `WorkspacePhaseSummary` | Compact summary for the selected phase, using reduced vertical padding so the selected status stays lightweight above the workspace |
 | `VerificationSummaryPanel` | Delivery actions during PR review |
 | `PhaseReviewView` | Historical artifact review with phase-attempt support |
 | `FullLogView` | Ticket-wide log inspection |
 
 The frontend is built around the assumption that users must be able to inspect prior attempts and artifacts without replaying the run mentally from logs.
+
+Council-style live workspace phases keep their current-action card dense: compact heading text, tight paragraph leading, and minimal header/content padding so artifacts and logs remain visible without scrolling past oversized status chrome.
 
 `LogProvider` treats the server-side normal execution log as durable truth for the lifecycle view. SSE-delivered rows merge into the in-memory log state immediately so the phase log viewer and full log can render live updates without waiting for file persistence. The browser opens the ticket stream through the same-origin `/api/stream` route, matching normal API fetches and avoiding dev-environment host/CORS drift. In dev, that same-origin path lets Vite inject backend auth without exposing the token to client code; direct stream clients may use `apiToken` only on `/api/stream` when they cannot send headers. Browser-local logs are a best-effort responsiveness cache, but reconnect recovery requests the complete matching server log again and merges by stable entry identity so a frontend restart does not leave the visible log pane stale.
 
