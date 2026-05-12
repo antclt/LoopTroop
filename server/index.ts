@@ -29,11 +29,16 @@ function isLocalhostRequest(c: Context): boolean {
     return false
   }
 
-  const hostname = host.startsWith('[')
-    ? host.slice(1, host.indexOf(']'))
-    : host.split(':')[0]
+  const hostname: string = host.startsWith('[')
+    ? host.slice(1, host.indexOf(']') === -1 ? host.length : host.indexOf(']'))
+    : (host.split(':')[0] ?? host)
 
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  return hostname === 'localhost'
+    || hostname === '127.0.0.1'
+    || hostname === '::1'
+    || hostname === '::ffff:127.0.0.1'
+    || hostname === '::ffff:7f00:1'
+    || hostname.startsWith('127.')
 }
 
 // Global middleware

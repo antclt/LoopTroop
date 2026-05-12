@@ -19,6 +19,26 @@ export async function validateJson(c: Context, next: Next) {
         return c.json({ error: `Request body exceeds ${MAX_API_JSON_BODY_BYTES} bytes` }, 413)
       }
     }
+
+    // For requests without Content-Length (e.g., chunked transfer-encoding),
+    // parse the body and validate it's valid JSON within the size limit.
+    // This also catches malformed JSON early before route handlers.
+    if (contentType?.includes('application/json') || (!contentType && c.req.method !== 'OPTIONS')) {
+      try {
+        const raw = await c.req.text()
+        if (raw.length > MAX_API_JSON_BODY_BYTES) {
+          return c.json({ error: `Request body exceeds ${MAX_API_JSON_BODY_BYTES} bytes` }, 413)
+        }
+        if (raw.length > 0) {
+          JSON.parse(raw)
+          // Re-attach the parsed body so downstream handlers can use c.req.json()
+          // without re-reading the stream
+          c.req.raw = new Request(c.req.raw, { body: raw })
+        }
+      } catch {
+        return c.json({ error: 'Invalid JSON in request body' }, 400)
+      }
+    }
   }
   await next()
 }

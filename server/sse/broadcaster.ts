@@ -28,7 +28,7 @@ interface SSEBroadcasterOptions {
 
 class SSEBroadcaster {
   private clients = new Map<string, SSEClient[]>()
-  private eventCounter = 0
+  private eventCounter = Date.now()
   private eventBuffer = new Map<string, BufferedSSEEvent[]>()
   private readonly maxBufferSize: number
   private readonly maxBufferBytes: number

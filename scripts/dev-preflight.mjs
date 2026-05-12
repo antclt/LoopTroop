@@ -1,6 +1,19 @@
+/**
+ * Lightweight pre-dev hook that ensures dependencies are installed
+ * before the TypeScript preflight runs.
+ *
+ * IMPORTANT: The actual preflight logic lives in scripts/dev-preflight.ts.
+ * This file is intentionally minimal (plain JS, no build step required) so
+ * that it can run as `npm run predev` before any build tooling is available.
+ * It delegates all real work to the TypeScript version via tsx.
+ *
+ * The duplications of pathExists/isExecutable/getMtimeMs from dev-maintenance.ts
+ * are intentional: this file must run before tsx is available, so it cannot
+ * import from TypeScript modules. Keep logic changes minimal and in sync.
+ */
 import { spawnSync } from 'node:child_process'
 import { accessSync, constants, statSync } from 'node:fs'
-import { basename, dirname, resolve } from 'node:path'
+import { dirname, resolve, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -14,103 +27,88 @@ const trackedManifests = [
   resolve(repoRoot, 'package.json'),
   resolve(repoRoot, 'package-lock.json'),
 ]
-const requiredDevBins = ['tsx', 'vite', 'vitepress', 'concurrently']
 
-function pathExists(path) {
-  try {
-    accessSync(path, constants.F_OK)
-    return true
-  } catch {
-    return false
-  }
+function pathExists(filePath) {
+  try { accessSync(filePath, constants.F_OK); return true } catch { return false }
 }
 
-function isExecutable(path) {
-  try {
-    accessSync(path, constants.X_OK)
-    return true
-  } catch {
-    return false
-  }
+function getMtimeMs(filePath) {
+  try { return statSync(filePath).mtimeMs } catch { return null }
 }
 
-function getMtimeMs(path) {
-  try {
-    return statSync(path).mtimeMs
-  } catch {
-    return null
-  }
+function isExecutable(filePath) {
+  try { accessSync(filePath, constants.X_OK); return true } catch { return false }
 }
 
-function getMissingBins() {
-  return requiredDevBins.filter((name) => {
-    const binPath = resolve(repoRoot, 'node_modules', '.bin', `${name}${binExtension}`)
-    return !isExecutable(binPath)
-  })
-}
+const reasons = []
 
-function getInstallReasons() {
-  const reasons = []
-  const missingBins = getMissingBins()
-
-  if (!pathExists(resolve(repoRoot, 'node_modules'))) {
-    reasons.push('node_modules is missing')
-  }
-
-  if (!pathExists(installStamp)) {
-    reasons.push('the npm install stamp is missing')
-  }
-
-  if (missingBins.length > 0) {
-    reasons.push(`missing local dev binaries: ${missingBins.join(', ')}`)
-  }
-
-  const installStampMtimeMs = getMtimeMs(installStamp)
-  if (installStampMtimeMs !== null) {
-    for (const manifestPath of trackedManifests) {
-      const manifestMtimeMs = getMtimeMs(manifestPath)
-      if (manifestMtimeMs !== null && manifestMtimeMs > installStampMtimeMs) {
-        reasons.push(`${basename(manifestPath)} changed after the last npm install`)
+if (!pathExists(resolve(repoRoot, 'node_modules'))) {
+  reasons.push('node_modules is missing')
+} else if (!pathExists(installStamp)) {
+  reasons.push('the npm install stamp is missing')
+} else {
+  const stampMtime = getMtimeMs(installStamp)
+  if (stampMtime !== null) {
+    for (const manifest of trackedManifests) {
+      const manifestMtime = getMtimeMs(manifest)
+      if (manifestMtime !== null && manifestMtime > stampMtime) {
+        reasons.push(`${basename(manifest)} changed after the last npm install`)
       }
     }
   }
-
-  return reasons
 }
 
-function runOrExit(command, args, label) {
-  const result = spawnSync(command, args, {
+const requiredBins = ['tsx', 'vite', 'vitepress', 'concurrently']
+const missingBins = requiredBins.filter(name => {
+  const binPath = resolve(repoRoot, 'node_modules', '.bin', `${name}${binExtension}`)
+  return !isExecutable(binPath)
+})
+
+if (missingBins.length > 0) {
+  reasons.push(`missing local dev binaries: ${missingBins.join(', ')}`)
+}
+
+if (reasons.length > 0) {
+  console.log('[dev-preflight] Running npm install before starting dev:')
+  for (const reason of reasons) {
+    console.log(`[dev-preflight] - ${reason}`)
+  }
+
+  const result = spawnSync(npmCommand, ['install', ...npmInstallFlags], {
     cwd: repoRoot,
     stdio: 'inherit',
   })
 
   if (result.error) {
-    console.error(`[dev-preflight] Failed to start ${label}: ${result.error.message}`)
+    console.error(`[dev-preflight] Failed to start npm install: ${result.error.message}`)
     process.exit(1)
   }
-
   if (result.status !== 0) {
     process.exit(result.status ?? 1)
   }
 }
 
-const installReasons = getInstallReasons()
-if (installReasons.length > 0) {
-  console.log('[dev-preflight] Running npm install before starting dev:')
-  for (const reason of installReasons) {
-    console.log(`[dev-preflight] - ${reason}`)
-  }
+const stillMissing = requiredBins.filter(name => {
+  const binPath = resolve(repoRoot, 'node_modules', '.bin', `${name}${binExtension}`)
+  return !isExecutable(binPath)
+})
 
-  runOrExit(npmCommand, ['install', ...npmInstallFlags], 'npm install')
-}
-
-const missingBinsAfterInstall = getMissingBins()
-if (missingBinsAfterInstall.length > 0) {
+if (stillMissing.length > 0) {
   console.error(
     '[dev-preflight] Required dev tools are still missing after npm install: ' +
-    missingBinsAfterInstall.join(', '),
+    stillMissing.join(', '),
   )
   process.exit(1)
 }
 
-runOrExit(tsxBin, [resolve(repoRoot, 'scripts', 'dev-preflight.ts')], 'the TypeScript dev preflight')
+// Delegate to the TypeScript preflight for all other checks
+const result = spawnSync(tsxBin, [resolve(repoRoot, 'scripts', 'dev-preflight.ts')], {
+  cwd: repoRoot,
+  stdio: 'inherit',
+})
+
+if (result.error) {
+  console.error(`[dev-preflight] Failed to start TypeScript preflight: ${result.error.message}`)
+  process.exit(1)
+}
+process.exit(result.status ?? 0)

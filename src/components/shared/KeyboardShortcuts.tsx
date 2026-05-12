@@ -16,7 +16,8 @@ export function KeyboardShortcuts() {
     const handler = (e: KeyboardEvent) => {
       if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
         const target = e.target as HTMLElement
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
+          || target.isContentEditable || target.closest('[role="textbox"]')) return
         e.preventDefault()
         setOpen(prev => !prev)
       }

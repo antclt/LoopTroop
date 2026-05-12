@@ -32,7 +32,7 @@ describe('API auth middleware', () => {
     }
   })
 
-  it('accepts configured tokens from headers, bearer auth, and SSE query params', async () => {
+  it('accepts configured tokens from headers, bearer auth, and SSE stream query params', async () => {
     const app = createAuthApp('secret-token')
 
     expect((await app.request('/api/health', {

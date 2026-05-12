@@ -1435,9 +1435,11 @@ export function getWorkflowPhaseMeta(status: string): WorkflowPhaseMeta | undefi
 
 export type WorkflowAction = 'start' | 'approve' | 'cancel' | 'retry' | 'merge' | 'close_unmerged'
 
-export function isBeforeExecution(status: string, previousStatus?: string | null): boolean {
+export function isBeforeExecution(status: string, previousStatus?: string | null, depth?: number): boolean {
   if (status === 'BLOCKED_ERROR' && previousStatus) {
-    return isBeforeExecution(previousStatus)
+    // Guard against infinite recursion if both statuses are BLOCKED_ERROR
+    if (previousStatus === 'BLOCKED_ERROR' || (depth ?? 0) >= 1) return false
+    return isBeforeExecution(previousStatus, null, (depth ?? 0) + 1)
   }
   const index = WORKFLOW_PHASE_IDS.indexOf(status)
   const executionIndex = WORKFLOW_PHASE_IDS.indexOf('PRE_FLIGHT_CHECK')

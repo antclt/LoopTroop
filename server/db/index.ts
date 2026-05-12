@@ -65,17 +65,49 @@ const DB_PATH = APP_STORAGE_BOOT_FACTS.dbPath
 mkdirSync(APP_CONFIG_DIR, { recursive: true })
 mkdirSync(dirname(DB_PATH), { recursive: true })
 
-const sqlite = new Database(DB_PATH)
-sqlite.pragma('journal_mode=WAL')
-sqlite.pragma('locking_mode=NORMAL')
-sqlite.pragma('synchronous=NORMAL')
-sqlite.pragma(`busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}`)
-sqlite.pragma('wal_autocheckpoint=1000')
-sqlite.pragma('foreign_keys=ON')
+let sqliteInstance: Database.Database | null = null
+let dbInstance: ReturnType<typeof drizzle> | null = null
 
-export const db = drizzle(sqlite, { schema })
+function getOrCreateSqlite(): Database.Database {
+  if (!sqliteInstance) {
+    sqliteInstance = new Database(DB_PATH)
+    sqliteInstance.pragma('journal_mode=WAL')
+    sqliteInstance.pragma('locking_mode=NORMAL')
+    sqliteInstance.pragma('synchronous=NORMAL')
+    sqliteInstance.pragma(`busy_timeout=${SQLITE_BUSY_TIMEOUT_MS}`)
+    sqliteInstance.pragma('wal_autocheckpoint=1000')
+    sqliteInstance.pragma('foreign_keys=ON')
+  }
+  return sqliteInstance
+}
+
+function getOrCreateDb(): ReturnType<typeof drizzle> {
+  if (!dbInstance) {
+    dbInstance = drizzle(getOrCreateSqlite(), { schema })
+  }
+  return dbInstance
+}
+
+// Lazy-initializing proxies — the actual SQLite connection is only opened on
+// first access, not at module-import time. This prevents test environments
+// that transitively import this module from creating spurious database files.
+export const sqlite = new Proxy({} as Database.Database, {
+  get(_target, prop: string | symbol) {
+    const real = getOrCreateSqlite()
+    const value = (real as unknown as Record<string | symbol, unknown>)[prop]
+    return typeof value === 'function' ? value.bind(real) : value
+  },
+})
+
+export const db = new Proxy({} as ReturnType<typeof drizzle>, {
+  get(_target, prop: string | symbol) {
+    const real = getOrCreateDb()
+    const value = (real as unknown as Record<string | symbol, unknown>)[prop]
+    return typeof value === 'function' ? value.bind(real) : value
+  },
+})
+
 export {
-  sqlite,
   DB_PATH as APP_DB_PATH,
   APP_CONFIG_DIR,
   APP_STORAGE_BOOT_FACTS,
@@ -105,5 +137,9 @@ export function stopWalCheckpoint() {
 
 export function closeDatabase() {
   stopWalCheckpoint()
-  sqlite.close()
+  if (sqliteInstance) {
+    sqliteInstance.close()
+    sqliteInstance = null
+  }
+  dbInstance = null
 }

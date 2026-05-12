@@ -1,3 +1,5 @@
+import { isRecord } from './typeGuards'
+
 export interface FingerprintedLogLike {
   fingerprint?: string | null
   data?: unknown
@@ -17,7 +19,7 @@ export function extractLogFingerprint(record: FingerprintedLogLike): string | un
   const direct = normalizeNonEmptyString(record.fingerprint)
   if (direct) return direct
 
-  if (!record.data || typeof record.data !== 'object') return undefined
+  if (!isRecord(record.data)) return undefined
   return normalizeNonEmptyString((record.data as Record<string, unknown>).fingerprint)
 }
 

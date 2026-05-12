@@ -262,7 +262,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
   const ticketsById = useMemo(() => new Map(tickets.map((ticket) => [ticket.id, ticket])), [tickets])
   const activeTickets = useMemo(() => tickets.filter((ticket) => !isTerminalStatus(ticket.status)), [tickets])
   const activeTicketIds = useMemo(() => new Set(activeTickets.map((ticket) => ticket.id)), [activeTickets])
-  const activeTicketKey = activeTickets.map((ticket) => ticket.id).join('|')
+  const activeTicketKey = useMemo(() => activeTickets.map((ticket) => ticket.id).sort().join('|'), [activeTickets])
 
   const removeRequest = useCallback((requestId: string) => {
     setRequests((current) => {

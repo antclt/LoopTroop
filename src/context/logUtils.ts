@@ -420,12 +420,19 @@ export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
   return next
 }
 
+const MAX_LOG_ENTRIES_PER_PHASE = 500
+
 export function persistLogs(ticketId: string | null | undefined, logsByPhase: Record<string, LogEntry[]>) {
   if (!ticketId || typeof window === 'undefined') return
   for (const [status, entries] of Object.entries(logsByPhase)) {
     try {
       const cacheableEntries = entries.filter(isBrowserCacheLogEntry)
-      localStorage.setItem(`${LOG_STORAGE_PREFIX}${ticketId}-${status}`, JSON.stringify(cacheableEntries))
+      // Prune oldest entries if exceeding the per-phase limit to avoid
+      // exceeding localStorage quotas on long-running tickets.
+      const prunedEntries = cacheableEntries.length > MAX_LOG_ENTRIES_PER_PHASE
+        ? cacheableEntries.slice(-MAX_LOG_ENTRIES_PER_PHASE)
+        : cacheableEntries
+      localStorage.setItem(`${LOG_STORAGE_PREFIX}${ticketId}-${status}`, JSON.stringify(prunedEntries))
     } catch {
       // Ignore quota failures; in-memory state is still usable.
     }

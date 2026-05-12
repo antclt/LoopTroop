@@ -11,6 +11,7 @@ interface ProjectDatabase {
   db: BetterSQLite3Database<typeof schema>
 }
 
+const MAX_PROJECT_CACHE_SIZE = 50
 const projectDbCache = new Map<string, ProjectDatabase>()
 
 function closeCachedProjectDatabase(projectRoot: string): boolean {
@@ -231,6 +232,14 @@ export function getProjectDatabase(projectRoot: string): ProjectDatabase {
   if (cached) {
     if (existsSync(dbPath)) return cached
     closeCachedProjectDatabase(projectRoot)
+  }
+
+  // Evict oldest entries if cache exceeds max size
+  if (projectDbCache.size >= MAX_PROJECT_CACHE_SIZE) {
+    const oldestKey = projectDbCache.keys().next().value
+    if (oldestKey !== undefined) {
+      closeCachedProjectDatabase(oldestKey)
+    }
   }
 
   ensureProjectStorageDirs(projectRoot)

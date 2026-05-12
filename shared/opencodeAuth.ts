@@ -18,5 +18,9 @@ export function getOpenCodeBasicAuthConfig(env: EnvLike = process.env): OpenCode
 export function getOpenCodeBasicAuthHeader(env: EnvLike = process.env): string | undefined {
   const auth = getOpenCodeBasicAuthConfig(env)
   if (!auth) return undefined
+  if (auth.username.includes(':')) {
+    console.warn('[opencodeAuth] Basic auth username contains ":" — this will produce an invalid Authorization header. Please use a username without colons.')
+    return undefined
+  }
   return `Basic ${Buffer.from(`${auth.username}:${auth.password}`).toString('base64')}`
 }

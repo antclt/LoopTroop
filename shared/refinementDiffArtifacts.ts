@@ -156,7 +156,7 @@ function readYamlArray<T>(content: string): T[] | null {
         .filter(Boolean)
         .map((line) => JSON.parse(line) as T)
     } catch {
-      return null
+      // Not valid JSON Lines — fall through to YAML parsing
     }
   }
 

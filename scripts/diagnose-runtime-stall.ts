@@ -1865,7 +1865,7 @@ function readProcessMemorySnapshot(pid: number): ProcessMemorySnapshot {
           if (separator <= 0) return ['', '']
           return [line.slice(0, separator), line.slice(separator + 1).trim()]
         })
-        .filter(([key]) => key.length > 0),
+        .filter(([key]) => (key ?? '').length > 0),
     ) as Record<string, string>
 
     const readProcNumber = (path: string): number | null => {
@@ -2060,7 +2060,7 @@ function readSwapSnapshot(): SwapSnapshot {
     if (!raw) return { totalKb: null, freeKb: null, usedKb: null, usePercent: null, error: '/proc/meminfo not available' }
     const parse = (key: string): number | null => {
       const match = raw.match(new RegExp(`^${key}:\\s+(\\d+)`, 'm'))
-      return match ? parseInt(match[1], 10) : null
+      return match?.[1] != null ? parseInt(match[1], 10) : null
     }
     const totalKb = parse('SwapTotal')
     const freeKb = parse('SwapFree')

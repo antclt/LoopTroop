@@ -1,5 +1,11 @@
 export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
+  return typeof value === 'object'
+    && value !== null
+    && !Array.isArray(value)
+    && !(value instanceof Date)
+    && !(value instanceof Map)
+    && !(value instanceof Set)
+    && !(value instanceof RegExp)
 }
 
 /** Returns error.message for Error instances, String(value) for everything else. */

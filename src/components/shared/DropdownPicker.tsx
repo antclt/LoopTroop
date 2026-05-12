@@ -30,6 +30,12 @@ export function DropdownPicker({ trigger, children, open, onOpenChange }: Dropdo
     if (!open) { setIsPositioned(false); return }
     updatePosition()
     setIsPositioned(true)
+
+    const handleWindowResize = () => updatePosition()
+    const handleScroll = () => updatePosition()
+
+    window.addEventListener('resize', handleWindowResize)
+    window.addEventListener('scroll', handleScroll, true)
     const handler = (e: MouseEvent) => {
       if (
         !ref.current?.contains(e.target as Node) &&
@@ -39,7 +45,11 @@ export function DropdownPicker({ trigger, children, open, onOpenChange }: Dropdo
       }
     }
     document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    return () => {
+      window.removeEventListener('resize', handleWindowResize)
+      window.removeEventListener('scroll', handleScroll, true)
+      document.removeEventListener('mousedown', handler)
+    }
   }, [open, onOpenChange, updatePosition])
 
   return (

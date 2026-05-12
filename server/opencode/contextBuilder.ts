@@ -85,6 +85,8 @@ function estimateTokens(text: string): number {
 const contextCache = new Map<string, { content: string; timestamp: number }>()
 const CACHE_TTL = 300000 // 5 minutes
 
+const MAX_CONTEXT_CACHE_SIZE = 200
+
 function getCachedContext(key: string): string | null {
   const cached = contextCache.get(key)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
@@ -95,6 +97,11 @@ function getCachedContext(key: string): string | null {
 }
 
 function setCachedContext(key: string, content: string) {
+  // Evict oldest entries if cache exceeds max size
+  if (contextCache.size >= MAX_CONTEXT_CACHE_SIZE) {
+    const oldestKey = contextCache.keys().next().value
+    if (oldestKey !== undefined) contextCache.delete(oldestKey)
+  }
   contextCache.set(key, { content, timestamp: Date.now() })
 }
 

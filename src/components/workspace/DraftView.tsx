@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LoadingText } from '@/components/ui/LoadingText'
@@ -107,17 +107,20 @@ export function DraftView({ ticket }: DraftViewProps) {
   const hasDescription = descriptionDraft.length > 0
   const hasDescriptionChanges = descriptionDraft !== savedDescription
 
-  // Sync draft from prop during render (React-recommended pattern for derived state)
-  if (savedDescription !== lastSyncedDescription) {
-    setLastSyncedDescription(savedDescription)
-    if (!isEditingDescription) {
-      if (skipNextSync) {
-        setSkipNextSync(false)
-      } else {
-        setDescriptionDraft(savedDescription)
+  // Sync draft from prop — use useEffect to avoid setting state during render
+  // which can cause issues with React StrictMode double-rendering.
+  useEffect(() => {
+    if (savedDescription !== lastSyncedDescription) {
+      setLastSyncedDescription(savedDescription)
+      if (!isEditingDescription) {
+        if (skipNextSync) {
+          setSkipNextSync(false)
+        } else {
+          setDescriptionDraft(savedDescription)
+        }
       }
     }
-  }
+  }, [savedDescription, lastSyncedDescription, isEditingDescription, skipNextSync])
 
   const handleStart = () => {
     setIsStartAttemptActive(true)

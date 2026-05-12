@@ -174,6 +174,7 @@ export function appendLogEvent(
 }
 
 const MAX_PERSISTED_FINGERPRINTS_PER_TICKET = 256
+const MAX_FINGERPRINT_TICKETS = 100
 const persistedFingerprintsByTicket = new Map<string, Map<string, number>>()
 
 function appendEventToChannel(
@@ -205,6 +206,12 @@ function hasPersistedFingerprint(ticketId: string, channel: PersistedLogChannel,
 }
 
 function rememberPersistedFingerprint(ticketId: string, channel: PersistedLogChannel, phase: string, phaseAttempt: number, fingerprint: string): void {
+  // Evict oldest ticket buckets if the outer map exceeds max size
+  if (!persistedFingerprintsByTicket.has(ticketId) && persistedFingerprintsByTicket.size >= MAX_FINGERPRINT_TICKETS) {
+    const oldestTicketKey = persistedFingerprintsByTicket.keys().next().value
+    if (oldestTicketKey !== undefined) persistedFingerprintsByTicket.delete(oldestTicketKey)
+  }
+
   const bucket = persistedFingerprintsByTicket.get(ticketId) ?? new Map<string, number>()
   const scopedKey = buildFingerprintScopeKey(channel, phase, phaseAttempt, fingerprint)
   if (bucket.has(scopedKey)) {
@@ -219,6 +226,10 @@ function rememberPersistedFingerprint(ticketId: string, channel: PersistedLogCha
   }
 
   persistedFingerprintsByTicket.set(ticketId, bucket)
+}
+
+export function clearTicketFingerprints(ticketId: string): void {
+  persistedFingerprintsByTicket.delete(ticketId)
 }
 
 export function createLogEvent(

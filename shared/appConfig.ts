@@ -5,7 +5,8 @@ const DEFAULT_BACKEND_HOST = '127.0.0.1'
 export const DEFAULT_OPENCODE_BASE_URL = 'http://127.0.0.1:4096'
 
 function parsePort(value: string | undefined, fallback: number): number {
-  const parsed = Number(value)
+  if (!value) return fallback
+  const parsed = parseInt(value, 10)
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : fallback
 }
 
@@ -42,6 +43,8 @@ export function isLoopbackHost(hostname: string): boolean {
   const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, '')
   return normalized === 'localhost'
     || normalized === '::1'
+    || normalized === '::ffff:127.0.0.1'
+    || normalized === '::ffff:7f00:1'
     || normalized.startsWith('127.')
 }
 

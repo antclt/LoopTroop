@@ -262,7 +262,7 @@ function runCommand(
 function runExternalCommand(
   command: string,
   args: string[],
-  label: string,
+  _label: string,
   { verbose = false }: { verbose?: boolean } = {},
 ) {
   const result = spawnSync(command, args, {

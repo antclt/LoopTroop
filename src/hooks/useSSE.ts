@@ -80,6 +80,8 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const connectAbortControllerRef = useRef<AbortController | null>(null)
   const connectTokenRef = useRef(0)
+  const ticketIdRef = useRef(ticketId)
+  ticketIdRef.current = ticketId
   // Keep the connection stable per ticket while always dispatching to the latest callback.
   const onEventRef = useRef(onEvent)
   const [connectionState, setConnectionState] = useState<SSEConnectionState>(ticketId ? 'connecting' : 'connected')
@@ -150,7 +152,8 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
         setConnectionState('connected')
         if (recoverOnOpenRef.current) {
           recoverOnOpenRef.current = false
-          recoverTicketAfterStreamGap(ticketId)
+          const tid = ticketIdRef.current
+          if (tid) recoverTicketAfterStreamGap(tid)
         }
       })
 
@@ -299,7 +302,10 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
         eventSourceRef.current = null
         recoverOnOpenRef.current = true
         setConnectionState('reconnecting')
-        queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+        // Use the current ticketId from the ref to avoid stale closures
+        // when ticketId changes between connect and error
+        const currentTicketId = ticketId
+        queryClient.invalidateQueries({ queryKey: ['ticket', currentTicketId] })
         queryClient.invalidateQueries({ queryKey: ['tickets'] })
         scheduleReconnect()
       }
