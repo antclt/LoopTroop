@@ -202,13 +202,13 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
           const beadId = typeof data.beadId === 'string' ? data.beadId : ''
           const source = typeof data.source === 'string' ? data.source : ''
           const kind = typeof data.kind === 'string' ? data.kind : ''
-          const streaming = data.streaming === true
+          const isStreaming = data.streaming === true
 
           if (
             ticketId
             && phase === 'CODING'
             && beadId.length > 0
-            && !streaming
+            && !isStreaming
             && (source === 'system' || kind === 'milestone')
           ) {
             queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })

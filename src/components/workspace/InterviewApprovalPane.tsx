@@ -56,13 +56,13 @@ function normalizePersistedAnswerDrafts(
     const draft = record[question.id]
     if (!draft || typeof draft !== 'object' || Array.isArray(draft)) continue
     const answerDraft = draft as Record<string, unknown>
-    const skipped = answerDraft.skipped === true
+    const isSkipped = answerDraft.skipped === true
     baseDrafts[question.id] = {
-      skipped,
-      selected_option_ids: !skipped && Array.isArray(answerDraft.selected_option_ids)
+      skipped: isSkipped,
+      selected_option_ids: !isSkipped && Array.isArray(answerDraft.selected_option_ids)
         ? answerDraft.selected_option_ids.filter((item): item is string => typeof item === 'string')
         : [],
-      free_text: !skipped && typeof answerDraft.free_text === 'string' ? answerDraft.free_text : '',
+      free_text: !isSkipped && typeof answerDraft.free_text === 'string' ? answerDraft.free_text : '',
     }
   }
 
@@ -461,8 +461,8 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
         ) : interviewDocument ? (
           <InterviewDocumentView document={interviewDocument} hideAiAnswerBadge />
         ) : rawContent ? (
-          <div className="min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-background p-4">
-            <pre className="min-w-0 max-w-full whitespace-pre-wrap break-words break-all [overflow-wrap:anywhere] overflow-x-hidden text-[11px] font-mono">{rawDisplayContent}</pre>
+          <div className="raw-content-box">
+            <pre className="raw-content-pre">{rawDisplayContent}</pre>
           </div>
         ) : (
           <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">No interview artifact available yet.</div>

@@ -119,8 +119,8 @@ export function useDebouncedApprovalUiState<T>({
         data: snapshot,
       })
       void Promise.resolve(result).then((saved) => {
-        const ignored = saved && typeof saved === 'object' && 'ignored' in saved && saved.ignored === true
-        if (!canceled && !ignored && latestSnapshotRef.current?.serialized === serialized) {
+        const isIgnored = saved && typeof saved === 'object' && 'ignored' in saved && saved.ignored === true
+        if (!canceled && !isIgnored && latestSnapshotRef.current?.serialized === serialized) {
           lastSavedSnapshotRef.current = serialized
         }
       }).catch(() => undefined)

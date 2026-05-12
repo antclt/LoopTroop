@@ -63,3 +63,13 @@
 body {
   font-family: system-ui, -apple-system, sans-serif;
 }
+
+/* Shared raw-content display block used across approval panes */
+.raw-content-box {
+  @apply min-w-0 max-w-full overflow-hidden rounded-xl border border-border bg-background p-4;
+}
+
+.raw-content-pre {
+  @apply min-w-0 max-w-full whitespace-pre-wrap break-words break-all overflow-x-hidden text-[11px] font-mono;
+  overflow-wrap: anywhere;
+}

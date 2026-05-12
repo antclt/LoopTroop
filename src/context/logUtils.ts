@@ -385,7 +385,7 @@ export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
       }
     }
 
-    const duplicate = bucket.some(existing =>
+    const isDuplicate = bucket.some(existing =>
       hasMatchingLogFingerprint(existing, entry)
       || (
         existing.line === entry.line
@@ -401,7 +401,7 @@ export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
           )
         )
       ))
-    if (duplicate) return bucket
+    if (isDuplicate) return bucket
     return [...bucket, entry]
   }
 

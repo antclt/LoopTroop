@@ -86,14 +86,14 @@ function normalizeAnswer(value: unknown): InterviewDocumentAnswer {
     }
   }
 
-  const skipped = value.skipped === true
+  const isSkipped = value.skipped === true
   const freeText = toStringValue(value.free_text || value.text)
   const selectedOptionIds = toStringArray(value.selected_option_ids || value.selected)
 
   return {
-    skipped,
-    selected_option_ids: skipped ? [] : selectedOptionIds,
-    free_text: skipped ? '' : freeText,
+    skipped: isSkipped,
+    selected_option_ids: isSkipped ? [] : selectedOptionIds,
+    free_text: isSkipped ? '' : freeText,
     answered_by: value.answered_by === 'user' ? 'user' : 'ai_skip',
     answered_at: toStringValue(value.answered_at),
   }

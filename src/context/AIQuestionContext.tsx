@@ -138,20 +138,20 @@ function QuestionAnswerForm({
       {item.question.options.length > 0 && (
         <div className="space-y-2">
           {item.question.options.map((option) => {
-            const checked = selected.includes(option.label)
+            const isChecked = selected.includes(option.label)
             return (
               <label
                 key={option.label}
                 className={cn(
                   'flex cursor-pointer items-start gap-3 rounded-md border border-border p-3 text-sm transition-colors',
-                  checked && 'border-primary bg-accent',
+                  isChecked && 'border-primary bg-accent',
                 )}
               >
                 <input
                   type={isMultiple ? 'checkbox' : 'radio'}
                   name={questionKey}
                   className="mt-1"
-                  checked={checked}
+                  checked={isChecked}
                   disabled={disabled}
                   onChange={() => toggleOption(option.label)}
                 />
