@@ -119,7 +119,7 @@ The prompt runner tracks:
 
 The frontend never talks directly to OpenCode. It receives normalized ticket events over `/api/stream`.
 
-AI detail rows are emitted as throttled upserts while a text or reasoning part is still changing, finalized when the part completes, and written to `.ticket/runtime/execution-log.ai.jsonl`. After a prompt completes, the prompt runner also backfills finalized assistant message parts from `session.messages()` so thinking/tool/output history is durable even if no browser was watching the ticket in real time.
+AI detail rows are emitted as fast live-only upserts while a text or reasoning part is still changing, finalized when the part completes, and then written to `.ticket/runtime/execution-log.ai.jsonl`. After a prompt completes, the prompt runner also backfills finalized assistant message parts from `session.messages()` so thinking/tool/output history is durable even if no browser was watching the ticket in real time.
 
 ## Questions And Human Input
 

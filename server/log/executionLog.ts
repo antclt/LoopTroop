@@ -157,14 +157,14 @@ export function appendLogEvent(
   const primaryChannel: PersistedLogChannel = isDebugEvent(event) ? 'debug' : 'normal'
   const primaryLogPath = primaryChannel === 'debug' ? paths.debugLogPath : paths.executionLogPath
 
-  if (isAiDetailEvent(event)) {
-    appendEventToChannel(ticketId, 'ai', paths.aiLogPath, event, phase, phaseAttempt, fingerprint)
-  }
-
   // Streaming upserts are NOT persisted — only delivered via SSE (see budget
   // note above). The finalize event carries the complete final content.
   if (event.op === UPSERT_LOG_OPERATION && event.streaming && event.entryId) {
     return
+  }
+
+  if (isAiDetailEvent(event)) {
+    appendEventToChannel(ticketId, 'ai', paths.aiLogPath, event, phase, phaseAttempt, fingerprint)
   }
 
   appendEventToChannel(ticketId, primaryChannel, primaryLogPath, event, phase, phaseAttempt, fingerprint)

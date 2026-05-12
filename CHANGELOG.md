@@ -20,6 +20,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Basic auth header builder now validates that the username does not contain `:` (RFC 7617 compliance).
 
 ### Performance
+- OpenCode text/reasoning live AI detail updates now use a 25ms live cadence with no large-growth bypass, making thinking/model output feel closer to tool-call responsiveness while keeping streaming upserts out of persisted log files until a final row is emitted.
 - `npm run dev` startup logs are quieter by default: held dependency/audit details, raw npm install output, socket snapshots, and the full service plan now require `LOOPTROOP_DEV_VERBOSE=1`.
 - Dev port inspection now avoids `netstat` unless earlier inspectors cannot identify the listener, removing noisy platform warnings during normal startup while preserving fallback diagnostics in verbose mode.
 - `contextCache` in `contextBuilder.ts` now evicts stale entries on cache misses, preventing unbounded accumulation in long-running processes.

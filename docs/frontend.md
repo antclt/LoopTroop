@@ -114,7 +114,7 @@ Current behavior:
 - sends `ticketId` and `lastEventId` on reconnect when available
 - uses the same-origin Vite proxy during development, which injects token auth server-side; outside that path, `apiToken` query auth is only valid for `/api/stream`
 - listens for `state_change`, `progress`, `log`, `error`, `bead_complete`, `needs_input`, and `artifact_change`
-- receives AI/model log detail as throttled `log` upserts/finalizations backed by `.ticket/runtime/execution-log.ai.jsonl`, so OpenCode thinking, tool calls, and model output can appear live and remain available after reconnect or tab close
+- receives AI/model log detail as fast live-only `log` upserts plus persisted finalizations/backfills backed by `.ticket/runtime/execution-log.ai.jsonl`, so OpenCode thinking, tool calls, and model output can appear live without bloating durable logs and remain available after reconnect or tab close
 - invalidates or patches React Query caches in response
 - refetches ticket details, ticket lists, artifacts, interview state, setup-plan state, bead state, and server logs after a reconnect gap
 - returns `{ lastEventIdRef, connectionState }`

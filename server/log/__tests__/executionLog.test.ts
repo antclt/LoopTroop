@@ -62,7 +62,7 @@ describe('appendLogEvent', () => {
     expect(mockAppend).not.toHaveBeenCalled()
   })
 
-  it('persists AI streaming upserts to the AI detail log only', () => {
+  it('keeps AI streaming upserts live-only until a final row is emitted', () => {
     appendLogEvent(
       '1:T-42',
       'model_output',
@@ -80,12 +80,7 @@ describe('appendLogEvent', () => {
       },
     )
 
-    expect(mockAppend).toHaveBeenCalledOnce()
-    expect(mockAppend.mock.calls[0]?.[0]).toBe('/tmp/test-execution-log.ai.jsonl')
-    const written = JSON.parse(mockAppend.mock.calls[0]![1]!)
-    expect(written.op).toBe('upsert')
-    expect(written.streaming).toBe(true)
-    expect(written.audience).toBe('ai')
+    expect(mockAppend).not.toHaveBeenCalled()
   })
 
   it('persists finalize events to disk', () => {

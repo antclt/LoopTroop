@@ -60,8 +60,7 @@ const DEFAULT_TOOL_LOG_LIMITS: ToolLogLimits = {
   errorMaxChars: PROFILE_DEFAULTS.toolErrorMaxChars,
 }
 
-const STREAMING_LOG_MIN_INTERVAL_MS = 250
-const STREAMING_LOG_MIN_GROWTH_CHARS = 2048
+const STREAMING_LOG_MIN_INTERVAL_MS = 25
 const LIVE_DEBUG_LOG_MAX_CHARS = 8000
 
 let _cachedToolLogLimits: ToolLogLimits = { ...DEFAULT_TOOL_LOG_LIMITS }
@@ -269,7 +268,7 @@ export function createOpenCodeStreamState(): OpenCodeStreamState {
 function shouldEmitStreamingLogUpdate(
   state: OpenCodeStreamState,
   entryId: string,
-  content: string,
+  _content: string,
   complete: boolean,
 ): boolean {
   const now = Date.now()
@@ -278,20 +277,17 @@ function shouldEmitStreamingLogUpdate(
   if (!previous) {
     state.liveStreamEmissions.set(entryId, {
       lastEmittedAt: now,
-      lastContentLength: content.length,
     })
     return true
   }
 
   const elapsedMs = now - previous.lastEmittedAt
-  const growthChars = Math.abs(content.length - previous.lastContentLength)
-  if (!complete && elapsedMs < STREAMING_LOG_MIN_INTERVAL_MS && growthChars < STREAMING_LOG_MIN_GROWTH_CHARS) {
+  if (!complete && elapsedMs < STREAMING_LOG_MIN_INTERVAL_MS) {
     return false
   }
 
   state.liveStreamEmissions.set(entryId, {
     lastEmittedAt: now,
-    lastContentLength: content.length,
   })
   return true
 }

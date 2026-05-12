@@ -40,7 +40,6 @@ export interface OpenCodeStreamState {
   liveContents: Map<string, string>
   liveStreamEmissions: Map<string, {
     lastEmittedAt: number
-    lastContentLength: number
   }>
   todoStatuses: Map<string, string>
   liveTextMessages: Map<string, {
