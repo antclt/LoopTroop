@@ -54,11 +54,18 @@
   - Parsers
   - Any other relevant patterns
 
+### Parsers & Output Repairs
+- When repairing a parser or adding a rule to existing parsers:
+  - Check if a failure can be resolved by adding extra safe repair rules or by fixing existing rules (repairs must only correct formatting, **never** invent text).
+  - Check if these rules can be safely added to other parsers in the same phase or even other phases.
+  - If no safe fixes can be applied to the parser, evaluate if the prompt used in this status can be further hardened with minimal modifications.
+  - When creating a new rule, inspect how other statuses handle parsing, detailed UI warnings, and repairs, and use them as inspiration.
+
 ## Development Environment
 
 - **Primary start command**: `npm run dev`
 - **Primary environment**: WSL
 - **Preferred browser**: Thorium
 
-> **Important**: Although the developer mainly uses WSL + Thorium, **this project is OS, projects and terminal agnostic**.
+> **Important**: Although the developer mainly uses WSL + Thorium, **this project is OS, projects (users can use all possible programming languages), and terminal agnostic**.
 > Do not hardcode WSL-specific paths, commands, or assumptions. All scripts and instructions should work on macOS, Linux, and Windows (PowerShell/WSL) where possible.
