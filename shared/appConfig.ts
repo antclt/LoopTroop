@@ -6,7 +6,9 @@ export const DEFAULT_OPENCODE_BASE_URL = 'http://127.0.0.1:4096'
 
 function parsePort(value: string | undefined, fallback: number): number {
   if (!value) return fallback
-  const parsed = parseInt(value, 10)
+  const normalized = value.trim()
+  if (!/^\d+$/.test(normalized)) return fallback
+  const parsed = Number(normalized)
   return Number.isInteger(parsed) && parsed >= 1 && parsed <= 65535 ? parsed : fallback
 }
 

@@ -7,11 +7,12 @@ All notable changes to LoopTroop will be documented in this file.
 ### Security & Reliability
 - Fixed timing side-channel in API token comparison: `constantTimeEquals` now always runs `timingSafeEqual` even when token lengths differ, preventing length-leak via response timing.
 - SSE authentication: `apiToken` query parameter now accepted exclusively on `/api/stream` (the only endpoint where browser `EventSource` clients cannot set custom headers); all other endpoints reject query-param tokens.
-- Added startup warning when both `LOOPTROOP_ALLOW_UNAUTHENTICATED=1` and `LOOPTROOP_ALLOW_REMOTE_API=1` are set simultaneously.
-- Request body size limit now enforced for chunked requests without a `Content-Length` header, preventing memory exhaustion via large unbounded bodies.
+- Vite dev proxy now injects the ephemeral `LOOPTROOP_API_TOKEN` server-side for same-origin `/api` requests, keeping the token out of the frontend bundle while preserving protected local development.
+- `LOOPTROOP_ALLOW_UNAUTHENTICATED=1` only bypasses auth when no API token is configured; non-loopback binds still require `LOOPTROOP_API_TOKEN`.
+- Request body size limit now enforced while reading chunked requests without a `Content-Length` header, preventing memory exhaustion via large unbounded bodies.
 - `validateJson` middleware now validates JSON syntax early and returns 400 rather than allowing handlers to surface unhandled 500 errors.
 - Fixed permanent memory leak in SSE stream handler: `await new Promise(() => {})` replaced with a resolvable promise; stream now cleanly resolves on client disconnect.
-- Fixed race condition in SSE double-cleanup: added `cleanedUp` guard to prevent `broadcaster.removeClient` from running twice on concurrent abort and error.
+- Fixed race condition in SSE double-cleanup: added `cleanedUp` guard to prevent `broadcaster.removeClient` from running twice on concurrent abort and error, including initial write/replay failures.
 - Project SQLite database cache now evicts the oldest entry when it exceeds 50 entries, preventing unbounded memory and file-descriptor growth.
 - `startingTickets` set now cleaned up in a `finally` block, preventing permanent blocking of ticket starts after unexpected errors.
 - `isLoopbackHost` and `isLocalhostRequest` now recognise IPv4-mapped IPv6 loopback addresses (`::ffff:127.0.0.1`, `::ffff:7f00:1`).
@@ -25,7 +26,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Bug Fixes
 - `isRecord` type guard now correctly excludes `Date`, `Map`, and `Set` instances.
-- `parsePort` uses `parseInt(value, 10)` with `Number.isNaN` check to reject strings like `"300e0"`.
+- `parsePort` now accepts only digit-only TCP port strings so malformed values like `"3000abc"`, `"123.4"`, or `"300e0"` fall back instead of being partially accepted.
 - `isBeforeExecution` in `workflowMeta.ts` now has a recursion depth guard to prevent stack overflow on cyclic workflow states.
 - `useSSE` stale-closure bug fixed: `ticketIdRef` used inside `onerror`/`onopen` handlers instead of the captured closure variable.
 - `AIQuestionContext` polling interval no longer restarts on every render; `activeTicketKey` is now computed inside a stable `useMemo`.

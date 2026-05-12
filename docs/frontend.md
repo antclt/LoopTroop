@@ -9,6 +9,8 @@ The UI is data-driven from:
 - workflow metadata in `shared/workflowMeta.ts`
 - ticket artifacts and runtime state from the backend
 
+In development, same-origin `/api/*` calls go through the Vite proxy. When `npm run dev` generates or receives `LOOPTROOP_API_TOKEN`, the proxy supplies the token to the backend server-side so the browser bundle does not contain the secret.
+
 ## Top-Level Composition
 
 | Area | Purpose | Primary files |
@@ -110,6 +112,7 @@ Current behavior:
 - connects to `/api/stream`
 - persists the latest SSE event id per ticket in browser storage
 - sends `ticketId` and `lastEventId` on reconnect when available
+- uses the same-origin Vite proxy during development, which injects token auth server-side; outside that path, `apiToken` query auth is only valid for `/api/stream`
 - listens for `state_change`, `progress`, `log`, `error`, `bead_complete`, `needs_input`, and `artifact_change`
 - invalidates or patches React Query caches in response
 - refetches ticket details, ticket lists, artifacts, interview state, setup-plan state, bead state, and server logs after a reconnect gap
@@ -157,7 +160,7 @@ Several UI components exist specifically to inspect durable workflow state:
 
 The frontend is built around the assumption that users must be able to inspect prior attempts and artifacts without replaying the run mentally from logs.
 
-`LogProvider` treats the server-side normal execution log as durable truth for the lifecycle view. SSE-delivered rows merge into the in-memory log state immediately so the phase log viewer and full log can render live updates without waiting for file persistence. The browser opens the ticket stream through the same-origin `/api/stream` route, matching normal API fetches and avoiding dev-environment host/CORS drift. Browser-local logs are merged for responsiveness, but reconnect recovery requests the server log again and merges by stable entry identity so a frontend restart does not leave the visible log pane stale.
+`LogProvider` treats the server-side normal execution log as durable truth for the lifecycle view. SSE-delivered rows merge into the in-memory log state immediately so the phase log viewer and full log can render live updates without waiting for file persistence. The browser opens the ticket stream through the same-origin `/api/stream` route, matching normal API fetches and avoiding dev-environment host/CORS drift. In dev, that same-origin path lets Vite inject backend auth without exposing the token to client code; direct stream clients may use `apiToken` only on `/api/stream` when they cannot send headers. Browser-local logs are merged for responsiveness, but reconnect recovery requests the server log again and merges by stable entry identity so a frontend restart does not leave the visible log pane stale.
 
 Internal command rows in `SYS > CMD` are result-only summaries. LoopTroop records the command after it completes, prefers concise semantic outcomes for quiet internal commands (for example, clean worktree, push completed, or no files removed), and avoids recurring progress-style command output in deterministic git/GitHub operations.
 

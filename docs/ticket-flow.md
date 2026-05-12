@@ -50,7 +50,7 @@ flowchart TB
         ID[COUNCIL_DELIBERATING<br/>Parallel interview drafts]
         IV[COUNCIL_VOTING_INTERVIEW<br/>Score and pick winner]
         IC[COMPILING_INTERVIEW<br/>Normalize interview.yaml]
-        IQ[WAITING_INTERVIEW_ANSWERS<br/>User answers or skips]
+        IQ[WAITING_INTERVIEW_ANSWERS<br/>User answers, skips, or continues batches]
         ICV[VERIFYING_INTERVIEW_COVERAGE<br/>Budgeted follow-up loop]
         IA[WAITING_INTERVIEW_APPROVAL<br/>Editable approval gate]
     end
@@ -98,7 +98,8 @@ flowchart TB
     ID --> IV
     IV --> IC
     IC --> IQ
-    IQ --> ICV
+    IQ -->|more batch questions| IQ
+    IQ -->|complete| ICV
     ICV -->|gaps + budget| IQ
     ICV -->|clean or budget exhausted| IA
     IA -->|approve| PD
@@ -270,7 +271,7 @@ The UI and API both group workflow states:
 | `COUNCIL_DELIBERATING` | Council members independently draft competing interview strategies and question sets from the same ticket + relevant-file context. Quorum matters here. | Interview draft artifacts and per-model logs. | `cancel` | Enough valid drafts moves to interview voting. |
 | `COUNCIL_VOTING_INTERVIEW` | The council scores anonymized interview drafts with a structured rubric and picks one winner for normalization. | Vote artifacts, score breakdowns, winner selection. | `cancel` | Winner advances to interview refinement. |
 | `COMPILING_INTERVIEW` | The winning draft is normalized into the interactive interview that the UI can render and track across batches and follow-up rounds. | Canonical interview artifact and interview session snapshot. | `cancel` | Success advances to `WAITING_INTERVIEW_ANSWERS`. |
-| `WAITING_INTERVIEW_ANSWERS` | The automated pipeline pauses while you answer or skip the active question batch. This state can repeat when coverage asks for follow-up questions. | Answer state, updated interview artifact, per-round history. | submit answers, skip, skip all, `cancel` | Submission moves to coverage; skip-all jumps directly to approval with a synthetic clean coverage receipt. |
+| `WAITING_INTERVIEW_ANSWERS` | The automated pipeline pauses while you answer or skip the active question batch. This state can self-loop when the interview has another batch, and can also repeat later when coverage asks for follow-up questions. | Answer state, updated interview artifact, per-round history. | submit answers, skip, skip all, `cancel` | Non-final submission stays here with the next batch; final submission moves to coverage; skip-all jumps directly to approval with a synthetic clean coverage receipt. |
 | `VERIFYING_INTERVIEW_COVERAGE` | The interview winner checks whether the current answers are sufficient. If not, it creates targeted follow-up questions until the configured budget is exhausted. | Coverage artifact, gap descriptions, follow-up batch when needed. | `cancel` | Gaps loop back to answers; clean or budget exhaustion advances to approval. |
 | `WAITING_INTERVIEW_APPROVAL` | You review the finalized interview in structured or raw form, edit it if needed, and explicitly approve the interview as the source material for PRD generation. Post-approval edits remain allowed only before `PRE_FLIGHT_CHECK`; saving from downstream planning archives the current approved interview version and downstream PRD/beads attempts, saves and approves the edit, and starts `DRAFTING_PRD`. | Approved interview artifact, approval receipt, and read-only archived versions when post-approval edits occur. | `approve`, `cancel` | Approval advances to PRD drafting. |
 

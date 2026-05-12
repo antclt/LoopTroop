@@ -66,7 +66,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | `COUNCIL_DELIBERATING` | Each council member independently drafts interview questions in parallel; accepted drafts become artifacts, while invalid outputs keep only diagnostics and raw-attempt history. |
 | `COUNCIL_VOTING_INTERVIEW` | Council members score all anonymized interview drafts against a structured rubric (question relevance, coverage breadth, clarity, and actionability) to select the strongest candidate. |
 | `COMPILING_INTERVIEW` | The winning interview draft is normalized into an interactive session: questions get unique IDs, types, and display metadata, and a batch-state snapshot is built for the interview UI. |
-| `WAITING_INTERVIEW_ANSWERS` | Answer the interview questions that will shape the PRD. Your responses and skip decisions are recorded; if coverage finds gaps after submission, follow-up question batches may bring you back here. |
+| `WAITING_INTERVIEW_ANSWERS` | Answer the interview questions that will shape the PRD. Your responses and skip decisions are recorded; submitting a non-final batch keeps you here with the next batch, while coverage-generated follow-up batches may bring you back later. |
 | `VERIFYING_INTERVIEW_COVERAGE` | Coverage check for interview completeness; may add targeted follow-up questions before approval. |
 | `WAITING_INTERVIEW_APPROVAL` | Review and approve the final interview Q&A before PRD drafting starts. Edits are allowed; saving a post-approval edit archives the current version and restarts downstream PRD planning. |
 | `DRAFTING_PRD` | Models produce per-model Full Answers artifacts and competing PRD drafts. Invalid Full Answers skip that member's PRD draft and malformed bodies stay in Raw diagnostics only. |
@@ -188,7 +188,7 @@ stateDiagram-v2
 ## What The Diagram Emphasizes
 
 - Approval gates are explicit workflow states, not transient UI overlays.
-- The interview loop returns to user input when coverage finds gaps.
+- The interview input state can self-loop while PROM4 prepares additional batches, and the later coverage loop can also return to user input when it finds gaps.
 - PRD and beads coverage stay inside their own phase groups and revise automatically until clean or capped.
 - `CODING` is intentionally self-looping because bead completion may just advance to the next runnable bead.
 - Delivery is part of the machine: final test, integration, PR creation, PR review, and cleanup are all first-class states.

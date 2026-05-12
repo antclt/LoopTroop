@@ -8,6 +8,8 @@ import { getBackendOrigin, getDocsOrigin, getFrontendPort } from './shared/appCo
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const backendOrigin = getBackendOrigin()
+const apiToken = process.env.LOOPTROOP_API_TOKEN?.trim() ?? ''
+const apiTokenHeader = 'X-LoopTroop-Token'
 
 function isBackendHealthProbe(req: IncomingMessage) {
   if ((req.method ?? 'GET').toUpperCase() !== 'GET') return false
@@ -23,9 +25,7 @@ async function respondToBackendHealthProbe(req: IncomingMessage, res: ServerResp
     const response = await fetch(url, {
       headers: {
         accept: 'application/json',
-        ...(process.env.LOOPTROOP_API_TOKEN?.trim()
-          ? { 'X-LoopTroop-Token': process.env.LOOPTROOP_API_TOKEN.trim() }
-          : {}),
+        ...(apiToken ? { [apiTokenHeader]: apiToken } : {}),
       },
       signal: AbortSignal.timeout(1_000),
     })
@@ -118,6 +118,11 @@ export default defineConfig({
         target: backendOrigin,
         changeOrigin: true,
         configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq) => {
+            if (apiToken) {
+              proxyReq.setHeader(apiTokenHeader, apiToken)
+            }
+          })
           proxy.on('error', (err, _req, res) => {
             if ('code' in err && err.code === 'ECONNREFUSED') {
               // Backend not ready yet — return 503 silently so the

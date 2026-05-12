@@ -172,11 +172,11 @@ Setting quorum higher than your total council size guarantees permanent blocks. 
 **Default:** 50  
 **Range:** 0–50
 
-Caps how many initial clarifying questions the compiled interview document can contain before the UI pauses and presents them to you.
+Caps how many initial clarifying questions the compiled interview document can contain before the UI starts presenting them to you across one or more batches.
 
 **What it controls:**
 
-After `COMPILING_INTERVIEW` finishes, the interview document can have up to this many questions in the first batch. Questions beyond the cap are not generated — this is a hard ceiling on initial intake depth, not a pagination setting.
+After `COMPILING_INTERVIEW` finishes, the interview document can have up to this many questions in the initial compiled checklist. The UI may present that checklist across multiple batches, but questions beyond the cap are not generated — this is a hard ceiling on initial intake depth.
 
 **Trade-offs:**
 
@@ -205,13 +205,13 @@ Coverage settings control the self-checking loops that run after drafting. LoopT
 **Default:** 20 %  
 **Range:** 0–100 %
 
-Limits how many additional follow-up questions the `VERIFYING_INTERVIEW_COVERAGE` pass can add relative to the original interview size.
+Limits how many additional coverage follow-up questions the `VERIFYING_INTERVIEW_COVERAGE` pass can add relative to the original compiled interview size.
 
 **Example:** With `Max Interview Questions = 50` and `Coverage Follow-Up Budget = 20 %`, the follow-up pass can add at most 10 extra questions (20 % of 50).
 
 **What it controls:**
 
-After your first answer round, the coverage pass checks whether important gaps remain. If it finds gaps, it generates targeted follow-up questions. This setting prevents an unbounded loop of "just a few more questions."
+After the initial compiled interview is complete, the coverage pass checks whether important gaps remain. If it finds gaps, it generates targeted follow-up questions. This setting prevents an unbounded coverage loop of "just a few more questions"; it does not limit how the initial compiled checklist is batched for presentation.
 
 **Trade-offs:**
 

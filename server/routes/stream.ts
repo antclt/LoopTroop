@@ -38,9 +38,17 @@ streamRouter.get('/stream', (c) => {
   return streamSSE(c, async (stream) => {
     const clientId = `${safeTicketId}-${Date.now()}-${randomBytes(6).toString('hex')}`
     let resolveStream: () => void = () => {}
+    let cleanedUp = false
+    let interval: ReturnType<typeof setInterval> | null = null
+
+    function safeCleanup() {
+      if (cleanedUp) return
+      cleanedUp = true
+      cleanupStreamClient(safeTicketId, clientId, interval ?? undefined)
+    }
 
     // Keep connection alive with heartbeat
-    const interval = setInterval(async () => {
+    interval = setInterval(async () => {
       try {
         await stream.writeSSE({
           event: 'heartbeat',
@@ -85,15 +93,6 @@ streamRouter.get('/stream', (c) => {
     } catch (error) {
       safeCleanup()
       throw error
-    }
-
-    // Clean up on close — use a guard to prevent double-cleanup between
-    // the heartbeat error path and the abort handler racing concurrently.
-    let cleanedUp = false
-    function safeCleanup() {
-      if (cleanedUp) return
-      cleanedUp = true
-      cleanupStreamClient(safeTicketId, clientId, interval)
     }
 
     stream.onAbort(() => {

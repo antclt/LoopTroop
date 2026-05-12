@@ -58,9 +58,8 @@ function getDevReadyProbeUrl(path: string) {
 }
 
 function getApiToken(): string {
-  // The API token is no longer baked into the client bundle.
-  // Authentication is handled server-side via httpOnly cookies
-  // or injected at runtime via /api/config.
+  // The API token is intentionally not baked into the client bundle.
+  // During local development, the Vite proxy injects it server-side.
   return ''
 }
 

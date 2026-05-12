@@ -87,6 +87,16 @@ describe('appConfig frontend origin', () => {
     expect(getBackendPort()).toBe(3000)
   })
 
+  it('rejects malformed port values instead of partially parsing them', () => {
+    process.env.LOOPTROOP_FRONTEND_PORT = '5173abc'
+    process.env.LOOPTROOP_DOCS_PORT = '123.4'
+    process.env.LOOPTROOP_BACKEND_PORT = '300e0'
+
+    expect(getFrontendPort()).toBe(5173)
+    expect(getDocsPort()).toBe(5174)
+    expect(getBackendPort()).toBe(3000)
+  })
+
   it('defaults backend origin to loopback and blocks remote binds without opt-in', () => {
     delete process.env.LOOPTROOP_BACKEND_HOST
     process.env.LOOPTROOP_BACKEND_PORT = '3005'

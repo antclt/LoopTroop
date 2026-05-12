@@ -1,17 +1,17 @@
 # Database Migrations
 
-> **⚠️ Important:** The LoopTroop app database schema is bootstrapped at runtime by `server/db/init.ts`. The committed migration files in this directory may be outdated and do **not** reflect the current canonical schema defined in `server/db/schema.ts`.
+> **Important:** The LoopTroop app database schema is bootstrapped at runtime by `server/db/init.ts`. Runtime startup, not this migration directory, is the source of truth for creating and evolving the app database.
 
-## Do not run `drizzle-kit push` or `drizzle-kit migrate` against the app database
+## App DB workflow
 
-These commands target the migration folder and will apply a stale schema that is missing tables, columns, and foreign-key constraints. This will break the application.
+Do not use `drizzle-kit push`, `drizzle-kit migrate`, `npm run db:push`, or `npm run db:push:app` as the normal app schema-change workflow. They are retained only for ad-hoc local experiments or external tooling checks.
 
-## Correct workflow
+For app schema changes:
 
 - Schema changes should be made in `server/db/schema.ts`.
-- The app database is created and updated automatically at server startup via `server/db/init.ts`.
-- If you need to regenerate migrations for external tooling, use:
+- Runtime bootstrap/evolution changes should be made in `server/db/init.ts`.
+- If you need to regenerate migration artifacts for external tooling, use:
   ```bash
   npm run db:generate:app
   ```
-  But verify the output against `schema.ts` before committing.
+  Then verify the output against `schema.ts` before committing.

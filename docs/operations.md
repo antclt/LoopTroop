@@ -39,7 +39,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - **Reuse:** if the configured address is already responding to authenticated requests, `npm run dev` reuses that running instance.
 - **Port fallback:** if the default port (`4096`) is occupied by a non-OpenCode process, `npm run dev` scans for the next free port and starts OpenCode there instead.
 - **Ephemeral auth:** if `OPENCODE_SERVER_PASSWORD` is not set and a new local OpenCode server is about to start, `npm run dev` generates a random credential and sets `OPENCODE_SERVER_USERNAME` to `opencode`. This credential is propagated automatically to all child processes — backend and watcher — for the duration of the session.
-- **Ephemeral API token:** if `LOOPTROOP_API_TOKEN` is not set, `npm run dev` generates one for the backend and frontend so local `/api/*` calls are protected for that session.
+- **Ephemeral API token:** if `LOOPTROOP_API_TOKEN` is not set, `npm run dev` generates one for the backend and Vite dev proxy so local same-origin `/api/*` calls are protected without embedding the token in the frontend bundle.
 
 By default, `npm run dev` does not update dependency versions and does not run `npm audit fix`. The networked maintenance work is available through explicit commands or by opting the next dev startup into it with `LOOPTROOP_DEV_FORCE_MAINTENANCE=1`.
 
@@ -104,18 +104,18 @@ All scripts are available with `npm run <name>`.
 
 Run `test:client` and `test:server` separately when you only want to validate one layer. Run `test` to validate both together.
 
-### Database Migrations
+### Database Schema Tools
 
 | Script | Purpose |
 | --- | --- |
-| `db:generate` | Generate a migration SQL file for the app DB target. Alias for `db:generate:app`. |
-| `db:generate:app` | Generate migrations against the configured app database target. |
-| `db:generate:project` | Generate migrations against a project database target from `LOOPTROOP_PROJECT_DB_PATH`. |
-| `db:push` | Push schema changes directly to the app DB target. Alias for `db:push:app`. |
-| `db:push:app` | Push schema changes directly to the app database target. |
+| `db:generate` | Generate app DB migration artifacts for external tooling review. Alias for `db:generate:app`; normal app schema changes still need `server/db/schema.ts` and runtime bootstrap updates in `server/db/init.ts`. |
+| `db:generate:app` | Generate app DB migration artifacts from the configured app database target. Verify output against `server/db/schema.ts` before committing. |
+| `db:generate:project` | Generate project DB migration artifacts from `LOOPTROOP_PROJECT_DB_PATH`. |
+| `db:push` | App DB push command retained for ad-hoc local experiments only; do not use as the normal app schema-change workflow. |
+| `db:push:app` | Same as `db:push`; avoid for normal app schema changes because runtime bootstrap owns app DB creation/evolution. |
 | `db:push:project` | Push schema changes directly to the project database target from `LOOPTROOP_PROJECT_DB_PATH`. |
 
-All commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview). The default `drizzle.config.ts` points at `drizzle.app.config.ts`; project DB work should use the explicit project scripts.
+The app database is runtime-bootstrapped by `server/db/init.ts`. The committed migration directory is not the source of truth for live app startup. Project DB work should use the explicit project scripts.
 
 ## Environment Variables
 
@@ -125,9 +125,9 @@ All commands use [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview). The 
 | `LOOPTROOP_FRONTEND_ORIGIN` | Override full frontend origin URL, for example `http://my-server:5173`; a valid explicit origin takes precedence over `LOOPTROOP_FRONTEND_PORT`, while an invalid value falls back to the default origin |
 | `LOOPTROOP_BACKEND_HOST` | Backend bind host; defaults to `127.0.0.1` |
 | `LOOPTROOP_BACKEND_PORT` | Override backend port |
-| `LOOPTROOP_ALLOW_REMOTE_API=1` | Required before binding the backend to a non-loopback host |
-| `LOOPTROOP_ALLOW_UNAUTHENTICATED=1` | Disable API token enforcement entirely; **do not combine with `LOOPTROOP_ALLOW_REMOTE_API=1`** — doing so exposes all endpoints with no authentication; a startup warning is logged when both are set |
-| `LOOPTROOP_API_TOKEN` | Optional token required by `/api/*`; `npm run dev` generates an ephemeral value when unset |
+| `LOOPTROOP_ALLOW_REMOTE_API=1` | Required before binding the backend to a non-loopback host; remote binds still require `LOOPTROOP_API_TOKEN` |
+| `LOOPTROOP_ALLOW_UNAUTHENTICATED=1` | Permit unauthenticated `/api/*` access only when no `LOOPTROOP_API_TOKEN` is configured; intended for local-only troubleshooting, not remote exposure |
+| `LOOPTROOP_API_TOKEN` | Optional token required by `/api/*`; `npm run dev` generates an ephemeral value when unset and the Vite dev proxy forwards it server-side |
 | `LOOPTROOP_TRUST_PROXY=1` | Trust `x-forwarded-for` / `x-real-ip` for rate-limit buckets; leave unset unless a trusted proxy owns those headers |
 | `LOOPTROOP_ENABLE_DEV_EVENT=1` | Enable the development-only ticket event injection route when paired with `LOOPTROOP_DEV_EVENT_TOKEN` |
 | `LOOPTROOP_DEV_EVENT_TOKEN` | Required secret for the dev-event route when it is enabled |

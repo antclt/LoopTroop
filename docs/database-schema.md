@@ -15,11 +15,11 @@ That split is intentional:
 | App DB | `~/.config/looptroop/app.sqlite` | `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
 | Project DB | `<project>/.looptroop/db.sqlite` | derived from the attached project root |
 
-Both databases are opened with WAL mode and SQLite foreign-key enforcement enabled. On project DB startup, LoopTroop removes orphan rows from dependent ticket tables before enabling enforcement so partially written or manually edited databases do not keep dangling references.
+Both databases are opened with WAL mode and SQLite foreign-key enforcement enabled. `server/db/index.ts` owns the app DB path, connection lifecycle, and SQLite pragmas; `server/db/init.ts` bootstraps and evolves the app runtime schema. On project DB startup, LoopTroop removes orphan rows from dependent ticket tables before enabling enforcement so partially written or manually edited databases do not keep dangling references.
 
 ## App Database
 
-The app database is initialized in `server/db/index.ts`.
+The app database connection is configured in `server/db/index.ts`; its runtime schema is initialized and evolved by `server/db/init.ts`.
 
 ### Tables
 
@@ -231,21 +231,13 @@ The project DB also creates indexes for:
 
 Combined with WAL mode, this keeps the workflow responsive while the UI polls and the backend streams updates.
 
-## Schema Migrations
+## Schema Changes
 
-LoopTroop uses [Drizzle Kit](https://orm.drizzle.team/docs/kit-overview) for schema management.
+LoopTroop uses Drizzle schema definitions, but the app database is created and updated at server startup by `server/db/init.ts`. For normal app schema changes, update both `server/db/schema.ts` and the runtime bootstrap/evolution logic in `server/db/init.ts`; do not rely on `db:push` or `db:push:app` as the app schema-change workflow.
 
-```bash
-# Generate a migration file after changing server/db/schema.ts
-npm run db:generate
+`db:generate` and `db:generate:app` are retained for external tooling or migration artifact review. Verify generated output against `server/db/schema.ts` before committing it.
 
-# Apply pending migrations to the local database directly
-npm run db:push
-```
-
-Use `db:generate` when you want a committed migration file in the repository. Use `db:push` for rapid local iteration when you do not yet need a migration record.
-
-The default `drizzle.config.ts` targets the app database through `drizzle.app.config.ts`. For project-local database work, use the explicit scripts and set `LOOPTROOP_PROJECT_DB_PATH`:
+For project-local database work, use the explicit scripts and set `LOOPTROOP_PROJECT_DB_PATH`:
 
 ```bash
 npm run db:generate:project

@@ -19,6 +19,7 @@ import { getOpenCodeAdapter, isMockOpenCodeMode } from '../opencode/factory'
 import { broadcaster } from '../sse/broadcaster'
 import { appendLogEvent } from '../log/executionLog'
 import { cancelTicket, handleInterviewQABatch, processInterviewBatchAsync, skipAllInterviewQuestionsToApproval } from '../workflow/runner'
+import { abortTicketWork } from '../workflow/phases/state'
 import { createTicket as createTicketRecord } from '../ticket/create'
 import { TicketInitializationError, initializeTicket } from '../ticket/initialize'
 import { withCommandLogging } from '../log/commandLogger'
@@ -159,59 +160,61 @@ const rawPrdSaveSchema = z.object({
   content: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES),
 })
 
+const prdUserStorySchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  acceptance_criteria: z.array(z.string()),
+  implementation_steps: z.array(z.string()),
+  verification: z.object({
+    required_commands: z.array(z.string()),
+  }).strict(),
+}).strict()
+
+const prdEpicSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  objective: z.string(),
+  implementation_steps: z.array(z.string()),
+  user_stories: z.array(prdUserStorySchema),
+}).strict()
+
+const prdDocumentSchema = z.object({
+  schema_version: z.number(),
+  ticket_id: z.string(),
+  artifact: z.literal('prd'),
+  status: z.enum(['draft', 'approved']),
+  source_interview: z.object({
+    content_sha256: z.string(),
+  }).strict(),
+  product: z.object({
+    problem_statement: z.string(),
+    target_users: z.array(z.string()),
+  }).strict(),
+  scope: z.object({
+    in_scope: z.array(z.string()),
+    out_of_scope: z.array(z.string()),
+  }).strict(),
+  technical_requirements: z.object({
+    architecture_constraints: z.array(z.string()),
+    data_model: z.array(z.string()),
+    api_contracts: z.array(z.string()),
+    security_constraints: z.array(z.string()),
+    performance_constraints: z.array(z.string()),
+    reliability_constraints: z.array(z.string()),
+    error_handling_rules: z.array(z.string()),
+    tooling_assumptions: z.array(z.string()),
+  }).strict(),
+  epics: z.array(prdEpicSchema).min(1),
+  risks: z.array(z.string()),
+  approval: z.object({
+    approved_by: z.string(),
+    approved_at: z.string(),
+  }).strict(),
+}).strict()
+
 const structuredPrdSaveSchema = z.object({
-  document: z.object({
-    schema_version: z.number(),
-    ticket_id: z.string(),
-    artifact: z.literal('prd'),
-    status: z.enum(['draft', 'approved']),
-    source_interview: z.object({
-      content_sha256: z.string(),
-    }),
-    product: z.object({
-      problem_statement: z.string(),
-      target_users: z.array(z.string()),
-    }),
-    scope: z.object({
-      in_scope: z.array(z.string()),
-      out_of_scope: z.array(z.string()),
-    }),
-    technical_requirements: z.object({
-      architecture_constraints: z.array(z.string()),
-      data_model: z.array(z.string()),
-      api_contracts: z.array(z.string()),
-      security_constraints: z.array(z.string()),
-      performance_constraints: z.array(z.string()),
-      reliability_constraints: z.array(z.string()),
-      error_handling_rules: z.array(z.string()),
-      tooling_assumptions: z.array(z.string()),
-    }),
-    epics: z.array(
-      z.object({
-        id: z.string(),
-        title: z.string(),
-        objective: z.string(),
-        implementation_steps: z.array(z.string()),
-        user_stories: z.array(
-          z.object({
-            id: z.string(),
-            title: z.string(),
-            acceptance_criteria: z.array(z.string()),
-            implementation_steps: z.array(z.string()),
-            verification: z.object({
-              required_commands: z.array(z.string()),
-            }),
-          })
-        ),
-      })
-    ).min(1),
-    risks: z.array(z.string()),
-    approval: z.object({
-      approved_by: z.string(),
-      approved_at: z.string(),
-    }),
-  })
-})
+  document: prdDocumentSchema,
+}).strict()
 
 const rawExecutionSetupPlanSaveSchema = z.object({
   content: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES),
@@ -228,7 +231,7 @@ const executionSetupPlanSchema = z.object({
     actionsRequired: z.boolean(),
     evidence: z.array(z.string()),
     gaps: z.array(z.string()),
-  }),
+  }).strict(),
   tempRoots: z.array(z.string()),
   steps: z.array(
     z.object({
@@ -239,32 +242,32 @@ const executionSetupPlanSchema = z.object({
       required: z.boolean(),
       rationale: z.string(),
       cautions: z.array(z.string()),
-    })
+    }).strict()
   ),
   projectCommands: z.object({
     prepare: z.array(z.string()),
     testFull: z.array(z.string()),
     lintFull: z.array(z.string()),
     typecheckFull: z.array(z.string()),
-  }),
+  }).strict(),
   qualityGatePolicy: z.object({
     tests: z.string(),
     lint: z.string(),
     typecheck: z.string(),
     fullProjectFallback: z.string(),
-  }),
+  }).strict(),
   cautions: z.array(z.string()),
-})
+}).strict()
 
 const structuredExecutionSetupPlanSaveSchema = z.object({
   plan: executionSetupPlanSchema,
-})
+}).strict()
 
 const regenerateExecutionSetupPlanSchema = z.object({
   commentary: z.string().trim().min(1),
   plan: executionSetupPlanSchema.optional(),
   rawContent: z.string().max(RAW_ARTIFACT_CONTENT_MAX_BYTES).optional(),
-})
+}).strict()
 
 const opencodeQuestionReplySchema = z.object({
   answers: z.array(z.array(z.string())),
@@ -1282,12 +1285,21 @@ export async function handleAnswerBatch(c: Context) {
       sendTicketEvent(ticketId, { type: 'BATCH_ANSWERED', batchAnswers: parsed.data.answers, selectedOptions: parsed.data.selectedOptions })
 
       const batchTimeoutMs = 10 * 60 * 1000
+      let timeoutId: ReturnType<typeof setTimeout> | null = null
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => {
+          abortTicketWork(ticketId)
+          reject(new Error('Async batch processing timed out'))
+        }, batchTimeoutMs)
+      })
+
       Promise.race([
         processInterviewBatchAsync(ticketId, parsed.data.answers, session!, parsed.data.selectedOptions),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Async batch processing timed out')), batchTimeoutMs),
-        ),
+        timeoutPromise,
       ])
+        .finally(() => {
+          if (timeoutId) clearTimeout(timeoutId)
+        })
         .then(result => {
           ensureActorForTicket(ticketId)
           if (result.isComplete) {

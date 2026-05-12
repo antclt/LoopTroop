@@ -39,4 +39,29 @@ describe('JSON validation middleware', () => {
 
     expect(response.status).toBe(400)
   })
+
+  it('rejects oversized chunked JSON bodies by byte length', async () => {
+    const app = createValidationApp()
+    const oversizedJson = JSON.stringify({
+      value: '€'.repeat(Math.ceil(MAX_API_JSON_BODY_BYTES / 3) + 100),
+    })
+    const encoder = new TextEncoder()
+    const body = new ReadableStream({
+      start(controller) {
+        controller.enqueue(encoder.encode(oversizedJson))
+        controller.close()
+      },
+    })
+
+    const request = new Request('http://localhost/api/tickets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      duplex: 'half',
+    } as RequestInit)
+
+    const response = await app.request(request)
+
+    expect(response.status).toBe(413)
+  })
 })

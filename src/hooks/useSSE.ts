@@ -302,10 +302,10 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
         eventSourceRef.current = null
         recoverOnOpenRef.current = true
         setConnectionState('reconnecting')
-        // Use the current ticketId from the ref to avoid stale closures
-        // when ticketId changes between connect and error
-        const currentTicketId = ticketId
-        queryClient.invalidateQueries({ queryKey: ['ticket', currentTicketId] })
+        const currentTicketId = ticketIdRef.current
+        if (currentTicketId) {
+          queryClient.invalidateQueries({ queryKey: ['ticket', currentTicketId] })
+        }
         queryClient.invalidateQueries({ queryKey: ['tickets'] })
         scheduleReconnect()
       }

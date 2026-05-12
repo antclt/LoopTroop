@@ -224,13 +224,13 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   WAITING_INTERVIEW_ANSWERS: {
-    overview: 'LoopTroop pauses all automated work and presents an interactive interview for you to answer. This is a user-input phase — no AI processing happens until you submit or skip the current question batch. Your answers (and skip decisions) directly shape the PRD that will be generated later, so this is your primary opportunity to guide the implementation direction. You may see this phase more than once if coverage finds gaps and generates follow-up questions.',
+    overview: 'LoopTroop pauses the workflow and presents an interactive interview for you to answer. This is a user-input phase until you submit or skip the current question batch. Your answers (and skip decisions) directly shape the PRD that will be generated later, so this is your primary opportunity to guide the implementation direction. Submitting a non-final batch can keep the ticket in this same phase with the next batch, and coverage can also return here later with targeted follow-up questions.',
     steps: [
       'Question Presentation: The workspace presents the current interview batch with all pending questions. Each question shows its type (free-text or choice-based), any context/hints provided by the AI, and whether it has been previously answered or skipped.',
       'Answering Questions: You can answer questions in any order. Free-text questions accept open-ended responses; choice-based questions present the available options. Your answers are stored in a local draft state as you type, so you won\'t lose work if you switch between questions.',
       'Skipping Questions: If a question is not relevant or you don\'t have the information, you can skip it. Skipped questions are tracked separately — during PRD drafting, the AI will attempt to fill in reasonable answers for skipped questions based on the ticket context. You can also unskip a previously skipped question to answer it after all.',
-      'Batch Submission: When you submit the current batch, LoopTroop normalizes your answers and skip decisions into the canonical interview state. This persists your responses into the interview session snapshot and updates the interview YAML artifact.',
-      'Follow-Up Rounds: If the coverage check (which runs after submission) determines that more information is needed, the workflow returns here with a new targeted batch of follow-up questions. These follow-ups are generated based on gaps in your previous answers, not by repeating the same questions.',
+      'Batch Submission: When you submit the current batch, LoopTroop normalizes your answers and skip decisions into the canonical interview state. This persists your responses into the interview session snapshot and updates the interview YAML artifact. If PROM4 prepares another interview batch, the ticket stays in this phase with the new questions; when the interview is complete, it advances to coverage.',
+      'Follow-Up Rounds: After the interview is complete, coverage may determine that more information is needed and return here with a new targeted batch of follow-up questions. These follow-ups are generated based on gaps in your previous answers, not by repeating the same questions.',
       'Skip All: You can skip all remaining unanswered questions at once. This finalizes the current answers, marks all remaining questions as skipped, and advances the workflow directly to interview approval — bypassing the real coverage evaluation. A synthetic clean coverage record is written under the VERIFYING_INTERVIEW_COVERAGE phase label so audit history remains complete.',
     ],
     outputs: [
@@ -239,13 +239,14 @@ const WORKFLOW_PHASE_DETAILS = {
       'Question history grouped across initial and follow-up rounds, preserving the full interaction timeline.',
     ],
     transitions: [
-      'Submit/Skip → Coverage Check (Interview): Submitting or skipping the active batch moves the workflow to the interview coverage check, which evaluates whether enough information has been gathered.',
+      'Submit/Skip → Interviewing: Submitting or skipping a non-final batch keeps the workflow in this phase and presents the next batch.',
+      'Complete Batch → Coverage Check (Interview): When the submitted batch completes the interview, the workflow advances to the interview coverage check, which evaluates whether enough information has been gathered.',
       'Coverage Follow-Up → Back Here: If coverage identifies gaps, the workflow returns to this phase with additional targeted follow-up questions for you to answer.',
       'Skip All → Approving Interview (Direct): Finalizes all remaining unanswered questions as skipped, then advances directly to interview approval — bypassing the real coverage evaluation. A synthetic clean coverage artifact is written for audit continuity.',
     ],
     notes: [
-      'This is a user-input phase — the workflow is intentionally paused. No AI models are running while you answer questions.',
-      'This phase may appear multiple times in the lifecycle if coverage generates follow-up rounds — each round is a new batch of targeted questions.',
+      'This is primarily a user-input phase — the workflow is intentionally paused while you answer questions. AI processing resumes only after submission to prepare the next batch or complete the interview.',
+      'This phase may repeat during initial interview batching and later during coverage-generated follow-up rounds.',
       'AI context available: Ticket Details only. The compiled question set, answered/skipped/pending state, and configured question limits are appended explicitly by the interview session logic when needed.',
       'Tip: Detailed, specific answers lead to better PRDs. If you\'re unsure about a question, it\'s better to answer with your best understanding and note any uncertainty than to skip it entirely.',
       'Tip: Skipping is fine for truly irrelevant questions — the AI will fill in reasonable defaults during PRD drafting. But skipping core architecture or business logic questions may result in a PRD that needs more manual editing later.',
@@ -1101,7 +1102,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_INTERVIEW_ANSWERS',
     label: 'Interviewing',
-    description: 'Answer the interview questions that will shape the PRD. Your responses and skip decisions are recorded; if coverage finds gaps after submission, follow-up question batches may bring you back here.',
+    description: 'Answer the interview questions that will shape the PRD. Non-final submissions can keep you here with another batch; completed interviews move to coverage, and coverage follow-ups can return here later.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_INTERVIEW_ANSWERS,
     kanbanPhase: 'needs_input',
     groupId: 'interview',

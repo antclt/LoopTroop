@@ -1,17 +1,11 @@
 import { Hono } from 'hono'
 import { z } from 'zod'
+import { execFile } from 'child_process'
 import { access, constants, readdir, stat } from 'fs/promises'
 import { dirname, resolve as resolvePath } from 'path'
 import { homedir } from 'os'
+import { promisify } from 'util'
 
-async function existsAsync(path: string): Promise<boolean> {
-  try {
-    await access(path, constants.F_OK)
-    return true
-  } catch {
-    return false
-  }
-}
 import {
   attachExistingProject,
   attachProject,
@@ -26,12 +20,14 @@ import {
   resolveProjectState,
   updateProject,
 } from '../storage/projects'
-import { parseGitHubRemoteUrl, readOriginRemoteUrl } from '../git/github'
+import { parseGitHubRemoteUrl } from '../git/github'
 import { buildRuntimeStatus } from '../runtime'
-import { isGitRepo, normalizeFolderPath, resolveGitRepoRoot } from '../storage/paths'
+import { normalizeFolderPath } from '../storage/paths'
 import { buildWslProjectMountedDriveWarning, isWslWindowsMountPath } from '../../shared/wslPerformance'
 
 const projectRouter = new Hono()
+const execFileAsync = promisify(execFile)
+const GIT_COMMAND_MAX_BUFFER_BYTES = 16 * 1024 * 1024
 
 const perProjectOverrides = {
   councilMembers: z.string().optional(),
@@ -70,6 +66,43 @@ interface GitRepoInfo {
   existingProject?: ExistingProjectMetadata | null
 }
 
+async function existsAsync(path: string): Promise<boolean> {
+  try {
+    await access(path, constants.F_OK)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function resolveGitRepoRootAsync(folderPath: string): Promise<string | null> {
+  const normalized = normalizeFolderPath(folderPath)
+  if (!(await existsAsync(normalized))) return null
+
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', normalized, 'rev-parse', '--show-toplevel'], {
+      encoding: 'utf8',
+      maxBuffer: GIT_COMMAND_MAX_BUFFER_BYTES,
+    })
+    const repoRoot = stdout.trim()
+    return repoRoot ? normalizeFolderPath(repoRoot) : null
+  } catch {
+    return null
+  }
+}
+
+async function readOriginRemoteUrlAsync(repoRoot: string): Promise<string | null> {
+  try {
+    const { stdout } = await execFileAsync('git', ['-C', repoRoot, 'remote', 'get-url', 'origin'], {
+      encoding: 'utf8',
+      maxBuffer: GIT_COMMAND_MAX_BUFFER_BYTES,
+    })
+    return stdout.trim() || null
+  } catch {
+    return null
+  }
+}
+
 async function getGitRepoInfo(folderPath: string): Promise<GitRepoInfo> {
   const resolved = normalizeFolderPath(folderPath)
   if (!(await existsAsync(resolved))) {
@@ -77,9 +110,9 @@ async function getGitRepoInfo(folderPath: string): Promise<GitRepoInfo> {
     return { isGit: false }
   }
 
-  const repoRoot = resolveGitRepoRoot(resolved)
+  const repoRoot = await resolveGitRepoRootAsync(resolved)
   if (!repoRoot) return { isGit: false }
-  const githubRepo = parseGitHubRemoteUrl(readOriginRemoteUrl(repoRoot))
+  const githubRepo = parseGitHubRemoteUrl(await readOriginRemoteUrlAsync(repoRoot))
 
   const state = resolveProjectState(repoRoot)
   return {
@@ -213,15 +246,15 @@ projectRouter.post('/projects', async (c) => {
     return c.json({ error: 'Invalid input', details: parsed.error.flatten(), message }, 400)
   }
 
-  if (process.env.NODE_ENV !== 'test' && !isGitRepo(parsed.data.folderPath)) {
+  const repoRoot = await resolveGitRepoRootAsync(parsed.data.folderPath)
+  if (process.env.NODE_ENV !== 'test' && !repoRoot) {
     return c.json({
       error: 'Folder is not a git repository',
       details: `No git repository found at: ${parsed.data.folderPath}. Please initialize the repository with 'git init' first.`,
     }, 400)
   }
 
-  const repoRoot = resolveGitRepoRoot(parsed.data.folderPath)
-  const githubRepo = repoRoot ? parseGitHubRemoteUrl(readOriginRemoteUrl(repoRoot)) : null
+  const githubRepo = repoRoot ? parseGitHubRemoteUrl(await readOriginRemoteUrlAsync(repoRoot)) : null
   if (!githubRepo) {
     return c.json({
       error: 'GitHub origin remote is required',

@@ -13,7 +13,7 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
 
-When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `X-LoopTroop-Token: <token>`, `Authorization: Bearer <token>`, or the SSE-safe `apiToken=<token>` query parameter. `npm run dev` generates and wires an ephemeral token automatically.
+When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `X-LoopTroop-Token: <token>` or `Authorization: Bearer <token>`. The only query-token exception is `/api/stream`, where browser `EventSource` clients may use `apiToken=<token>` because they cannot set custom headers. `npm run dev` generates an ephemeral token when needed and keeps it server-side; the Vite dev proxy injects it for same-origin `/api` requests.
 
 All `/api/*` routes share a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. When a limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying.
 
@@ -29,7 +29,7 @@ All `/api/*` routes share a global per-client rate limit, with separate buckets 
 | `GET` | `/api/workflow/meta` | Current workflow groups and phases |
 | `GET` | `/api/stream?ticketId=<id>` | Ticket-scoped SSE stream; validates the ticket and enforces stream caps |
 
-`/api/stream` also accepts `lastEventId` and `apiToken` query parameters. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible.
+`/api/stream` also accepts `lastEventId` and, when header auth is not available, `apiToken` query parameters. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible.
 
 Example health payload:
 
@@ -254,6 +254,8 @@ Current batch-answer payload:
 
 Possible `answer-batch` response shapes:
 
+`202 { "accepted": true }` means the user answers were accepted and asynchronous AI processing is continuing in the background. A non-complete batch response keeps the ticket in `WAITING_INTERVIEW_ANSWERS` with another batch to answer. When `isComplete` is `true`, the backend dispatches interview completion and the workflow advances to coverage.
+
 ```json
 {
   "accepted": true
@@ -262,9 +264,15 @@ Possible `answer-batch` response shapes:
 
 ```json
 {
-  "questions": [],
+  "questions": [
+    {
+      "id": "q-auth-3",
+      "question": "What session lifetime should SSO tokens use?",
+      "type": "free_text"
+    }
+  ],
   "progress": {
-    "answered": 4,
+    "current": 4,
     "total": 8
   },
   "isComplete": false,
@@ -308,10 +316,44 @@ Execution setup plan read response:
   "exists": true,
   "artifactId": 42,
   "updatedAt": "2026-04-23T09:00:00.000Z",
-  "raw": "{\n  \"schema_version\": \"1\",\n  \"ticket_id\": \"AUTH-12\"\n}",
+  "raw": "{\"schemaVersion\":1,\"ticketId\":\"AUTH-12\",\"artifact\":\"execution_setup_plan\",\"status\":\"draft\",\"summary\":\"Prepare the workspace before implementation.\"}",
   "plan": {
-    "schemaVersion": "1",
-    "ticketId": "AUTH-12"
+    "schemaVersion": 1,
+    "ticketId": "AUTH-12",
+    "artifact": "execution_setup_plan",
+    "status": "draft",
+    "summary": "Prepare the workspace before implementation.",
+    "readiness": {
+      "status": "ready",
+      "actionsRequired": false,
+      "evidence": ["Dependencies are already installed."],
+      "gaps": []
+    },
+    "tempRoots": [".looptroop/worktrees/AUTH-12"],
+    "steps": [
+      {
+        "id": "setup-1",
+        "title": "Install dependencies",
+        "purpose": "Ensure commands run with the expected packages.",
+        "commands": ["npm install"],
+        "required": true,
+        "rationale": "The project uses npm scripts for verification.",
+        "cautions": ["Do not update unrelated dependencies."]
+      }
+    ],
+    "projectCommands": {
+      "prepare": ["npm install"],
+      "testFull": ["npm test"],
+      "lintFull": ["npm run lint"],
+      "typecheckFull": ["npm run typecheck"]
+    },
+    "qualityGatePolicy": {
+      "tests": "Run targeted tests first, then the full suite before handoff.",
+      "lint": "Run the project linter after code changes.",
+      "typecheck": "Run TypeScript typecheck after code changes.",
+      "fullProjectFallback": "If targeted checks are inconclusive, run all required project checks."
+    },
+    "cautions": ["Keep generated artifacts out of source control."]
   }
 }
 ```
@@ -321,7 +363,34 @@ Regeneration payload:
 ```json
 {
   "commentary": "Tighten the temp-root cleanup steps and add the full lint command.",
-  "rawContent": "{\n  \"schema_version\": \"1\",\n  \"ticket_id\": \"AUTH-12\"\n}"
+  "plan": {
+    "schemaVersion": 1,
+    "ticketId": "AUTH-12",
+    "artifact": "execution_setup_plan",
+    "status": "draft",
+    "summary": "Prepare the workspace before implementation.",
+    "readiness": {
+      "status": "ready",
+      "actionsRequired": false,
+      "evidence": [],
+      "gaps": []
+    },
+    "tempRoots": [],
+    "steps": [],
+    "projectCommands": {
+      "prepare": [],
+      "testFull": ["npm test"],
+      "lintFull": ["npm run lint"],
+      "typecheckFull": ["npm run typecheck"]
+    },
+    "qualityGatePolicy": {
+      "tests": "Run full tests before handoff.",
+      "lint": "Run lint before handoff.",
+      "typecheck": "Run typecheck before handoff.",
+      "fullProjectFallback": "Run all required project checks when unsure."
+    },
+    "cautions": []
+  }
 }
 ```
 

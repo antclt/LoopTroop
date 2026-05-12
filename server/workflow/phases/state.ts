@@ -46,6 +46,14 @@ export function cancelTicket(ticketId: string) {
   cleanupTicketState(ticketId)
 }
 
+export function abortTicketWork(ticketId: string) {
+  const controller = ticketAbortControllers.get(ticketId)
+  if (controller) {
+    controller.abort()
+    ticketAbortControllers.delete(ticketId)
+  }
+}
+
 export function getOrCreateAbortSignal(ticketId: string): AbortSignal {
   let controller = ticketAbortControllers.get(ticketId)
   if (!controller) {

@@ -27,7 +27,7 @@ LoopTroop operates as a layered system:
 | OpenCode adapter | Session creation, prompting, event streaming, questions, health | `server/opencode/adapter.ts` |
 | Session manager | Ownership tracking, reconnect validation, completion and abandonment | `server/opencode/sessionManager.ts` |
 | SSE broadcaster | Ticket-scoped event fan-out plus replay buffer for reconnect | `server/sse/broadcaster.ts` |
-| App database | Singleton profile and attached-project registry | `server/db/index.ts` |
+| App database | Singleton profile and attached-project registry | `server/db/index.ts`, `server/db/init.ts` |
 | Project database | Tickets, artifacts, sessions, attempts, history, error occurrences | `server/db/project.ts` |
 | Ticket filesystem | Human-readable and execution-time artifacts inside the ticket worktree | `server/storage/*`, `server/phases/*` |
 | Git and GitHub layer | Worktrees, diffs, commits, PR creation, merge/close flows | `server/phases/execution/gitOps.ts`, `server/git/*`, `server/github/*` |
@@ -179,7 +179,8 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 
 | Area | Modules |
 | --- | --- |
-| App DB bootstrap | `server/db/index.ts` |
+| App DB connection and SQLite pragmas | `server/db/index.ts` |
+| App DB runtime schema bootstrap | `server/db/init.ts` |
 | Project DB bootstrap | `server/db/project.ts` |
 | Schema | `server/db/schema.ts` |
 | Ticket and project storage helpers | `server/storage/*` |

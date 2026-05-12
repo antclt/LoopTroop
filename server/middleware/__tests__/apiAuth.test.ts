@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { createApiAuthMiddleware } from '../apiAuth'
 
@@ -10,7 +10,26 @@ function createAuthApp(token?: string) {
   return app
 }
 
+const ORIGINAL_ENV = {
+  LOOPTROOP_ALLOW_UNAUTHENTICATED: process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED,
+  LOOPTROOP_ALLOW_REMOTE_API: process.env.LOOPTROOP_ALLOW_REMOTE_API,
+}
+
 describe('API auth middleware', () => {
+  afterEach(() => {
+    if (ORIGINAL_ENV.LOOPTROOP_ALLOW_UNAUTHENTICATED === undefined) {
+      delete process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED
+    } else {
+      process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED = ORIGINAL_ENV.LOOPTROOP_ALLOW_UNAUTHENTICATED
+    }
+    if (ORIGINAL_ENV.LOOPTROOP_ALLOW_REMOTE_API === undefined) {
+      delete process.env.LOOPTROOP_ALLOW_REMOTE_API
+    } else {
+      process.env.LOOPTROOP_ALLOW_REMOTE_API = ORIGINAL_ENV.LOOPTROOP_ALLOW_REMOTE_API
+    }
+    vi.restoreAllMocks()
+  })
+
   it('returns 503 when no token is configured and unauthenticated access is not allowed', async () => {
     const app = createAuthApp('')
 
@@ -42,6 +61,25 @@ describe('API auth middleware', () => {
       headers: { Authorization: 'Bearer secret-token' },
     })).status).toBe(200)
     expect((await app.request('/api/stream?apiToken=secret-token')).status).toBe(200)
+  })
+
+  it('does not accept query-param tokens outside the SSE stream route', async () => {
+    const app = createAuthApp('secret-token')
+
+    expect((await app.request('/api/health?apiToken=secret-token')).status).toBe(401)
+  })
+
+  it('keeps token enforcement when LOOPTROOP_ALLOW_UNAUTHENTICATED is set with a token', async () => {
+    process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED = '1'
+    process.env.LOOPTROOP_ALLOW_REMOTE_API = '1'
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const app = createAuthApp('secret-token')
+
+    expect((await app.request('/api/health')).status).toBe(401)
+    expect((await app.request('/api/health', {
+      headers: { 'X-LoopTroop-Token': 'secret-token' },
+    })).status).toBe(200)
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
   it('rejects missing or incorrect tokens', async () => {

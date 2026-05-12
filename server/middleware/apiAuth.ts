@@ -42,12 +42,12 @@ export function createApiAuthMiddleware(options: ApiAuthOptions = {}) {
   const configuredToken = options.token ?? process.env.LOOPTROOP_API_TOKEN?.trim()
   const allowUnauthenticated = process.env.LOOPTROOP_ALLOW_UNAUTHENTICATED === '1'
 
-  if (allowUnauthenticated && process.env.LOOPTROOP_ALLOW_REMOTE_API === '1') {
+  if (!configuredToken && allowUnauthenticated && process.env.LOOPTROOP_ALLOW_REMOTE_API === '1') {
     console.error(
       '[apiAuth] CRITICAL: LOOPTROOP_ALLOW_UNAUTHENTICATED=1 with LOOPTROOP_ALLOW_REMOTE_API=1. ' +
       'The API is completely open to the network. This should NEVER be used in production.',
     )
-  } else if (allowUnauthenticated) {
+  } else if (!configuredToken && allowUnauthenticated) {
     console.warn('[apiAuth] Running without API token authentication. Set LOOPTROOP_API_TOKEN to secure the API.')
   }
 

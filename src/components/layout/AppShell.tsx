@@ -38,7 +38,7 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
           }}
         >
           <img src="/trans-logo.png" alt="LoopTroop" className="h-7" />
-          <span className="text-xl tracking-wide leading-none" style={{ fontFamily: "'Godfather', 'Georgia', 'Times New Roman', serif" }}>
+          <span className="text-xl tracking-wide leading-none" style={{ fontFamily: "'Georgia', 'Times New Roman', serif" }}>
             LoopTroop
           </span>
         </button>
