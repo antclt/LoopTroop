@@ -227,11 +227,7 @@ describe('executeBead', () => {
 
   it('calls onContextWipe when iteration fails and PROM51 generates notes', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()
-    adapter.mockResponses.set('mock-session-1#1', [
-      '<BEAD_STATUS>',
-      '{"bead_id":"bead-1","status":"error","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"},"reason":"tests still failing"}',
-      '</BEAD_STATUS>',
-    ].join('\n'))
+    adapter.promptFailures.set('mock-session-1#1', new Error('tests still failing'))
     adapter.mockResponses.set('mock-session-1#2', 'Iteration 1 failed because: no completion marker output.')
 
     const notesUpdates: { beadId: string; notes: string }[] = []
@@ -241,7 +237,7 @@ describe('executeBead', () => {
       [{ type: 'text', content: 'Bead context' }],
       '/tmp/test',
       1,
-      1,
+      PROFILE_DEFAULTS.perIterationTimeout,
       undefined,
       {
         onContextWipe: async ({ beadId, notes }) => {
@@ -389,11 +385,7 @@ describe('executeBead', () => {
 
   it('rebuilds bead context for the next iteration after PROM51 notes are appended', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()
-    adapter.mockResponses.set('mock-session-1#1', [
-      '<BEAD_STATUS>',
-      '{"bead_id":"bead-1","status":"error","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"},"reason":"missing final fix"}',
-      '</BEAD_STATUS>',
-    ].join('\n'))
+    adapter.promptFailures.set('mock-session-1#1', new Error('missing final fix'))
     adapter.mockResponses.set('mock-session-1#2', 'Retry with the new note about the missing completion marker.')
     adapter.mockResponses.set('mock-session-2#1', [
       '<BEAD_STATUS>',
@@ -412,7 +404,7 @@ describe('executeBead', () => {
       },
       '/tmp/test',
       2,
-      1,
+      PROFILE_DEFAULTS.perIterationTimeout,
     )
 
     expect(result.success).toBe(true)

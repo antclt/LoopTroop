@@ -433,7 +433,7 @@ These routes are intentionally narrow.
 | `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 | `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 
-Log routes accept optional `status`, `phase`, `phaseAttempt`, `limit`, and `tail` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. `limit` defaults to `5000` and is capped at `20000`; by default the endpoint returns the tail of matching entries. Set `tail=false` to return the first matching entries up to the limit.
+Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry.
 
 There is no generic filesystem browser or arbitrary file read route under `/api/files`.
 

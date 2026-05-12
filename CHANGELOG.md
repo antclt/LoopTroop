@@ -37,7 +37,7 @@ All notable changes to LoopTroop will be documented in this file.
 - `DropdownPicker` now repositions on window resize and scroll while open.
 - `KeyboardShortcuts` `?` shortcut now suppressed on `contentEditable` elements and `<select>` in addition to `<input>`/`<textarea>`.
 - `dev-preflight.mjs` deduplicated: now delegates to `tsx scripts/dev-preflight.ts` instead of duplicating utility functions.
-- `logUtils.ts` localStorage log entries now pruned to `MAX_LOG_ENTRIES_PER_PHASE` to prevent quota exhaustion.
+- Completed log entries are no longer entry-count capped in the log API or browser cache; server log files remain the durable source of truth, while streaming partials are still folded to avoid repeated in-progress snapshots.
 
 ### Configuration
 - `vitest.config.ts`: all test projects now use `isolate: true` to prevent test state leakage.

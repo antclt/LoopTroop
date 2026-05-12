@@ -265,7 +265,7 @@ describe('appendLogEvent', () => {
     expect(mockAppend).toHaveBeenCalledOnce()
   })
 
-  it('dedupes recent append events by content hash when no fingerprint is provided', () => {
+  it('persists repeated append events when no fingerprint is provided', () => {
     appendLogEvent(
       '1:T-42',
       'info',
@@ -286,10 +286,10 @@ describe('appendLogEvent', () => {
       'CODING',
     )
 
-    expect(mockAppend).toHaveBeenCalledOnce()
+    expect(mockAppend).toHaveBeenCalledTimes(2)
   })
 
-  it('dedupes recent AI finalize events separately per persisted channel', () => {
+  it('persists repeated AI finalize events when no fingerprint is provided', () => {
     const writeAiResult = (timestamp: string) => appendLogEvent(
       '1:T-42',
       'model_output',
@@ -310,17 +310,16 @@ describe('appendLogEvent', () => {
     writeAiResult('2026-03-13T12:00:00.000Z')
     writeAiResult('2026-03-13T12:00:00.050Z')
 
-    expect(mockAppend).toHaveBeenCalledTimes(2)
+    expect(mockAppend).toHaveBeenCalledTimes(4)
     expect(mockAppend.mock.calls.map((call) => call[0])).toEqual([
+      '/tmp/test-execution-log.ai.jsonl',
+      '/tmp/test-execution-log.jsonl',
       '/tmp/test-execution-log.ai.jsonl',
       '/tmp/test-execution-log.jsonl',
     ])
   })
 
-  it('allows the same emission again after the dedup window expires', () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-03-13T12:00:00.000Z'))
-
+  it('does not suppress repeated non-fingerprinted emissions', () => {
     expect(shouldSkipLogEmission(
       '1:T-42',
       'info',
@@ -331,24 +330,12 @@ describe('appendLogEvent', () => {
       'CODING',
     )).toBe(false)
 
-    vi.setSystemTime(new Date('2026-03-13T12:00:00.200Z'))
     expect(shouldSkipLogEmission(
       '1:T-42',
       'info',
       'CODING',
       'Status update',
       { timestamp: '2026-03-13T12:00:00.200Z' },
-      'system',
-      'CODING',
-    )).toBe(true)
-
-    vi.setSystemTime(new Date('2026-03-13T12:00:01.500Z'))
-    expect(shouldSkipLogEmission(
-      '1:T-42',
-      'info',
-      'CODING',
-      'Status update',
-      { timestamp: '2026-03-13T12:00:01.500Z' },
       'system',
       'CODING',
     )).toBe(false)

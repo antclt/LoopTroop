@@ -165,7 +165,7 @@ describe('filesRouter GET /files/:ticketId/logs', () => {
     expect(aiPayload.every((entry) => entry.audience === 'ai')).toBe(true)
   })
 
-  it('returns a bounded tail of log entries by default-compatible limit parameters', async () => {
+  it('returns all matching log entries even when legacy limit parameters are present', async () => {
     const { ticket, paths } = createProjectTicket()
     writeJsonl(paths.debugLogPath, [
       { timestamp: '2026-03-13T12:00:00.000Z', message: 'first' },
@@ -177,15 +177,7 @@ describe('filesRouter GET /files/:ticketId/logs', () => {
 
     expect(response.status).toBe(200)
     const payload = await response.json() as Array<Record<string, unknown>>
-    expect(payload.map((entry) => entry.message)).toEqual(['second', 'third'])
-  })
-
-  it('rejects invalid log limits', async () => {
-    const { ticket } = createProjectTicket()
-
-    const response = await app.request(`/api/files/${encodeURIComponent(ticket.id)}/logs?limit=20001`)
-
-    expect(response.status).toBe(400)
+    expect(payload.map((entry) => entry.message)).toEqual(['first', 'second', 'third'])
   })
 })
 
