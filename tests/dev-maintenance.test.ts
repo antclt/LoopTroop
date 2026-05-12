@@ -4,7 +4,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   chooseAgedDependencyTarget,
+  collectLockfilePackageUpdates,
   decideDailyMaintenanceTask,
+  evaluatePackageVersionReleaseAge,
   recordDailyMaintenanceSuccess,
   type DailyMaintenanceState,
 } from '../scripts/dev-maintenance'
@@ -163,5 +165,61 @@ describe('aged dependency update selection', () => {
     })
 
     expect(selection.targetVersion).toBe('1.1.0')
+  })
+})
+
+describe('audit lockfile age gating', () => {
+  const now = new Date('2026-05-12T12:00:00.000Z')
+
+  it('extracts proposed package version changes from npm audit lockfile previews', () => {
+    const currentLock = JSON.stringify({
+      packages: {
+        '': { name: 'looptroop' },
+        'node_modules/plain': { version: '1.0.0' },
+        'node_modules/@scope/pkg': { version: '2.0.0' },
+      },
+    })
+    const proposedLock = JSON.stringify({
+      packages: {
+        '': { name: 'looptroop' },
+        'node_modules/plain': { version: '1.1.0' },
+        'node_modules/@scope/pkg': { version: '2.0.0' },
+        'node_modules/wrapped/node_modules/nested': { version: '3.0.0' },
+      },
+    })
+
+    const result = collectLockfilePackageUpdates(currentLock, proposedLock)
+
+    expect(result.errors).toEqual([])
+    expect(result.updates).toEqual([
+      { name: 'nested', version: '3.0.0', currentVersion: undefined },
+      { name: 'plain', version: '1.1.0', currentVersion: '1.0.0' },
+    ])
+  })
+
+  it('marks proposed audit fix versions as held until their release delay passes', () => {
+    const releaseAge = evaluatePackageVersionReleaseAge({
+      version: '4.2.0',
+      now,
+      publishTimes: {
+        '4.2.0': '2026-05-10T12:00:00.000Z',
+      },
+    })
+
+    expect(releaseAge.eligible).toBe(false)
+    expect(releaseAge.reason).toBe('too-new')
+    expect(releaseAge.nextEligibleAt).toBe('2026-05-17T12:00:00.000Z')
+  })
+
+  it('allows proposed audit fix versions that are old enough', () => {
+    const releaseAge = evaluatePackageVersionReleaseAge({
+      version: '4.1.0',
+      now,
+      publishTimes: {
+        '4.1.0': '2026-05-01T12:00:00.000Z',
+      },
+    })
+
+    expect(releaseAge.eligible).toBe(true)
   })
 })

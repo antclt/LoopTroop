@@ -35,7 +35,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - checks direct dependencies against npm publish metadata
 - updates stale direct dependencies only to stable releases that are newer than the current installed version and at least 7 days old
 - holds newer releases that are still inside that 7-day delay, and installs the newest eligible older release when one exists
-- runs `npm audit fix` without `--force`
+- previews `npm audit fix` lockfile changes and runs the fix only when every proposed npm package version has passed the same 7-day delay
 - upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
 - prints the startup plan for each dev service
@@ -49,7 +49,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 
 That means `npm run dev` can intentionally mutate local dependency files when aged direct dependency updates or audit fixes are available. The expensive networked maintenance work is daily-gated during normal startup. Direct dependency sync, npm audit remediation, and OpenCode CLI upgrade checks run on the first local dev start of the day. If `package.json` or `package-lock.json` changes later the same day, the affected maintenance step runs again immediately.
 
-The 7-day release delay applies to direct npm package updates selected by dependency sync. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
+The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held package. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
 
 ## Maintenance Commands
 

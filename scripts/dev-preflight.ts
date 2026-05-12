@@ -305,6 +305,8 @@ const auditReport = shouldSkipDependencyMaintenance
       deferred: true,
       didFixRun: false,
       fixChanged: false,
+      fixHeld: false,
+      heldPackageUpdates: [],
       unresolved: [],
       totals: {
         info: 0,
@@ -477,15 +479,28 @@ if (shouldSkipDependencyMaintenance) {
     console.log(
       `[dev-preflight] Skipped daily npm audit remediation; it already ran today at ${formatTimestamp(auditReport.lastCompletedAt)}.`,
     )
-  } else if (auditReport.unresolved.length === 0) {
-    console.log('[dev-preflight] npm audit summary: no remaining findings.')
   } else {
-    console.log(
-      `[dev-preflight] npm audit summary: ${auditReport.totals.total} remaining ` +
-      `(high=${auditReport.totals.high}, moderate=${auditReport.totals.moderate}).`,
-    )
-    for (const issue of auditReport.unresolved.slice(0, 5)) {
-      console.log(`[dev-preflight] - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
+    if (auditReport.fixHeld) {
+      console.log(
+        `[dev-preflight] npm audit remediation held ${auditReport.heldPackageUpdates.length} ` +
+        `${auditReport.heldPackageUpdates.length === 1 ? 'package release' : 'package releases'} until the 7-day release delay passes.`,
+      )
+      for (const held of auditReport.heldPackageUpdates.slice(0, 5)) {
+        const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
+        console.log(`[dev-preflight] - held audit fix ${held.name}${held.version ? `@${held.version}` : ''}${nextEligible}`)
+      }
+    }
+
+    if (auditReport.unresolved.length === 0) {
+      console.log('[dev-preflight] npm audit summary: no remaining findings.')
+    } else {
+      console.log(
+        `[dev-preflight] npm audit summary: ${auditReport.totals.total} remaining ` +
+        `(high=${auditReport.totals.high}, moderate=${auditReport.totals.moderate}).`,
+      )
+      for (const issue of auditReport.unresolved.slice(0, 5)) {
+        console.log(`[dev-preflight] - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
+      }
     }
   }
 }

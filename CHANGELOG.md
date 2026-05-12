@@ -5,7 +5,7 @@ All notable changes to LoopTroop will be documented in this file.
 ## [Unreleased]
 
 ### Security & Reliability
-- `npm run dev` now restores daily startup dependency/audit/OpenCode maintenance while gating direct npm dependency updates to stable releases that are at least 7 days old; if `latest` is too fresh, dependency sync installs the newest eligible older version instead. OpenCode CLI and `@opencode-ai/sdk` updates remain immediate.
+- `npm run dev` now restores daily startup dependency/audit/OpenCode maintenance while gating npm dependency updates to releases that are at least 7 days old; if `latest` is too fresh, dependency sync installs the newest eligible older version instead, and audit remediation holds the whole fix when any proposed package version is too fresh. OpenCode CLI and `@opencode-ai/sdk` updates remain immediate.
 - Fixed timing side-channel in API token comparison: `constantTimeEquals` now always runs `timingSafeEqual` even when token lengths differ, preventing length-leak via response timing.
 - SSE authentication: `apiToken` query parameter now accepted exclusively on `/api/stream` (the only endpoint where browser `EventSource` clients cannot set custom headers); all other endpoints reject query-param tokens.
 - Vite dev proxy now injects the ephemeral `LOOPTROOP_API_TOKEN` server-side for same-origin `/api` requests, keeping the token out of the frontend bundle while preserving protected local development.

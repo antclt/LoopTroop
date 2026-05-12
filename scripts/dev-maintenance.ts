@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process'
-import { accessSync, constants, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { basename, dirname, resolve } from 'node:path'
+import { accessSync, constants, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getErrorMessage } from '../shared/typeGuards'
 
@@ -94,11 +95,21 @@ export interface AuditRemediationReport {
   deferred: boolean
   didFixRun: boolean
   fixChanged: boolean
+  fixHeld: boolean
+  heldPackageUpdates: HeldAuditPackageUpdate[]
   unresolved: AuditIssue[]
   totals: AuditTotals
   errors: string[]
   lastCompletedAt?: string
   nextEligibleAt?: string
+}
+
+export interface HeldAuditPackageUpdate {
+  name: string
+  version?: string
+  currentVersion?: string
+  nextEligibleAt?: string
+  reason: 'metadata-unavailable' | 'missing-version' | 'too-new'
 }
 
 export interface OpenCodeUpgradeReport {
@@ -147,6 +158,21 @@ interface DependencyUpdatePlan {
   targetVersion: string
   targetPublishedAt?: string
   bypassedAgeGate: boolean
+}
+
+export interface LockfilePackageUpdate {
+  name: string
+  version: string
+  currentVersion?: string
+}
+
+interface PackageLockEntry {
+  version?: unknown
+  link?: unknown
+}
+
+interface PackageLockSnapshot {
+  packages?: Record<string, PackageLockEntry>
 }
 
 interface NpmCommandResult {
@@ -274,10 +300,10 @@ function stripAnsi(raw: string) {
 function runCommand(
   args: string[],
   label: string,
-  { verbose = false }: { verbose?: boolean } = {},
+  { verbose = false, cwd = repoRoot }: { verbose?: boolean; cwd?: string } = {},
 ): NpmCommandResult {
   const result = spawnSync(npmCommand, args, {
-    cwd: repoRoot,
+    cwd,
     encoding: 'utf8',
     stdio: verbose ? 'inherit' : 'pipe',
   })
@@ -643,6 +669,195 @@ export function chooseAgedDependencyTarget(options: {
   }
 }
 
+export function evaluatePackageVersionReleaseAge(options: {
+  version?: string
+  publishTimes?: Record<string, string> | null
+  now?: Date
+  minimumAgeDays?: number
+  bypassAgeGate?: boolean
+}): { eligible: boolean; publishedAt?: string; nextEligibleAt?: string; reason?: HeldAuditPackageUpdate['reason'] } {
+  const {
+    version,
+    publishTimes,
+    now = new Date(),
+    minimumAgeDays = DEPENDENCY_RELEASE_DELAY_DAYS,
+    bypassAgeGate = false,
+  } = options
+
+  if (!version) {
+    return { eligible: false, reason: 'missing-version' }
+  }
+
+  if (bypassAgeGate) {
+    return {
+      eligible: true,
+      publishedAt: publishTimes?.[version],
+    }
+  }
+
+  if (!publishTimes) {
+    return { eligible: false, reason: 'metadata-unavailable' }
+  }
+
+  const publishedAt = publishTimes[version]
+  const publishedAtMs = Date.parse(publishedAt ?? '')
+  if (!publishedAt || !isFiniteTimestamp(publishedAtMs)) {
+    return { eligible: false, reason: 'missing-version' }
+  }
+
+  const eligibleAtMs = publishedAtMs + Math.max(0, minimumAgeDays) * MS_PER_DAY
+  if (eligibleAtMs > now.getTime()) {
+    return {
+      eligible: false,
+      publishedAt,
+      nextEligibleAt: toIsoTimestamp(eligibleAtMs),
+      reason: 'too-new',
+    }
+  }
+
+  return {
+    eligible: true,
+    publishedAt,
+  }
+}
+
+function getPackageNameFromLockPath(lockPath: string) {
+  const marker = 'node_modules/'
+  const markerIndex = lockPath.lastIndexOf(marker)
+  if (markerIndex < 0) {
+    return null
+  }
+
+  const packagePath = lockPath.slice(markerIndex + marker.length)
+  const parts = packagePath.split('/')
+  if (parts[0]?.startsWith('@')) {
+    return parts[0] && parts[1] ? `${parts[0]}/${parts[1]}` : null
+  }
+
+  return parts[0] || null
+}
+
+export function collectLockfilePackageUpdates(
+  currentLockContents: string,
+  proposedLockContents: string,
+): { updates: LockfilePackageUpdate[]; errors: string[] } {
+  const currentLock = parseJson<PackageLockSnapshot>(currentLockContents)
+  const proposedLock = parseJson<PackageLockSnapshot>(proposedLockContents)
+  if (!currentLock?.packages || !proposedLock?.packages) {
+    return {
+      updates: [],
+      errors: ['Unable to parse npm audit fix lockfile preview.'],
+    }
+  }
+
+  const updatesByPackageVersion = new Map<string, LockfilePackageUpdate>()
+
+  for (const [lockPath, proposedEntry] of Object.entries(proposedLock.packages)) {
+    if (!lockPath || proposedEntry.link === true || typeof proposedEntry.version !== 'string') {
+      continue
+    }
+
+    const name = getPackageNameFromLockPath(lockPath)
+    if (!name) {
+      continue
+    }
+
+    const currentEntry = currentLock.packages[lockPath]
+    const currentVersion = typeof currentEntry?.version === 'string' ? currentEntry.version : undefined
+    if (currentVersion === proposedEntry.version) {
+      continue
+    }
+
+    const key = `${name}@${proposedEntry.version}`
+    if (!updatesByPackageVersion.has(key)) {
+      updatesByPackageVersion.set(key, {
+        name,
+        version: proposedEntry.version,
+        currentVersion,
+      })
+    }
+  }
+
+  return {
+    updates: [...updatesByPackageVersion.values()].sort((left, right) => {
+      const nameDelta = left.name.localeCompare(right.name)
+      return nameDelta !== 0 ? nameDelta : left.version.localeCompare(right.version)
+    }),
+    errors: [],
+  }
+}
+
+function findHeldAuditPackageUpdates(updates: LockfilePackageUpdate[], { now = new Date(), verbose = false }: { now?: Date; verbose?: boolean } = {}) {
+  const held: HeldAuditPackageUpdate[] = []
+
+  for (const update of updates) {
+    const bypassAgeGate = OPENCODE_IMMEDIATE_NPM_PACKAGES.has(update.name)
+    const publishTimesResult = bypassAgeGate
+      ? { times: null as Record<string, string> | null, error: null as string | null }
+      : getPackagePublishTimes(update.name)
+
+    if (!bypassAgeGate && publishTimesResult.error) {
+      if (verbose) {
+        console.warn(`[dev-preflight] Holding npm audit fix; unable to verify ${update.name}@${update.version}: ${publishTimesResult.error}`)
+      }
+      held.push({
+        name: update.name,
+        version: update.version,
+        currentVersion: update.currentVersion,
+        reason: 'metadata-unavailable',
+      })
+      continue
+    }
+
+    const releaseAge = evaluatePackageVersionReleaseAge({
+      version: update.version,
+      publishTimes: publishTimesResult.times,
+      now,
+      bypassAgeGate,
+    })
+
+    if (!releaseAge.eligible) {
+      held.push({
+        name: update.name,
+        version: update.version,
+        currentVersion: update.currentVersion,
+        nextEligibleAt: releaseAge.nextEligibleAt,
+        reason: releaseAge.reason ?? 'too-new',
+      })
+    }
+  }
+
+  return held
+}
+
+function previewAuditFixLockfile({ verbose = false }: { verbose?: boolean } = {}) {
+  const tempDir = mkdtempSync(join(tmpdir(), 'looptroop-audit-fix-'))
+  const tempPackageJsonPath = resolve(tempDir, 'package.json')
+  const tempPackageLockPath = resolve(tempDir, 'package-lock.json')
+
+  try {
+    copyFileSync(packageJsonPath, tempPackageJsonPath)
+    copyFileSync(packageLockPath, tempPackageLockPath)
+    runCommand(
+      ['audit', 'fix', '--package-lock-only', '--ignore-scripts'],
+      'npm audit fix --package-lock-only',
+      { verbose, cwd: tempDir },
+    )
+
+    return {
+      lockContents: readFileIfPresent(tempPackageLockPath),
+      error: null as string | null,
+    }
+  } catch (error) {
+    return {
+      lockContents: null,
+      error: getErrorMessage(error),
+    }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
 function summarizeAuditIssues(vulnerabilities: Record<string, {
   name: string
   severity: keyof AuditTotals
@@ -923,6 +1138,8 @@ export function remediateAudit(
       deferred: false,
       didFixRun: false,
       fixChanged: false,
+      fixHeld: false,
+      heldPackageUpdates: [],
       unresolved: [],
       totals: emptyTotals(),
       errors: [],
@@ -931,13 +1148,42 @@ export function remediateAudit(
 
   const lockContentsBefore = readFileIfPresent(packageLockPath)
   const errors: string[] = []
+  const heldPackageUpdates: HeldAuditPackageUpdate[] = []
   let didFixRun = false
+  let fixHeld = false
 
-  try {
-    didFixRun = true
-    runCommand(['audit', 'fix'], 'npm audit fix', { verbose })
-  } catch (error) {
-    errors.push(getErrorMessage(error))
+  if (!lockContentsBefore) {
+    errors.push('Unable to read package-lock.json before npm audit remediation.')
+  } else {
+    const preview = previewAuditFixLockfile({ verbose })
+
+    if (preview.error) {
+      errors.push(`Unable to preview npm audit fix: ${preview.error}`)
+    } else if (!preview.lockContents) {
+      errors.push('Unable to read npm audit fix lockfile preview.')
+    } else {
+      const lockfileUpdates = collectLockfilePackageUpdates(lockContentsBefore, preview.lockContents)
+      errors.push(...lockfileUpdates.errors)
+
+      if (lockfileUpdates.errors.length === 0) {
+        heldPackageUpdates.push(...findHeldAuditPackageUpdates(lockfileUpdates.updates, { verbose }))
+        fixHeld = heldPackageUpdates.length > 0
+
+        if (fixHeld) {
+          console.log(
+            `[dev-preflight] Holding npm audit fix because ${heldPackageUpdates.length} proposed ` +
+            `${heldPackageUpdates.length === 1 ? 'package release is' : 'package releases are'} inside the 7-day delay.`,
+          )
+        } else {
+          try {
+            didFixRun = true
+            runCommand(['audit', 'fix'], 'npm audit fix', { verbose })
+          } catch (error) {
+            errors.push(getErrorMessage(error))
+          }
+        }
+      }
+    }
   }
 
   const lockContentsAfter = readFileIfPresent(packageLockPath)
@@ -967,6 +1213,8 @@ export function remediateAudit(
     deferred: false,
     didFixRun,
     fixChanged,
+    fixHeld,
+    heldPackageUpdates,
     unresolved: summarizeAuditIssues(auditJson?.vulnerabilities),
     totals: auditJson?.metadata?.vulnerabilities ?? emptyTotals(),
     errors,

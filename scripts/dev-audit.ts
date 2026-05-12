@@ -15,7 +15,12 @@ if (report.skipped) {
   process.exit(0)
 }
 
-if (report.fixChanged) {
+if (report.fixHeld) {
+  console.log(
+    `[audit:remediate] Held npm audit fix because ${report.heldPackageUpdates.length} proposed ` +
+    `${report.heldPackageUpdates.length === 1 ? 'package release is' : 'package releases are'} inside the 7-day delay.`,
+  )
+} else if (report.fixChanged) {
   console.log('[audit:remediate] npm audit fix updated the dependency graph.')
 } else {
   console.log('[audit:remediate] npm audit fix made no dependency changes.')

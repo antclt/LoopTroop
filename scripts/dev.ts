@@ -202,6 +202,12 @@ if (preflightReport) {
       'Audit',
       `Deferred daily remediation; last completed today at ${formatMaintenanceTimestamp(preflightReport.audit.lastCompletedAt)}`,
     )
+  } else if (preflightReport.audit.fixHeld) {
+    printSummaryLine(
+      'Audit',
+      `Held remediation; ${preflightReport.audit.heldPackageUpdates.length} proposed ` +
+      `${preflightReport.audit.heldPackageUpdates.length === 1 ? 'release is' : 'releases are'} inside the 7-day delay`,
+    )
   } else if (preflightReport.audit.unresolved.length === 0) {
     printSummaryLine('Audit', 'No remaining npm audit findings after remediation')
   } else {
