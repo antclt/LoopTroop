@@ -69,3 +69,11 @@
 
 > **Important**: Although the developer mainly uses WSL + Thorium, **this project is OS, projects (users can use all possible programming languages), and terminal agnostic**.
 > Do not hardcode WSL-specific paths, commands, or assumptions. All scripts and instructions should work on macOS, Linux, and Windows (PowerShell/WSL) where possible.
+
+### Changelog Maintenance
+
+- **Always keep `CHANGELOG.md` up to date**. For every change you make, you can immediately add, remove, modify or optimise relevant entries in the `## [Unreleased]` section before committing.
+- Structure the `[Unreleased]` section as follows:
+  - **Summary** (at the very top): Add or modify **only a single concise, user-facing line** per bigger or notable change. This high-level summary will be used for release notes and quick overviews.
+  - **Detailed Changes** (immediately below): Provide **more detailed** entries organized under standard category headings (`### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security`, `### Performance`, etc.).
+- Write in clear, professional, benefit-oriented language suitable for both users and developers. Focus on human-readable changes rather than raw commit messages.
