@@ -17,6 +17,31 @@ search: false
 
 *   **Argue the opposite:** In approving interview, main implementer will refresh context, add ticket details and interview results, analyze the whole interview, and then suggest a completely opposite approach to each question's ticket description and interview results. It will be an optional thing.
 *   **Animate icons:** Update the icons for actions when models are doing different actions (e.g., when models create a draft, it shows drafting with a pencil icon — can this pencil be animated, or can a similar animation be used?).
+*   **Post-interview planning context refresh:** After interview approval, add a mandatory `REFRESHING_PLANNING_CONTEXT` phase before PRD drafting.
+    * Transition: `WAITING_INTERVIEW_APPROVAL` -> approve -> `REFRESHING_PLANNING_CONTEXT` -> `DRAFTING_PRD`.
+    * This phase runs for every ticket.
+    * It reconciles the original ticket-based relevant-file scan with the approved interview answers, skipped-question metadata, current repository state, repo map/index entries, and direct code search results.
+    * Replace downstream `relevant_files` context with a new canonical `planning_context` artifact for all future phases.
+    * Keep the original relevant-files output only as the initial seed / debug artifact; future phases should consume `planning_context`, not `relevant_files`.
+    * Output `.looptroop/tickets/<ticket-id>/context/planning-context.yaml`.
+    * Also output `.looptroop/tickets/<ticket-id>/context/planning-context-refresh-receipt.json` with input hashes, refresh result, warnings, and reason codes.
+    * `planning-context.yaml` must include:
+      * selected files with priority, role, reason, and evidence references;
+      * newly added files discovered from interview answers or code search;
+      * files demoted or removed from the initial scan, with reasons;
+      * relevant symbols, routes, APIs, configs, tests, commands, and docs when detectable;
+      * skipped-question topics that may affect implementation context;
+      * confidence score and warnings.
+    * File role should be explicit: `modify`, `read_for_interface`, `read_for_pattern`, `test`, `config`, `docs`, or `risk_only`.
+    * A ticket with no meaningful context changes still writes `planning-context.yaml` and a receipt with `result: no_change`.
+    * All PRD council members receive the same `planning_context` before per-model Full Answers and PRD drafting start.
+    * Do not fill skipped interview answers in this phase; only record which skipped topics may affect implementation context.
+    * If an approved interview is edited after this phase, invalidate downstream PRD/Beads artifacts and restart from `REFRESHING_PLANNING_CONTEXT`, not directly from `DRAFTING_PRD`.
+    * Prefer repo index / repo map / changed-only refresh when available; fall back to full scan-style discovery only when the index is missing, stale, or low-confidence.
+    * Combine semantic search, grep/text search, path matching, symbol lookup, and the original relevant-file scan instead of relying on only one retrieval method.
+    * Keep context bounded: store enough evidence and references to explain why files were selected, but do not dump large full-file contents into the artifact unless required.
+    * Add a future UI surface to show `planning_context`, pinned files, demoted files, ignored files, and "why selected" explanations.
+    * Add a legacy migration alias so existing prompts/components that still request `relevant_files` receive `planning_context` until all phases are updated.
 *   **Optimize components:** Update each component to latest stable and optimize each component of the app, after creation, using ref.tools mcp that can read latest version of docs plus exa mcp that can search the internet and skill for each component.
 *   **Diff view:** Show git diff per finished bead in ticket view dashboard
     *   Add one-click `rollback_to_bead` with preview and explicit confirmation.
