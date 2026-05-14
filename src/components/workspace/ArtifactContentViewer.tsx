@@ -65,6 +65,7 @@ import {
   parsePullRequestReport,
   parseInterviewQuestions,
   parseRefinementArtifact,
+  normalizeRawAttempts,
 } from './phaseArtifactTypes'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { parseInterviewDocument, normalizeInterviewDocumentLike } from '@/lib/interviewDocument'
@@ -1631,13 +1632,96 @@ function FinalPrdDraftView({
   phase?: string
 }) {
   const [activeTab, setActiveTab] = useState<'final' | 'diff' | 'raw'>(defaultTab)
+  const [activeRawVariantId, setActiveRawVariantId] = useState('raw-attempts:accepted-latest')
 
   const parsed = parseRefinementArtifact(content)
+  const fallbackRawAttempts = useMemo(() => getRawAttemptsFromContent(content), [content])
+  const rawAttempts = parsed?.rawAttempts ?? fallbackRawAttempts
+  const rawAttemptVariants = useMemo(
+    () => buildRawAttemptInspectionVariants('raw-attempts', isBeads ? 'beads refinement' : 'PRD refinement', rawAttempts),
+    [isBeads, rawAttempts],
+  )
+  const artifactRawContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
+  const rawVariantOptions = useMemo<RawContentVariant[]>(() => [
+    ...rawAttemptVariants,
+    {
+      id: 'raw-attempts:artifact',
+      label: 'Artifact JSON',
+      content,
+      displayContent: artifactRawContent,
+      title: 'Show stored refinement artifact JSON',
+    },
+  ], [artifactRawContent, content, rawAttemptVariants])
+  const activeRawVariant = rawVariantOptions.find((variant) => variant.id === activeRawVariantId && !variant.disabled)
+    ?? rawVariantOptions.find((variant) => !variant.disabled)
+    ?? rawVariantOptions[0]
+  const activeRawContent = activeRawVariant?.content ?? content
+  const activeRawDisplayContent = activeRawVariant?.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
+  useEffect(() => {
+    if (!rawVariantOptions.some((variant) => variant.id === activeRawVariantId && !variant.disabled)) {
+      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'raw-attempts:artifact')
+    }
+  }, [activeRawVariantId, rawVariantOptions])
   const coverageResult = parseCoverageArtifact(content)
-  if (!parsed) return <RawContentWithCopy content={content} />
+  const rawVariantSelector = rawVariantOptions.length > 1
+    ? (
+      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden" aria-label="Raw refinement attempts">
+        {rawVariantOptions.map((variant) => {
+          const active = activeRawVariant?.id === variant.id
+          const disabled = Boolean(variant.disabled)
+          return (
+            <Tooltip key={variant.id}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={active}
+                  onClick={() => setActiveRawVariantId(variant.id)}
+                  className={cn(
+                    'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-accent/70 hover:text-foreground',
+                    disabled && 'cursor-not-allowed opacity-45 hover:bg-background hover:text-muted-foreground',
+                  )}
+                >
+                  <span className="min-w-0 truncate">{variant.label}</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+      )
+    : null
+
+  if (!parsed) {
+    return (
+      <div className="min-w-0 max-w-full space-y-3">
+        <div className="flex justify-end">
+          <CopyButton content={activeRawContent} />
+        </div>
+        {rawVariantSelector}
+        <RawDisplayStats content={activeRawDisplayContent} />
+        <RawDisplayPre content={activeRawDisplayContent} />
+      </div>
+    )
+  }
 
   const refinedContent = parsed?.refinedContent ?? ''
-  if (!refinedContent) return <RawContentWithCopy content={content} />
+  if (!refinedContent) {
+    return (
+      <div className="min-w-0 max-w-full space-y-3">
+        <div className="flex justify-end">
+          <CopyButton content={activeRawContent} />
+        </div>
+        {rawVariantSelector}
+        <RawDisplayStats content={activeRawDisplayContent} />
+        <RawDisplayPre content={activeRawDisplayContent} />
+      </div>
+    )
+  }
 
   const domain = isBeads ? 'beads' : 'prd'
   const diffEntries = buildRefinementDiffEntries(content, domain)
@@ -1646,7 +1730,6 @@ function FinalPrdDraftView({
   const shouldShowDiffTab = showDiffTab ?? !hideDiffInApproval
   const hasDiffTab = shouldShowDiffTab && (diffEntries.length > 0 || Boolean(parsed?.winnerDraftContent) || Boolean(parsed?.coverageBaselineContent))
   const currentTab = activeTab === 'raw' ? 'raw' : (hasDiffTab ? activeTab : 'final')
-  const rawDisplayContent = buildReadableRawDisplayContent(content)
   const notice = hasDiffTab ? <ArtifactProcessingNotice structuredOutput={parsed?.structuredOutput} kind="diff" /> : null
 
   const tabButtonClass = (tab: string) =>
@@ -1670,13 +1753,14 @@ function FinalPrdDraftView({
           <button onClick={() => setActiveTab('raw')} className={tabButtonClass('raw')}>
             Raw
           </button>
-          {currentTab === 'raw' && <CopyButton content={content} />}
+          {currentTab === 'raw' && <CopyButton content={activeRawContent} />}
         </div>
       </div>
       {currentTab === 'raw' ? (
         <div className="min-w-0 max-w-full space-y-3">
-          <RawDisplayStats content={rawDisplayContent} />
-          <RawDisplayPre content={rawDisplayContent} />
+          {rawVariantSelector}
+          <RawDisplayStats content={activeRawDisplayContent} />
+          <RawDisplayPre content={activeRawDisplayContent} />
         </div>
       ) : currentTab === 'final'
         ? (
@@ -2022,7 +2106,35 @@ function CoverageReportView({ content, phase }: { content: string; phase?: strin
     return <RawContentWithCopy content={content} />
   }
 
-  return <VersionedCoverageReportView coverageResult={coverageResult} content={content} phase={phase} />
+  return (
+    <WithRawTab
+      content={content}
+      structuredLabel="Summary"
+      rawSources={buildCoverageRawSources(coverageResult)}
+    >
+      <VersionedCoverageReportView coverageResult={coverageResult} content={content} phase={phase} />
+    </WithRawTab>
+  )
+}
+
+function buildCoverageRawSources(coverageResult: CoverageArtifactData | null): RawContentSource[] | undefined {
+  if (!coverageResult?.response && !coverageResult?.rawAttempts?.length) return undefined
+  return [{
+    id: 'coverage-model-output',
+    label: 'Model Output',
+    variants: [
+      ...(coverageResult.response ? [{
+        id: 'coverage-model-output:current',
+        label: 'Model Output',
+        content: coverageResult.response,
+        displayContent: coverageResult.response,
+        title: 'Show coverage model output',
+      }] : []),
+      ...buildRawAttemptVariants('coverage-audit', 'coverage audit', coverageResult.rawAttempts),
+    ],
+    disabled: !coverageResult.response && !coverageResult.rawAttempts?.length,
+    title: 'Show coverage raw diagnostics',
+  }]
 }
 
 export function InterviewAnswersView({ content, hideSummary = false, hideAiAnswerBadge = false }: { content: string; hideSummary?: boolean; hideAiAnswerBadge?: boolean }) {
@@ -3304,7 +3416,23 @@ function findRejectedRawOutput(history: string[] | undefined, currentRawResponse
 }
 
 function getRawAttemptContent(attempt: ArtifactRawAttemptData): string | undefined {
-  return attempt.rawResponse ?? attempt.modelOutput ?? attempt.content
+  const content = attempt.rawResponse ?? attempt.modelOutput ?? attempt.content
+  if (typeof content === 'string' && content.length > 0) return content
+  const diagnostic = attempt.validationError ?? attempt.error
+  if (!diagnostic) return undefined
+  return [
+    'No model response was captured for this attempt.',
+    '',
+    `Error: ${diagnostic}`,
+    attempt.failureClass ? `Failure class: ${attempt.failureClass}` : '',
+  ].filter(Boolean).join('\n')
+}
+
+function getRawAttemptsFromContent(content: string): ArtifactRawAttemptData[] | undefined {
+  const parsed = tryParseStructuredContent(content)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
+  const record = parsed as Record<string, unknown>
+  return normalizeRawAttempts(record.rawAttempts ?? record.raw_attempts)
 }
 
 function getRawAttemptStatus(attempt: ArtifactRawAttemptData): string | undefined {
@@ -3350,6 +3478,28 @@ function buildRawAttemptVariants(
       title: `Show ${attemptLabel.toLowerCase()} raw output from ${ownerLabel}${titleStatus}`,
     }]
   })
+}
+
+function buildRawAttemptInspectionVariants(
+  ownerId: string,
+  ownerLabel: string,
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+): RawContentVariant[] {
+  const attempts = rawAttempts ?? []
+  const latestAcceptedAttempt = [...attempts].reverse().find((attempt) => getRawAttemptStatus(attempt)?.toLowerCase() === 'accepted')
+  const latestAcceptedContent = latestAcceptedAttempt ? getRawAttemptContent(latestAcceptedAttempt) : undefined
+  return [
+    ...(typeof latestAcceptedContent === 'string'
+      ? [{
+          id: `${ownerId}:accepted-latest`,
+          label: 'Accepted Output',
+          content: latestAcceptedContent,
+          displayContent: latestAcceptedContent,
+          title: `Show latest accepted raw output from ${ownerLabel}`,
+        }]
+      : []),
+    ...buildRawAttemptVariants(ownerId, ownerLabel, rawAttempts),
+  ]
 }
 
 function buildRejectedRawVariant(
@@ -3798,8 +3948,34 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
 
 function RelevantFilesScanView({ content }: { content: string }) {
   const [activeTab, setActiveTab] = useState<'files' | 'raw'>('files')
+  const [activeRawVariantId, setActiveRawVariantId] = useState('relevant-files-scan:accepted-latest')
   const rawDisplayContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
   const raw = tryParseStructuredContent(content) as (RelevantFilesScanData & { files: Array<RelevantFileScanEntry & { content_preview?: string }> }) | null
+  const rawAttempts = useMemo(() => getRawAttemptsFromContent(content), [content])
+  const rawAttemptVariants = useMemo(
+    () => buildRawAttemptInspectionVariants('relevant-files-scan', 'relevant files scan', rawAttempts),
+    [rawAttempts],
+  )
+  const rawVariantOptions = useMemo<RawContentVariant[]>(() => [
+    ...rawAttemptVariants,
+    {
+      id: 'relevant-files-scan:artifact',
+      label: 'Artifact JSON',
+      content,
+      displayContent: rawDisplayContent,
+      title: 'Show stored relevant-files artifact JSON',
+    },
+  ], [content, rawAttemptVariants, rawDisplayContent])
+  const activeRawVariant = rawVariantOptions.find((variant) => variant.id === activeRawVariantId && !variant.disabled)
+    ?? rawVariantOptions.find((variant) => !variant.disabled)
+    ?? rawVariantOptions[0]
+  const activeRawContent = activeRawVariant?.content ?? content
+  const activeRawDisplayContent = activeRawVariant?.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
+  useEffect(() => {
+    if (!rawVariantOptions.some((variant) => variant.id === activeRawVariantId && !variant.disabled)) {
+      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'relevant-files-scan:artifact')
+    }
+  }, [activeRawVariantId, rawVariantOptions])
   if (!raw?.files) return <RawContentWithCopy content={content} />
 
   // Normalize: accept both camelCase (new) and snake_case (legacy DB rows)
@@ -3810,7 +3986,40 @@ function RelevantFilesScanView({ content }: { content: string }) {
       contentPreview: f.contentPreview ?? (f as { content_preview?: string }).content_preview ?? '',
       contentLength: f.contentLength ?? (f.contentPreview ?? (f as { content_preview?: string }).content_preview ?? '').length,
     })),
+    rawAttempts,
   }
+  const rawVariantSelector = rawVariantOptions.length > 1
+    ? (
+      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden" aria-label="Relevant files raw attempts">
+        {rawVariantOptions.map((variant) => {
+          const active = activeRawVariant?.id === variant.id
+          const disabled = Boolean(variant.disabled)
+          return (
+            <Tooltip key={variant.id}>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-pressed={active}
+                  onClick={() => setActiveRawVariantId(variant.id)}
+                  className={cn(
+                    'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                    active
+                      ? 'border-primary bg-primary text-primary-foreground'
+                      : 'border-border bg-background text-muted-foreground hover:bg-accent/70 hover:text-foreground',
+                    disabled && 'cursor-not-allowed opacity-45 hover:bg-background hover:text-muted-foreground',
+                  )}
+                >
+                  <span className="min-w-0 truncate">{variant.label}</span>
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
+            </Tooltip>
+          )
+        })}
+      </div>
+      )
+    : null
 
   const relevanceColor = (r: string) =>
     r === 'high' ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800'
@@ -3846,14 +4055,15 @@ function RelevantFilesScanView({ content }: { content: string }) {
           >
             Raw
           </button>
-          {activeTab === 'raw' && <CopyButton content={content} />}
+          {activeTab === 'raw' && <CopyButton content={activeRawContent} />}
         </div>
       </div>
 
       {activeTab === 'raw' ? (
         <>
-          <RawDisplayStats content={rawDisplayContent} />
-          <RawDisplayPre content={rawDisplayContent} />
+          {rawVariantSelector}
+          <RawDisplayStats content={activeRawDisplayContent} />
+          <RawDisplayPre content={activeRawDisplayContent} />
         </>
       ) : (
         <>
@@ -4767,6 +4977,24 @@ function FinalTestResultsView({ content }: { content: string }) {
       </ModelBadge>
       )
     : <div className="text-xs font-semibold px-1">Final Test Results</div>
+  const rawSources: RawContentSource[] | undefined = parsed.modelOutput || parsed.rawAttempts?.length
+    ? [{
+        id: 'final-test-model-output',
+        label: 'Model Output',
+        variants: [
+          ...(parsed.modelOutput ? [{
+            id: 'final-test-model-output:current',
+            label: 'Model Output',
+            content: parsed.modelOutput,
+            displayContent: parsed.modelOutput,
+            title: 'Show final-test model output',
+          }] : []),
+          ...buildRawAttemptVariants('final-test', 'final test generation', parsed.rawAttempts),
+        ],
+        disabled: !parsed.modelOutput && !parsed.rawAttempts?.length,
+        title: 'Show final-test raw diagnostics',
+      }]
+    : undefined
 
   return (
     <WithRawTab
@@ -4774,6 +5002,7 @@ function FinalTestResultsView({ content }: { content: string }) {
       structuredLabel="Results"
       header={header}
       notice={<ArtifactProcessingNotice structuredOutput={parsed.planStructuredOutput} kind="final-test" />}
+      rawSources={rawSources}
     >
       <div className="space-y-4">
         <div className={`rounded-md border px-3 py-2 text-xs font-medium ${
@@ -5698,6 +5927,7 @@ export function ArtifactContent({
         structuredLabel="Summary"
         header={header}
         notice={<ArtifactProcessingNotice structuredOutput={coverageResult?.structuredOutput} kind="coverage" />}
+        rawSources={buildCoverageRawSources(coverageResult)}
       >
         <CoverageResultView content={content} phase={phase} />
       </WithRawTab>

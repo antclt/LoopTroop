@@ -101,6 +101,7 @@ export interface CoverageAttemptData {
   response?: string
   normalizedContent?: string
   structuredOutput?: ArtifactStructuredOutputData
+  rawAttempts?: ArtifactRawAttemptData[]
   coverageRunNumber?: number
   maxCoveragePasses?: number
   limitReached?: boolean
@@ -119,6 +120,7 @@ export interface CoverageTransitionData {
   resolutionNotes: string[]
   uiRefinementDiff?: UiRefinementDiffArtifact | null
   structuredOutput?: ArtifactStructuredOutputData
+  rawAttempts?: ArtifactRawAttemptData[]
 }
 
 export interface CoverageFollowUpArtifactQuestion {
@@ -159,6 +161,7 @@ export interface CoverageArtifactData {
     follow_up_questions?: CoverageFollowUpArtifactQuestion[]
   }
   structuredOutput?: ArtifactStructuredOutputData
+  rawAttempts?: ArtifactRawAttemptData[]
 }
 
 export interface ArtifactStructuredOutputData {
@@ -279,6 +282,7 @@ export interface RefinementDiffArtifactData {
   structuredOutput?: ArtifactStructuredOutputData
   candidateVersion?: number
   gapResolutions?: CoverageGapResolutionData[]
+  rawAttempts?: ArtifactRawAttemptData[]
 }
 
 export interface RefinementDiffEntry {
@@ -321,6 +325,7 @@ export interface RelevantFilesScanData {
   files: RelevantFileScanEntry[]
   modelId?: string
   structuredOutput?: ArtifactStructuredOutputData
+  rawAttempts?: ArtifactRawAttemptData[]
 }
 
 export interface FinalTestCommandResultData {
@@ -357,6 +362,7 @@ export interface FinalTestExecutionReportData {
   commands: FinalTestCommandResultData[]
   errors: string[]
   planStructuredOutput?: ArtifactStructuredOutputData
+  rawAttempts?: ArtifactRawAttemptData[]
   attempt?: number
   maxIterations?: number | null
   attemptHistory?: FinalTestAttemptHistoryEntryData[]
@@ -646,7 +652,7 @@ function normalizeStringArray(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
 }
 
-function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] | undefined {
+export function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] | undefined {
   if (!Array.isArray(value)) return undefined
   const attempts = value
     .filter((entry): entry is Record<string, unknown> => isRecord(entry))
@@ -1150,6 +1156,7 @@ export function parseRefinementArtifact(content: string): RefinementDiffArtifact
     structuredOutput: normalizeArtifactStructuredOutput(parsed.structuredOutput),
     candidateVersion: normalizeCandidateVersion(parsed.candidateVersion),
     gapResolutions: normalizeCoverageGapResolutions(parsed.gapResolutions ?? parsed.gap_resolutions),
+    rawAttempts: normalizeRawAttempts(getValueByAliases(parsed, ['rawAttempts', 'raw_attempts'])),
   }
 }
 
@@ -1420,6 +1427,9 @@ export function buildFinalRefinementArtifactContent(
       candidateVersion: typeof coverageRecord.candidateVersion === 'number'
         ? coverageRecord.candidateVersion
         : sourceArtifact?.candidateVersion,
+      rawAttempts: sourceArtifact?.rawAttempts
+        ?? normalizeRawAttempts(getValueByAliases(refinedCompanion ?? {}, ['rawAttempts', 'raw_attempts']))
+        ?? undefined,
     }
 
     return JSON.stringify(payload)
@@ -1449,6 +1459,9 @@ export function buildFinalRefinementArtifactContent(
     structuredOutput: sourceArtifact?.structuredOutput
       ?? normalizeArtifactStructuredOutput(refinedCompanion?.structuredOutput)
       ?? coverageArtifact?.structuredOutput,
+    rawAttempts: sourceArtifact?.rawAttempts
+      ?? normalizeRawAttempts(getValueByAliases(refinedCompanion ?? {}, ['rawAttempts', 'raw_attempts']))
+      ?? undefined,
     candidateVersion: coverageArtifact?.finalCandidateVersion
       ?? latestRevisionArtifact?.candidateVersion
       ?? (typeof coverageRecord?.candidateVersion === 'number'
@@ -1553,6 +1566,7 @@ export function parseCoverageArtifact(content: string): CoverageArtifactData | n
             response: typeof attempt.response === 'string' ? attempt.response : undefined,
             normalizedContent: typeof attempt.normalizedContent === 'string' ? attempt.normalizedContent : undefined,
             structuredOutput: normalizeArtifactStructuredOutput(attempt.structuredOutput),
+            rawAttempts: normalizeRawAttempts(getValueByAliases(attempt, ['rawAttempts', 'raw_attempts'])),
             coverageRunNumber: typeof attempt.coverageRunNumber === 'number' ? attempt.coverageRunNumber : undefined,
             maxCoveragePasses: typeof attempt.maxCoveragePasses === 'number' ? attempt.maxCoveragePasses : undefined,
             limitReached: typeof attempt.limitReached === 'boolean' ? attempt.limitReached : undefined,
@@ -1586,6 +1600,7 @@ export function parseCoverageArtifact(content: string): CoverageArtifactData | n
               : [],
             uiRefinementDiff: normalizeUiRefinementDiff(transition.uiRefinementDiff) ?? undefined,
             structuredOutput: normalizeArtifactStructuredOutput(transition.structuredOutput),
+            rawAttempts: normalizeRawAttempts(getValueByAliases(transition, ['rawAttempts', 'raw_attempts'])),
           } satisfies CoverageTransitionData]
         })
       : undefined,
@@ -1595,6 +1610,7 @@ export function parseCoverageArtifact(content: string): CoverageArtifactData | n
       : undefined,
     parsed: parsedCoverage,
     structuredOutput: normalizeArtifactStructuredOutput(result.structuredOutput),
+    rawAttempts: normalizeRawAttempts(getValueByAliases(result, ['rawAttempts', 'raw_attempts'])),
   }
 }
 

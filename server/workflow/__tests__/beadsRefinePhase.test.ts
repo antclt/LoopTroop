@@ -364,7 +364,10 @@ describe('handleBeadsRefine', () => {
       _sessionOwnership: unknown,
       _buildPrompt: unknown,
       validateResponse?: (content: string) => { normalizedContent?: string },
-    ) => validateResponse?.(buildValidRefinementOutput()).normalizedContent ?? buildValidRefinementOutput())
+    ) => ({
+      content: validateResponse?.(buildValidRefinementOutput()).normalizedContent ?? buildValidRefinementOutput(),
+      rawAttempts: [],
+    }))
 
     await handleBeadsRefine(ticket.id, context, sendEvent, new AbortController().signal)
 

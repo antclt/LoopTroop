@@ -277,9 +277,9 @@ describe('interview workflow phases', () => {
 
     refineDraftMock.mockImplementation(async (...args: unknown[]) => {
       const validateResponse = args[12] as ((content: string) => { normalizedContent?: string }) | undefined
-      if (!validateResponse) return rawRefinementOutput
+      if (!validateResponse) return { content: rawRefinementOutput, rawAttempts: [] }
       const validation = validateResponse(rawRefinementOutput)
-      return validation.normalizedContent ?? rawRefinementOutput
+      return { content: validation.normalizedContent ?? rawRefinementOutput, rawAttempts: [] }
     })
 
     phaseIntermediate.set(`${ticket.id}:interview`, {
@@ -424,9 +424,9 @@ describe('interview workflow phases', () => {
 
     refineDraftMock.mockImplementation(async (...args: unknown[]) => {
       const validateResponse = args[12] as ((content: string) => { normalizedContent?: string }) | undefined
-      if (!validateResponse) return rawRefinementOutput
+      if (!validateResponse) return { content: rawRefinementOutput, rawAttempts: [] }
       const validation = validateResponse(rawRefinementOutput)
-      return validation.normalizedContent ?? rawRefinementOutput
+      return { content: validation.normalizedContent ?? rawRefinementOutput, rawAttempts: [] }
     })
 
     phaseIntermediate.set(`${ticket.id}:interview`, {

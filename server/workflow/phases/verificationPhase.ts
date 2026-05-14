@@ -2,7 +2,7 @@ import type { TicketContext, TicketEvent } from '../../machines/types'
 import { withCommandLoggingAsync } from '../../log/commandLogger'
 import { handleMockExecutionUnsupported } from './executionPhase'
 import type { PromptPart } from '../../opencode/types'
-import { CancelledError, throwIfAborted } from '../../council/types'
+import { CancelledError, throwIfAborted, type RawAttempt } from '../../council/types'
 import { throwIfCancelled } from '../../lib/abort'
 import { COMMAND_OUTPUT_SLICE_LENGTH, MODEL_OUTPUT_PREVIEW_LENGTH } from '../../lib/constants'
 import { buildMinimalContext, type TicketState } from '../../opencode/contextBuilder'
@@ -223,6 +223,7 @@ type CoverageAttemptHistoryEntry = {
   response: string
   normalizedContent: string
   structuredOutput: ReturnType<typeof buildStructuredMetadata>
+  rawAttempts?: RawAttempt[]
   coverageRunNumber: number
   maxCoveragePasses: number
   limitReached: boolean
@@ -246,6 +247,7 @@ type CoverageTransitionHistoryEntry = {
   resolutionNotes: string[]
   uiRefinementDiff: UiRefinementDiffArtifact | null
   structuredOutput: ReturnType<typeof buildStructuredMetadata>
+  rawAttempts?: RawAttempt[]
 }
 
 type CoverageHistorySnapshot = {
@@ -290,6 +292,7 @@ function persistVersionedCoverageArtifact(params: {
       finalCandidateVersion: params.finalCandidateVersion,
       hasRemainingGaps: params.hasRemainingGaps,
       remainingGaps: params.remainingGaps,
+      rawAttempts: params.attemptEntry.rawAttempts,
     }),
   })
 
@@ -307,6 +310,7 @@ function persistVersionedCoverageArtifact(params: {
     hasRemainingGaps: params.hasRemainingGaps,
     remainingGaps: params.remainingGaps,
     auditNotes: params.attemptEntry.auditNotes,
+    rawAttempts: params.attemptEntry.rawAttempts,
   })
 }
 
@@ -516,6 +520,7 @@ async function runPrdCoverageAuditPrompt(params: {
   envelope: CoverageResultEnvelope
   normalizedContent: string
   structuredMeta: ReturnType<typeof buildStructuredMetadata>
+  rawAttempts: RawAttempt[]
 }> {
   throwIfAborted(params.signal, params.ticketId)
 
@@ -526,6 +531,7 @@ async function runPrdCoverageAuditPrompt(params: {
   let coverageEnvelope: ReturnType<typeof normalizeCoverageResultOutput> | null = null
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
+  const rawAttempts: RawAttempt[] = []
 
   for (let attempt = 0; attempt <= 1; attempt += 1) {
     try {
@@ -620,6 +626,15 @@ async function runPrdCoverageAuditPrompt(params: {
       }
 
       if (prdCoverageNormalization.validationError) {
+        const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
+        rawAttempts.push({
+          attempt: attempt + 1,
+          stage: 'prd_coverage_audit',
+          outcome: 'rejected',
+          rawResponse: response,
+          validationError: prdCoverageNormalization.validationError,
+          failureClass: retryDecision.failureClass,
+        })
         if (attempt === 1) {
           structuredMeta = buildStructuredMetadata(structuredMeta, {
             autoRetryCount: 1,
@@ -628,6 +643,7 @@ async function runPrdCoverageAuditPrompt(params: {
               attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
               rawResponse: response,
               validationError: prdCoverageNormalization.validationError,
+              failureClass: retryDecision.failureClass,
             })],
           })
           throw new Error(`PRD coverage output failed semantic validation after retry: ${prdCoverageNormalization.validationError}`)
@@ -640,6 +656,7 @@ async function runPrdCoverageAuditPrompt(params: {
             attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
             rawResponse: response,
             validationError: prdCoverageNormalization.validationError,
+            failureClass: retryDecision.failureClass,
           })],
         })
         promptParts = buildStructuredRetryPrompt([{ type: 'text', content: params.promptContent }], {
@@ -661,9 +678,24 @@ async function runPrdCoverageAuditPrompt(params: {
         repairApplied: coverageEnvelope.repairApplied || prdCoverageNormalization.repairWarnings.length > 0,
         repairWarnings: [...coverageEnvelope.repairWarnings, ...prdCoverageNormalization.repairWarnings],
       }
+      rawAttempts.push({
+        attempt: attempt + 1,
+        stage: 'prd_coverage_audit',
+        outcome: 'accepted',
+        rawResponse: response,
+      })
       break
     }
 
+    const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
+    rawAttempts.push({
+      attempt: attempt + 1,
+      stage: 'prd_coverage_audit',
+      outcome: 'rejected',
+      rawResponse: response,
+      validationError: coverageEnvelope.error,
+      failureClass: retryDecision.failureClass,
+    })
     if (attempt === 1) {
       structuredMeta = buildStructuredMetadata(structuredMeta, {
         autoRetryCount: 1,
@@ -672,6 +704,7 @@ async function runPrdCoverageAuditPrompt(params: {
           attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
           rawResponse: response,
           validationError: coverageEnvelope.error,
+          failureClass: retryDecision.failureClass,
           retryDiagnostic: coverageEnvelope.retryDiagnostic,
         })],
       })
@@ -685,6 +718,7 @@ async function runPrdCoverageAuditPrompt(params: {
         attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
         rawResponse: response,
         validationError: coverageEnvelope.error,
+        failureClass: retryDecision.failureClass,
         retryDiagnostic: coverageEnvelope.retryDiagnostic,
       })],
     })
@@ -704,6 +738,7 @@ async function runPrdCoverageAuditPrompt(params: {
     envelope: coverageEnvelope.value,
     normalizedContent: coverageEnvelope.normalizedContent,
     structuredMeta,
+    rawAttempts,
   }
 }
 
@@ -723,6 +758,7 @@ async function runPrdCoverageResolutionPrompt(params: {
   response: string
   revision: ReturnType<typeof validatePrdCoverageRevisionOutput>
   structuredMeta: ReturnType<typeof buildStructuredMetadata>
+  rawAttempts: RawAttempt[]
 }> {
   throwIfAborted(params.signal, params.ticketId)
 
@@ -731,6 +767,7 @@ async function runPrdCoverageResolutionPrompt(params: {
   let response = ''
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
+  const rawAttempts: RawAttempt[] = []
 
   for (let attempt = 0; attempt <= 1; attempt += 1) {
     let runResult: Awaited<ReturnType<typeof runOpenCodePrompt>>
@@ -824,9 +861,25 @@ async function runPrdCoverageResolutionPrompt(params: {
         repairWarnings: revision.repairWarnings,
       })
 
-      return { response, revision, structuredMeta }
+      rawAttempts.push({
+        attempt: attempt + 1,
+        stage: 'prd_coverage_revision',
+        outcome: 'accepted',
+        rawResponse: response,
+      })
+
+      return { response, revision, structuredMeta, rawAttempts }
     } catch (error) {
       const validationError = getErrorMessage(error)
+      const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
+      rawAttempts.push({
+        attempt: attempt + 1,
+        stage: 'prd_coverage_revision',
+        outcome: 'rejected',
+        rawResponse: response,
+        validationError,
+        failureClass: retryDecision.failureClass,
+      })
       if (attempt === 1) {
         structuredMeta = buildStructuredMetadata(structuredMeta, {
           autoRetryCount: 1,
@@ -835,6 +888,7 @@ async function runPrdCoverageResolutionPrompt(params: {
             attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
             rawResponse: response,
             validationError,
+            failureClass: retryDecision.failureClass,
             error,
           })],
         })
@@ -848,6 +902,7 @@ async function runPrdCoverageResolutionPrompt(params: {
           attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
           rawResponse: response,
           validationError,
+          failureClass: retryDecision.failureClass,
           error,
         })],
       })
@@ -875,6 +930,7 @@ async function runBeadsCoverageAuditPrompt(params: {
   envelope: CoverageResultEnvelope
   normalizedContent: string
   structuredMeta: ReturnType<typeof buildStructuredMetadata>
+  rawAttempts: RawAttempt[]
 }> {
   throwIfAborted(params.signal, params.ticketId)
 
@@ -885,6 +941,7 @@ async function runBeadsCoverageAuditPrompt(params: {
   let coverageEnvelope: ReturnType<typeof normalizeCoverageResultOutput> | null = null
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
+  const rawAttempts: RawAttempt[] = []
 
   for (let attempt = 0; attempt <= 1; attempt += 1) {
     try {
@@ -979,6 +1036,15 @@ async function runBeadsCoverageAuditPrompt(params: {
       }
 
       if (beadsCoverageNormalization.validationError) {
+        const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
+        rawAttempts.push({
+          attempt: attempt + 1,
+          stage: 'beads_coverage_audit',
+          outcome: 'rejected',
+          rawResponse: response,
+          validationError: beadsCoverageNormalization.validationError,
+          failureClass: retryDecision.failureClass,
+        })
         if (attempt === 1) {
           structuredMeta = buildStructuredMetadata(structuredMeta, {
             autoRetryCount: 1,
@@ -987,6 +1053,7 @@ async function runBeadsCoverageAuditPrompt(params: {
               attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
               rawResponse: response,
               validationError: beadsCoverageNormalization.validationError,
+              failureClass: retryDecision.failureClass,
             })],
           })
           throw new Error(`Beads coverage output failed semantic validation after retry: ${beadsCoverageNormalization.validationError}`)
@@ -999,6 +1066,7 @@ async function runBeadsCoverageAuditPrompt(params: {
             attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
             rawResponse: response,
             validationError: beadsCoverageNormalization.validationError,
+            failureClass: retryDecision.failureClass,
           })],
         })
         promptParts = buildStructuredRetryPrompt([{ type: 'text', content: params.promptContent }], {
@@ -1020,9 +1088,24 @@ async function runBeadsCoverageAuditPrompt(params: {
         repairApplied: coverageEnvelope.repairApplied || beadsCoverageNormalization.repairWarnings.length > 0,
         repairWarnings: [...coverageEnvelope.repairWarnings, ...beadsCoverageNormalization.repairWarnings],
       }
+      rawAttempts.push({
+        attempt: attempt + 1,
+        stage: 'beads_coverage_audit',
+        outcome: 'accepted',
+        rawResponse: response,
+      })
       break
     }
 
+    const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
+    rawAttempts.push({
+      attempt: attempt + 1,
+      stage: 'beads_coverage_audit',
+      outcome: 'rejected',
+      rawResponse: response,
+      validationError: coverageEnvelope.error,
+      failureClass: retryDecision.failureClass,
+    })
     if (attempt === 1) {
       structuredMeta = buildStructuredMetadata(structuredMeta, {
         autoRetryCount: 1,
@@ -1031,6 +1114,7 @@ async function runBeadsCoverageAuditPrompt(params: {
           attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
           rawResponse: response,
           validationError: coverageEnvelope.error,
+          failureClass: retryDecision.failureClass,
           retryDiagnostic: coverageEnvelope.retryDiagnostic,
         })],
       })
@@ -1044,6 +1128,7 @@ async function runBeadsCoverageAuditPrompt(params: {
         attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
         rawResponse: response,
         validationError: coverageEnvelope.error,
+        failureClass: retryDecision.failureClass,
         retryDiagnostic: coverageEnvelope.retryDiagnostic,
       })],
     })
@@ -1063,6 +1148,7 @@ async function runBeadsCoverageAuditPrompt(params: {
     envelope: coverageEnvelope.value,
     normalizedContent: coverageEnvelope.normalizedContent,
     structuredMeta,
+    rawAttempts,
   }
 }
 
@@ -1081,6 +1167,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
   response: string
   revision: ReturnType<typeof validateBeadsCoverageRevisionOutput>
   structuredMeta: ReturnType<typeof buildStructuredMetadata>
+  rawAttempts: RawAttempt[]
 }> {
   throwIfAborted(params.signal, params.ticketId)
 
@@ -1089,6 +1176,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
   let response = ''
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
+  const rawAttempts: RawAttempt[] = []
 
   for (let attempt = 0; attempt <= 1; attempt += 1) {
     let runResult: Awaited<ReturnType<typeof runOpenCodePrompt>>
@@ -1180,9 +1268,25 @@ async function runBeadsCoverageResolutionPrompt(params: {
         repairWarnings: revision.repairWarnings,
       })
 
-      return { response, revision, structuredMeta }
+      rawAttempts.push({
+        attempt: attempt + 1,
+        stage: 'beads_coverage_revision',
+        outcome: 'accepted',
+        rawResponse: response,
+      })
+
+      return { response, revision, structuredMeta, rawAttempts }
     } catch (error) {
       const validationError = getErrorMessage(error)
+      const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
+      rawAttempts.push({
+        attempt: attempt + 1,
+        stage: 'beads_coverage_revision',
+        outcome: 'rejected',
+        rawResponse: response,
+        validationError,
+        failureClass: retryDecision.failureClass,
+      })
       if (attempt === 1) {
         structuredMeta = buildStructuredMetadata(structuredMeta, {
           autoRetryCount: 1,
@@ -1191,6 +1295,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
             attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
             rawResponse: response,
             validationError,
+            failureClass: retryDecision.failureClass,
             error,
           })],
         })
@@ -1204,6 +1309,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
           attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
           rawResponse: response,
           validationError,
+          failureClass: retryDecision.failureClass,
           error,
         })],
       })
@@ -1439,6 +1545,7 @@ async function handlePrdCoverageVerificationLoop(params: {
       response: auditResult.response,
       normalizedContent: auditResult.normalizedContent,
       structuredOutput: auditResult.structuredMeta,
+      rawAttempts: auditResult.rawAttempts,
       coverageRunNumber,
       maxCoveragePasses,
       limitReached: gapDisposition.limitReached,
@@ -1566,6 +1673,7 @@ async function handlePrdCoverageVerificationLoop(params: {
         winnerId: revisionArtifact.winnerId,
         refinedContent: revisionArtifact.refinedContent,
         candidateVersion: revisionArtifact.candidateVersion,
+        rawAttempts: revisionRun.rawAttempts,
       }),
     })
     persistUiArtifactCompanionArtifact(params.ticketId, params.stateLabel, 'prd_coverage_revision', {
@@ -1583,6 +1691,7 @@ async function handlePrdCoverageVerificationLoop(params: {
       coverageBaselineContent: revisionArtifact.winnerDraftContent,
       coverageBaselineVersion: currentCandidateVersion,
       coverageUiRefinementDiff: uiDiffArtifact,
+      rawAttempts: revisionRun.rawAttempts,
     })
 
     const nextTransitions = [
@@ -1604,6 +1713,7 @@ async function handlePrdCoverageVerificationLoop(params: {
         resolutionNotes: revisionArtifact.gapResolutions.map((resolution) => resolution.rationale),
         uiRefinementDiff: uiDiffArtifact,
         structuredOutput: revisionRun.structuredMeta,
+        rawAttempts: revisionRun.rawAttempts,
       } satisfies CoverageTransitionHistoryEntry,
     ]
 
@@ -1771,6 +1881,7 @@ async function handleBeadsCoverageVerificationLoop(params: {
       response: auditResult.response,
       normalizedContent: auditResult.normalizedContent,
       structuredOutput: auditResult.structuredMeta,
+      rawAttempts: auditResult.rawAttempts,
       coverageRunNumber,
       maxCoveragePasses,
       limitReached: gapDisposition.limitReached,
@@ -1898,6 +2009,7 @@ async function handleBeadsCoverageVerificationLoop(params: {
         winnerId: revisionArtifact.winnerId,
         refinedContent: revisionArtifact.refinedContent,
         candidateVersion: revisionArtifact.candidateVersion,
+        rawAttempts: revisionRun.rawAttempts,
       }),
     })
     persistUiArtifactCompanionArtifact(params.ticketId, params.stateLabel, 'beads_coverage_revision', {
@@ -1915,6 +2027,7 @@ async function handleBeadsCoverageVerificationLoop(params: {
       coverageBaselineContent: revisionArtifact.winnerDraftContent,
       coverageBaselineVersion: currentCandidateVersion,
       coverageUiRefinementDiff: revisionArtifact.uiRefinementDiff,
+      rawAttempts: revisionRun.rawAttempts,
     })
 
     const nextTransitions = [
@@ -1936,6 +2049,7 @@ async function handleBeadsCoverageVerificationLoop(params: {
         resolutionNotes: revisionArtifact.gapResolutions.map((resolution) => resolution.rationale),
         uiRefinementDiff: revisionArtifact.uiRefinementDiff,
         structuredOutput: revisionRun.structuredMeta,
+        rawAttempts: revisionRun.rawAttempts,
       } satisfies CoverageTransitionHistoryEntry,
     ]
 
@@ -2106,6 +2220,8 @@ export async function handleRelevantFilesScan(
 
     let normalized = validateRelevantFilesScanResponse(result.response)
     let finalResponse = result.response
+    let finalResponseMeta = result.responseMeta
+    const rawAttempts: RawAttempt[] = []
     let retryMeta = buildStructuredMetadata({
       autoRetryCount: 0,
       repairApplied: false,
@@ -2114,6 +2230,14 @@ export async function handleRelevantFilesScan(
 
     if (!normalized.ok) {
       const retryDecision = getStructuredRetryDecision(result.response, result.responseMeta)
+      rawAttempts.push({
+        attempt: 1,
+        stage: 'relevant_files_scan',
+        outcome: 'rejected',
+        rawResponse: result.response,
+        validationError: normalized.error,
+        failureClass: retryDecision.failureClass,
+      })
       const retryMode = retryDecision.reuseSession ? 'same session' : 'fresh session'
       retryMeta = buildStructuredMetadata(retryMeta, {
         autoRetryCount: 1,
@@ -2189,6 +2313,7 @@ export async function handleRelevantFilesScan(
         )
 
         finalResponse = retryResult.response
+        finalResponseMeta = retryResult.responseMeta
       } else {
         const freshResult = await runOpenCodePrompt({
           adapter,
@@ -2254,14 +2379,49 @@ export async function handleRelevantFilesScan(
         )
 
         finalResponse = freshResult.response
+        finalResponseMeta = freshResult.responseMeta
       }
 
       normalized = validateRelevantFilesScanResponse(finalResponse)
       if (!normalized.ok) {
+        const retryDecision = getStructuredRetryDecision(finalResponse, finalResponseMeta)
+        rawAttempts.push({
+          attempt: 2,
+          stage: 'relevant_files_scan',
+          outcome: 'rejected',
+          rawResponse: finalResponse,
+          validationError: normalized.error,
+          failureClass: retryDecision.failureClass,
+        })
+        const failedStructuredMeta = buildStructuredMetadata(retryMeta, {
+          validationError: normalized.error,
+          retryDiagnostics: [
+            ...(retryMeta.retryDiagnostics ?? []),
+            resolveStructuredRetryDiagnostic({
+              attempt: 2,
+              rawResponse: finalResponse,
+              validationError: normalized.error,
+              failureClass: retryDecision.failureClass,
+              retryDiagnostic: normalized.retryDiagnostic,
+            }),
+          ],
+        })
         const latestOpenCodeDiagnostics = openCodeDiagnostics.at(-1) ?? null
         const baseMsg = `Relevant files scan failed validation after retry: ${normalized.error}`
         const msg = appendBlockedErrorDiagnosticsSummary(baseMsg, latestOpenCodeDiagnostics?.diagnostics)
         emitPhaseLog(ticketId, context.externalId, phase, 'error', msg)
+        insertPhaseArtifact(ticketId, {
+          phase,
+          artifactType: 'relevant_files_scan',
+          content: JSON.stringify({
+            fileCount: 0,
+            files: [],
+            modelId: codingModelId,
+            structuredOutput: failedStructuredMeta,
+            rawAttempts,
+            errors: [normalized.error],
+          }),
+        })
         sendEvent({
           type: 'ERROR',
           message: msg,
@@ -2270,6 +2430,19 @@ export async function handleRelevantFilesScan(
         })
         return
       }
+      rawAttempts.push({
+        attempt: 2,
+        stage: 'relevant_files_scan',
+        outcome: 'accepted',
+        rawResponse: finalResponse,
+      })
+    } else {
+      rawAttempts.push({
+        attempt: 1,
+        stage: 'relevant_files_scan',
+        outcome: 'accepted',
+        rawResponse: result.response,
+      })
     }
 
     const structuredMeta = buildStructuredMetadata(retryMeta, {
@@ -2307,6 +2480,7 @@ export async function handleRelevantFilesScan(
         })),
         modelId: codingModelId,
         structuredOutput: structuredMeta,
+        rawAttempts,
       }),
     })
 
@@ -3442,6 +3616,7 @@ export async function handleFinalTest(
           output,
           commandPlan,
           structuredOutput: planStructuredOutput,
+          rawAttempts,
         } = generation
 
         const validatedTestFiles = validateFinalTestFiles(
@@ -3514,6 +3689,7 @@ export async function handleFinalTest(
             commands: [],
             errors: commandPlan.errors,
             planStructuredOutput,
+            rawAttempts,
           }
         }
 
@@ -3528,6 +3704,7 @@ export async function handleFinalTest(
           testsCount: commandPlan.testsCount,
           modelOutput: output,
           planStructuredOutput,
+          rawAttempts,
         })
       },
       generateRetryNote: async ({ attempt, report, generation }) => {

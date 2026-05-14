@@ -673,8 +673,9 @@ export async function handleBeadsRefine(
   let validatedChanges: import('@shared/refinementChanges').RefinementChange[] = []
   let refinementResult = null as ValidatedBeadsRefinement | null
   let refinedContent: string
+  let refinementRawAttempts: Awaited<ReturnType<typeof refineDraft>>['rawAttempts'] = []
   try {
-    refinedContent = await refineDraft(
+    const refinementRun = await refineDraft(
       adapter,
       winnerDraft,
       losingDrafts,
@@ -754,6 +755,8 @@ export async function handleBeadsRefine(
       undefined,
       PROM22.toolPolicy,
     )
+    refinedContent = refinementRun.content
+    refinementRawAttempts = refinementRun.rawAttempts
   } catch (error) {
     emitPhaseLog(
       ticketId,
@@ -818,12 +821,16 @@ export async function handleBeadsRefine(
   insertPhaseArtifact(ticketId, {
     phase: 'REFINING_BEADS',
     artifactType: 'beads_refined',
-    content: JSON.stringify(beadsRefinedArtifact),
+    content: JSON.stringify({
+      ...beadsRefinedArtifact,
+      ...(refinementRawAttempts.length > 0 ? { rawAttempts: refinementRawAttempts } : {}),
+    }),
   })
   persistUiArtifactCompanionArtifact(ticketId, 'REFINING_BEADS', 'beads_refined', {
     winnerDraftContent: winnerDraft.content,
     structuredOutput: refineStructuredMeta,
     draftMetrics,
+    ...(refinementRawAttempts.length > 0 ? { rawAttempts: refinementRawAttempts } : {}),
   })
   insertPhaseArtifact(ticketId, {
     phase: 'REFINING_BEADS',

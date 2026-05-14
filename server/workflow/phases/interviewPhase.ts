@@ -748,7 +748,7 @@ export async function handleInterviewCompile(
   if (signal.aborted) throw new CancelledError(ticketId)
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   let parsedRefinementChanges: InterviewQuestionChange[] = []
-  const refinedContent = await refineDraft(
+  const refinementRun = await refineDraft(
     adapter,
     winnerDraft,
     losingDrafts,
@@ -832,6 +832,7 @@ export async function handleInterviewCompile(
     undefined,
     PROM3.toolPolicy,
   )
+  const refinedContent = refinementRun.content
 
   // Clean up intermediate data
   phaseIntermediate.delete(`${ticketId}:interview`)
@@ -866,6 +867,7 @@ export async function handleInterviewCompile(
       artifactType: 'interview_compiled',
       content: JSON.stringify({
         refinedContent: compiledArtifact.refinedContent,
+        ...(refinementRun.rawAttempts.length > 0 ? { rawAttempts: refinementRun.rawAttempts } : {}),
       }),
     })
     persistUiArtifactCompanionArtifact(ticketId, 'COMPILING_INTERVIEW', 'interview_compiled', {
@@ -873,6 +875,7 @@ export async function handleInterviewCompile(
       questions: compiledArtifact.questions,
       questionCount: compiledArtifact.questionCount,
       structuredOutput: structuredMeta,
+      ...(refinementRun.rawAttempts.length > 0 ? { rawAttempts: refinementRun.rawAttempts } : {}),
     })
 
     // Persist winnerId separately so it survives server restarts and is available

@@ -7,7 +7,7 @@ import {
   type OpenCodePromptCompletedEvent,
   type OpenCodePromptDispatchEvent,
 } from '../../workflow/runOpenCodePrompt'
-import { throwIfAborted } from '../../council/types'
+import { throwIfAborted, type RawAttempt } from '../../council/types'
 import { throwIfCancelled } from '../../lib/abort'
 import { buildStructuredRetryPrompt } from '../../structuredOutput'
 import { buildStructuredOutputMetadata } from '../../structuredOutput/metadata'
@@ -43,15 +43,28 @@ function buildPromptFailureGeneration(
   session: Session,
   error: unknown,
   previousDiagnostics: NonNullable<StructuredOutputMetadata['retryDiagnostics']> = [],
+  previousRawAttempts: RawAttempt[] = [],
 ): GenerateExecutionSetupResult {
   const validationError = `Execution setup prompt failed: ${errorMessage(error)}`
+  const failureClass = classifyStructuredFailureFromError(error)
+  const rawAttempts: RawAttempt[] = [
+    ...previousRawAttempts,
+    {
+      attempt: previousRawAttempts.length + 1,
+      stage: 'execution_setup',
+      outcome: 'rejected',
+      rawResponse: '',
+      validationError,
+      failureClass,
+    },
+  ]
   const retryDiagnostics = [
     ...previousDiagnostics,
     resolveStructuredRetryDiagnostic({
       attempt: previousDiagnostics.length + 1,
       rawResponse: '',
       validationError,
-      failureClass: classifyStructuredFailureFromError(error),
+      failureClass,
     }),
   ]
 
@@ -70,6 +83,7 @@ function buildPromptFailureGeneration(
       validationError,
       retryDiagnostics,
     }),
+    rawAttempts,
   }
 }
 
@@ -166,6 +180,14 @@ export async function generateExecutionSetup(
             failureClass: classifyStructuredFailureFromError(error),
           }),
         ],
+        [{
+          attempt: 1,
+          stage: 'execution_setup',
+          outcome: 'rejected',
+          rawResponse: '',
+          validationError: `Execution setup prompt failed: ${errorMessage(error)}`,
+          failureClass: classifyStructuredFailureFromError(error),
+        }],
       )
     }
   }
@@ -176,6 +198,7 @@ export async function generateExecutionSetup(
 
   let response = result.response
   let parsed = parseExecutionSetupResult(response)
+  const rawAttempts: RawAttempt[] = []
   const retryDiagnostics: NonNullable<StructuredOutputMetadata['retryDiagnostics']> = []
   let structuredOutput = buildStructuredOutputMetadata({
     autoRetryCount: 0,
@@ -186,6 +209,14 @@ export async function generateExecutionSetup(
 
   if (parsed.errors.length > 0) {
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
+    rawAttempts.push({
+      attempt: 1,
+      stage: 'execution_setup',
+      outcome: 'rejected',
+      rawResponse: response,
+      validationError: parsed.validationError ?? parsed.errors.join('; '),
+      failureClass: retryDecision.failureClass,
+    })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
       attempt: 1,
       rawResponse: response,
@@ -282,7 +313,7 @@ export async function generateExecutionSetup(
       if (!activeSession) {
         throw error
       }
-      return buildPromptFailureGeneration(activeSession, error, retryDiagnostics)
+      return buildPromptFailureGeneration(activeSession, error, retryDiagnostics, rawAttempts)
     }
 
     parsed = parseExecutionSetupResult(response)
@@ -292,16 +323,40 @@ export async function generateExecutionSetup(
       ...(parsed.validationError ? { validationError: parsed.validationError } : {}),
     })
     if (parsed.errors.length > 0) {
+      const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
+      rawAttempts.push({
+        attempt: 2,
+        stage: 'execution_setup',
+        outcome: 'rejected',
+        rawResponse: response,
+        validationError: parsed.validationError ?? parsed.errors.join('; '),
+        failureClass: retryDecision.failureClass,
+      })
       retryDiagnostics.push(resolveStructuredRetryDiagnostic({
         attempt: 2,
         rawResponse: response,
         validationError: parsed.validationError ?? parsed.errors.join('; '),
+        failureClass: retryDecision.failureClass,
         retryDiagnostic: parsed.retryDiagnostic,
       }))
       structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
         retryDiagnostics,
       })
+    } else {
+      rawAttempts.push({
+        attempt: 2,
+        stage: 'execution_setup',
+        outcome: 'accepted',
+        rawResponse: response,
+      })
     }
+  } else {
+    rawAttempts.push({
+      attempt: 1,
+      stage: 'execution_setup',
+      outcome: 'accepted',
+      rawResponse: response,
+    })
   }
 
   if (!activeSession) {
@@ -314,5 +369,6 @@ export async function generateExecutionSetup(
     result: parsed.result,
     parse: parsed,
     structuredOutput,
+    rawAttempts,
   }
 }

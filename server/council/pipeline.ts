@@ -101,7 +101,7 @@ export async function runCouncilPipeline(
   // Step 5: Refine — sequential
   throwIfAborted(signal)
   const refineContext = contextBuilder ? contextBuilder('refine', draftRun.drafts) : contextParts
-  const refinedContent = await refineDraft(
+  const refinementRun = await refineDraft(
     adapter,
     winnerDraft,
     losingDrafts,
@@ -111,6 +111,7 @@ export async function runCouncilPipeline(
     signal,
     onOpenCodeSessionLog,
   )
+  const refinedContent = refinementRun.content
 
   // Build outcome map
   const memberOutcomes: Record<string, MemberOutcome> = {}

@@ -93,6 +93,10 @@ describe('generateExecutionSetup', () => {
     expect(result.parse.repairApplied).toBe(true)
     expect(result.structuredOutput.autoRetryCount).toBe(1)
     expect(result.structuredOutput.retryDiagnostics?.[0]?.validationError).toBe('No execution setup result marker found')
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'I am still preparing the environment.' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: expect.stringContaining('<EXECUTION_SETUP_RESULT>') }),
+    ])
     const messages = adapter.messages.get('mock-session-1') ?? []
     expect(messages.some((message) => typeof message.content === 'string' && message.content.includes('Structured Output Retry'))).toBe(true)
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
@@ -112,6 +116,10 @@ describe('generateExecutionSetup', () => {
     expect(result.result?.status).toBe('ready')
     expect(result.structuredOutput.autoRetryCount).toBe(1)
     expect(result.structuredOutput.retryDiagnostics?.[0]?.excerpt).toBe('[empty response]')
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: '', failureClass: 'empty_response' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: buildReadyExecutionSetupResponse() }),
+    ])
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
     expect(adapter.messages.get('mock-session-1')?.some((message) => typeof message.content === 'string' && message.content.includes('Structured Output Retry'))).toBe(false)
   })
@@ -137,6 +145,10 @@ describe('generateExecutionSetup', () => {
       failureClass: 'session_protocol_error',
       validationError: 'No execution setup result marker found',
     })
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', failureClass: 'session_protocol_error' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: buildReadyExecutionSetupResponse() }),
+    ])
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
   })
 })

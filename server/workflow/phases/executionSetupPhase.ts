@@ -75,6 +75,7 @@ function buildExecutionSetupReport(input: {
     modelOutput: input.generation.output,
     errors: input.errors,
     structuredOutput: input.generation.structuredOutput,
+    rawAttempts: input.generation.rawAttempts,
     approvedPlanCommands,
     executionAddedCommands,
   }
@@ -394,6 +395,7 @@ export async function handleExecutionSetup(
           normalizedContent: report.profile ? serializeExecutionSetupProfile(report.profile) : null,
           parsed: report.profile ? { profile: report.profile, checks: report.checks, summary: report.summary } : null,
           structuredOutput: report.structuredOutput,
+          rawAttempts: report.rawAttempts,
           status: report.status,
           errors: report.errors,
           retryNotes: retryNotes,

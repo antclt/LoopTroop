@@ -86,6 +86,10 @@ describe('generateExecutionSetupPlan', () => {
 
     expect(result.plan?.steps[0]?.title).toBe('Bootstrap project dependencies')
     expect(result.structuredOutput.autoRetryCount).toBe(1)
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'I drafted the setup plan.' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: buildReadyPlanResponse() }),
+    ])
 
     const messages = adapter.messages.get('mock-session-1') ?? []
     const retryPrompt = messages.find((message) => (
@@ -143,6 +147,10 @@ describe('generateExecutionSetupPlan', () => {
     )
 
     expect(result.plan).toBeNull()
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'not a setup plan' }),
+      expect.objectContaining({ attempt: 2, outcome: 'rejected', rawResponse: 'still not a setup plan' }),
+    ])
     expect(listOpenCodeSessionsForTicket(ticket.id, ['active'])).toHaveLength(0)
     expect(listOpenCodeSessionsForTicket(ticket.id, ['abandoned'])).toHaveLength(1)
   })

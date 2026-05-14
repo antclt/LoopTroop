@@ -364,7 +364,10 @@ describe('handlePrdRefine', () => {
       expect(retryPromptText).not.toContain('extra top-level keys')
       expect(retryPromptText).not.toContain('\nchanges:')
 
-      return validateResponse?.(validOutput).normalizedContent ?? validOutput
+      return {
+        content: validateResponse?.(validOutput).normalizedContent ?? validOutput,
+        rawAttempts: [],
+      }
     })
 
     await handlePrdRefine(ticket.id, context, sendEvent, new AbortController().signal)

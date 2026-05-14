@@ -519,7 +519,11 @@ describe('Council Pipeline', () => {
       'Return only YAML.',
     )
 
-    expect(result).toBe('normalized refine output')
+    expect(result.content).toBe('normalized refine output')
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'invalid refine output' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: 'valid refine output' }),
+    ])
   })
 
   it('does not retry refinement when interview semantic auto-heal succeeds on the first pass', async () => {
@@ -572,8 +576,11 @@ describe('Council Pipeline', () => {
       'Return only YAML.',
     )
 
-    expect(result).toContain('questions:')
-    expect(result).not.toContain('changes:')
+    expect(result.content).toContain('questions:')
+    expect(result.content).not.toContain('changes:')
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'accepted' }),
+    ])
     expect(validator).toHaveBeenCalledTimes(1)
     expect(adapter.sessions).toHaveLength(1)
   })

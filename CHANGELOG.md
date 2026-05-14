@@ -4,6 +4,19 @@ All notable changes to LoopTroop will be documented in this file.
 
 ## [Unreleased]
 
+### Summary
+- Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
+
+### Detailed Changes
+
+### Added
+- Added raw attempt persistence for PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime generation, and final-test generation.
+- Added Raw tab variants for structured artifacts with `rawAttempts`, including diagnostic entries when a retry failed before model text existed.
+
+### Changed
+- Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
+- Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
+
 ## [0.2.0] - 2026-05-12
 
 ### Added

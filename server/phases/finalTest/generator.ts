@@ -7,7 +7,7 @@ import {
   type OpenCodePromptCompletedEvent,
   type OpenCodePromptDispatchEvent,
 } from '../../workflow/runOpenCodePrompt'
-import { throwIfAborted } from '../../council/types'
+import { throwIfAborted, type RawAttempt } from '../../council/types'
 import { throwIfCancelled } from '../../lib/abort'
 import { parseFinalTestCommands, type FinalTestCommandPlan } from './parser'
 import { buildStructuredRetryPrompt } from '../../structuredOutput'
@@ -31,6 +31,7 @@ export interface FinalTestGenerationResult {
   output: string
   commandPlan: FinalTestCommandPlan
   structuredOutput: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
 }
 
 type FinalTestPromptStage = 'final_test_main' | 'final_test_structured_retry'
@@ -118,6 +119,7 @@ export async function generateFinalTests(
 
   let response = result.response
   let commandPlan = parseFinalTestCommands(response)
+  const rawAttempts: RawAttempt[] = []
   const retryDiagnostics: NonNullable<StructuredOutputMetadata['retryDiagnostics']> = []
   let structuredOutput = buildStructuredOutputMetadata({
     autoRetryCount: 0,
@@ -127,6 +129,14 @@ export async function generateFinalTests(
   })
   if (commandPlan.errors.length > 0) {
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
+    rawAttempts.push({
+      attempt: 1,
+      stage: 'final_test_generation',
+      outcome: 'rejected',
+      rawResponse: response,
+      validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
+      failureClass: retryDecision.failureClass,
+    })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
       attempt: 1,
       rawResponse: response,
@@ -248,16 +258,40 @@ export async function generateFinalTests(
       ...(commandPlan.validationError ? { validationError: commandPlan.validationError } : {}),
     })
     if (commandPlan.errors.length > 0) {
+      const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
+      rawAttempts.push({
+        attempt: 2,
+        stage: 'final_test_generation',
+        outcome: 'rejected',
+        rawResponse: response,
+        validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
+        failureClass: retryDecision.failureClass,
+      })
       retryDiagnostics.push(resolveStructuredRetryDiagnostic({
         attempt: 2,
         rawResponse: response,
         validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
+        failureClass: retryDecision.failureClass,
         retryDiagnostic: commandPlan.retryDiagnostic,
       }))
       structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
         retryDiagnostics,
       })
+    } else {
+      rawAttempts.push({
+        attempt: 2,
+        stage: 'final_test_generation',
+        outcome: 'accepted',
+        rawResponse: response,
+      })
     }
+  } else {
+    rawAttempts.push({
+      attempt: 1,
+      stage: 'final_test_generation',
+      outcome: 'accepted',
+      rawResponse: response,
+    })
   }
 
   if (activeSessionId && sessionManager) {
@@ -268,5 +302,6 @@ export async function generateFinalTests(
     output: response,
     commandPlan,
     structuredOutput,
+    rawAttempts,
   }
 }

@@ -533,6 +533,8 @@ A `repairApplied: true` flag is set on any result where at least one repair warn
 
 Repairs never silently drop required fields — if a required field cannot be recovered after all repairs, the parse fails and the run is retried with a structured retry prompt that explains the specific validation error.
 
-Structured retry loops may store `rawAttempts` next to the draft, vote, or setup report detail. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class. The older `rawResponse` field remains the latest attempt for compatibility.
+Structured retry loops store `rawAttempts` next to the artifact/report detail when model text is available. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class. This covers council drafts/votes, PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime, and final-test generation. If a failure occurs before model text exists, the attempt is diagnostic-only with the error/failure class and no invented raw response.
+
+Automatic structured retries are attempt history inside one phase run. They appear as Raw variants on the artifact and do not create a new canonical artifact version. User-triggered Retry from `BLOCKED_ERROR` is different: for phase-attempt tracked statuses, LoopTroop archives the failed active phase attempt and creates a fresh active attempt before rerunning, so prior rerun artifacts/logs are inspected through the previous-version selector.
 
 Invalid, failed, or timed-out outputs are diagnostic-only. The structured artifact body shows the outcome, model or stage, retry count, validation error, and short diagnostic excerpts; full malformed model text belongs in Raw attempt views and execution logs only.

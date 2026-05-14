@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { FORCE_KILL_DELAY_MS } from '../../lib/constants'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
+import type { RawAttempt } from '../../council/types'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -98,6 +99,7 @@ export interface FinalTestExecutionReport {
   commands: FinalTestCommandResult[]
   errors: string[]
   planStructuredOutput?: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
   attempt?: number
   maxIterations?: number | null
   attemptHistory?: FinalTestAttemptHistoryEntry[]
@@ -175,6 +177,7 @@ export async function executeFinalTestCommands(input: {
   testsCount?: number | null
   modelOutput: string
   planStructuredOutput?: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
 }): Promise<FinalTestExecutionReport> {
   const commandResults: FinalTestCommandResult[] = []
   const errors: string[] = []
@@ -225,5 +228,6 @@ export async function executeFinalTestCommands(input: {
     commands: commandResults,
     errors,
     ...(input.planStructuredOutput ? { planStructuredOutput: input.planStructuredOutput } : {}),
+    ...(input.rawAttempts ? { rawAttempts: input.rawAttempts } : {}),
   }
 }

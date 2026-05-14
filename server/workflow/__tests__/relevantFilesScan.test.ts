@@ -160,6 +160,7 @@ describe('handleRelevantFilesScan', () => {
           excerpt?: string
         }>
       }
+      rawAttempts?: Array<{ attempt?: number; outcome?: string; rawResponse?: string; validationError?: string; failureClass?: string }>
     }
     expect(artifact.fileCount).toBe(1)
     expect(artifact.files?.[0]?.path).toBe('src/main.ts')
@@ -174,6 +175,18 @@ describe('handleRelevantFilesScan', () => {
         attempt: 1,
         validationError: 'Relevant files output echoed the prompt instead of returning a <RELEVANT_FILES_RESULT> artifact',
         excerpt: expect.stringContaining('CRITICAL OUTPUT RULE'),
+      }),
+    ])
+    expect(artifact.rawAttempts).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        outcome: 'rejected',
+        rawResponse: expect.stringContaining('CRITICAL OUTPUT RULE'),
+      }),
+      expect.objectContaining({
+        attempt: 2,
+        outcome: 'accepted',
+        rawResponse: expect.stringContaining('<RELEVANT_FILES_RESULT>'),
       }),
     ])
   })
@@ -212,7 +225,25 @@ describe('handleRelevantFilesScan', () => {
       codes: ['RELEVANT_FILES_SCAN_FAILED'],
     }))
     expect(existsSync(`${paths.ticketDir}/relevant-files.yaml`)).toBe(false)
-    expect(getLatestPhaseArtifact(ticket.id, 'relevant_files_scan', 'SCANNING_RELEVANT_FILES')).toBeUndefined()
+    const artifactRow = getLatestPhaseArtifact(ticket.id, 'relevant_files_scan', 'SCANNING_RELEVANT_FILES')
+    expect(artifactRow).toBeDefined()
+    const artifact = JSON.parse(artifactRow!.content) as {
+      fileCount?: number
+      rawAttempts?: Array<{ attempt?: number; outcome?: string; rawResponse?: string; validationError?: string }>
+    }
+    expect(artifact.fileCount).toBe(0)
+    expect(artifact.rawAttempts).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        outcome: 'rejected',
+        rawResponse: expect.stringContaining('CRITICAL OUTPUT RULE'),
+      }),
+      expect.objectContaining({
+        attempt: 2,
+        outcome: 'rejected',
+        validationError: 'Relevant files output is missing files list',
+      }),
+    ])
   })
 
   it('restarts the scan in a fresh session after an empty response instead of sending a structured retry prompt', async () => {
@@ -277,6 +308,7 @@ describe('handleRelevantFilesScan', () => {
           failureClass?: string
         }>
       }
+      rawAttempts?: Array<{ attempt?: number; outcome?: string; rawResponse?: string; failureClass?: string }>
     }
     expect(artifact.structuredOutput).toMatchObject({
       repairApplied: false,
@@ -293,6 +325,19 @@ describe('handleRelevantFilesScan', () => {
         validationError: 'Relevant files output was empty.',
         excerpt: '[empty response]',
         failureClass: 'empty_response',
+      }),
+    ])
+    expect(artifact.rawAttempts).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        outcome: 'rejected',
+        rawResponse: '',
+        failureClass: 'empty_response',
+      }),
+      expect.objectContaining({
+        attempt: 2,
+        outcome: 'accepted',
+        rawResponse: expect.stringContaining('<RELEVANT_FILES_RESULT>'),
       }),
     ])
   })

@@ -197,7 +197,7 @@ flowchart TB
 | `DRAFT` | `start`, `cancel` | `start` locks model configuration and initializes the ticket workspace. |
 | `WAITING_INTERVIEW_APPROVAL`, `WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL` | `approve`, `cancel` | The generic approve route dispatches to the phase-specific approval handler. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | `merge` is also exposed through `/verify` as an alias during the transition period. |
-| `BLOCKED_ERROR` | `retry`, `cancel` | `retry` re-enters the exact `previousStatus` preserved in machine context. |
+| `BLOCKED_ERROR` | `retry`, `cancel` | `retry` archives the failed active phase attempt when the preserved `previousStatus` is tracked, creates a fresh active attempt, then re-enters that exact status. |
 | Most active phases | `cancel` | Active work can be stopped from planning, execution, or review phases. |
 | `COMPLETED`, `CANCELED` | none | These are terminal states. |
 
@@ -205,6 +205,7 @@ Two extra guards matter at the user-action layer:
 
 - `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL`, and execution-band retries check for project-level execution-band conflicts before they advance.
 - `BLOCKED_ERROR` retry from `CODING` first tries to restore the failed bead into a retryable state before it re-enters `CODING`.
+- `BLOCKED_ERROR` retry from a tracked planning/review phase archives the failed version with `manual_retry_after_blocked_error` and writes the rerun into the next phase attempt.
 - `BLOCKED_ERROR` retry is rejected when no preserved `previousStatus` exists.
 - `CODING` retry is rejected when the failed bead cannot be reset to a recorded bead-start commit.
 
@@ -375,6 +376,8 @@ The retry route adds two safety checks before it dispatches `RETRY`:
 - if `previousStatus` is absent, retry returns a conflict response and the user must cancel or inspect the stored failure
 - if the preserved status is `CODING`, LoopTroop resets the failed or interrupted bead to its `beadStartCommit`; if that reset cannot be performed, retry returns a conflict response instead of resuming against a dirty worktree
 
+Before dispatching `RETRY`, tracked non-coding phases archive the active phase attempt and create a fresh active attempt. Automatic structured retries inside that phase do not create versions; they are kept as `rawAttempts` in the artifact Raw tab. Manual retry versions are loaded through the existing previous-version selector with `phaseAttempt`-scoped artifacts/logs, while blocked-error history remains attached to error occurrences.
+
 ## Safe Resume By Interruption Type
 
 | Interruption | Expected resume behavior |
@@ -383,7 +386,7 @@ The retry route adds two safety checks before it dispatches `RETRY`:
 | Frontend crashes or restarts | Draft interview answers and approval editor state are saved to ticket UI-state artifacts. Page unload uses a best-effort keepalive write for the latest unsaved snapshot. |
 | Backend process restarts | Startup validates or reconstructs non-terminal actor snapshots, starts actors from their stored state, and immediately processes the restored snapshot so active work continues. |
 | OpenCode server restarts or loses a session | Owned sessions are validated against the remote OpenCode session list. Missing remote sessions are abandoned and a fresh owned session is created when the phase can safely continue. |
-| Model prompt fails, times out, or returns invalid output | Planning phases use structured retries and attempt-scoped artifacts. Invalid artifact bodies show only failure diagnostics; malformed text stays in Raw/logs. Execution phases use bead-scoped retry, context wipe notes, and worktree reset before trying again. |
+| Model prompt fails, times out, or returns invalid output | Planning phases use automatic structured retries whose rejected/accepted model text is preserved as Raw attempt variants while canonical artifacts keep only accepted normalized content. Manual Retry from `BLOCKED_ERROR` creates a new phase attempt/version. Execution phases use bead-scoped retry, context wipe notes, and worktree reset before trying again. |
 | Resume point cannot be proven | The ticket enters or remains in `BLOCKED_ERROR` with an explicit retry/cancel choice. |
 
 ## PR Review Outcomes

@@ -5,6 +5,7 @@ import type {
 } from '../../structuredOutput/types'
 import type { Session } from '../../opencode/types'
 import type { StructuredRetryDiagnostic } from '@shared/structuredRetryDiagnostics'
+import type { RawAttempt } from '../../council/types'
 
 export const EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE = 'execution_setup_profile'
 export const EXECUTION_SETUP_REPORT_ARTIFACT_TYPE = 'execution_setup_report'
@@ -35,6 +36,7 @@ export interface ExecutionSetupGenerationResult {
   result: ExecutionSetupResult | null
   parse: ExecutionSetupParseResult
   structuredOutput: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
 }
 
 export interface ExecutionSetupAttemptHistoryEntry {
@@ -60,6 +62,7 @@ export interface ExecutionSetupReport {
   modelOutput: string
   errors: string[]
   structuredOutput?: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
   attempt?: number
   maxIterations?: number | null
   attemptHistory?: ExecutionSetupAttemptHistoryEntry[]

@@ -1,11 +1,47 @@
 import type { OpenCodeAdapter } from '../opencode/adapter'
-import type { DraftResult } from './types'
+import type { DraftResult, RawAttempt } from './types'
 import type { Message, PromptPart, StreamEvent } from '../opencode/types'
 import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
 import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
 import { buildStructuredRetryPrompt } from '../structuredOutput'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { getErrorMessage } from '@shared/typeGuards'
+import { classifyStructuredFailureFromError, getStructuredRetryDecision } from '../lib/structuredOutputRetry'
+
+export interface RefineDraftResult {
+  content: string
+  rawAttempts: RawAttempt[]
+}
+
+const RAW_ATTEMPTS_ERROR_KEY = '__loopTroopRawAttempts'
+
+export function getRawAttemptsFromRefinementError(error: unknown): RawAttempt[] {
+  if (!error || typeof error !== 'object') return []
+  const rawAttempts = (error as Record<string, unknown>)[RAW_ATTEMPTS_ERROR_KEY]
+  return Array.isArray(rawAttempts) ? rawAttempts.filter(isRawAttemptLike) : []
+}
+
+function isRawAttemptLike(value: unknown): value is RawAttempt {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && typeof (value as RawAttempt).attempt === 'number'
+    && typeof (value as RawAttempt).stage === 'string'
+    && ((value as RawAttempt).outcome === 'rejected' || (value as RawAttempt).outcome === 'accepted')
+    && typeof (value as RawAttempt).rawResponse === 'string',
+  )
+}
+
+function throwWithRawAttempts(error: unknown, rawAttempts: RawAttempt[]): never {
+  if (error && typeof error === 'object') {
+    Object.defineProperty(error, RAW_ATTEMPTS_ERROR_KEY, {
+      configurable: true,
+      enumerable: false,
+      value: [...rawAttempts],
+    })
+  }
+  throw error
+}
 
 export async function refineDraft(
   adapter: OpenCodeAdapter,
@@ -47,7 +83,7 @@ export async function refineDraft(
     rawResponse: string
   }) => PromptPart[],
   toolPolicy: OpenCodeToolPolicy = 'default',
-): Promise<string> {
+): Promise<RefineDraftResult> {
   let sessionId = ''
   const refineParts = buildPrompt
     ? buildPrompt(winnerDraft, losingDrafts)
@@ -67,45 +103,60 @@ export async function refineDraft(
   let promptParts = refineParts
   let attemptCount = 0
   const maxStructuredRetries = 1
+  const rawAttempts: RawAttempt[] = []
 
   while (true) {
-    const result = await runOpenCodePrompt({
-      adapter,
-      projectPath,
-      parts: promptParts,
-      signal,
-      timeoutMs,
-      model: winnerDraft.memberId,
-      toolPolicy,
-      ...(sessionOwnership
-        ? {
-            sessionOwnership: {
-              ticketId: sessionOwnership.ticketId,
-              phase: sessionOwnership.phase,
-              phaseAttempt: sessionOwnership.phaseAttempt ?? 1,
-              memberId: winnerDraft.memberId,
-            },
-          }
-        : {}),
-      onSessionCreated: (session) => {
-        sessionId = session.id
-      },
-      onStreamEvent: (event) => {
-        onOpenCodeStreamEvent?.({
-          stage: 'refine',
-          memberId: winnerDraft.memberId,
-          sessionId,
-          event,
-        })
-      },
-      onPromptDispatched: (event) => {
-        onOpenCodePromptDispatched?.({
-          stage: 'refine',
-          memberId: winnerDraft.memberId,
-          event,
-        })
-      },
-    })
+    const attempt = attemptCount + 1
+    let result: Awaited<ReturnType<typeof runOpenCodePrompt>>
+    try {
+      result = await runOpenCodePrompt({
+        adapter,
+        projectPath,
+        parts: promptParts,
+        signal,
+        timeoutMs,
+        model: winnerDraft.memberId,
+        toolPolicy,
+        ...(sessionOwnership
+          ? {
+              sessionOwnership: {
+                ticketId: sessionOwnership.ticketId,
+                phase: sessionOwnership.phase,
+                phaseAttempt: sessionOwnership.phaseAttempt ?? 1,
+                memberId: winnerDraft.memberId,
+              },
+            }
+          : {}),
+        onSessionCreated: (session) => {
+          sessionId = session.id
+        },
+        onStreamEvent: (event) => {
+          onOpenCodeStreamEvent?.({
+            stage: 'refine',
+            memberId: winnerDraft.memberId,
+            sessionId,
+            event,
+          })
+        },
+        onPromptDispatched: (event) => {
+          onOpenCodePromptDispatched?.({
+            stage: 'refine',
+            memberId: winnerDraft.memberId,
+            event,
+          })
+        },
+      })
+    } catch (error) {
+      rawAttempts.push({
+        attempt,
+        stage: 'refine',
+        outcome: 'rejected',
+        rawResponse: '',
+        validationError: getErrorMessage(error),
+        failureClass: classifyStructuredFailureFromError(error),
+      })
+      throwWithRawAttempts(error, rawAttempts)
+    }
     const refined = result.response || winnerDraft.content
     const messages: Message[] = result.messages
 
@@ -118,18 +169,39 @@ export async function refineDraft(
     })
 
     if (!validateResponse) {
-      return refined
+      rawAttempts.push({
+        attempt,
+        stage: 'refine',
+        outcome: 'accepted',
+        rawResponse: refined,
+      })
+      return { content: refined, rawAttempts }
     }
 
     try {
       const validation = validateResponse(refined)
-      return validation.normalizedContent ?? refined
+      rawAttempts.push({
+        attempt,
+        stage: 'refine',
+        outcome: 'accepted',
+        rawResponse: refined,
+      })
+      return { content: validation.normalizedContent ?? refined, rawAttempts }
     } catch (error) {
+      const validationError = getErrorMessage(error)
+      const retryDecision = getStructuredRetryDecision(refined, result.responseMeta)
+      rawAttempts.push({
+        attempt,
+        stage: 'refine',
+        outcome: 'rejected',
+        rawResponse: refined,
+        validationError,
+        failureClass: retryDecision.failureClass,
+      })
       if (attemptCount >= maxStructuredRetries) {
-        throw error
+        throwWithRawAttempts(error, rawAttempts)
       }
       attemptCount += 1
-      const validationError = getErrorMessage(error)
       promptParts = buildRetryPrompt?.({
         baseParts: refineParts,
         validationError,

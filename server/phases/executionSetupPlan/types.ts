@@ -4,6 +4,7 @@ import type {
 } from '../../structuredOutput/types'
 import type { Session } from '../../opencode/types'
 import type { StructuredRetryDiagnostic } from '@shared/structuredRetryDiagnostics'
+import type { RawAttempt } from '../../council/types'
 
 export const EXECUTION_SETUP_PLAN_ARTIFACT_TYPE = 'execution_setup_plan'
 export const EXECUTION_SETUP_PLAN_REPORT_ARTIFACT_TYPE = 'execution_setup_plan_report'
@@ -29,6 +30,7 @@ export interface ExecutionSetupPlanGenerationResult {
   plan: ExecutionSetupPlan | null
   parse: ExecutionSetupPlanParseResult
   structuredOutput: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
 }
 
 export interface ExecutionSetupPlanReport {
@@ -41,6 +43,7 @@ export interface ExecutionSetupPlanReport {
   modelOutput: string
   errors: string[]
   structuredOutput?: StructuredOutputMetadata
+  rawAttempts?: RawAttempt[]
   notes?: string[]
   source: 'auto' | 'regenerate'
 }

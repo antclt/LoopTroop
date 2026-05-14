@@ -110,14 +110,14 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Prompt Assembly: LoopTroop builds a minimal prompt from the ticket title and description (the Ticket Details context). The prompt instructs the model to identify source files that are likely relevant to implementing this ticket — including files that would need modification, files that provide important interfaces or types, and files that contain related logic.',
       'Model Execution: The locked main implementer model processes the prompt and returns a structured response listing relevant files with their paths, content excerpts, relevance ratings (e.g., high/medium/low), and natural-language rationales explaining why each file matters to this ticket.',
-      'Output Validation: LoopTroop validates the structured output against the expected schema (correct field types, non-empty file paths, valid relevance levels). Provider, session, and OpenCode failures are correlated with empty or discarded validation failures so transient infrastructure errors are not mistaken for ordinary malformed output. If validation fails, it automatically retries once, either within the same session or by starting a fresh session.',
+      'Output Validation: LoopTroop validates the structured output against the expected schema (correct field types, non-empty file paths, valid relevance levels). Provider, session, and OpenCode failures are correlated with empty or discarded validation failures so transient infrastructure errors are not mistaken for ordinary malformed output. If validation fails, it automatically retries once, either within the same session or by starting a fresh session, and records rejected/accepted raw attempts on the scan artifact.',
       'Artifact Persistence: On success, LoopTroop writes the canonical `relevant-files.yaml` artifact into the ticket workspace directory. This YAML file becomes the reusable file-context artifact that all downstream phases can reference without needing to re-scan the codebase.',
       'Summarized Scan Artifact: A companion summarized scan artifact is also stored for UI review, giving you a quick overview of what files were identified and why.',
       'Logging: The normal phase log captures key session lifecycle milestones — prompt dispatch timing, summarized model output, retry attempts, validation results, correlated provider/session/OpenCode diagnostics, and the final extracted file count.',
     ],
     outputs: [
       'Canonical `relevant-files.yaml` inside the ticket workspace — this becomes a shared context artifact that interview, PRD, and beads phases all receive as part of their input context.',
-      'Structured scan artifact containing file paths, content previews, relevance levels (high/medium/low), and natural-language rationales for each identified file.',
+      'Structured scan artifact containing file paths, content previews, relevance levels (high/medium/low), natural-language rationales, and Raw attempt variants for any automatic structured retry.',
       'Normal phase logs with session lifecycle, prompt dispatch, retry history, and diagnostics.',
     ],
     transitions: [
@@ -383,14 +383,14 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Context Assembly: LoopTroop gives the winning model its own winning draft plus all the losing drafts, clearly labeled. The prompt instructs the model to keep the winning draft\'s structure and core content intact while selectively merging stronger elements from the losers.',
       'Selective Merging: The model reviews each losing draft for requirements, acceptance criteria, edge cases, or test scenarios that are present in the losing draft but absent from the winner. It incorporates these improvements without duplicating existing content or breaking the winning draft\'s organizational structure.',
-      'Output Validation: The refinement output is normalized and validated as a proper PRD document — checking for consistent structure, non-empty requirement sections, valid acceptance criteria format, and overall document integrity.',
+      'Output Validation: The refinement output is normalized and validated as a proper PRD document — checking for consistent structure, non-empty requirement sections, valid acceptance criteria format, and overall document integrity. Automatic structured retries are preserved as Raw attempt variants; only the accepted normalized PRD becomes canonical downstream context.',
       'Diff Metadata: LoopTroop optionally generates refinement diff metadata that describes what changed between the original winning draft and the refined candidate. This helps you understand what was added during refinement when you review the PRD later.',
       'Candidate Promotion: The resulting document becomes PRD Candidate v1 — the first versioned candidate that enters the coverage verification loop. This is not yet the final PRD; coverage may produce additional versions before approval until the configured cap is reached.',
     ],
     outputs: [
       'Refined PRD candidate artifact (PRD Candidate v1) — the winning draft enhanced with the best elements from losing drafts.',
       'Optional refinement diff metadata showing what was added or changed during the refinement process.',
-      'Normalized PRD content ready for the coverage verification loop.',
+      'Normalized PRD content ready for the coverage verification loop, with rejected refinement model text kept diagnostic-only in Raw attempts.',
     ],
     transitions: [
       'Success → Coverage Check (PRD): A valid refined candidate advances to the PRD coverage check, which verifies the PRD against the winning model\'s Full Answers artifact.',
@@ -674,7 +674,7 @@ const WORKFLOW_PHASE_DETAILS = {
     overview: 'LoopTroop audits the current workspace, drafts only the temporary setup that is still missing, and pauses for your review before any execution setup commands run. This gate keeps environment preparation separate from the beads blueprint: beads approval decides what to build, while setup-plan approval decides whether anything must be prepared and, if so, how LoopTroop may prepare the worktree for coding. The review artifact now includes an explicit readiness assessment, so it can cleanly say "already ready, no actions required" without forcing placeholder setup steps.',
     steps: [
       'Automatic Readiness Audit On Entry: When this state is entered, LoopTroop asks the locked main implementer to inspect the approved ticket details, relevant files, PRD, beads, the current worktree, and any prior reusable setup profile, then decide whether temporary setup is actually needed. The draft is created automatically if no current setup-plan artifact exists.',
-      'Structured Setup Plan: The draft plan captures an explicit readiness assessment (`ready`, `partial`, or `missing`), whether actions are required, the evidence gathered, unresolved gaps, any ordered setup steps that remain necessary, the allowed temp roots, discovered project-wide command families, and the default quality-gate policy later coding beads should follow.',
+      'Structured Setup Plan: The draft plan captures an explicit readiness assessment (`ready`, `partial`, or `missing`), whether actions are required, the evidence gathered, unresolved gaps, any ordered setup steps that remain necessary, the allowed temp roots, discovered project-wide command families, and the default quality-gate policy later coding beads should follow. Structured retries are captured as Raw attempt variants on the generation report.',
       'No-Action Cases Are First-Class: If the audit finds that the environment already has everything needed, the plan stays reviewable but contains no setup steps. You can still approve it as-is or edit it to add commands if you want LoopTroop to do additional temporary preparation.',
       'User Review And Editing: The approval UI lets you review the readiness assessment and setup steps in structured form, edit commands or descriptions, add or remove steps, and fall back to raw YAML/JSON editing when you need full control over the artifact.',
       'Regenerate With Commentary: If the initial assessment or plan is close but not correct, you can send commentary describing what should change. LoopTroop will archive the current plan as a prior version, then regenerate a new draft in the background. You are returned to the ticket overview immediately while generation runs. All previous versions are accessible via the VERSION dropdown at the top of the approval pane.',
@@ -682,7 +682,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     outputs: [
       'Editable `execution_setup_plan` artifact containing the readiness assessment, any proposed temporary environment-setup steps, user-facing diagnostics, and regenerate commentary history.',
-      'Underlying plan-generation report and notes artifacts retained for workflow context, auditability, and regenerate continuity.',
+      'Underlying plan-generation report and notes artifacts retained for workflow context, auditability, regenerate continuity, and raw attempt inspection.',
       'Approval receipt confirming the reviewed setup plan was explicitly approved before execution setup begins.',
     ],
     transitions: [
@@ -706,13 +706,13 @@ const WORKFLOW_PHASE_DETAILS = {
       'Temporary-Only Initialization: When setup is still missing, the agent executes only the approved temporary steps, may inspect the repository, run repo-native bootstrap commands, warm caches, or prepare generated runtime artifacts, but only inside LoopTroop-owned runtime paths under `.ticket/runtime/execution-setup/**` plus the profile mirror file `.ticket/runtime/execution-setup-profile.json`.',
       'Reusable Profile Generation: The agent finishes by returning a structured execution setup result that records the temp roots it prepared, bootstrap commands it used, reusable artifacts it created, discovered project command families, and the quality-gate policy later coding beads should follow.',
       'Audited Augmentations: If the approved plan is insufficient and the setup agent must run extra temporary-only commands, those additions are recorded in the setup report so you can see exactly how execution diverged from the approved draft.',
-      'Structured Validation: LoopTroop parses the result via a strict marker/schema contract. If the marker or schema is wrong, it sends a same-session structured retry prompt instead of treating the attempt as an implementation failure.',
+      'Structured Validation: LoopTroop parses the result via a strict marker/schema contract. If the marker or schema is wrong, it sends a same-session structured retry prompt instead of treating the attempt as an implementation failure, and records rejected/accepted raw attempts on the setup report.',
       'Filesystem Policy Enforcement: After each attempt, LoopTroop verifies in code that setup touched only the allowed runtime paths. Any tracked file changes or off-policy untracked output immediately fail the attempt and produce a retry note describing the violation.',
       'Retry and Reset: If an attempt fails, LoopTroop records retry notes, resets tracked repository files back to the setup phase start commit, clears the setup temp roots/profile mirror, preserves the execution log, and retries until the normal iteration budget is exhausted.',
     ],
     outputs: [
       'Canonical execution setup profile artifact describing reusable temp roots, discovered command families, and quality-gate policy for later coding beads.',
-      'Execution setup report artifact with attempt history, final status, retry notes, and structured-output diagnostics.',
+      'Execution setup report artifact with attempt history, final status, retry notes, structured-output diagnostics, and Raw attempt variants for setup-generation retries.',
       'Temporary runtime artifacts stored only under `.ticket/runtime/execution-setup/**` plus the profile mirror file `.ticket/runtime/execution-setup-profile.json`.',
     ],
     transitions: [
@@ -770,13 +770,13 @@ const WORKFLOW_PHASE_DETAILS = {
     overview: 'After all beads finish successfully, LoopTroop runs a ticket-level final test to verify the complete implementation as a whole — not just individual beads in isolation. The main implementer generates a comprehensive test plan based on focused implementation context (ticket details, PRD, beads, and any final-test retry notes), and then the generated test commands are executed on the current ticket branch. This catches integration issues that individual bead tests might miss.',
     steps: [
       'Context Assembly: LoopTroop loads ticket details, the approved PRD, the beads plan, and any final-test retry notes. The interview and Full Answers artifacts are intentionally not fed because the PRD and beads already carry the approved implementation intent.',
-      'Test Plan Generation: The locked main implementer analyzes the full context and generates a structured final-test plan. This plan includes test commands to execute, expected outcomes, and what each test is verifying. Tests may include unit tests, integration tests, build verification, and acceptance criteria validation.',
+      'Test Plan Generation: The locked main implementer analyzes the full context and generates a structured final-test plan. This plan includes test commands to execute, expected outcomes, and what each test is verifying. Tests may include unit tests, integration tests, build verification, and acceptance criteria validation. Malformed final-test plan responses are automatically retried and preserved as Raw attempt variants.',
       'Test Execution: LoopTroop executes the generated test commands in the ticket worktree under the configured timeout budget. Tests run on the actual branch state produced by the coding phase.',
       'Result Recording: A final test report artifact is written whether tests pass or fail. The report includes the generated test plan, actual command output, pass/fail status for each test, and any error messages or stack traces from failures.',
       'Phase Logging: The normal phase log captures the test lifecycle — plan generation, command execution, output streams, and final results — for review and diagnosis. LoopTroop-owned reset and git inspection commands are logged as completed-command summaries rather than recurring progress rows.',
     ],
     outputs: [
-      'Final test report with the generated test plan, execution results, pass/fail status, and error details.',
+      'Final test report with the generated test plan, execution results, pass/fail status, error details, and raw attempt diagnostics for final-test generation retries.',
       'Phase logs showing test command execution and output.',
       'A pass/fail gate that determines whether the implementation proceeds to integration or needs manual intervention.',
     ],
@@ -942,19 +942,20 @@ const WORKFLOW_PHASE_DETAILS = {
       'State Preservation: The blocked error becomes the active workflow state while preserving the previous status (the phase that failed). This preserved status is critical — it tells the retry mechanism exactly which phase to re-enter when you click Retry.',
       'Error History: If a ticket has been blocked multiple times (e.g., retry → fail → retry → fail), all error occurrences are preserved in a history list. This helps you identify recurring issues and decide whether retry is likely to succeed.',
       'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, persisted structured provider/model/session diagnostics, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
-      'Decision Point: You choose either Retry (which returns the workflow to the previously blocked status and re-attempts the failed operation) or Cancel (which moves the ticket to the terminal Canceled state, preserving all artifacts).',
+      'Decision Point: You choose either Retry (which archives the failed tracked phase attempt, creates a fresh attempt, returns the workflow to the previously blocked status, and re-attempts the failed operation) or Cancel (which moves the ticket to the terminal Canceled state, preserving all artifacts).',
     ],
     outputs: [
       'Error occurrence history with timestamps, error messages, error codes, structured provider/model/session/timeout/rate-limit diagnostics when available, and the phase where each failure occurred.',
       'Blocked state metadata linking the error to the specific phase that failed.',
-      'Retry or cancel decision point for manual intervention.',
+      'Retry or cancel decision point for manual intervention, with tracked retry artifacts/logs separated by phase attempt.',
     ],
     transitions: [
-      'Retry → Previous Status: Retry returns the workflow to the previously blocked status. The failed phase is re-entered and re-attempted from the beginning of that phase\'s logic.',
+      'Retry → Previous Status: Retry archives the active tracked phase attempt with `manual_retry_after_blocked_error`, creates the next active attempt, and returns the workflow to the previously blocked status. CODING keeps its special failed-bead reset before re-entering.',
       'Cancel → Canceled: Cancel moves the ticket to the terminal Canceled state. Artifacts and error history are preserved by default; the cancellation dialog offers optional cleanup of AI-generated artifacts and/or the execution log.',
     ],
     notes: [
       'Past error occurrences remain reviewable even after the ticket moves on (via retry) or is canceled — the error history is never deleted.',
+      'Manual retry versions are reviewed through the phase previous-version selector; automatic structured retries inside a version are reviewed through artifact Raw attempt tabs.',
       'Context available: Current Bead Data (if the failure occurred during the coding phase) + Error Context (error message, codes, phase, timing).',
       'Common causes of blocked errors: provider or model failures, session interruptions, model timeouts, rate-limit-style failures, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
       'Tip: Before retrying, check the error details. If the error is a transient issue (timeout, connectivity), retry is likely to succeed. If the error indicates a fundamental problem (malformed output, missing configuration), retry may fail again.',
@@ -1054,7 +1055,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'SCANNING_RELEVANT_FILES',
     label: 'Scanning Relevant Files',
-    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Provider, session, and OpenCode errors are correlated with empty or discarded validation failures before this shared context artifact is finalized.',
+    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Automatic scan retries are preserved in Raw attempts while the shared context artifact contains only accepted normalized files.',
     details: WORKFLOW_PHASE_DETAILS.SCANNING_RELEVANT_FILES,
     kanbanPhase: 'in_progress',
     groupId: 'discovery',
@@ -1165,7 +1166,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'REFINING_PRD',
     label: 'Refining Specs',
-    description: 'Winning draft is consolidated into PRD Candidate v1 using useful ideas from the losing drafts.',
+    description: 'Winning draft is consolidated into PRD Candidate v1 using useful ideas from the losing drafts; rejected refinement retries remain inspectable in Raw attempts.',
     details: WORKFLOW_PHASE_DETAILS.REFINING_PRD,
     kanbanPhase: 'in_progress',
     groupId: 'prd',
@@ -1289,7 +1290,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_EXECUTION_SETUP_APPROVAL',
     label: 'Approving Workspace Setup',
-    description: 'Review the readiness audit and approve any temporary workspace preparation; failed setup-plan output stays in Raw diagnostics, not the structured plan body.',
+    description: 'Review the readiness audit and approve any temporary workspace preparation; failed setup-plan output stays in Raw attempt diagnostics, not the structured plan body.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_EXECUTION_SETUP_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'pre_implementation',
@@ -1302,7 +1303,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'PREPARING_EXECUTION_ENV',
     label: 'Preparing Workspace Runtime',
-    description: 'Verifying readiness and performing only the missing temporary execution setup before coding begins. Internal setup commands are audited as concise completion summaries.',
+    description: 'Verifying readiness and performing only the missing temporary execution setup before coding begins. Setup-generation retries are captured in Raw attempts, and internal setup commands are audited as concise completion summaries.',
     details: WORKFLOW_PHASE_DETAILS.PREPARING_EXECUTION_ENV,
     kanbanPhase: 'in_progress',
     groupId: 'pre_implementation',
@@ -1327,7 +1328,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'RUNNING_FINAL_TEST',
     label: 'Testing Implementation',
-    description: 'The main implementer generates a comprehensive test plan from ticket details, PRD, beads, and retry notes, then runs it against the ticket branch while LoopTroop logs internal reset/git commands as concise CMD summaries.',
+    description: 'The main implementer generates a comprehensive test plan from ticket details, PRD, beads, and retry notes, preserves final-test generation retries in Raw attempts, then runs the accepted commands against the ticket branch.',
     details: WORKFLOW_PHASE_DETAILS.RUNNING_FINAL_TEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1411,7 +1412,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'BLOCKED_ERROR',
     label: 'Error (reason)',
-    description: 'A phase failure paused the workflow. The failed phase is preserved so Retry re-enters it with full context, including structured diagnostics for provider, model, session, timeout, or rate-limit-style failures when available.',
+    description: 'A phase failure paused the workflow. Retry preserves the failed tracked phase as an archived version, starts a fresh attempt, and re-enters the preserved status with diagnostics intact.',
     details: WORKFLOW_PHASE_DETAILS.BLOCKED_ERROR,
     kanbanPhase: 'needs_input',
     groupId: 'errors',

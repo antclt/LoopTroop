@@ -2,7 +2,7 @@ import type { TicketContext, TicketEvent } from '../../machines/types'
 import type { DraftResult, MemberOutcome, Vote, VotePresentationOrder } from '../../council/types'
 import { CancelledError, VOTING_RUBRIC_PRD } from '../../council/types'
 import { conductVoting, selectWinner } from '../../council/voter'
-import { refineDraft } from '../../council/refiner'
+import { getRawAttemptsFromRefinementError, refineDraft } from '../../council/refiner'
 import { checkMemberResponseQuorum, checkQuorum } from '../../council/quorum'
 import { draftPRD, buildPrdContextBuilder, buildPrdRefinePrompt } from '../../phases/prd/draft'
 import {
@@ -784,7 +784,9 @@ export async function handlePrdRefine(
   if (signal.aborted) throw new CancelledError(ticketId)
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   let validatedRefinement: ValidatedPrdRefinement | null = null
-  const refinedContent = await refineDraft(
+  let refinementRun: Awaited<ReturnType<typeof refineDraft>>
+  try {
+    refinementRun = await refineDraft(
     adapter,
     winnerDraft,
     losingDrafts,
@@ -875,7 +877,30 @@ export async function handlePrdRefine(
       rawResponse,
     }),
     PROM12.toolPolicy,
-  )
+    )
+  } catch (error) {
+    const rawAttempts = getRawAttemptsFromRefinementError(error)
+    if (rawAttempts.length > 0) {
+      insertPhaseArtifact(ticketId, {
+        phase: 'REFINING_PRD',
+        artifactType: 'prd_refined',
+        content: JSON.stringify({
+          status: 'failed',
+          error: getErrorMessage(error),
+          structuredOutput: structuredMeta,
+          rawAttempts,
+        }),
+      })
+      persistUiArtifactCompanionArtifact(ticketId, 'REFINING_PRD', 'prd_refined', {
+        status: 'failed',
+        error: getErrorMessage(error),
+        structuredOutput: structuredMeta,
+        rawAttempts,
+      })
+    }
+    throw error
+  }
+  const refinedContent = refinementRun.content
 
   // Clean up intermediate data
   phaseIntermediate.delete(`${ticketId}:prd`)
@@ -929,12 +954,14 @@ export async function handlePrdRefine(
     artifactType: 'prd_refined',
     content: JSON.stringify({
       refinedContent: refinedArtifact.refinedContent,
+      ...(refinementRun.rawAttempts.length > 0 ? { rawAttempts: refinementRun.rawAttempts } : {}),
     }),
   })
   persistUiArtifactCompanionArtifact(ticketId, 'REFINING_PRD', 'prd_refined', {
     winnerDraftContent: refinedArtifact.winnerDraftContent,
     draftMetrics: refinedArtifact.draftMetrics,
     structuredOutput: refinedArtifact.structuredOutput ?? null,
+    ...(refinementRun.rawAttempts.length > 0 ? { rawAttempts: refinementRun.rawAttempts } : {}),
   })
 
   // Persist winnerId separately for restart resilience (matches interview_winner pattern)

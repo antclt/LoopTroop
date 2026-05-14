@@ -171,11 +171,13 @@ Streaming AI upserts are also written to `.ticket/runtime/execution-log.ai.jsonl
 
 Artifact raw tabs show line, character, and tokenizer counts. Coverage report cards intentionally omit line-count details because JSON envelopes and escaped multiline payloads can make a displayed card total misleading. Coverage result summaries show status, gap counts, termination/budget notes, and interview follow-up questions without repeating the full open-gap list; the exact audit payload remains available in Raw.
 
-Council draft and vote raw tabs can also expose a disabled-or-enabled italic `Rejected` raw variant before `Validated` when structured retry metadata exists. New artifacts may provide `rawAttempts` directly on draft, voter, or execution setup report details; the raw tab uses those attempt payloads first, then falls back to existing phase model-output logs scoped by phase, model, and PRD sub-stage where needed. If rejected response data is unavailable, the button stays unavailable and the artifact processing notice still shows the retry diagnostic excerpt.
+Structured artifacts that include `rawAttempts` expose those attempts as Raw variants. The accepted/latest raw output appears first when available, followed by per-attempt variants such as `Attempt 1 Rejected` and `Attempt 2 Accepted`; diagnostic attempts without model text show the captured error/failure class instead of fabricated raw content. Council draft/vote artifacts can still fall back to existing phase model-output logs scoped by phase, model, and PRD sub-stage where needed.
 
 Council drafts with `invalid_output`, `failed`, or `timed_out` outcomes are diagnostic-only in the structured tab. The viewer suppresses draft body rendering even when older companion artifacts still contain a body for that member, and vote/refine merged views strip those failed draft bodies before display. Raw model output, raw attempts, validation errors, and retry excerpts remain available from diagnostics and the Raw tab.
 
 Failed execution setup plan and runtime reports keep `modelOutput` out of the structured details/body. When available, that model output and any `rawAttempts` are exposed through Raw tab variants so failure diagnostics remain inspectable without presenting rejected setup text as accepted plan content.
+
+Manual Retry from `BLOCKED_ERROR` is represented as a phase version, not another Raw variant. Views that load archived phase attempts use the existing previous-version selector and `phaseAttempt`-scoped artifact/log queries; error occurrence history remains the source for the blocked-error timeline.
 
 ### Artifact Processing Notices
 

@@ -90,6 +90,10 @@ describe('generateFinalTests', () => {
         excerpt: expect.stringContaining('I added tests to cover the whole ticket.'),
       }),
     ])
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'I added tests to cover the whole ticket.' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: expect.stringContaining('<FINAL_TEST_COMMANDS>') }),
+    ])
     expect(result.structuredOutput.interventions?.some((intervention) => intervention.category === 'parser_fix')).toBe(true)
     expect(result.structuredOutput.interventions?.some((intervention) => intervention.category === 'retry')).toBe(true)
 
@@ -141,6 +145,10 @@ describe('generateFinalTests', () => {
         excerpt: '[empty response]',
       }),
     ])
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: '', failureClass: 'empty_response' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: expect.stringContaining('<FINAL_TEST_COMMANDS>') }),
+    ])
     expect(result.structuredOutput.interventions?.some((intervention) => intervention.category === 'retry')).toBe(true)
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
     expect(adapter.messages.get('mock-session-1')?.some((message) => typeof message.content === 'string' && message.content.includes('Structured Output Retry'))).toBe(false)
@@ -186,6 +194,10 @@ describe('generateFinalTests', () => {
         failureClass: 'session_protocol_error',
         excerpt: '[empty response]',
       }),
+    ])
+    expect(result.rawAttempts).toEqual([
+      expect.objectContaining({ attempt: 1, outcome: 'rejected', failureClass: 'session_protocol_error' }),
+      expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: expect.stringContaining('<FINAL_TEST_COMMANDS>') }),
     ])
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
     expect(adapter.messages.get('mock-session-1')?.some((message) => typeof message.content === 'string' && message.content.includes('Structured Output Retry'))).toBe(false)

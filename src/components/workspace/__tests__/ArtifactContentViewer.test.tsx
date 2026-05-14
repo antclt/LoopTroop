@@ -1054,6 +1054,50 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('No refinement changes recorded.')).toBeInTheDocument()
   })
 
+  it('shows PRD refinement auto retries as raw attempt variants', () => {
+    const prdContent = buildPrdDocumentContent()
+    const rejectedRawResponse = 'this is prose, not the PRD schema'
+    const acceptedRawResponse = `${prdContent}\n`
+
+    render(
+      <ArtifactContent
+        artifactId="final-prd-draft"
+        phase="REFINING_PRD"
+        content={JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          winnerDraftContent: prdContent,
+          refinedContent: prdContent,
+          rawAttempts: [
+            {
+              attempt: 1,
+              stage: 'refine',
+              outcome: 'rejected',
+              rawResponse: rejectedRawResponse,
+              validationError: 'Missing PRD document fields.',
+            },
+            {
+              attempt: 2,
+              stage: 'refine',
+              outcome: 'accepted',
+              rawResponse: acceptedRawResponse,
+            },
+          ],
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    expect(screen.getByRole('button', { name: 'Accepted Output' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Attempt 2 Accepted' })).toBeInTheDocument()
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse.trimEnd())).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attempt 1 Rejected' }))
+
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
+  })
+
   it('renders coverage report with changes tab when only revision content is provided', () => {
     const revisionContent = JSON.stringify({
       winnerId: 'openai/gpt-5.2',

@@ -53,6 +53,7 @@ function buildExecutionSetupPlanReport(input: {
     modelOutput: input.generation.output,
     errors: [...input.generation.parse.errors],
     structuredOutput: input.generation.structuredOutput,
+    rawAttempts: input.generation.rawAttempts,
     notes: input.notes,
     source: input.source,
   }
@@ -232,6 +233,7 @@ async function generateAndPersistExecutionSetupPlan(input: {
       normalizedContent: report.plan ? JSON.stringify(report.plan) : null,
       parsed: report.plan,
       structuredOutput: report.structuredOutput,
+      rawAttempts: report.rawAttempts,
       status: report.status,
       errors: report.errors,
       notes,
