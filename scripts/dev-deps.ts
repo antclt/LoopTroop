@@ -1,5 +1,7 @@
 import {
   ensureInstallIfNeeded,
+  formatHeldDependencyReleaseDetail,
+  getHeldDependencyReleaseDetails,
   getMissingBins,
   readDailyMaintenanceState,
   recordDailyMaintenanceSuccess,
@@ -37,6 +39,9 @@ if (report.alreadyCurrent) {
     `[deps:sync] Held ${heldCount} newer direct dependency ` +
     `${heldCount === 1 ? 'release' : 'releases'} until the 7-day release delay passes.`,
   )
+  for (const held of getHeldDependencyReleaseDetails(report)) {
+    console.log(`[deps:sync] - ${formatHeldDependencyReleaseDetail(held)}`)
+  }
 } else {
   const heldCount = report.heldDependencies.length + report.heldDevDependencies.length
   console.log(
@@ -44,6 +49,9 @@ if (report.alreadyCurrent) {
     `${report.updatedDevDependencies.length} dev dependencies to eligible stable releases` +
     (heldCount > 0 ? `; held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'}.` : '.'),
   )
+  for (const held of getHeldDependencyReleaseDetails(report)) {
+    console.log(`[deps:sync] - ${formatHeldDependencyReleaseDetail(held)}`)
+  }
 }
 
 const missingBins = getMissingBins()

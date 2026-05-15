@@ -6,6 +6,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Summary
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
+- Made startup maintenance hold reports name each delayed dependency and its next eligible time.
 
 ### Detailed Changes
 
@@ -16,6 +17,10 @@ All notable changes to LoopTroop will be documented in this file.
 ### Changed
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
+- Development maintenance output now lists held direct dependency and audit package releases by name with the time they become eligible, or the reason no time is available, while preserving the 7-day release-age update gate.
+
+### Fixed
+- ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.
 
 ## [0.2.0] - 2026-05-12
 

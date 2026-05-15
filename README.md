@@ -175,7 +175,7 @@ cd LoopTroop
 npm run dev
 ```
 
-`npm run dev` starts the local LoopTroop stack and runs the startup preflight. The preflight can refresh the local OpenCode CLI, sync direct npm dependencies, and run safe audit remediation during local development. Routine startup keeps maintenance details concise; use `LOOPTROOP_DEV_VERBOSE=1 npm run dev` for full held-package, audit, npm install, service-plan, and port diagnostics.
+`npm run dev` starts the local LoopTroop stack and runs the startup preflight. The preflight can refresh the local OpenCode CLI, sync direct npm dependencies, and run safe audit remediation during local development. Routine startup lists held dependency and audit package releases with their next eligible times or the reason no time is available; use `LOOPTROOP_DEV_VERBOSE=1 npm run dev` for full audit finding notes, npm install output, service-plan details, and port diagnostics.
 
 The app starts:
 

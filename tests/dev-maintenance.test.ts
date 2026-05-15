@@ -7,6 +7,10 @@ import {
   collectLockfilePackageUpdates,
   decideDailyMaintenanceTask,
   evaluatePackageVersionReleaseAge,
+  formatHeldAuditPackageUpdate,
+  formatHeldDependencyReleaseDetail,
+  getHeldAuditPackageReleaseDetails,
+  getHeldDependencyReleaseDetails,
   recordDailyMaintenanceSuccess,
   type DailyMaintenanceState,
 } from '../scripts/dev-maintenance'
@@ -221,5 +225,50 @@ describe('audit lockfile age gating', () => {
     })
 
     expect(releaseAge.eligible).toBe(true)
+  })
+})
+
+describe('held dependency detail formatting', () => {
+  it('lists held direct dependencies with package type, versions, and eligibility time', () => {
+    const details = getHeldDependencyReleaseDetails({
+      heldDependencies: [
+        {
+          name: 'alpha',
+          current: '1.0.0',
+          latest: '1.1.0',
+          nextEligibleAt: '2026-05-15T00:00:00.000Z',
+          reason: 'no-aged-version',
+        },
+      ],
+      heldDevDependencies: [
+        {
+          name: 'beta',
+          current: '2.0.0',
+          latest: '2.1.0',
+          reason: 'metadata-unavailable',
+        },
+      ],
+    })
+
+    expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
+      'held runtime dependency alpha current=1.0.0 latest=1.1.0; until 2026-05-15T00:00:00.000Z',
+      'held dev dependency beta current=2.0.0 latest=2.1.0; until npm publish metadata can be verified',
+    ])
+  })
+
+  it('lists held audit packages with proposed versions and eligibility time', () => {
+    const details = getHeldAuditPackageReleaseDetails([
+      {
+        name: 'beta',
+        version: '2.1.0',
+        currentVersion: '2.0.0',
+        nextEligibleAt: '2026-05-16T00:00:00.000Z',
+        reason: 'too-new',
+      },
+    ])
+
+    expect(details.map(formatHeldAuditPackageUpdate)).toEqual([
+      'held audit fix beta@2.1.0 current=2.0.0; until 2026-05-16T00:00:00.000Z',
+    ])
   })
 })

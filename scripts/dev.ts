@@ -3,7 +3,14 @@ import concurrently from 'concurrently'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getDocsPort, getFrontendPort } from '../shared/appConfig'
-import { readDevPreflightReport, type DependencySyncReport } from './dev-maintenance'
+import {
+  formatHeldAuditPackageUpdate,
+  formatHeldDependencyReleaseDetail,
+  getHeldAuditPackageReleaseDetails,
+  getHeldDependencyReleaseDetails,
+  readDevPreflightReport,
+  type DependencySyncReport,
+} from './dev-maintenance'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
 import { getErrorMessage } from '../shared/typeGuards'
 
@@ -105,6 +112,18 @@ function getHeldDependencyCount(report: DependencySyncReport) {
   return (report.heldDependencies?.length ?? 0) + (report.heldDevDependencies?.length ?? 0)
 }
 
+function printHeldDependencyDetails(report: DependencySyncReport) {
+  for (const held of getHeldDependencyReleaseDetails(report)) {
+    console.log(`[dev]   - ${formatHeldDependencyReleaseDetail(held)}`)
+  }
+}
+
+function printHeldAuditDetails(report: NonNullable<ReturnType<typeof readDevPreflightReport>>['audit']) {
+  for (const held of getHeldAuditPackageReleaseDetails(report.heldPackageUpdates)) {
+    console.log(`[dev]   - ${formatHeldAuditPackageUpdate(held)}`)
+  }
+}
+
 function formatVerboseDetailHint(detailCount: number, detailLabel = 'details') {
   if (isVerboseLogging || detailCount <= 0) {
     return ''
@@ -203,6 +222,13 @@ if (preflightReport) {
       (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : ''),
     )
   }
+  if (
+    !preflightReport.dependencySync.skipped &&
+    !preflightReport.dependencySync.deferred &&
+    getHeldDependencyCount(preflightReport.dependencySync) > 0
+  ) {
+    printHeldDependencyDetails(preflightReport.dependencySync)
+  }
 
   if (preflightReport.audit.skipped) {
     printSummaryLine('Audit', 'Skipped automatic audit remediation via LOOPTROOP_DEV_SKIP_DEPS=1')
@@ -231,6 +257,9 @@ if (preflightReport) {
         console.log(`[dev]   - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
       }
     }
+  }
+  if (!preflightReport.audit.skipped && !preflightReport.audit.deferred && preflightReport.audit.fixHeld) {
+    printHeldAuditDetails(preflightReport.audit)
   }
 }
 

@@ -38,7 +38,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - previews `npm audit fix` lockfile changes and runs the fix only when every proposed npm package version has passed the same 7-day delay
 - upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
-- prints concise startup summaries by default, with held-package lists, audit finding details, raw npm install output, socket snapshots, and the full service plan available through `LOOPTROOP_DEV_VERBOSE=1`
+- prints concise startup summaries by default, including held dependency and audit package releases with their next eligible times or reasons, while audit finding details, raw npm install output, socket snapshots, and the full service plan remain available through `LOOPTROOP_DEV_VERBOSE=1`
 
 `npm run dev` also resolves the local OpenCode server endpoint before the dev services launch:
 
@@ -49,7 +49,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 
 That means `npm run dev` can intentionally mutate local dependency files when aged direct dependency updates or audit fixes are available. The expensive networked maintenance work is daily-gated during normal startup. Direct dependency sync, npm audit remediation, and OpenCode CLI upgrade checks run on the first local dev start of the day. If `package.json` or `package-lock.json` changes later the same day, the affected maintenance step runs again immediately.
 
-The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held count during normal startup. Use `LOOPTROOP_DEV_VERBOSE=1` to print the exact held packages, next eligible times, and known audit finding notes. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
+The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held packages plus their next eligible times, or the reason a time is unavailable, during normal startup. Use `LOOPTROOP_DEV_VERBOSE=1` to add known audit finding notes and other low-level diagnostics. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
 
 ## Maintenance Commands
 

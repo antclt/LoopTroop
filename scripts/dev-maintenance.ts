@@ -112,6 +112,10 @@ export interface HeldAuditPackageUpdate {
   reason: 'metadata-unavailable' | 'missing-version' | 'too-new'
 }
 
+export interface HeldDependencyReleaseDetail extends HeldDependencyUpdate {
+  dependencyType: 'runtime' | 'dev'
+}
+
 export interface OpenCodeUpgradeReport {
   skipped: boolean
   deferred: boolean
@@ -133,6 +137,80 @@ export interface DevPreflightReport {
   dependencySync: DependencySyncReport
   audit: AuditRemediationReport
   opencode: OpenCodeUpgradeReport
+}
+
+function compareHeldReleaseDetails(left: { name: string; nextEligibleAt?: string }, right: { name: string; nextEligibleAt?: string }) {
+  if (left.nextEligibleAt && right.nextEligibleAt && left.nextEligibleAt !== right.nextEligibleAt) {
+    return left.nextEligibleAt.localeCompare(right.nextEligibleAt)
+  }
+
+  if (left.nextEligibleAt && !right.nextEligibleAt) {
+    return -1
+  }
+
+  if (!left.nextEligibleAt && right.nextEligibleAt) {
+    return 1
+  }
+
+  return left.name.localeCompare(right.name)
+}
+
+function formatHeldReleaseTiming(
+  reason: HeldDependencyUpdate['reason'] | HeldAuditPackageUpdate['reason'],
+  nextEligibleAt?: string,
+) {
+  if (nextEligibleAt) {
+    return `until ${nextEligibleAt}`
+  }
+
+  switch (reason) {
+    case 'metadata-unavailable':
+      return 'until npm publish metadata can be verified'
+    case 'missing-version':
+      return 'until npm reports comparable version metadata'
+    case 'non-semver-current':
+      return 'because the current version is not stable semver'
+    case 'no-aged-version':
+      return 'until a newer stable release is at least 7 days old'
+    case 'too-new':
+      return 'until the 7-day release delay passes'
+  }
+}
+
+export function getHeldDependencyReleaseDetails(
+  report: Pick<DependencySyncReport, 'heldDependencies' | 'heldDevDependencies'>,
+): HeldDependencyReleaseDetail[] {
+  return [
+    ...(report.heldDependencies ?? []).map((update) => ({ ...update, dependencyType: 'runtime' as const })),
+    ...(report.heldDevDependencies ?? []).map((update) => ({ ...update, dependencyType: 'dev' as const })),
+  ].sort(compareHeldReleaseDetails)
+}
+
+export function formatHeldDependencyReleaseDetail(detail: HeldDependencyReleaseDetail) {
+  const versions = [
+    detail.current ? `current=${detail.current}` : '',
+    detail.latest ? `latest=${detail.latest}` : '',
+  ].filter(Boolean)
+  const versionSuffix = versions.length > 0 ? ` ${versions.join(' ')}` : ''
+
+  return `held ${detail.dependencyType} dependency ${detail.name}${versionSuffix}; ${formatHeldReleaseTiming(
+    detail.reason,
+    detail.nextEligibleAt,
+  )}`
+}
+
+export function getHeldAuditPackageReleaseDetails(updates: HeldAuditPackageUpdate[]) {
+  return [...updates].sort(compareHeldReleaseDetails)
+}
+
+export function formatHeldAuditPackageUpdate(update: HeldAuditPackageUpdate) {
+  const targetSuffix = update.version ? `@${update.version}` : ''
+  const currentSuffix = update.currentVersion ? ` current=${update.currentVersion}` : ''
+
+  return `held audit fix ${update.name}${targetSuffix}${currentSuffix}; ${formatHeldReleaseTiming(
+    update.reason,
+    update.nextEligibleAt,
+  )}`
 }
 
 interface PackageManifest {

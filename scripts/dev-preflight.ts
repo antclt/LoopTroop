@@ -6,6 +6,10 @@ import { getBackendPort, getDocsPort, getFrontendPort } from '../shared/appConfi
 import {
   decideDailyMaintenanceTask,
   ensureInstallIfNeeded,
+  formatHeldAuditPackageUpdate,
+  formatHeldDependencyReleaseDetail,
+  getHeldAuditPackageReleaseDetails,
+  getHeldDependencyReleaseDetails,
   getMissingBins,
   readDailyMaintenanceState,
   recordDailyMaintenanceSuccess,
@@ -458,10 +462,7 @@ for (const { label, port } of configuredPorts) {
 if (shouldSkipDependencyMaintenance) {
   console.log('[dev-preflight] Skipped dependency sync and audit remediation because LOOPTROOP_DEV_SKIP_DEPS=1.')
 } else {
-  const heldDependencyUpdates = [
-    ...(dependencySyncReport.heldDependencies ?? []),
-    ...(dependencySyncReport.heldDevDependencies ?? []),
-  ]
+  const heldDependencyUpdates = getHeldDependencyReleaseDetails(dependencySyncReport)
   if (dependencySyncReport.deferred) {
     console.log(
       `[dev-preflight] Skipped daily dependency sync; it already ran today at ${formatTimestamp(dependencySyncReport.lastCompletedAt)}.`,
@@ -471,22 +472,17 @@ if (shouldSkipDependencyMaintenance) {
   } else if (dependencySyncReport.updatedDependencies.length === 0 && dependencySyncReport.updatedDevDependencies.length === 0) {
     console.log(
       `[dev-preflight] Direct dependency sync complete: held ${heldDependencyUpdates.length} ` +
-      `${heldDependencyUpdates.length === 1 ? 'newer release' : 'newer releases'} until the 7-day release delay passes.` +
-      formatVerboseDetailHint(heldDependencyUpdates.length, 'held-package details'),
+      `${heldDependencyUpdates.length === 1 ? 'newer release' : 'newer releases'} until the 7-day release delay passes.`,
     )
   } else {
     console.log(
       `[dev-preflight] Direct dependency sync complete: ` +
       `${dependencySyncReport.updatedDependencies.length} runtime and ` +
-      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated to eligible releases.` +
-      formatVerboseDetailHint(heldDependencyUpdates.length, 'held-package details'),
+      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated to eligible releases.`,
     )
   }
-  if (isVerboseLogging) {
-    for (const held of heldDependencyUpdates.slice(0, 5)) {
-      const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
-      console.log(`[dev-preflight] - held ${held.name}${held.latest ? ` latest=${held.latest}` : ''}${nextEligible}`)
-    }
+  for (const held of heldDependencyUpdates) {
+    console.log(`[dev-preflight] - ${formatHeldDependencyReleaseDetail(held)}`)
   }
 
   if (auditReport.deferred) {
@@ -497,14 +493,10 @@ if (shouldSkipDependencyMaintenance) {
     if (auditReport.fixHeld) {
       console.log(
         `[dev-preflight] npm audit remediation held ${auditReport.heldPackageUpdates.length} ` +
-        `${auditReport.heldPackageUpdates.length === 1 ? 'package release' : 'package releases'} until the 7-day release delay passes.` +
-        formatVerboseDetailHint(auditReport.heldPackageUpdates.length, 'held audit package details'),
+        `${auditReport.heldPackageUpdates.length === 1 ? 'package release' : 'package releases'} until the 7-day release delay passes.`,
       )
-      if (isVerboseLogging) {
-        for (const held of auditReport.heldPackageUpdates.slice(0, 5)) {
-          const nextEligible = held.nextEligibleAt ? `; next eligible ${formatTimestamp(held.nextEligibleAt)}` : ''
-          console.log(`[dev-preflight] - held audit fix ${held.name}${held.version ? `@${held.version}` : ''}${nextEligible}`)
-        }
+      for (const held of getHeldAuditPackageReleaseDetails(auditReport.heldPackageUpdates)) {
+        console.log(`[dev-preflight] - ${formatHeldAuditPackageUpdate(held)}`)
       }
     }
 

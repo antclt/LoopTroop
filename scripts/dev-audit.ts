@@ -1,4 +1,6 @@
 import {
+  formatHeldAuditPackageUpdate,
+  getHeldAuditPackageReleaseDetails,
   readDailyMaintenanceState,
   recordDailyMaintenanceSuccess,
   remediateAudit,
@@ -20,6 +22,9 @@ if (report.fixHeld) {
     `[audit:remediate] Held npm audit fix because ${report.heldPackageUpdates.length} proposed ` +
     `${report.heldPackageUpdates.length === 1 ? 'package release is' : 'package releases are'} inside the 7-day delay.`,
   )
+  for (const held of getHeldAuditPackageReleaseDetails(report.heldPackageUpdates)) {
+    console.log(`[audit:remediate] - ${formatHeldAuditPackageUpdate(held)}`)
+  }
 } else if (report.fixChanged) {
   console.log('[audit:remediate] npm audit fix updated the dependency graph.')
 } else {

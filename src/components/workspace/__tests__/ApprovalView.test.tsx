@@ -18,7 +18,7 @@ vi.mock('@/hooks/useTickets', async () => {
     ...actual,
     useInterviewQuestions: (...args: unknown[]) => mockUseInterviewQuestions(...args),
     useTicketUIState: (...args: unknown[]) => mockUseTicketUIState(...args),
-    useSaveTicketUIState: () => ({ mutate: mockSaveUiState }),
+    useSaveTicketUIState: () => ({ mutate: mockSaveUiState, mutateAsync: mockSaveUiState }),
   }
 })
 
