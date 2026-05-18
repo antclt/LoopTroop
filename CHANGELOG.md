@@ -18,6 +18,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
 - Development maintenance output now renders a single default startup summary instead of repeating preflight details, summarizing held direct dependency and audit package counts while keeping package-level names and eligibility times available through `LOOPTROOP_DEV_VERBOSE=1`.
+- The `npm run dev` startup summary now prints the docs URL once instead of repeating its port as a suffix.
 
 ### Fixed
 - ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.

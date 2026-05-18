@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import concurrently from 'concurrently'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getDocsPort, getFrontendPort } from '../shared/appConfig'
+import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getFrontendPort } from '../shared/appConfig'
 import {
   formatHeldAuditPackageUpdate,
   formatHeldDependencyReleaseDetail,
@@ -166,7 +166,7 @@ const services: DevService[] = [
 printDivider('Startup Summary')
 printSummaryLine('Frontend', `http://localhost:${getFrontendPort()}`)
 printSummaryLine('Backend', `http://localhost:${getBackendPort()}`)
-printSummaryLine('Docs', `${getDocsOrigin()} (port ${getDocsPort()})`)
+printSummaryLine('Docs', getDocsOrigin())
 printSummaryLine('OpenCode', baseUrl)
 
 if (preflightReport) {
