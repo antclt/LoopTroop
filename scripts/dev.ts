@@ -210,7 +210,8 @@ if (preflightReport) {
     const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
     printSummaryLine(
       'Dependencies',
-      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} inside the 7-day delay`,
+      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} inside the 7-day delay.` +
+      formatVerboseDetailHint(heldCount, 'held release details'),
     )
   } else {
     const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
@@ -219,10 +220,13 @@ if (preflightReport) {
       `Updated ${preflightReport.dependencySync.updatedDependencies.length} runtime and ` +
       `${preflightReport.dependencySync.updatedDevDependencies.length} dev packages to eligible releases` +
       (heldCount > 0 ? `; held ${heldCount}` : '') +
-      (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : ''),
+      (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : '') +
+      '.' +
+      formatVerboseDetailHint(heldCount, 'held release details'),
     )
   }
   if (
+    isVerboseLogging &&
     !preflightReport.dependencySync.skipped &&
     !preflightReport.dependencySync.deferred &&
     getHeldDependencyCount(preflightReport.dependencySync) > 0
@@ -238,10 +242,12 @@ if (preflightReport) {
       `Deferred daily remediation; last completed today at ${formatMaintenanceTimestamp(preflightReport.audit.lastCompletedAt)}`,
     )
   } else if (preflightReport.audit.fixHeld) {
+    const heldCount = preflightReport.audit.heldPackageUpdates.length
     printSummaryLine(
       'Audit',
-      `Held remediation; ${preflightReport.audit.heldPackageUpdates.length} proposed ` +
-      `${preflightReport.audit.heldPackageUpdates.length === 1 ? 'release is' : 'releases are'} inside the 7-day delay`,
+      `Held remediation; ${heldCount} proposed ` +
+      `${heldCount === 1 ? 'release is' : 'releases are'} inside the 7-day delay.` +
+      formatVerboseDetailHint(heldCount, 'held audit release details'),
     )
   } else if (preflightReport.audit.unresolved.length === 0) {
     printSummaryLine('Audit', 'No remaining npm audit findings after remediation')
@@ -258,7 +264,7 @@ if (preflightReport) {
       }
     }
   }
-  if (!preflightReport.audit.skipped && !preflightReport.audit.deferred && preflightReport.audit.fixHeld) {
+  if (isVerboseLogging && !preflightReport.audit.skipped && !preflightReport.audit.deferred && preflightReport.audit.fixHeld) {
     printHeldAuditDetails(preflightReport.audit)
   }
 }

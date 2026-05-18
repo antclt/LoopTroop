@@ -6,7 +6,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Summary
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
-- Made startup maintenance hold reports name each delayed dependency and its next eligible time.
+- Made `npm run dev` startup maintenance output summarize once by default, with held package details available in verbose mode.
 
 ### Detailed Changes
 
@@ -17,7 +17,7 @@ All notable changes to LoopTroop will be documented in this file.
 ### Changed
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
-- Development maintenance output now lists held direct dependency and audit package releases by name with the time they become eligible, or the reason no time is available, while preserving the 7-day release-age update gate.
+- Development maintenance output now renders a single default startup summary instead of repeating preflight details, summarizing held direct dependency and audit package counts while keeping package-level names and eligibility times available through `LOOPTROOP_DEV_VERBOSE=1`.
 
 ### Fixed
 - ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.

@@ -6,10 +6,6 @@ import { getBackendPort, getDocsPort, getFrontendPort } from '../shared/appConfi
 import {
   decideDailyMaintenanceTask,
   ensureInstallIfNeeded,
-  formatHeldAuditPackageUpdate,
-  formatHeldDependencyReleaseDetail,
-  getHeldAuditPackageReleaseDetails,
-  getHeldDependencyReleaseDetails,
   getMissingBins,
   readDailyMaintenanceState,
   recordDailyMaintenanceSuccess,
@@ -216,30 +212,6 @@ function ensureDistinctConfiguredPorts() {
   if (hasConflict) {
     process.exit(1)
   }
-}
-
-function formatTimestamp(timestamp?: string) {
-  if (!timestamp) {
-    return 'unknown time'
-  }
-
-  const date = new Date(timestamp)
-  if (Number.isNaN(date.getTime())) {
-    return timestamp
-  }
-
-  return new Intl.DateTimeFormat(undefined, {
-    hour: 'numeric',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function formatVerboseDetailHint(detailCount: number, detailLabel = 'details') {
-  if (isVerboseLogging || detailCount <= 0) {
-    return ''
-  }
-
-  return ` Set LOOPTROOP_DEV_VERBOSE=1 for ${detailLabel}.`
 }
 
 ensureDistinctConfiguredPorts()
@@ -457,84 +429,6 @@ for (const { label, port } of configuredPorts) {
       process.exit(1)
     }
   }
-}
-
-if (shouldSkipDependencyMaintenance) {
-  console.log('[dev-preflight] Skipped dependency sync and audit remediation because LOOPTROOP_DEV_SKIP_DEPS=1.')
-} else {
-  const heldDependencyUpdates = getHeldDependencyReleaseDetails(dependencySyncReport)
-  if (dependencySyncReport.deferred) {
-    console.log(
-      `[dev-preflight] Skipped daily dependency sync; it already ran today at ${formatTimestamp(dependencySyncReport.lastCompletedAt)}.`,
-    )
-  } else if (dependencySyncReport.alreadyCurrent) {
-    console.log('[dev-preflight] Direct dependencies are already on the latest stable releases.')
-  } else if (dependencySyncReport.updatedDependencies.length === 0 && dependencySyncReport.updatedDevDependencies.length === 0) {
-    console.log(
-      `[dev-preflight] Direct dependency sync complete: held ${heldDependencyUpdates.length} ` +
-      `${heldDependencyUpdates.length === 1 ? 'newer release' : 'newer releases'} until the 7-day release delay passes.`,
-    )
-  } else {
-    console.log(
-      `[dev-preflight] Direct dependency sync complete: ` +
-      `${dependencySyncReport.updatedDependencies.length} runtime and ` +
-      `${dependencySyncReport.updatedDevDependencies.length} dev packages updated to eligible releases.`,
-    )
-  }
-  for (const held of heldDependencyUpdates) {
-    console.log(`[dev-preflight] - ${formatHeldDependencyReleaseDetail(held)}`)
-  }
-
-  if (auditReport.deferred) {
-    console.log(
-      `[dev-preflight] Skipped daily npm audit remediation; it already ran today at ${formatTimestamp(auditReport.lastCompletedAt)}.`,
-    )
-  } else {
-    if (auditReport.fixHeld) {
-      console.log(
-        `[dev-preflight] npm audit remediation held ${auditReport.heldPackageUpdates.length} ` +
-        `${auditReport.heldPackageUpdates.length === 1 ? 'package release' : 'package releases'} until the 7-day release delay passes.`,
-      )
-      for (const held of getHeldAuditPackageReleaseDetails(auditReport.heldPackageUpdates)) {
-        console.log(`[dev-preflight] - ${formatHeldAuditPackageUpdate(held)}`)
-      }
-    }
-
-    if (auditReport.unresolved.length === 0) {
-      console.log('[dev-preflight] npm audit summary: no remaining findings.')
-    } else {
-      console.log(
-        `[dev-preflight] npm audit summary: ${auditReport.totals.total} remaining ` +
-        `(high=${auditReport.totals.high}, moderate=${auditReport.totals.moderate}).` +
-        formatVerboseDetailHint(auditReport.unresolved.length, 'audit finding details'),
-      )
-      if (isVerboseLogging) {
-        for (const issue of auditReport.unresolved.slice(0, 5)) {
-          console.log(`[dev-preflight] - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
-        }
-      }
-    }
-  }
-}
-
-if (opencodeReport.skipped) {
-  console.log('[dev-preflight] Skipped OpenCode CLI upgrade because LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1.')
-} else if (opencodeReport.deferred) {
-  console.log(
-    `[dev-preflight] Skipped daily OpenCode CLI upgrade check; it already ran today at ${formatTimestamp(opencodeReport.lastCompletedAt)}.`,
-  )
-} else if (!opencodeReport.available) {
-  console.log('[dev-preflight] Local OpenCode CLI was not found; skipping automatic OpenCode upgrade.')
-} else if (opencodeReport.upgraded) {
-  const methodSuffix = opencodeReport.method ? ` via ${opencodeReport.method}` : ''
-  console.log(
-    `[dev-preflight] OpenCode CLI upgraded${methodSuffix}: ` +
-    `${opencodeReport.versionBefore ?? 'unknown'} -> ${opencodeReport.versionAfter ?? 'unknown'}.`,
-  )
-} else {
-  const version = opencodeReport.versionAfter ?? opencodeReport.versionBefore ?? 'unknown'
-  const methodSuffix = opencodeReport.method ? ` via ${opencodeReport.method}` : ''
-  console.log(`[dev-preflight] OpenCode CLI is already current at ${version}${methodSuffix}.`)
 }
 
 writeDevPreflightReport({
