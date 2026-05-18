@@ -18,11 +18,17 @@ search: false
 *   **Adversarial Critique Pre-Pass:** After relevant-file scanning and any enabled research briefs, optionally run a bounded ticket-level critique before Interview begins.
     *   Persist `.looptroop/tickets/<ticket-id>/critique.yaml` with verdict, major risks, counterproposals, interview follow-ups, and stop conditions.
     *   Treat the critique as read-only planning context, not a council vote or automatic cancel path.
+    *   Default OFF unless enabled by `phase_flags.critique.enabled`; lock mode at `START`.
+    *   Require each major risk to cite a ticket assumption, repository/research evidence, or missing constraint.
+    *   Surface the approved critique summary in review UI so users can carry forward or dismiss generated follow-ups explicitly.
     *   Keep council-side `adversarial_critique` as artifact-level critique during Interview/Proposal/Options/Design/Beads.
     *   Editing an approved critique invalidates Interview + Proposal + Options Synthesis + Design + Beads.
 *   **Repository Research Brief:** After relevant-file scanning, optionally generate a compact read-only brief of repository facts before critique/interview planning.
     *   Persist `.looptroop/tickets/<ticket-id>/research/repository-brief.yaml` with summary, invariants, relevant paths, reuse candidates, and unknowns.
     *   Briefs must cite concrete files/artifacts and avoid selecting the solution.
+    *   Default `auto` for scoped/full planning profiles and OFF for minimal profile.
+    *   Use scan output, repo-discovery/codebase-map artifacts, and planning context when available; preserve provenance back to source artifacts.
+    *   Regeneration should update only factual claims and must not rewrite approved planning decisions.
     *   Make the concise summary available to Critique, Interview, Proposal, Options Synthesis, Design, and Beads.
 *   **Animate icons:** Update the icons for actions when models are doing different actions (e.g., when models create a draft, it shows drafting with a pencil icon — can this pencil be animated, or can a similar animation be used?).
 *   **Post-interview planning context refresh:** After interview approval, add a mandatory `REFRESHING_PLANNING_CONTEXT` phase before PRD drafting.
@@ -241,7 +247,7 @@ search: false
     *   Route planning depth from scope using explicit planning profiles:
         *   `SMALL` -> `profile=minimal` (change request + fast-path planning with optional direct bead generation).
         *   `MEDIUM` -> `profile=scoped` (short intake + scoped Proposal/Options/Design delta + scoped beads).
-        *   `LARGE` -> `profile=full` (full interview + full Proposal + full Design + scoped beads).
+        *   `LARGE` -> `profile=full` (full interview + full Proposal + Options Synthesis when needed + full Design + scoped beads).
     *   Add ticket-level `execution_profile` selector at creation/start:
         *   `quick` (MVP fast path): single-model planning (`main implementer`) with strict coverage checks.
         *   `council` (default for higher complexity): full multi-model drafting + voting pipeline.
@@ -278,6 +284,9 @@ search: false
     *   Include critique, repository research, external research, options synthesis, spikes allowed, manual QA waiver policy, and related budgets.
     *   Persist effective flags in ticket runtime state and approval artifacts.
     *   Treat flags as immutable after `START`, like locked model and coverage settings.
+    *   Defaults: critique optional, repository brief auto for scoped/full profiles, external brief optional, options synthesis auto on ambiguity, manual QA required.
+    *   Mid-run flag changes require a new planning run or explicit restart, not silent mutation of the active run.
+    *   Show effective flags in ticket creation/start UI, phase headers, and diagnostic receipts.
     *   Migrate `execution_profile` into `phase_flags.execution_profile` when this contract lands.
     *   If an upstream approved artifact tied to a flag is edited, downstream invalidation must be deterministic and visible.
 *   **Action-Required Notifications + Escalation Lifecycle (severity-routed, acknowledgment-aware):**
@@ -348,6 +357,10 @@ search: false
     *   Options Synthesis runs when architectural/product ambiguity is detected or `phase_flags.options_synthesis.mode=required`.
     *   Persist `.looptroop/tickets/<ticket-id>/options-pack.yaml` with `options[]`, `recommended_option`, `why_not_the_others[]`, and optional `spike.required`.
     *   Reserve `spike` for bounded runnable uncertainty reduction that is explicitly approved; do not treat every option comparison as a prototype.
+    *   Clear tickets may skip Options Synthesis automatically and record the skip reason in planning status.
+    *   Ambiguous tickets should compare at least two materially different viable options, with tradeoffs and a single recommendation.
+    *   Selected options feed Design and `TEST_STRATEGY`; rejected options remain as decision history, not active implementation scope.
+    *   This replaces standalone winner-model discussion with a documented decision pack before Design.
     *   Design generation is blocked until Proposal and any required Options Synthesis are approved.
     *   Require feasibility cross-check: each Proposal requirement must map to at least one Design decision path or explicit blocker.
     *   Persist approved artifacts:
@@ -471,6 +484,10 @@ search: false
     *   Persist QA runs at `.looptroop/tickets/<ticket-id>/verification/wizard-<run-id>.yaml` and issues at `.looptroop/tickets/<ticket-id>/verification/issues.jsonl`.
     *   Each failed check or user-reported defect creates a structured QA issue with repro, expected result, actual result, evidence, and linked requirement/bead where possible.
     *   Fixes run as fresh-session QA mini-beads and return to the Manual QA Loop until the user clears blocking issues or signs an explicit waiver.
+    *   A successful automated final test may not transition directly to integration when `phase_flags.manual_qa.required=true`.
+    *   QA mini-beads may fix verified defects only; design or scope changes require an explicit escalation back to planning.
+    *   Waivers must persist who approved them, which checks were waived, and why integration may continue.
+    *   Legacy in-flight tickets can keep old behavior if they already passed the post-implementation boundary before this feature lands.
     *   The final verification scorecard prepares this loop; any critical finding blocks manual QA clearance until resolved.
 *   **Per-bead Fast Quality Gate + Lightweight Security Gate (changed-files first):**
     *   Before a bead can be marked `done`, run deterministic changed-files gates with two mandatory events: `idle_gate` and `completion_gate`.
@@ -921,6 +938,9 @@ search: false
     *   External Research Brief output is read-only context for council drafting and is never counted as a council vote.
     *   Research pass is non-blocking: configurable timeout (default 5 minutes); on timeout/failure, continue planning with warning `research_pass_skipped`.
     *   Persist research artifacts at `.looptroop/tickets/<ticket-id>/research/external-brief-<phase>-<timestamp>.json` with provenance metadata, retrieval time, freshness, confidence, and source type.
+    *   Distinguish official docs, vendor announcements, security advisories, and community commentary in the stored source metadata.
+    *   Capture conflicts or uncertainty explicitly instead of smoothing over contradictory sources.
+    *   Enforce source allowlists, recency filters, and max injected-token budget before adding findings to planning context.
     *   Add optional `council_web_search` during council drafting phases (Interview/Proposal/Options Synthesis/Design/Beads):
         *   provider options: `duckduckgo` (default), `tavily`, `exa`, `brave` (project-configurable).
         *   bounded retrieval contract: max 5 results, max 2000 injected tokens, source allowlist + recency filter.
