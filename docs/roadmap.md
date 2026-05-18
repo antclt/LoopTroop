@@ -15,7 +15,15 @@ search: false
 ## High Priority
 
 
-*   **Argue the opposite:** In approving interview, main implementer will refresh context, add ticket details and interview results, analyze the whole interview, and then suggest a completely opposite approach to each question's ticket description and interview results. It will be an optional thing.
+*   **Adversarial Critique Pre-Pass:** After relevant-file scanning and any enabled research briefs, optionally run a bounded ticket-level critique before Interview begins.
+    *   Persist `.looptroop/tickets/<ticket-id>/critique.yaml` with verdict, major risks, counterproposals, interview follow-ups, and stop conditions.
+    *   Treat the critique as read-only planning context, not a council vote or automatic cancel path.
+    *   Keep council-side `adversarial_critique` as artifact-level critique during Interview/Proposal/Options/Design/Beads.
+    *   Editing an approved critique invalidates Interview + Proposal + Options Synthesis + Design + Beads.
+*   **Repository Research Brief:** After relevant-file scanning, optionally generate a compact read-only brief of repository facts before critique/interview planning.
+    *   Persist `.looptroop/tickets/<ticket-id>/research/repository-brief.yaml` with summary, invariants, relevant paths, reuse candidates, and unknowns.
+    *   Briefs must cite concrete files/artifacts and avoid selecting the solution.
+    *   Make the concise summary available to Critique, Interview, Proposal, Options Synthesis, Design, and Beads.
 *   **Animate icons:** Update the icons for actions when models are doing different actions (e.g., when models create a draft, it shows drafting with a pencil icon — can this pencil be animated, or can a similar animation be used?).
 *   **Post-interview planning context refresh:** After interview approval, add a mandatory `REFRESHING_PLANNING_CONTEXT` phase before PRD drafting.
     * Transition: `WAITING_INTERVIEW_APPROVAL` -> approve -> `REFRESHING_PLANNING_CONTEXT` -> `DRAFTING_PRD`.
@@ -159,10 +167,10 @@ search: false
         *   explicit out-of-scope list for the ticket.
     *   Persist artifacts: `.looptroop/tickets/<ticket-id>/audience-jtbd.yaml` and `.looptroop/tickets/<ticket-id>/release-slice.yaml`.
     *   Transition policy:
-        *   Interview/Planning (Proposal + Design) cannot start unless `go-no-go` is approved (`go` or approved `pivot`) and Audience/JTBD/SLC artifacts are approved.
+        *   Interview/Planning (Proposal + Options Synthesis + Design) cannot start unless `go-no-go` is approved (`go` or approved `pivot`) and Audience/JTBD/SLC artifacts are approved.
         *   `no_go` routes ticket to backlog/canceled with archived evidence instead of continuing execution planning.
     *   Iteration policy:
-        *   if opportunity verdict or Audience/JTBD/SLC are edited, invalidate downstream Proposal/Design/Beads and require regeneration.
+        *   if opportunity verdict or Audience/JTBD/SLC are edited, invalidate downstream Proposal/Options/Design/Beads and require regeneration.
 *   **Project Enable Flow + Ticket Entry Mode (idempotent onboarding + discovery + scope triage):**
     *   Before the first ticket in a project, run `Enable Project` (interactive wizard or `--non-interactive` mode) to establish deterministic project defaults.
     *   Add optional `Walkthrough` path for first-time/non-technical users:
@@ -232,7 +240,7 @@ search: false
         *   `LARGE` - 10+ files or architecture-impacting change.
     *   Route planning depth from scope using explicit planning profiles:
         *   `SMALL` -> `profile=minimal` (change request + fast-path planning with optional direct bead generation).
-        *   `MEDIUM` -> `profile=scoped` (short intake + scoped Proposal/Design delta + scoped beads).
+        *   `MEDIUM` -> `profile=scoped` (short intake + scoped Proposal/Options/Design delta + scoped beads).
         *   `LARGE` -> `profile=full` (full interview + full Proposal + full Design + scoped beads).
     *   Add ticket-level `execution_profile` selector at creation/start:
         *   `quick` (MVP fast path): single-model planning (`main implementer`) with strict coverage checks.
@@ -266,6 +274,12 @@ search: false
         *   If repository has no commits, block execution with deterministic remediation:
             *   `git add .`
             *   `git commit -m "Initial commit"`
+*   **Ticket-Scoped Phase Flags (locked at start):** Extend the ticket start contract with one `phase_flags` object for optional planning/verification behavior.
+    *   Include critique, repository research, external research, options synthesis, spikes allowed, manual QA waiver policy, and related budgets.
+    *   Persist effective flags in ticket runtime state and approval artifacts.
+    *   Treat flags as immutable after `START`, like locked model and coverage settings.
+    *   Migrate `execution_profile` into `phase_flags.execution_profile` when this contract lands.
+    *   If an upstream approved artifact tied to a flag is edited, downstream invalidation must be deterministic and visible.
 *   **Action-Required Notifications + Escalation Lifecycle (severity-routed, acknowledgment-aware):**
     *   Keep severity bands (`critical`, `warning`, `info`) but map each band to deterministic action routes (`in_app`, `email`, `sms`, `webhook`, `escalation_record`).
     *   Add visibility-aware delivery policy: if the user is currently focused on the affected ticket/pane, suppress external alerts and show in-app only; if not focused, escalate normally.
@@ -326,27 +340,32 @@ search: false
         *   mark operational metadata as `system_managed` (for example: timestamps, iteration counters, lifecycle status, audit markers) to reduce accidental state drift.
         *   enforce ownership in runtime validators: reject out-of-scope agent mutations and return actionable errors.
         *   add deterministic migration/compatibility handling when existing beads include legacy fields outside the simplified contract.
-*   **Planning Split: Proposal (What/Why) + Design (How) (composite PRD contract):**
-    *   Replace monolithic PRD authoring with two sequential planning artifacts:
+*   **Planning Split: Proposal (What/Why) + Options Synthesis + Design (How) (composite PRD contract):**
+    *   Replace monolithic PRD authoring with sequential planning artifacts:
         *   Step A `Proposal` (problem, user intent, scope in/out, epics, stories, functional acceptance criteria).
-        *   Step B `Design` (architecture constraints, libraries, data/schema decisions, API contracts, security/performance/reliability patterns).
-    *   Design generation is blocked until Proposal is approved.
+        *   Step B `Options Synthesis` (viable paths, tradeoffs, recommendation, and why alternatives were not selected).
+        *   Step C `Design` (architecture constraints, libraries, data/schema decisions, API contracts, security/performance/reliability patterns).
+    *   Options Synthesis runs when architectural/product ambiguity is detected or `phase_flags.options_synthesis.mode=required`.
+    *   Persist `.looptroop/tickets/<ticket-id>/options-pack.yaml` with `options[]`, `recommended_option`, `why_not_the_others[]`, and optional `spike.required`.
+    *   Reserve `spike` for bounded runnable uncertainty reduction that is explicitly approved; do not treat every option comparison as a prototype.
+    *   Design generation is blocked until Proposal and any required Options Synthesis are approved.
     *   Require feasibility cross-check: each Proposal requirement must map to at least one Design decision path or explicit blocker.
     *   Persist approved artifacts:
         *   `.looptroop/tickets/<ticket-id>/proposal.yaml`
+        *   `.looptroop/tickets/<ticket-id>/options-pack.yaml` when Options Synthesis runs
         *   `.looptroop/tickets/<ticket-id>/design.yaml`
     *   Keep compatibility PRD composite:
-        *   generate `.looptroop/tickets/<ticket-id>/prd.yaml` as derived composite/manifest from approved Proposal + Design (not primary authoring surface).
+        *   generate `.looptroop/tickets/<ticket-id>/prd.yaml` as derived composite/manifest from approved Proposal + Options Synthesis + Design (not primary authoring surface).
     *   Council role routing:
         *   product-focused roles vote primarily on Proposal quality/value alignment.
         *   engineering-focused roles vote primarily on Design feasibility/coherence.
     *   Council decision contract (deterministic + audit-ready):
         *   apply blind-review protocol before scoring: strip model/provider markers, randomize anonymous labels (`candidate_1`, `candidate_2`, ...), and persist reversible mapping for audit-only use at `.looptroop/tickets/<ticket-id>/council/candidate-map.json`.
-        *   required council pipeline for Interview/Proposal/Design/Beads phases when `execution_profile=council`: `draft -> self_reflection -> adversarial_critique -> voting -> synthesis`.
+        *   required council pipeline for Interview/Proposal/Options/Design/Beads phases when `execution_profile=council`: `draft -> self_reflection -> adversarial_critique -> voting -> synthesis`.
         *   `execution_profile=quick` uses single-model path: `draft -> coverage_verify`; system auto-escalates to full council when quick-path escalation triggers fire.
         *   self-reflection output is mandatory per draft: `top_weaknesses[]` (minimum 3), `assumptions[]`, `confidence_pct` (0-100), and `needs_user_input[]`.
         *   adversarial critique pass is mandatory: each member must record at least one concrete weakness/risk per peer draft (`issue`, `impact`, `evidence_ref`, `suggested_fix`); empty critique payloads are `invalid_output`.
-        *   default decision mode is rubric scoring across required Proposal/Design criteria; optional `pairwise` mode is allowed only for close finalists and must emit explicit criterion-level win/loss reasons.
+        *   default decision mode is rubric scoring across required Proposal/Options/Design criteria; optional `pairwise` mode is allowed only for close finalists and must emit explicit criterion-level win/loss reasons.
         *   each vote must emit structured evidence fields: `criterion`, `score`, `confidence`, `evidence_refs[]`, `concerns[]`.
         *   persist per-phase scorecards with category totals, score spread, and candidate rank order at `.looptroop/tickets/<ticket-id>/council/scorecard-<phase>-<timestamp>.json`.
         *   stream provisional vote updates during council voting (`council_score_update`) and mark them as provisional until quorum is met.
@@ -356,11 +375,12 @@ search: false
         *   enforce council deliberation behavioral rules in system prompts: `equal_standing`, `constructive_dissent_required`, `pass_when_empty`, `collaborative_rivalry`, `evidence_required`.
         *   council decision phases must use the global phase-timeout/quorum policy defined in `Timeout + Inactivity Watchdog + Stagnation Heuristics`.
     *   Invalidation policy:
-        *   Proposal edits invalidate Design + downstream Beads/Test Strategy.
+        *   Proposal edits invalidate Options Synthesis + Design + downstream Beads/Test Strategy.
+        *   Options Synthesis edits invalidate Design + downstream Beads/Test Strategy.
         *   Design edits invalidate downstream Beads/Test Strategy only.
-    *   Execution cannot start unless both Proposal and Design are approved.
+    *   Execution cannot start unless Proposal, any required Options Synthesis, and Design are approved.
 *   **Test Strategy Phase (risk-first planning contract; TEA-inspired):**
-    *   Insert a dedicated `TEST_STRATEGY` planning step after Proposal + Design approval and before Beads generation.
+    *   Insert a dedicated `TEST_STRATEGY` planning step after Proposal + Options Synthesis + Design approval and before Beads generation.
     *   Persist `.looptroop/tickets/<ticket-id>/test-strategy.yaml` with:
         *   risk tier per epic/user-story (`critical`, `high`, `medium`, `low`),
         *   critical-path markers (`auth`, `payments`, data integrity, external side effects),
@@ -369,8 +389,8 @@ search: false
     *   Require Beads generation to consume `test-strategy.yaml` so high-risk features receive stronger test density and stricter gates than low-risk cosmetic work.
     *   Enforce traceability: every high-risk Proposal acceptance criterion must map to at least one explicit high-confidence verification path before execution start.
     *   If strategy is missing or invalid, block transition to Beads/Execution with deterministic remediation.
-*   **Planning Sharding for Beads Generation (proposal/design decomposition):**
-    *   Add pre-computation sharding step for multi-epic or large approved Proposal/Design composites before bead drafting.
+*   **Planning Sharding for Beads Generation (proposal/options/design decomposition):**
+    *   Add pre-computation sharding step for multi-epic or large approved Proposal/Options/Design composites before bead drafting.
     *   Persist shards at `.looptroop/tickets/<ticket-id>/planning/shards/`:
         *   one self-contained shard per epic with only relevant requirements, constraints, acceptance criteria, and dependency notes,
         *   `index.yaml` containing shard IDs, source section refs, and content hashes.
@@ -446,6 +466,12 @@ search: false
     *   Runner behavior: deduplicate findings, validate each finding before fix, and loop `review -> fix -> review` until no valid critical/major findings remain.
     *   Reviewer output rule: report issues only (no positive commentary).
     *   Failure policy: if final verdict is missing/invalid/timed out, do **not** auto-approve; retry reviewer or transition ticket to `BLOCKED_ERROR` with explicit remediation.
+*   **Manual QA Loop (required post-final-test gate):** After `RUNNING_FINAL_TEST`, pause for human QA before `INTEGRATING_CHANGES`.
+    *   Generate a deterministic checklist from approved requirements and preload `quickstart.md` in the QA UI.
+    *   Persist QA runs at `.looptroop/tickets/<ticket-id>/verification/wizard-<run-id>.yaml` and issues at `.looptroop/tickets/<ticket-id>/verification/issues.jsonl`.
+    *   Each failed check or user-reported defect creates a structured QA issue with repro, expected result, actual result, evidence, and linked requirement/bead where possible.
+    *   Fixes run as fresh-session QA mini-beads and return to the Manual QA Loop until the user clears blocking issues or signs an explicit waiver.
+    *   The final verification scorecard prepares this loop; any critical finding blocks manual QA clearance until resolved.
 *   **Per-bead Fast Quality Gate + Lightweight Security Gate (changed-files first):**
     *   Before a bead can be marked `done`, run deterministic changed-files gates with two mandatory events: `idle_gate` and `completion_gate`.
     *   `idle_gate` blocks immediately on changed files for:
@@ -723,13 +749,13 @@ search: false
     *   Generate an auto-authored quickstart validation guide at `.looptroop/tickets/<ticket-id>/quickstart.md` from approved PRD user stories + acceptance criteria.
         *   Each scenario must include prerequisites, numbered human-readable steps, and explicit expected outcomes.
         *   Persist quickstart metadata (`source_artifact_versions`, `generated_at`, `generator_model`) for auditability.
-    *   Add **Interactive Verification Wizard** as the final human validation gate:
+    *   Support the **Manual QA Loop** with a guided verification UI:
         *   Generate a deterministic checklist from PRD acceptance criteria and ticket traceability links.
         *   Pre-load `quickstart.md` in the verification UI and map wizard checklist items to quickstart scenarios.
         *   Each checklist item must include explicit user action steps and expected visible outcome.
         *   User marks each item as `pass` or `failed`; failed items require a short observation and optional evidence refs.
-        *   For each failed item, auto-create a high-priority `bug` bead linked to the failed requirement/checklist item.
-        *   Route to `CODING` for fixable gaps; route to `BLOCKED_ERROR` for blocker severity or policy-mandated hard stops.
+        *   For each failed item, auto-create a high-priority QA mini-bead linked to the failed requirement/checklist item.
+        *   Route to QA fix work for fixable gaps; route to `BLOCKED_ERROR` for blocker severity or policy-mandated hard stops.
         *   Persist wizard runs at `.looptroop/tickets/<ticket-id>/verification/wizard-<run-id>.yaml` and append item events to `.looptroop/tickets/<ticket-id>/verification/wizard-events.jsonl`.
     *   `cleanup_command` runs on success, cancel, and error paths to stop services and remove temporary resources.
     *   `Doctor` validates script availability and timeout bounds; blocking failures prevent execution with explicit remediation.
@@ -891,11 +917,11 @@ search: false
     *   Show context window, max prompt tokens, cost tier, and modality support (e.g., vision).
     *   Sorting by performance, cost (and mark free options), speed.
     *   Add optional `research_model` role (separate from implementer/council/fallback), intended for web-grounded planning support.
-    *   For Interview, PRD, and Beads planning phases, support a bounded research pre-pass that generates a `Technology Context Brief` (current versions, breaking changes, security advisories, best-practice notes, and source links).
-    *   Research model output is read-only context for council drafting and is never counted as a council vote.
+    *   For Interview, Proposal, Options Synthesis, Design, and Beads planning phases, support a bounded research pre-pass that generates an `External Research Brief` (official docs, current versions, breaking changes, security advisories, migration notes, best-practice notes, and source links).
+    *   External Research Brief output is read-only context for council drafting and is never counted as a council vote.
     *   Research pass is non-blocking: configurable timeout (default 5 minutes); on timeout/failure, continue planning with warning `research_pass_skipped`.
-    *   Persist research artifacts at `.looptroop/tickets/<ticket-id>/research/brief-<phase>-<timestamp>.{md,json}` with provenance metadata and retrieval time.
-    *   Add optional `council_web_search` during council drafting phases (Interview/Proposal/Design/Beads):
+    *   Persist research artifacts at `.looptroop/tickets/<ticket-id>/research/external-brief-<phase>-<timestamp>.json` with provenance metadata, retrieval time, freshness, confidence, and source type.
+    *   Add optional `council_web_search` during council drafting phases (Interview/Proposal/Options Synthesis/Design/Beads):
         *   provider options: `duckduckgo` (default), `tavily`, `exa`, `brave` (project-configurable).
         *   bounded retrieval contract: max 5 results, max 2000 injected tokens, source allowlist + recency filter.
         *   if ticket mentions specific technologies, auto-generate a focused tech brief (`stable_version`, `breaking_changes`, `security_advisories`, `recommended_patterns`).
@@ -908,7 +934,7 @@ search: false
     *   When diversity is red, show warning and optional `recommend_diverse_council` auto-suggestion from configured models.
     *   Add adaptive reasoning budgets per phase with provider-mapped settings:
         *   Interview generation: `medium`.
-        *   Proposal/Design drafting: `high`.
+        *   Proposal/Options/Design drafting: `high`.
         *   Beads decomposition: `high`.
         *   Implementation: `medium`.
         *   Coverage/verification passes: `high`.
@@ -1255,7 +1281,7 @@ search: false
     *   Add deterministic path recommendation before selection:
         *   choose `traditional/no-persona` mode when task is straightforward and single-focused, role handoffs are unnecessary, or user requests minimal setup.
         *   choose `persona/hats` mode when work naturally decomposes into distinct specialist phases or requires multi-role review.
-    *   **Full AFK:** no human review until Interactive Verification Wizard gate (unless blocking error).
+    *   **Full AFK:** no human review until Manual QA Loop gate (unless blocking error).
     *   **Fast Plan:** short intake + AI-generated initial bead draft from plain-language request, then user reviews/edits selected beads before execution.
     *   **Near-Perfect:** full interview + PRD + Beads with editable artifacts and full council workflow.
 *   **Parallel ticketing + optional multi-repo workspace sets (dependency-aware + landing queue):**
@@ -1694,14 +1720,13 @@ search: false
         *   `full` (explicit opt-in): allow prompts/responses, tool arguments, and touched-file paths for private debugging/evals.
     *   Every exported record must include `ticket_id`, `run_id`, `model_id`, `phase`, `success`, `duration_ms`, and `privacy_level` (`anonymous` | `full`).
     *   Telemetry/webhook export delivery must be best-effort, timeout-bounded, and non-blocking for ticket execution.
-*   **Winner model discussion:** A more interactive discussion after a model is declared the winner, where it can prompt the user with interesting findings and let the user select the better version. Example: Codex says it found a different framework proposed by Claude that can be faster, but its winning option is more stable, then asks what the user wants to pick.
 *   **Extra questions / Extend interview:** At the very end of the interview flow, after the `anything else to add?` form is submitted, provide an `extend interview` action to start another interview phase with a new batch of questions.
     *   The extended phase must run after all standard interview questions and terminal free-form input are completed.
     *   All council members must receive prior interview answers as explicit read-only context for the new phase via rolling summary + recent-answer window by default; full transcript remains in interview artifacts for final coverage checks.
     *   Persist phase linkage/ordering so each extension is traceable (`phase_index`, `parent_phase`, and cumulative context sources).
 *   **Quota/rate limits remaining:** Display the remaining quota for model/provider API usage.
 *   **LLM council optional:** Allow users to disable the council and rely solely on the main implementer for decision-making.
-*   **Execution Mode Lock:** During coding phase, implementer can execute approved beads only; design-level changes require explicit approval transition.
+*   **Execution Mode Lock:** During coding phase, implementer can execute approved beads only; design-level changes require explicit approval transition. QA fixes cannot silently expand scope or alter approved design without escalation.
 *   **Deterministic Bead Sizing + Complexity Scoring + Dependency-Order Contract (+ scope sentence test):**
     *   Add required sizing classes for planning/approval:
         *   `S`: 1-2 target files, 1-3 acceptance criteria, no architecture change.
@@ -1749,9 +1774,9 @@ search: false
 *   **Planning artifact upload (validated import contract):** Allow users to upload planning inputs and skip interview/planning generation only after schema validation + minimum coverage checks pass; otherwise route to correction flow with actionable validation errors. When user uploads a PRD or specs document an option to start a short interview phase to validate and enrich the uploaded content is provided. This will start the normal interview phase (with fewer questions and uploaded document as extra context) and then move to PRD phase and then beads phase as normal.
     *   Accept upload modes:
         *   split mode: `proposal` + `design` inputs,
-        *   legacy mode: monolithic `PRD` input (auto-normalized into Proposal + Design + derived composite PRD).
+        *   legacy mode: monolithic `PRD` input (auto-normalized into Proposal + Options Synthesis + Design + derived composite PRD).
     *   Add import pipeline for common formats (`.md`, `.txt`, `.pdf`, `.docx`, `.json`) into normalized `proposal.v1`, `design.v1`, and derived `prd.v1` artifacts.
-    *   Persist import artifacts: original source file hash/metadata, extracted intermediate representation, normalized Proposal/Design/PRD outputs, and validation report.
+    *   Persist import artifacts: original source file hash/metadata, extracted intermediate representation, normalized Proposal/Options/Design/PRD outputs, and validation report.
     *   Add import confidence + unresolved-sections report; unresolved critical sections must block execution until user confirms fixes.
     *   Allow iterative correction loop (`edit -> re-validate -> approve`) without regenerating unrelated ticket artifacts.
 *   **Progress-safe Regeneration on Manual Edits + Artifact Review/Traceability Contract:**
@@ -1764,7 +1789,7 @@ search: false
         *   Enforce `write-existing-file-guard`: `write` may create new files only; edits to existing files must use `edit`/`patch` tools to reduce accidental full-file overwrite.
         *   Allow explicit exception paths only for LoopTroop-managed generated artifacts (for example `.looptroop/**` receipts) with audit logging.
         *   Any attempted write outside allowed ownership scope is rejected, logged, and surfaced with actionable remediation.
-    *   **Structured artifact review loop (Interview/Proposal/Design/Beads):**
+    *   **Structured artifact review loop (Interview/Proposal/Options/Design/Beads):**
         *   User edits are submitted as `review_notes` (not silent overwrite), with required metadata: `edited_by`, `edited_at`, `change_summary`.
         *   Approval screens for `WAITING_PRD_APPROVAL` and `WAITING_BEADS_APPROVAL` must include `Show Changes`:
             *   diff current candidate vs last approved artifact version with `added`, `modified`, `removed`, and stable anchors;
@@ -1782,10 +1807,10 @@ search: false
             *   `.looptroop/tickets/<ticket-id>/history/prd.v<artifact_iteration>.yaml`
             *   `.looptroop/tickets/<ticket-id>/history/beads.<flow-id>.v<artifact_iteration>.jsonl`
         *   Re-run matrix is deterministic:
-            *   Interview changed -> regenerate Proposal + Design + Beads
+            *   Interview changed -> regenerate Proposal + Options Synthesis + Design + Beads
             *   Proposal changed -> regenerate Design + Beads
             *   Design changed -> regenerate Beads
-            *   Legacy/composite PRD changed -> normalize into Proposal + Design, then regenerate Beads
+            *   Legacy/composite PRD changed -> normalize into Proposal + Options Synthesis + Design, then regenerate Beads
             *   Beads changed -> rerun Beads coverage validation only
     *   **Artifact metadata + traceability contract:**
         *   `interview-results`, `interview-decision-log`, `proposal`, `design`, `prd`, and Beads outputs must include: `artifact_type`, `ticket_id`, `flow_id`, `artifact_version`, `artifact_iteration`, `source_hash`, `approved`.
@@ -1802,7 +1827,7 @@ search: false
         *   Add per-criterion runtime status fields: `pass_state` (`not_started|in_progress|pass|fail`), `last_checked_at`, and `evidence_refs`.
         *   Execution start is blocked if any approved interview decision has no Proposal mapping, any in-scope Proposal acceptance criterion has no Design mapping, or any in-scope requirement has no bead + verification mapping.
         *   Ticket completion is blocked if any in-scope criterion is not `pass`.
-    *   When Interview/Proposal/Design/Beads/implementation conflict, run impact analysis and pause for explicit direction before mutating artifacts:
+    *   When Interview/Proposal/Options/Design/Beads/implementation conflict, run impact analysis and pause for explicit direction before mutating artifacts:
         *   `source_to_downstream` - update downstream artifacts/code to match source artifact.
         *   `downstream_to_source` - promote validated implementation reality back into source artifact.
         *   `manual_resolution` - user resolves directly, then validators re-run.
@@ -1909,7 +1934,6 @@ search: false
     *   Add explicit `BLOCKED_ERROR` steering UX: before retrying a blocked bead, show `Provide Steering` input and append accepted steering into bead notes (`source=steering`) for the next iteration.
 *   **Chat during execution:** The cheaper model is used to chat live during execution about what has been done and what is still needed, so the user does not need to read all logs.
 *   **Chat in dashboard:** The cheaper model is used to chat live about what tickets are doing, projects, statuses, etc., so the user does not need to read all logs, and the chat should be actionable (e.g., you type into a box: "Retry all the failed ones." The system understands and does it).
-*   **Exhaustive Interrogation Mode for Interviews:** After the interview phase ends, an optional mode uses a specialized prompt to interrogate app ideas ruthlessly, asking endless questions on details, edges, and constraints until zero assumptions remain. Manual ending or automatic ending with a summary for user confirmation. Rules: no inferences, push on vagueness, ask what might be missed. Persist as enhanced follow-ups in session logs.
 *   **Different implementer per bead/component:** Manually or automatically assign an implementer per bead or group of beads (e.g., all UI components should be done by Gemini 3 Pro).
 *   **Ticket-Scoped Commands & Instructions (testing + workspace setup):** Allow users to attach executable commands and free-form instructions directly to a ticket at creation time, which are then consumed during execution by the appropriate workflow phases.
     *   **Testing commands/instructions:** Users can specify test commands or testing instructions in the ticket description at creation. These are persisted, validated, and injected into the execution loop so the implementing agent can use them when writing and running tests.
@@ -2120,11 +2144,11 @@ search: false
     *   Verifier must validate evidence authenticity by matching claimed gate results to actual command outputs/artifacts; unverified claims are treated as `fake_evidence`.
     *   On suspected `fake_evidence`, force targeted gate re-run and reject completion until independent evidence passes.
     *   If verifier verdict is missing/invalid/timed out, do not mark bead complete; retry verifier or route to `BLOCKED_ERROR` with remediation.
-    *   Add required ticket-level final verification scorecard before manual verification (`WAITING_MANUAL_VERIFICATION`):
+    *   Add required ticket-level final verification scorecard as the machine-prep stage for the Manual QA Loop:
         *   persist `verification-report.md` and `verification-report.json`;
         *   required sections: `completeness` (all intended work shipped), `correctness` (behavior matches requirements), `coherence` (implementation still follows approved design decisions);
         *   categorize findings as `critical`, `warning`, `suggestion` with file evidence and remediation;
-        *   any `critical` finding blocks transition to manual verification until resolved.
+        *   any `critical` finding blocks Manual QA Loop clearance until resolved.
 *   **Benchmarks:** Put the app to the test on different benchmarks.
 *   **Dynamic Evolution via Tree-Based Strategic Re-Planning (MCTS-inspired for Beads):**
     *   Move beyond simple retry loops when a bead repeatedly fails or a complex epic starts with high uncertainty.
