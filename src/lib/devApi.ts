@@ -82,7 +82,7 @@ function appendApiTokenQuery(url: URL): URL {
   return url
 }
 
-async function pingDevBackend() {
+export async function pingDevBackend() {
   const controller = new AbortController()
   const timeoutId = window.setTimeout(() => controller.abort(), API_TIMEOUT_MS)
 

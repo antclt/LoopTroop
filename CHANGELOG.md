@@ -11,6 +11,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
+- Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
 
 ### Detailed Changes
 
@@ -19,6 +20,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Added structured retry for pull request title/body drafting before branch push or PR create/update, with diagnostics and deterministic fallback text when parsing remains invalid.
 - Added raw attempt persistence for PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime generation, and final-test generation.
 - Added Raw tab variants for structured artifacts with `rawAttempts`, including diagnostic entries when a retry failed before model text existed.
+- Added a global backend reconnecting banner in the app header that polls `/api/health` every 3 seconds and shows an amber "Reconnecting to server…" badge whenever the backend is unreachable, covering all views including the Kanban board.
 
 ### Changed
 - Replaced hardcoded one-shot structured retries across scanning, interview/PROM4 parsing, PRD/beads planning, coverage repair, execution setup, coding marker repair, and final-test generation with the locked ticket retry count while keeping broader workflow attempt budgets separate.

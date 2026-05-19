@@ -2,6 +2,8 @@
 export const COPY_SUCCESS_DISPLAY_MS = 2000
 /** SSE reconnection delay */
 export const SSE_RECONNECT_DELAY_MS = 3000
+/** Interval for polling backend health to detect server downtime */
+export const BACKEND_HEALTH_POLL_MS = 3000
 /** Default API call timeout */
 export const API_TIMEOUT_MS = 1000
 /** Model fetch timeout */

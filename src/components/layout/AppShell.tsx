@@ -2,9 +2,11 @@ import { SunMoon, Moon, Sun, Settings, FolderOpen, Plus, RefreshCw, BookOpen } f
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
 import { useUI } from '@/context/useUI'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useBackendHealth } from '@/hooks/useBackendHealth'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -20,6 +22,7 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
   const queryClient = useQueryClient()
   const [isRefreshing, setIsRefreshing] = useState(false)
   const docsOrigin = __LOOPTROOP_DOCS_ORIGIN__
+  const { isOffline } = useBackendHealth()
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
@@ -129,6 +132,32 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
           </DropdownMenu>
         </div>
       </header>
+      {isOffline && (
+        <div
+          className="border-b border-amber-200 bg-amber-50/90 px-3 py-2 dark:border-amber-900/60 dark:bg-amber-950/40"
+          role="status"
+          aria-live="polite"
+          data-testid="backend-reconnecting-banner"
+        >
+          <div className="flex flex-col gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  className="w-fit gap-1.5 border-amber-300 bg-amber-100/80 text-[11px] text-amber-900 dark:border-amber-800 dark:bg-amber-900/40 dark:text-amber-200"
+                >
+                  <RefreshCw className="h-3 w-3 animate-spin" />
+                  Reconnecting to server...
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center text-balance">Backend is unreachable. LoopTroop is reconnecting automatically.</TooltipContent>
+            </Tooltip>
+            <p className="text-xs leading-5 text-amber-900/75 dark:text-amber-200/80">
+              The server is not responding. LoopTroop will reconnect automatically when it becomes available.
+            </p>
+          </div>
+        </div>
+      )}
       <main className="flex-1">
         {children}
       </main>
