@@ -91,7 +91,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | `CLEANING_ENV` | Removes transient runtime resources (lock files, session folders, temp files) while preserving permanent artifacts (interview, PRD, beads, logs, test and integration reports) for long-term review and audit. |
 | `COMPLETED` | The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible. The ticket records whether it closed as a merged PR or finished without merge. |
 | `CANCELED` | Ticket canceled by user action. Artifacts are preserved by default; optional cleanup is available at cancellation time. |
-| `BLOCKED_ERROR` | A phase failure paused the workflow. The failed phase is preserved so Retry re-enters it with full context, including structured diagnostics for provider, model, session, timeout, or rate-limit-style failures when available. |
+| `BLOCKED_ERROR` | A phase failure paused the workflow. The failed phase is preserved so Retry can re-enter it with a fresh attempt, while eligible Continue can re-enter without archiving attempts and send exactly `continue please` to the preserved OpenCode session. Structured diagnostics include provider, model, session, timeout, and rate-limit-style failures when available. |
 
 ## Transition Model
 
@@ -148,6 +148,7 @@ stateDiagram-v2
 
     state "previousStatus" as PREVIOUS_PHASE
     BLOCKED_ERROR --> PREVIOUS_PHASE: RETRY
+    BLOCKED_ERROR --> PREVIOUS_PHASE: CONTINUE
     BLOCKED_ERROR --> CANCELED: CANCEL
 
     SCANNING_RELEVANT_FILES --> BLOCKED_ERROR: ERROR / INIT_FAILED

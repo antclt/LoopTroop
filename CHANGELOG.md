@@ -14,6 +14,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
 - Fixed error navigation from Full Log so selecting an error opens its review view.
 - Improved blocked-error diagnostics so OpenCode usage-limit failures remain visible when structured coverage output is empty.
+- Added a Continue recovery action for eligible blocked OpenCode sessions so temporary model interruptions can resume without starting a fresh phase attempt.
 
 ### Detailed Changes
 
@@ -23,11 +24,13 @@ All notable changes to LoopTroop will be documented in this file.
 - Added raw attempt persistence for PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime generation, and final-test generation.
 - Added Raw tab variants for structured artifacts with `rawAttempts`, including diagnostic entries when a retry failed before model text existed.
 - Added a global backend reconnecting banner in the app header that polls `/api/health` every 3 seconds and shows an amber "Reconnecting to server…" badge whenever the backend is unreachable, covering all views including the Kanban board.
+- Added a conditional `Continue` action for `BLOCKED_ERROR` tickets with resumable OpenCode/provider diagnostics and a matching active preserved session; it dispatches `CONTINUE` and sends exactly `continue please` to the same OpenCode session.
 
 ### Changed
 - Replaced hardcoded one-shot structured retries across scanning, interview/PROM4 parsing, PRD/beads planning, coverage repair, execution setup, coding marker repair, and final-test generation with the locked ticket retry count while keeping broader workflow attempt budgets separate.
 - Documented the four retry classes and standardized status/details wording around **continued session**, **fresh session**, and broader **new attempt** loops.
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
+- Blocked-error history now records `CONTINUED` resolutions separately from `RETRIED`, and CODING continuation preserves the interrupted bead/session instead of running the normal reset-first retry recovery.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
 - Structured artifact viewers now keep parser/retry intervention notices on the primary artifact tab, while retry producers share one raw-attempt helper so accepted/rejected attempt metadata stays consistent across phases.
 - Made grouped Raw selector model labels passive metadata and deduplicated identical Raw variants, with per-attempt retry tabs preferred over generic `Raw Output`, `Model Output`, `Accepted Output`, or `Rejected` shortcuts.

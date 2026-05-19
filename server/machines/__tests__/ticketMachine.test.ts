@@ -139,6 +139,61 @@ describe('ticketMachine execution setup flow', () => {
     expect(actor.getSnapshot().context.error).toBeNull()
   })
 
+  it('continues back into PREPARING_EXECUTION_ENV from blocked error', () => {
+    const actor = createActor(ticketMachine, {
+      snapshot: {
+        status: 'active',
+        value: 'BLOCKED_ERROR',
+        historyValue: {},
+        context: {
+          ticketId: '1:T-1',
+          projectId: 1,
+          externalId: 'T-1',
+          title: 'Execution setup continue',
+          status: 'BLOCKED_ERROR',
+          lockedMainImplementer: 'model-a',
+          lockedMainImplementerVariant: null,
+          lockedCouncilMembers: ['model-a', 'model-b'],
+          lockedCouncilMemberVariants: null,
+          lockedInterviewQuestions: null,
+          lockedCoverageFollowUpBudgetPercent: null,
+          lockedMaxCoveragePasses: null,
+          lockedMaxPrdCoveragePasses: null,
+          lockedMaxBeadsCoveragePasses: null,
+          lockedStructuredRetryCount: null,
+          previousStatus: 'PREPARING_EXECUTION_ENV',
+          error: 'Usage limit reached',
+          errorCodes: [],
+          errorDiagnostics: null,
+          blockedErrorResolution: null,
+          beadProgress: { total: 2, completed: 0, current: null },
+          iterationCount: 0,
+          maxIterations: 5,
+          councilResults: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        children: {},
+      } as unknown as never,
+      input: {
+        ticketId: '1:T-1',
+        projectId: 1,
+        externalId: 'T-1',
+        title: 'Execution setup continue',
+        maxIterations: 5,
+        lockedMainImplementer: 'model-a',
+        lockedCouncilMembers: ['model-a', 'model-b'],
+      },
+    })
+
+    actor.start()
+    actor.send({ type: 'CONTINUE' })
+
+    expect(actor.getSnapshot().value).toBe('PREPARING_EXECUTION_ENV')
+    expect(actor.getSnapshot().context.error).toBeNull()
+    expect(actor.getSnapshot().context.blockedErrorResolution).toBe('CONTINUED')
+  })
+
   it('retries back into setup-plan approval from blocked error', () => {
     const actor = createActor(ticketMachine, {
       snapshot: {

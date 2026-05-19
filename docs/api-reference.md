@@ -210,7 +210,10 @@ Example UI-state response:
 | `POST` | `/api/tickets/:id/close-unmerged` | Close without merge |
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
 | `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase |
+| `POST` | `/api/tickets/:id/continue` | Continue a blocked ticket only when a resumable OpenCode/provider interruption has a matching active preserved OpenCode session |
 | `POST` | `/api/tickets/:id/dev-event` | Disabled by default; requires `LOOPTROOP_ENABLE_DEV_EVENT=1`, `LOOPTROOP_DEV_EVENT_TOKEN`, and `X-LoopTroop-Dev-Event-Token` |
+
+The Continue endpoint is available only from `BLOCKED_ERROR`. It requires a known `previousStatus`, an unresolved active error occurrence with a diagnostic `sessionId`, a matching active `opencode_sessions` row for that ticket and previous phase, and a live OpenCode session with that id. It returns `409` and leaves the ticket blocked when those checks fail. On success it dispatches `CONTINUE`, records the pending session continuation, and the next owned prompt sends exactly `continue please` without creating a fresh phase attempt.
 
 The cancel endpoint accepts an optional JSON request body to trigger cleanup at cancellation time. Both fields default to `false`; the ticket record itself is never deleted.
 

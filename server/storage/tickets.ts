@@ -14,6 +14,7 @@ export {
   getTicketByRef,
   findTicketRefByLocalId,
   getTicketContext,
+  resolveTicketContinuationCandidate,
   getTicketStorageContext,
   listNonTerminalTickets,
   getTicketPaths,

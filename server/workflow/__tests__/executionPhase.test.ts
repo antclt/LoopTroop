@@ -6,6 +6,10 @@ import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage
 import { readTicketBeads, recoverFailedCodingBead, writeTicketBeads } from '../phases/beadsPhase'
 import { phaseIntermediate } from '../phases/state'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../shared/errorCodes'
+import {
+  clearAllPendingSessionContinuationsForTests,
+  requestSessionContinuation,
+} from '../../opencode/sessionContinuation'
 
 const {
   executeBeadMock,
@@ -104,6 +108,7 @@ function makeDoneBead(id: string, priority: number): Bead {
 describe('handleCoding', () => {
   beforeEach(() => {
     resetTestDb()
+    clearAllPendingSessionContinuationsForTests()
     phaseIntermediate.clear()
     executeBeadMock.mockReset()
     recordBeadStartCommitMock.mockReset()
@@ -123,6 +128,7 @@ describe('handleCoding', () => {
   })
 
   afterAll(() => {
+    clearAllPendingSessionContinuationsForTests()
     resetTestDb()
     repoManager.cleanup()
   })
@@ -446,6 +452,47 @@ describe('handleCoding', () => {
     const executedBead = executeBeadMock.mock.calls[0]![1] as Bead
     expect(executedBead.status).toBe('in_progress')
     expect(executedBead.notes).toBe('prior interrupted attempt')
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+  })
+
+  it('continues an interrupted in-progress bead without resetting when a session continuation is pending', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Continue interrupted in-progress bead',
+    })
+    writeTicketBeads(ticket.id, [
+      makePendingBead('bead-1', 1, {
+        status: 'in_progress',
+        iteration: 2,
+        notes: 'prior interrupted attempt',
+        beadStartCommit: 'start-sha',
+      }),
+    ])
+    requestSessionContinuation({
+      ticketId: ticket.id,
+      phase: 'CODING',
+      sessionId: 'ses-continue',
+    })
+    executeBeadMock.mockResolvedValueOnce({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 2,
+      output: 'done',
+      errors: [],
+    })
+    const sendEvent = vi.fn()
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(resetToBeadStartMock).not.toHaveBeenCalled()
+    expect(recordBeadStartCommitMock).not.toHaveBeenCalled()
+    const executedBead = executeBeadMock.mock.calls[0]![1] as Bead
+    expect(executedBead).toMatchObject({
+      id: 'bead-1',
+      status: 'in_progress',
+      iteration: 2,
+      notes: 'prior interrupted attempt',
+      beadStartCommit: 'start-sha',
+    })
     expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
   })
 

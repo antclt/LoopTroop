@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '@/test/renderHelpers'
 import { makeTicket } from '@/test/factories'
@@ -6,14 +6,24 @@ import { ErrorView } from '../ErrorView'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '@shared/errorCodes'
 
 const logSectionMock = vi.hoisted(() => vi.fn(() => <div data-testid="phase-log-section" />))
+const mockUseTicketAction = vi.hoisted(() => vi.fn())
 
 vi.mock('../CollapsiblePhaseLogSection', () => ({
   CollapsiblePhaseLogSection: logSectionMock,
 }))
 
+vi.mock('@/hooks/useTickets', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/hooks/useTickets')>()
+  return {
+    ...actual,
+    useTicketAction: () => mockUseTicketAction(),
+  }
+})
+
 describe('ErrorView', () => {
   beforeEach(() => {
     logSectionMock.mockClear()
+    mockUseTicketAction.mockReturnValue({ mutate: vi.fn(), isPending: false })
   })
 
   it('allows long error details to scroll within the summary area', () => {
@@ -102,6 +112,66 @@ describe('ErrorView', () => {
     renderWithProviders(<ErrorView ticket={ticket} />)
 
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('shows Continue only when the live blocked ticket exposes the continue action', () => {
+    const mutate = vi.fn()
+    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'PREPARING_EXECUTION_ENV',
+      availableActions: ['retry', 'continue', 'cancel'],
+      activeErrorOccurrenceId: 'continue-1',
+      errorOccurrences: [{
+        id: 'continue-1',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'PREPARING_EXECUTION_ENV',
+        errorMessage: 'Usage limit reached.',
+        errorCodes: [],
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'usage limit reached',
+          sessionId: 'ses-continue',
+          statusCode: 429,
+          isRetryable: true,
+        },
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(screen.getByText(/sends only "continue please"/i)).toBeInTheDocument()
+    expect(mutate).toHaveBeenCalledWith({ id: ticket.id, action: 'continue' })
+  })
+
+  it('hides Continue when the live blocked ticket does not expose the continue action', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'PREPARING_EXECUTION_ENV',
+      availableActions: ['retry', 'cancel'],
+      activeErrorOccurrenceId: 'retry-only',
+      errorOccurrences: [{
+        id: 'retry-only',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'PREPARING_EXECUTION_ENV',
+        errorMessage: 'Invalid request.',
+        errorCodes: [],
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument()
   })
 
   it('renders structured blocked-error diagnostics when present', () => {

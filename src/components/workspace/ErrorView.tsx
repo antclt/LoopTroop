@@ -1,4 +1,4 @@
-import { AlertTriangle, Clock3, Info, RotateCcw } from 'lucide-react'
+import { AlertTriangle, CirclePlay, Clock3, Info, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -164,6 +164,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && ticket.status === 'BLOCKED_ERROR'
     && Boolean(visibleOccurrence)
     && visibleOccurrence?.resolvedAt === null
+  const canContinue = isLiveError && ticket.availableActions.includes('continue')
   const diagnostics = visibleOccurrence?.diagnostics ?? null
   const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
   const primaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
@@ -276,24 +277,50 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
               )}
             </div>
             {isLiveError && (
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => performAction({ id: ticket.id, action: 'cancel' })}
-                  disabled={isPending}
-                  className="h-7 text-xs"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={() => performAction({ id: ticket.id, action: 'retry' })}
-                  disabled={isPending}
-                  className="h-7 text-xs"
-                >
-                  {retryActionLabel}
-                </Button>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-2 justify-end">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => performAction({ id: ticket.id, action: 'cancel' })}
+                    disabled={isPending}
+                    className="h-7 text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  {canContinue && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => performAction({ id: ticket.id, action: 'continue' })}
+                          disabled={isPending}
+                          className="h-7 text-xs border-amber-500/70 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
+                        >
+                          <CirclePlay className="mr-1 h-3.5 w-3.5" />
+                          Continue
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-center text-balance">
+                        Sends only "continue please" to the preserved session. It does not restart the original prompt.
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
+                  <Button
+                    size="sm"
+                    onClick={() => performAction({ id: ticket.id, action: 'retry' })}
+                    disabled={isPending}
+                    className="h-7 text-xs"
+                  >
+                    {retryActionLabel}
+                  </Button>
+                </div>
+                {canContinue && (
+                  <p className="text-right text-[11px] leading-snug text-muted-foreground">
+                    Continue keeps the current OpenCode session and sends only "continue please" after the temporary interruption clears.
+                  </p>
+                )}
               </div>
             )}
           </CardContent>

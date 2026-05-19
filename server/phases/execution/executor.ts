@@ -19,6 +19,10 @@ import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import { buildPromptFromTemplate, buildSameSessionPromptFromTemplate, PROM_CODING, PROM51 } from '../../prompts/index'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../shared/errorCodes'
+import {
+  attachContinuationDiagnostics,
+  shouldPreserveSessionForContinuation,
+} from '../../opencode/sessionContinuation'
 
 const BEAD_STATUS_SCHEMA_REMINDER = [
   'Return exactly one <BEAD_STATUS>...</BEAD_STATUS> block and nothing else.',
@@ -341,6 +345,16 @@ export async function executeBead(
 
       let runResult = await runBeadPrompt()
       let structuredRetryAttempts = 0
+      const codingSessionOwnership = callbacks?.ticketId
+        ? {
+            ticketId: callbacks.ticketId,
+            phase: 'CODING',
+            memberId: callbacks.model,
+            beadId: bead.id,
+            iteration,
+            keepActive: true,
+          }
+        : undefined
 
       while (true) {
         throwIfAborted(signal)
@@ -389,6 +403,7 @@ export async function executeBead(
               signal,
               timeoutMs: remainingMs,
               model: callbacks?.model,
+              sessionOwnership: codingSessionOwnership,
               erroredSessionPolicy: 'discard_errored_session_output',
               onStreamEvent: (event) => {
                 callbacks?.onOpenCodeStreamEvent?.({
@@ -433,6 +448,7 @@ export async function executeBead(
           timeoutMs: remainingMs,
           model: callbacks?.model,
           variant: callbacks?.variant,
+          sessionOwnership: codingSessionOwnership,
           erroredSessionPolicy: 'discard_errored_session_output',
           toolPolicy: PROM_CODING.toolPolicy,
           onStreamEvent: (event) => {
@@ -460,6 +476,31 @@ export async function executeBead(
       }
     } catch (err) {
       throwIfCancelled(err, signal)
+      if (
+        activeSessionId
+        && callbacks?.ticketId
+        && shouldPreserveSessionForContinuation({
+          error: err,
+          sessionId: activeSessionId,
+          modelId: callbacks.model,
+          sessionOwnership: {
+            ticketId: callbacks.ticketId,
+            phase: 'CODING',
+            memberId: callbacks.model,
+            beadId: bead.id,
+            iteration,
+            keepActive: true,
+          },
+          signal,
+        })
+      ) {
+        const continuableError = err instanceof Error ? err : new Error(String(err))
+        throw attachContinuationDiagnostics(continuableError, {
+          error: continuableError,
+          sessionId: activeSessionId,
+          modelId: callbacks.model,
+        })
+      }
       const msg = err instanceof Error ? err.message : 'Unknown error'
       iterationErrors.push(msg)
     }

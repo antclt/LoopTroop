@@ -20,6 +20,7 @@ export interface TicketContext {
   error: string | null
   errorCodes: string[]
   errorDiagnostics?: BlockedErrorDiagnostics | null
+  blockedErrorResolution: 'RETRIED' | 'CONTINUED' | null
   beadProgress: {
     total: number
     completed: number
@@ -81,6 +82,7 @@ export type TicketEvent =
   | { type: 'RELEVANT_FILES_READY' }
   | { type: 'CANCEL' }
   | { type: 'RETRY' }
+  | { type: 'CONTINUE' }
   | { type: 'ERROR'; message: string; codes?: string[]; diagnostics?: BlockedErrorDiagnostics | null }
 
 // Kanban phase mapping

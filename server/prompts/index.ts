@@ -938,6 +938,19 @@ export const PROM53: PromptTemplate = {
   toolPolicy: 'disabled',
 }
 
+export const PROM54_CONTINUE_TEXT = 'continue please'
+
+export const PROM54: PromptTemplate = {
+  id: 'PROM54',
+  description: 'Same-session OpenCode continuation prompt',
+  systemRole: 'Existing OpenCode session continuation',
+  task: PROM54_CONTINUE_TEXT,
+  instructions: [],
+  outputFormat: 'Bare continuation text only.',
+  contextInputs: [],
+  toolPolicy: 'default',
+}
+
 function buildPromptWithRules(
   rules: string,
   template: PromptTemplate,
@@ -1014,4 +1027,5 @@ export const ALL_PROMPTS = {
   PROM51,
   PROM52,
   PROM53,
+  PROM54,
 }

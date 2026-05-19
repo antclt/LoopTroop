@@ -29,6 +29,7 @@ DRAFT
 
 Any active phase can fail into BLOCKED_ERROR.
 BLOCKED_ERROR -> RETRY -> previousStatus
+BLOCKED_ERROR -> CONTINUE -> previousStatus (eligible preserved OpenCode sessions only)
 Any cancellable phase -> CANCELED
 WAITING_PR_REVIEW -> merge or close-unmerged -> CLEANING_ENV
 ```
@@ -86,7 +87,7 @@ flowchart TB
     end
 
     subgraph Recovery["Recovery"]
-        ERR[BLOCKED_ERROR<br/>Retry or cancel]
+        ERR[BLOCKED_ERROR<br/>Retry, Continue, or cancel]
         CAN[CANCELED]
     end
 
@@ -197,7 +198,7 @@ flowchart TB
 | `DRAFT` | `start`, `cancel` | `start` locks model configuration and initializes the ticket workspace. |
 | `WAITING_INTERVIEW_APPROVAL`, `WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL` | `approve`, `cancel` | The generic approve route dispatches to the phase-specific approval handler. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | `merge` is also exposed through `/verify` as an alias during the transition period. |
-| `BLOCKED_ERROR` | `retry`, `cancel` | `retry` archives the failed active phase attempt when the preserved `previousStatus` is tracked, creates a fresh active attempt, then re-enters that exact status. |
+| `BLOCKED_ERROR` | `retry`, conditional `continue`, `cancel` | `retry` archives the failed active phase attempt when the preserved `previousStatus` is tracked, creates a fresh active attempt, then re-enters that exact status. `continue` appears only for resumable OpenCode/provider interruptions with a matching active preserved session and sends exactly `continue please` into that same session. |
 | Most active phases | `cancel` | Active work can be stopped from planning, execution, or review phases. |
 | `COMPLETED`, `CANCELED` | none | These are terminal states. |
 
@@ -207,6 +208,7 @@ Two extra guards matter at the user-action layer:
 - `BLOCKED_ERROR` retry from `CODING` first tries to restore the failed bead into a retryable state before it re-enters `CODING`.
 - `BLOCKED_ERROR` retry from a tracked planning/review phase archives the failed version with `manual_retry_after_blocked_error` and writes the rerun into the next phase attempt.
 - `BLOCKED_ERROR` retry is rejected when no preserved `previousStatus` exists.
+- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look transient (rate/usage limit, overload/capacity, timeout, selected 5xx/529, or transport failure) rather than auth, billing, quota, invalid-request, configuration, or request-size failures.
 - `CODING` retry is rejected when the failed bead cannot be reset to a recorded bead-start commit.
 
 ## Artifact Checkpoints
@@ -355,13 +357,13 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `BLOCKED_ERROR` | A blocking failure has paused the workflow. The error is tied to a preserved `previousStatus`, so retry can re-enter the exact failed phase rather than guessing where to resume. | Error occurrence history, failure diagnostics, preserved `previousStatus`. | `retry`, `cancel` | `retry` re-enters the preserved prior state; `cancel` moves to `CANCELED`. |
+| `BLOCKED_ERROR` | A blocking failure has paused the workflow. The error is tied to a preserved `previousStatus`, so recovery can re-enter the exact failed phase rather than guessing where to resume. | Error occurrence history, failure diagnostics, preserved `previousStatus`, and eligible preserved OpenCode session metadata. | `retry`, conditional `continue`, `cancel` | `retry` re-enters the preserved prior state as a fresh phase attempt; `continue` re-enters without creating a fresh attempt and sends only `continue please` into the preserved session; `cancel` moves to `CANCELED`. |
 | `COMPLETED` | The ticket finished successfully. The workflow is now read-only from an automation perspective, but all artifacts remain available for inspection. | Full lifecycle history remains accessible. | none | Terminal. |
 | `CANCELED` | The ticket was stopped by user action before or after partial progress. Earlier artifacts are preserved for review. | Preserved partial history and cancellation metadata. | none | Terminal. |
 
-## Retry And Blocked-Error Semantics
+## Retry, Continue, And Blocked-Error Semantics
 
-`BLOCKED_ERROR` is not just a generic failure bucket. The machine stores the last active status as `previousStatus`, and `RETRY` branches back to that exact status:
+`BLOCKED_ERROR` is not just a generic failure bucket. The machine stores the last active status as `previousStatus`, and both `RETRY` and eligible `CONTINUE` branch back to that exact status:
 
 - scan failures retry scan
 - planning failures retry the exact planning phase that failed
@@ -377,6 +379,14 @@ The retry route adds two safety checks before it dispatches `RETRY`:
 - if the preserved status is `CODING`, LoopTroop resets the failed or interrupted bead to its `beadStartCommit`; if that reset cannot be performed, retry returns a conflict response instead of resuming against a dirty worktree
 
 Before dispatching `RETRY`, tracked non-coding phases archive the active phase attempt and create a fresh active attempt. Automatic structured retries inside that phase do not create versions; they are kept as `rawAttempts` in the artifact Raw tab. Manual retry versions are loaded through the existing previous-version selector with `phaseAttempt`-scoped artifacts/logs, while blocked-error history remains attached to error occurrences.
+
+`CONTINUE` is narrower than Retry. It is exposed only when an unresolved blocked-error occurrence has continuable diagnostics and a session id, the ticket still has a known `previousStatus`, and the matching active OpenCode session is preserved locally and still listed by the OpenCode server. Continue records the pending continuation by session id, dispatches `CONTINUE`, does not archive or create phase attempts, and the next owned prompt replaces the original prompt body with exactly:
+
+```text
+continue please
+```
+
+For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. Normal Retry keeps the reset-first behavior.
 
 ## Safe Resume By Interruption Type
 

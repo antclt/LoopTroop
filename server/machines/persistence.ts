@@ -89,6 +89,7 @@ function buildMachineContext(
     error: options.error ?? null,
     errorCodes: options.errorCodes ?? [],
     errorDiagnostics: options.errorDiagnostics ?? null,
+    blockedErrorResolution: null,
     beadProgress: { total: 0, completed: 0, current: null },
     iterationCount: 0,
     maxIterations: input.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
@@ -176,6 +177,9 @@ function reconcileSnapshotForTicket(
     context.errorCodes = []
   }
   context.errorDiagnostics = normalizeBlockedErrorDiagnostics(context.errorDiagnostics)
+  if (context.blockedErrorResolution !== 'RETRIED' && context.blockedErrorResolution !== 'CONTINUED') {
+    context.blockedErrorResolution = null
+  }
 
   return rawSnapshot
 }
@@ -445,8 +449,13 @@ function persistSnapshot(
         },
       )
     } else if (previousStatus === 'BLOCKED_ERROR') {
+      const resolutionStatus = stateValue === 'CANCELED'
+        ? 'CANCELED'
+        : currentSnapshot.context.blockedErrorResolution === 'CONTINUED'
+          ? 'CONTINUED'
+          : 'RETRIED'
       resolveLatestTicketErrorOccurrence(resolvedTicketRef, {
-        resolutionStatus: stateValue === 'CANCELED' ? 'CANCELED' : 'RETRIED',
+        resolutionStatus,
         resumedToStatus: stateValue === 'CANCELED' ? null : stateValue,
         resolvedAt: transitionAt,
       })

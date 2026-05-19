@@ -85,6 +85,16 @@ It currently does the following:
 
 `runOpenCodeSessionPrompt()` is the lower-level helper for prompting a known session.
 
+When a ticket is blocked by a resumable OpenCode/provider interruption, the prompt runner can preserve the active owned session instead of abandoning it. Eligible interruptions include retryable diagnostics, HTTP 408/429/500/502/503/504/529, rate or usage limits, overload/capacity messages, timeouts, and transport failures. Auth, billing, invalid request, request-size, permission, missing API key, and insufficient-quota signals remain non-continuable.
+
+The public Continue action records a pending continuation keyed by OpenCode `sessionId`. After the state machine returns from `BLOCKED_ERROR` to the failed phase, the next owned active-session prompt consumes that pending request and replaces only that prompt body with exactly:
+
+```text
+continue please
+```
+
+Continue does not archive the active phase attempt or create a fresh attempt. Retry still keeps the fresh-attempt behavior.
+
 ## Reconnect Behavior
 
 Reconnect is intentionally conservative.
@@ -101,6 +111,8 @@ If any of those checks fail, LoopTroop falls back to creating a fresh session.
 That means LoopTroop can survive restart and resume safely, but it does not try to magically continue any random broken stream from the past.
 
 If OpenCode cannot list sessions because the server is down or restarting, validation fails closed without abandoning the database record. The prompt runner then either creates a new owned session when OpenCode is reachable or lets the phase fail into the normal retry/block path. Owned same-session reuse is also revalidated immediately before prompting, so a stale session cannot be prompted after the ticket has moved phases.
+
+For Continue, the route performs one extra live check: if the OpenCode server no longer lists the preserved session id, the request returns `409` and leaves the ticket in `BLOCKED_ERROR`.
 
 ## Streaming
 

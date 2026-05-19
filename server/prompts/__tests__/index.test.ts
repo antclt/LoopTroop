@@ -27,6 +27,7 @@ import {
   PROM51,
   PROM52,
   PROM53,
+  PROM54,
   buildPromptFromTemplate,
   buildSameSessionPromptFromTemplate,
 } from '../index'
@@ -87,7 +88,7 @@ describe.concurrent('structured prompt hardening', () => {
       expect(buildPromptFromTemplate(prompt, [])).not.toContain('Do not use tools.')
     }
 
-    for (const prompt of [PROM0, PROM25, PROM_EXECUTION_SETUP, PROM_CODING, PROM52]) {
+    for (const prompt of [PROM0, PROM25, PROM_EXECUTION_SETUP, PROM_CODING, PROM52, PROM54]) {
       expect(prompt.toolPolicy).toBe('default')
       expect(buildPromptFromTemplate(prompt, [])).not.toContain('Do not use tools.')
     }

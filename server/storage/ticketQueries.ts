@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { db as appDb } from '../db/index'
 import { PROFILE_DEFAULTS } from '../db/defaults'
 import { getProjectContextById, getProjectById, listProjects } from './projects'
-import { phaseArtifacts, profiles, projects, ticketErrorOccurrences, tickets } from '../db/schema'
+import { opencodeSessions, phaseArtifacts, profiles, projects, ticketErrorOccurrences, tickets } from '../db/schema'
 import {
   getTicketAiLogPath,
   getTicketDir,
@@ -19,6 +19,7 @@ import { getTicketBeadsPath, resolveTicketBaseBranch } from '../ticket/metadata'
 import type { ArtifactSnapshot } from '../sse/eventTypes'
 import { EXECUTION_BAND_STATUSES } from '../workflow/executionBand'
 import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
+import { isContinuableBlockedError } from '../opencode/sessionContinuation'
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
@@ -46,7 +47,7 @@ function warnInvalidDbJson(fieldName: string, raw: string, detail: string): void
   console.warn(`[tickets] Invalid ${fieldName} JSON in database: ${truncateLoggedValue(raw)} (${detail})`)
 }
 
-export type TicketErrorResolutionStatus = 'RETRIED' | 'CANCELED'
+export type TicketErrorResolutionStatus = 'RETRIED' | 'CONTINUED' | 'CANCELED'
 
 export interface TicketErrorOccurrence {
   id: number
@@ -212,7 +213,7 @@ export function arraysEqual(left: string[], right: string[]): boolean {
 }
 
 export function isValidResolutionStatus(v: unknown): v is TicketErrorResolutionStatus {
-  return v === 'RETRIED' || v === 'CANCELED'
+  return v === 'RETRIED' || v === 'CONTINUED' || v === 'CANCELED'
 }
 
 function parseJsonObject<T>(raw: string | null | undefined): T | null {
@@ -286,6 +287,72 @@ function readActiveErrorOccurrenceId(errorOccurrences: TicketErrorOccurrence[]):
   return null
 }
 
+export interface TicketContinuationCandidate {
+  ticketId: string
+  projectId: number
+  localTicketId: number
+  previousStatus: string
+  sessionId: string
+}
+
+function resolveTicketContinuationCandidateFromRows(
+  projectContext: NonNullable<ReturnType<typeof getProjectContextById>> | null | undefined,
+  projectId: number,
+  ticket: LocalTicketRow,
+  previousStatus: string | null,
+  errorOccurrences: TicketErrorOccurrence[],
+  activeErrorOccurrenceId: number | null,
+): TicketContinuationCandidate | null {
+  if (!projectContext || ticket.status !== 'BLOCKED_ERROR' || !previousStatus || activeErrorOccurrenceId === null) {
+    return null
+  }
+
+  const occurrence = errorOccurrences.find((candidate) => candidate.id === activeErrorOccurrenceId)
+  if (!occurrence || occurrence.resolvedAt !== null) return null
+  if (!isContinuableBlockedError({
+    diagnostics: occurrence.diagnostics,
+    errorCodes: occurrence.errorCodes,
+  })) {
+    return null
+  }
+
+  const sessionId = occurrence.diagnostics?.sessionId?.trim()
+  if (!sessionId) return null
+
+  const activeSession = projectContext.projectDb.select({ id: opencodeSessions.id })
+    .from(opencodeSessions)
+    .where(and(
+      eq(opencodeSessions.ticketId, ticket.id),
+      eq(opencodeSessions.sessionId, sessionId),
+      eq(opencodeSessions.phase, previousStatus),
+      eq(opencodeSessions.state, 'active'),
+    ))
+    .get()
+  if (!activeSession) return null
+
+  return {
+    ticketId: buildTicketRef(projectId, ticket.externalId),
+    projectId,
+    localTicketId: ticket.id,
+    previousStatus,
+    sessionId,
+  }
+}
+
+function addContinueActionWhenAvailable(
+  actions: string[],
+  candidate: TicketContinuationCandidate | null,
+): string[] {
+  if (!candidate || actions.includes('continue')) return actions
+  const retryIndex = actions.indexOf('retry')
+  if (retryIndex === -1) return [...actions, 'continue']
+  return [
+    ...actions.slice(0, retryIndex + 1),
+    'continue',
+    ...actions.slice(retryIndex + 1),
+  ]
+}
+
 function readErrorSeenSignature(projectContext: NonNullable<ReturnType<typeof getProjectContextById>>, localTicketId: number): string | null {
   const artifact = projectContext.projectDb.select().from(phaseArtifacts)
     .where(and(
@@ -348,6 +415,14 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     ?? (ticket.status === 'BLOCKED_ERROR' ? errorOccurrences.at(-1)?.blockedFromStatus ?? null : null)
   const reviewCutoffStatus = readReviewCutoffStatus(ticket, previousStatus, errorOccurrences)
   const errorSeenSignature = projectContext ? readErrorSeenSignature(projectContext, ticket.id) : null
+  const continuationCandidate = resolveTicketContinuationCandidateFromRows(
+    projectContext,
+    projectId,
+    ticket,
+    previousStatus,
+    errorOccurrences,
+    activeErrorOccurrenceId,
+  )
   const runtime = project ? buildRuntime(projectId, project.folderPath, ticket, baseBranch, previousStatus) : {
     baseBranch,
     currentBead: ticket.currentBead ?? 0,
@@ -379,7 +454,10 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     projectId,
     lockedCouncilMembers,
     lockedCouncilMemberVariants,
-    availableActions: getAvailableWorkflowActions(ticket.status),
+    availableActions: addContinueActionWhenAvailable(
+      getAvailableWorkflowActions(ticket.status),
+      continuationCandidate,
+    ),
     previousStatus,
     reviewCutoffStatus,
     errorOccurrences,
@@ -620,6 +698,28 @@ export function getTicketContext(ticketRef: string): TicketContext | undefined {
     localTicketId: localTicket.id,
     projectDb: project.projectDb,
   }
+}
+
+export function resolveTicketContinuationCandidate(ticketRef: string): TicketContinuationCandidate | null {
+  const context = getTicketContext(ticketRef)
+  if (!context) return null
+  const projectContext = getProjectContextById(context.projectId)
+  if (!projectContext) return null
+  const snapshot = parseJsonObject<{ context?: { previousStatus?: unknown } }>(context.localTicket.xstateSnapshot)
+  const errorOccurrences = readTicketErrorOccurrences(projectContext, context.localTicketId)
+  const activeErrorOccurrenceId = readActiveErrorOccurrenceId(errorOccurrences)
+  const previousStatusFromSnapshot = typeof snapshot?.context?.previousStatus === 'string' ? snapshot.context.previousStatus : null
+  const previousStatus = previousStatusFromSnapshot
+    ?? (context.localTicket.status === 'BLOCKED_ERROR' ? errorOccurrences.at(-1)?.blockedFromStatus ?? null : null)
+
+  return resolveTicketContinuationCandidateFromRows(
+    projectContext,
+    context.projectId,
+    context.localTicket,
+    previousStatus,
+    errorOccurrences,
+    activeErrorOccurrenceId,
+  )
 }
 
 export function getTicketStorageContext(ticketRef: string): { projectId: number; projectRoot: string; externalId: string } | undefined {

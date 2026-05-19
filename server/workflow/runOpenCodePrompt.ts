@@ -18,6 +18,13 @@ import { parseModelRef } from '../opencode/types'
 import { SessionManager, type SessionOwnership } from '../opencode/sessionManager'
 import { resolveOpenCodeTools } from '../opencode/toolPolicy'
 import { PROMPT_MIN_TIMEOUT_MS, PROMPT_MAX_TIMEOUT_MS } from '../lib/constants'
+import { PROM54_CONTINUE_TEXT } from '../prompts/index'
+import {
+  attachContinuationDiagnostics,
+  clearSessionContinuation,
+  consumeSessionContinuation,
+  shouldPreserveSessionForContinuation,
+} from '../opencode/sessionContinuation'
 
 export interface OpenCodeRunCallbacks {
   onSessionCreated?: (session: Session) => void
@@ -66,6 +73,7 @@ export interface OpenCodeRunOptions extends OpenCodeRunCallbacks {
   variant?: string
   toolPolicy?: OpenCodeToolPolicy
   sessionOwnership?: OpenCodeSessionOwnership
+  skipSessionValidation?: boolean
   erroredSessionPolicy?: OpenCodeErroredSessionPolicy
 }
 
@@ -262,6 +270,7 @@ export async function runOpenCodePrompt({
   const timeoutDeadline = getTimeoutDeadline(timeoutMs)
   const acquisitionDeadline = createTimeoutSignal(signal, getRemainingTimeoutMs(timeoutDeadline))
   let session: Session | undefined
+  let preservedForContinuation = false
   try {
     if (sessionOwnership?.forceFresh) {
       const existing = sessionManager!.getOwnedActiveSession(
@@ -272,6 +281,7 @@ export async function runOpenCodePrompt({
       if (existing) {
         await adapter.abortSession(existing.sessionId).catch(() => false)
         await sessionManager!.abandonSession(existing.sessionId)
+        clearSessionContinuation(existing.sessionId)
         clearOpenCodePromptDispatchCount(existing.sessionId)
       }
     }
@@ -307,16 +317,28 @@ export async function runOpenCodePrompt({
   }
   onSessionCreated?.(session)
   try {
+    const continuation = sessionOwnership
+      ? consumeSessionContinuation({
+          ticketId: sessionOwnership.ticketId,
+          phase: sessionOwnership.phase,
+          sessionId: session.id,
+        })
+      : null
+    const promptParts = continuation
+      ? [{ type: 'text' as const, content: PROM54_CONTINUE_TEXT }]
+      : parts
     const result = await runOpenCodeSessionPrompt({
       adapter,
       session,
-      parts,
+      parts: promptParts,
       signal,
       timeoutMs,
       model,
       agent,
       variant,
       toolPolicy,
+      sessionOwnership,
+      skipSessionValidation: true,
       erroredSessionPolicy,
       onPromptDispatched,
       onStreamEvent,
@@ -325,17 +347,26 @@ export async function runOpenCodePrompt({
     })
     if (sessionManager && !sessionOwnership?.keepActive) {
       await sessionManager.completeSession(session.id)
+      clearSessionContinuation(session.id)
       clearOpenCodePromptDispatchCount(session.id)
     }
     return result
   } catch (error) {
-    if (sessionManager && !sessionOwnership?.keepActive) {
+    preservedForContinuation = shouldPreserveSessionForContinuation({
+      error,
+      sessionId: session.id,
+      modelId: model,
+      sessionOwnership,
+      signal,
+    })
+    if (sessionManager && !sessionOwnership?.keepActive && !preservedForContinuation) {
       await sessionManager.abandonSession(session.id)
+      clearSessionContinuation(session.id)
       clearOpenCodePromptDispatchCount(session.id)
     }
     throw error
   } finally {
-    if (session && !sessionOwnership?.keepActive) {
+    if (session && !sessionOwnership?.keepActive && !preservedForContinuation) {
       clearOpenCodePromptDispatchCount(session.id)
     }
   }
@@ -352,6 +383,7 @@ export async function runOpenCodeSessionPrompt({
   variant,
   toolPolicy,
   sessionOwnership,
+  skipSessionValidation,
   erroredSessionPolicy,
   onPromptDispatched,
   onStreamEvent,
@@ -362,7 +394,7 @@ export async function runOpenCodeSessionPrompt({
   const resolvedTimeoutDeadline = timeoutDeadline ?? getTimeoutDeadline(timeoutMs)
   let resolvedSession = session
   const sessionManager = sessionOwnership ? new SessionManager(adapter) : null
-  if (sessionOwnership) {
+  if (sessionOwnership && !skipSessionValidation) {
     const validationDeadline = createTimeoutSignal(signal, getRemainingTimeoutMs(resolvedTimeoutDeadline))
     let reconnected: Session | null
     try {
@@ -448,23 +480,57 @@ export async function runOpenCodeSessionPrompt({
     }
   } catch (error) {
     if (deadlineController?.signal.aborted) {
-      await adapter.abortSession(resolvedSession.id)
       const timeoutError = error instanceof Error && error.message === TIMEOUT_ERROR_MESSAGE
         ? error
         : new Error(TIMEOUT_ERROR_MESSAGE)
-      if (sessionManager && !sessionOwnership?.keepActive) {
+      const preserveForContinuation = shouldPreserveSessionForContinuation({
+        error: timeoutError,
+        sessionId: resolvedSession.id,
+        modelId: model,
+        sessionOwnership,
+        signal,
+        fallbackMessage: TIMEOUT_ERROR_MESSAGE,
+      })
+      if (!preserveForContinuation) {
+        await adapter.abortSession(resolvedSession.id)
+      }
+      if (sessionManager && !sessionOwnership?.keepActive && !preserveForContinuation) {
         await sessionManager.abandonSession(resolvedSession.id)
+        clearSessionContinuation(resolvedSession.id)
         clearOpenCodePromptDispatchCount(resolvedSession.id)
       }
-      onStreamError?.(timeoutError)
-      throw timeoutError
+      const enrichedError = preserveForContinuation
+        ? attachContinuationDiagnostics(timeoutError, {
+            error: timeoutError,
+            sessionId: resolvedSession.id,
+            modelId: model,
+            fallbackMessage: TIMEOUT_ERROR_MESSAGE,
+          })
+        : timeoutError
+      onStreamError?.(enrichedError)
+      throw enrichedError
     }
-    if (sessionManager && !sessionOwnership?.keepActive && isPromptTransportFailure(error)) {
+    const preserveForContinuation = shouldPreserveSessionForContinuation({
+      error,
+      sessionId: resolvedSession.id,
+      modelId: model,
+      sessionOwnership,
+      signal,
+    })
+    if (sessionManager && !sessionOwnership?.keepActive && isPromptTransportFailure(error) && !preserveForContinuation) {
       await sessionManager.abandonSession(resolvedSession.id)
+      clearSessionContinuation(resolvedSession.id)
       clearOpenCodePromptDispatchCount(resolvedSession.id)
     }
-    onStreamError?.(error)
-    throw error
+    const thrownError = preserveForContinuation && error instanceof Error
+      ? attachContinuationDiagnostics(error, {
+          error,
+          sessionId: resolvedSession.id,
+          modelId: model,
+        })
+      : error
+    onStreamError?.(thrownError)
+    throw thrownError
   } finally {
     if (deadlineTimer) {
       clearTimeout(deadlineTimer)

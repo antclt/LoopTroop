@@ -137,6 +137,41 @@ describe('hydrateAllTickets', () => {
     }
   })
 
+  it('resolves blocked-error occurrences as continued when CONTINUE resumes the previous status', () => {
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Persist blocked continue',
+    })
+
+    try {
+      const actor = ensureActorForTicket(ticket.id)
+      actor.send({ type: 'START', lockedMainImplementer: 'model-a', lockedCouncilMembers: ['model-a'] })
+      actor.send({
+        type: 'ERROR',
+        message: 'Usage limit reached.',
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'usage limit reached',
+          modelId: 'model-a',
+          sessionId: 'ses-limit',
+          statusCode: 429,
+          isRetryable: true,
+        },
+      })
+      actor.send({ type: 'CONTINUE' })
+
+      const recovered = getTicketByRef(ticket.id)
+      expect(recovered?.status).toBe('SCANNING_RELEVANT_FILES')
+      expect(recovered?.errorOccurrences.at(-1)).toMatchObject({
+        blockedFromStatus: 'SCANNING_RELEVANT_FILES',
+        resolutionStatus: 'CONTINUED',
+        resumedToStatus: 'SCANNING_RELEVANT_FILES',
+      })
+    } finally {
+      stopActor(ticket.id)
+    }
+  })
+
   it('reconstructs a missing active snapshot from the durable ticket status', () => {
     const { ticket } = createInitializedTestTicket(repoManager, {
       title: 'Missing snapshot recovery',

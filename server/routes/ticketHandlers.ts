@@ -31,6 +31,7 @@ import {
   getLatestPhaseArtifact,
   getTicketByRef,
   getTicketContext,
+  resolveTicketContinuationCandidate,
   getTicketPaths,
   patchTicket,
   deleteTicket as deleteStoredTicket,
@@ -99,6 +100,10 @@ import { regenerateExecutionSetupPlanDraft } from '../workflow/phases/executionS
 import { isExecutionBandStatus } from '../workflow/executionBand'
 import { normalizeExecutionSetupPlanOutput } from '../structuredOutput'
 import { getErrorMessage } from '@shared/typeGuards'
+import {
+  clearSessionContinuation,
+  requestSessionContinuation,
+} from '../opencode/sessionContinuation'
 
 export const createTicketSchema = z.object({
   projectId: z.number().int().positive(),
@@ -1982,6 +1987,64 @@ export function handleRetryTicket(c: Context) {
   }
 
   return respondWithState(c, ticketId, 'Retry action accepted')
+}
+
+export async function handleContinueTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticket.status !== 'BLOCKED_ERROR') {
+    return c.json({ error: 'Continue only works from BLOCKED_ERROR state' }, 409)
+  }
+  if (!ticket.previousStatus) {
+    return c.json({ error: 'Continue is not available because the failed status could not be recovered' }, 409)
+  }
+
+  const continuation = resolveTicketContinuationCandidate(ticketId)
+  if (!continuation) {
+    return c.json({ error: 'Continue is not available for this blocked error' }, 409)
+  }
+
+  if (isExecutionBandStatus(continuation.previousStatus)) {
+    const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
+    if (executionConflict) {
+      return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
+    }
+  }
+
+  let liveSessions
+  try {
+    liveSessions = await getOpenCodeAdapter().listSessions()
+  } catch (err) {
+    console.error(`[tickets] Failed to verify OpenCode session before continuing ticket ${ticketId}:`, err)
+    return c.json({
+      error: 'Continue is not available because the OpenCode session could not be verified',
+      details: getErrorMessage(err),
+    }, 500)
+  }
+
+  if (!liveSessions.some((session) => session.id === continuation.sessionId)) {
+    return c.json({
+      error: 'Continue is not available because the preserved OpenCode session is no longer active',
+    }, 409)
+  }
+
+  requestSessionContinuation({
+    ticketId,
+    phase: continuation.previousStatus,
+    sessionId: continuation.sessionId,
+  })
+
+  try {
+    ensureActorForTicket(ticketId)
+    sendTicketEvent(ticketId, { type: 'CONTINUE' })
+  } catch (err) {
+    clearSessionContinuation(continuation.sessionId)
+    console.error(`[tickets] Failed to send CONTINUE to ticket ${ticketId}:`, err)
+    return c.json({ error: 'Failed to continue ticket', details: String(err) }, 500)
+  }
+
+  return respondWithState(c, ticketId, 'Continue action accepted')
 }
 
 export async function handleListOpenCodeQuestions(c: Context) {

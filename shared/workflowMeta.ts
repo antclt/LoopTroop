@@ -943,26 +943,28 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   BLOCKED_ERROR: {
-    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so retry knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, OpenCode retry, and rate-limit-style failures alongside the human-readable error. You can see the error details, inspect logs around the failing moment, and choose to either retry the failed phase or cancel the ticket entirely.',
+    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so recovery knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, OpenCode retry, and rate-limit-style failures alongside the human-readable error. You can see the error details, inspect logs around the failing moment, and choose Retry, Continue when a preserved OpenCode session is resumable, or Cancel.',
     steps: [
       'Error Recording: LoopTroop captures the error message, error codes (if available), the precise timestamp of the failure, and the workflow status where the failure occurred. Provider, model, session, timeout, OpenCode retry, and rate-limit-style diagnostics are persisted as structured fields when the failing subsystem exposes them. If structured-output validation later fails because OpenCode returned no usable content, the latest underlying OpenCode retry/provider failure is preserved instead of replacing it with only the parser wrapper. This information is stored as an error occurrence record.',
-      'State Preservation: The blocked error becomes the active workflow state while preserving the previous status (the phase that failed). This preserved status is critical — it tells the retry mechanism exactly which phase to re-enter when you click Retry.',
+      'State Preservation: The blocked error becomes the active workflow state while preserving the previous status (the phase that failed). This preserved status is critical — it tells Retry and eligible Continue exactly which phase to re-enter.',
       'Error History: If a ticket has been blocked multiple times (e.g., retry → fail → retry → fail), all error occurrences are preserved in a history list. This helps you identify recurring issues and decide whether retry is likely to succeed.',
       'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, persisted structured provider/model/session/OpenCode retry diagnostics, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
-      'Decision Point: You choose either Retry (which archives the failed tracked phase attempt, creates a fresh attempt, returns the workflow to the previously blocked status, and re-attempts the failed operation) or Cancel (which moves the ticket to the terminal Canceled state, preserving all artifacts).',
+      'Decision Point: You choose Retry (which archives the failed tracked phase attempt, creates a fresh attempt, returns the workflow to the previously blocked status, and re-attempts the failed operation), Continue when available (which keeps the preserved OpenCode session and sends only `continue please`), or Cancel (which moves the ticket to the terminal Canceled state, preserving all artifacts).',
     ],
     outputs: [
       'Error occurrence history with timestamps, error messages, error codes, structured provider/model/session/timeout/OpenCode retry/rate-limit diagnostics when available, and the phase where each failure occurred.',
       'Blocked state metadata linking the error to the specific phase that failed.',
-      'Retry or cancel decision point for manual intervention, with tracked retry artifacts/logs separated by phase attempt.',
+      'Retry, eligible same-session Continue, or cancel decision point for manual intervention, with tracked retry artifacts/logs separated by phase attempt.',
     ],
     transitions: [
       'Retry → Previous Status: Retry archives the active tracked phase attempt with `manual_retry_after_blocked_error`, creates the next active attempt, and returns the workflow to the previously blocked status. CODING keeps its special failed-bead reset before re-entering.',
+      'Continue → Previous Status: Continue is available only for resumable OpenCode/provider interruptions with a preserved active session. It returns to the previous status without archiving or creating phase attempts and dispatches exactly `continue please` into that same session.',
       'Cancel → Canceled: Cancel moves the ticket to the terminal Canceled state. Artifacts and error history are preserved by default; the cancellation dialog offers optional cleanup of AI-generated artifacts and/or the execution log.',
     ],
     notes: [
       'Past error occurrences remain reviewable even after the ticket moves on (via retry) or is canceled — the error history is never deleted.',
       'Manual retry versions are reviewed through the phase previous-version selector; automatic structured retries inside a version are reviewed through artifact Raw attempt tabs, with parser/retry intervention warnings summarized on the primary artifact tab.',
+      'Continue is deliberately narrower than Retry: it is hidden unless the active error has a session id, the matching OpenCode session is still active, and diagnostics point to a transient limit, overload, timeout, or transport interruption rather than auth, billing, configuration, or invalid-request errors.',
       'Context available: Current Bead Data (if the failure occurred during the coding phase) + Error Context (error message, codes, phase, timing).',
       'Common causes of blocked errors: provider or model failures, session interruptions, model timeouts, rate-limit-style failures, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
       'Tip: Before retrying, check the error details. If the error is a transient issue (timeout, connectivity), retry is likely to succeed. If the error indicates a fundamental problem (malformed output, missing configuration), retry may fail again.',
@@ -1020,7 +1022,7 @@ function getSafeResumeDescription(phase: Pick<WorkflowPhaseMeta, 'id' | 'kanbanP
     return 'After backend or OpenCode restart, LoopTroop finalizes only a current matching in-progress bead checkpoint; otherwise it resets the bead to its bead start commit, preserves retry notes, and continues from the next runnable bead. If no reset anchor exists, it blocks instead of reusing dirty work.'
   }
   if (phase.id === 'BLOCKED_ERROR') {
-    return 'Retry is allowed only when the failed previous status is known from durable state; otherwise the ticket stays blocked for manual review.'
+    return 'Retry is allowed only when the failed previous status is known from durable state. Continue is shown only when a matching active OpenCode session is preserved for a resumable interruption; otherwise the ticket stays blocked for retry/cancel review.'
   }
   if (phase.id === 'COMPLETED') {
     return 'This terminal result is read-only and reloads from stored artifacts after any restart.'
@@ -1442,7 +1444,7 @@ export function getWorkflowPhaseMeta(status: string): WorkflowPhaseMeta | undefi
   return WORKFLOW_PHASE_MAP[status]
 }
 
-export type WorkflowAction = 'start' | 'approve' | 'cancel' | 'retry' | 'merge' | 'close_unmerged'
+export type WorkflowAction = 'start' | 'approve' | 'cancel' | 'retry' | 'continue' | 'merge' | 'close_unmerged'
 
 export function isBeforeExecution(status: string, previousStatus?: string | null, depth?: number): boolean {
   if (status === 'BLOCKED_ERROR' && previousStatus) {

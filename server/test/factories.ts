@@ -63,6 +63,8 @@ export function makeTicketContext(
     previousStatus: null,
     error: null,
     errorCodes: [],
+    errorDiagnostics: null,
+    blockedErrorResolution: null,
     beadProgress: { total: 0, completed: 0, current: null },
     iterationCount: 0,
     maxIterations: 5,

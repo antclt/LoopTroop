@@ -1,0 +1,268 @@
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Hono } from 'hono'
+import { initializeDatabase } from '../../db/init'
+import { sqlite } from '../../db/index'
+import { clearProjectDatabaseCache } from '../../db/project'
+import { opencodeSessions } from '../../db/schema'
+import { attachProject } from '../../storage/projects'
+import {
+  createTicket,
+  ensureActivePhaseAttempt,
+  getTicketByRef,
+  getTicketContext,
+  listPhaseAttempts,
+  patchTicket,
+  recordTicketErrorOccurrence,
+} from '../../storage/tickets'
+import { createFixtureRepoManager } from '../../test/fixtureRepo'
+import {
+  clearAllPendingSessionContinuationsForTests,
+  hasPendingSessionContinuationForTicketPhase,
+} from '../../opencode/sessionContinuation'
+
+const { listSessionsMock } = vi.hoisted(() => ({
+  listSessionsMock: vi.fn(),
+}))
+
+vi.mock('../../opencode/factory', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../opencode/factory')>()
+  return {
+    ...actual,
+    getOpenCodeAdapter: vi.fn(() => ({
+      listSessions: listSessionsMock,
+    })),
+  }
+})
+
+vi.mock('../../machines/persistence', async () => {
+  const storage = await import('../../storage/tickets')
+
+  return {
+    createTicketActor: vi.fn(),
+    ensureActorForTicket: vi.fn(() => ({ id: 'mock-actor' })),
+    sendTicketEvent: vi.fn((ticketRef: string | number, event: { type: string }) => {
+      const ticket = storage.getTicketByRef(String(ticketRef))
+      if (event.type === 'CONTINUE' && ticket?.previousStatus) {
+        storage.patchTicket(String(ticketRef), {
+          status: ticket.previousStatus,
+          errorMessage: null,
+        })
+      }
+      return { value: event.type }
+    }),
+    getTicketState: vi.fn((ticketRef: string | number) => {
+      const ticket = storage.getTicketByRef(String(ticketRef))
+      if (!ticket) return null
+      return { state: ticket.status, context: {}, status: 'active' }
+    }),
+    stopActor: vi.fn(() => true),
+    revertTicketToApprovalStatus: vi.fn(),
+  }
+})
+
+import { sendTicketEvent } from '../../machines/persistence'
+import { ticketRouter } from '../tickets'
+
+const repoManager = createFixtureRepoManager({
+  templatePrefix: 'looptroop-ticket-continue-route-',
+  files: {
+    'README.md': '# Continue route test\n',
+  },
+})
+
+function setupContinueTicketApp() {
+  const repoDir = repoManager.createRepo()
+  const project = attachProject({
+    folderPath: repoDir,
+    name: 'LoopTroop',
+    shortname: 'LOOP',
+  })
+  const ticket = createTicket({
+    projectId: project.id,
+    title: 'Continue route',
+    description: 'Verify same-session continuation.',
+  })
+
+  const app = new Hono()
+  app.route('/api', ticketRouter)
+
+  return { app, project, ticket }
+}
+
+function insertActiveOpenCodeSession(ticketRef: string, phase: string, sessionId = 'ses-continue') {
+  const context = getTicketContext(ticketRef)
+  if (!context) throw new Error(`Missing ticket context for ${ticketRef}`)
+  context.projectDb.insert(opencodeSessions)
+    .values({
+      sessionId,
+      ticketId: context.localTicketId,
+      phase,
+      phaseAttempt: 1,
+      state: 'active',
+    })
+    .run()
+}
+
+function blockTicketWithContinuableError(ticketRef: string, previousStatus: string, sessionId = 'ses-continue') {
+  recordTicketErrorOccurrence(ticketRef, {
+    blockedFromStatus: previousStatus,
+    errorMessage: 'Usage limit has been reached.',
+    errorCodes: [],
+    diagnostics: {
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'usage limit has been reached',
+      sessionId,
+      statusCode: 429,
+      isRetryable: true,
+    },
+  })
+  patchTicket(ticketRef, {
+    status: 'BLOCKED_ERROR',
+    xstateSnapshot: JSON.stringify({ context: { previousStatus } }),
+    errorMessage: 'Usage limit has been reached.',
+  })
+  insertActiveOpenCodeSession(ticketRef, previousStatus, sessionId)
+}
+
+describe('ticketRouter POST /tickets/:id/continue', () => {
+  beforeEach(() => {
+    clearProjectDatabaseCache()
+    initializeDatabase()
+    sqlite.exec('DELETE FROM attached_projects; DELETE FROM profiles;')
+    clearAllPendingSessionContinuationsForTests()
+    vi.clearAllMocks()
+    listSessionsMock.mockResolvedValue([{ id: 'ses-continue', projectPath: '/tmp/project' }])
+  })
+
+  afterAll(() => {
+    clearProjectDatabaseCache()
+    repoManager.cleanup()
+  })
+
+  it('records pending continuation and resumes the previous status without archiving phase attempts', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    ensureActivePhaseAttempt(ticket.id, 'PREPARING_EXECUTION_ENV')
+    blockTicketWithContinuableError(ticket.id, 'PREPARING_EXECUTION_ENV')
+    expect(getTicketByRef(ticket.id)?.availableActions).toContain('continue')
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'CONTINUE' })
+    expect(hasPendingSessionContinuationForTicketPhase(ticket.id, 'PREPARING_EXECUTION_ENV')).toBe(true)
+    expect(getTicketByRef(ticket.id)?.status).toBe('PREPARING_EXECUTION_ENV')
+    expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
+      expect.objectContaining({ attemptNumber: 1, state: 'active' }),
+    ])
+  })
+
+  it('rejects continue when no matching active OpenCode session row is preserved', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    const previousStatus = 'PREPARING_EXECUTION_ENV'
+    recordTicketErrorOccurrence(ticket.id, {
+      blockedFromStatus: previousStatus,
+      errorMessage: 'Usage limit has been reached.',
+      errorCodes: [],
+      diagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'usage limit has been reached',
+        sessionId: 'ses-continue',
+        statusCode: 429,
+        isRetryable: true,
+      },
+    })
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus } }),
+      errorMessage: 'Usage limit has been reached.',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(getTicketByRef(ticket.id)?.availableActions).not.toContain('continue')
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects continue for non-blocked tickets', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects continue when previous status is missing', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: {} }),
+      errorMessage: 'Missing previous status',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects ineligible diagnostics', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    const previousStatus = 'PREPARING_EXECUTION_ENV'
+    recordTicketErrorOccurrence(ticket.id, {
+      blockedFromStatus: previousStatus,
+      errorMessage: 'Authentication failed.',
+      errorCodes: ['OPENCODE_PROVIDER_AUTH_FAILED'],
+      diagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'Authentication failed: API key is invalid.',
+        sessionId: 'ses-continue',
+        statusCode: 401,
+        isRetryable: false,
+      },
+    })
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus } }),
+      errorMessage: 'Authentication failed.',
+    })
+    insertActiveOpenCodeSession(ticket.id, previousStatus)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects continue when another ticket occupies the execution band', async () => {
+    const { app, project, ticket } = setupContinueTicketApp()
+    const otherTicket = createTicket({
+      projectId: project.id,
+      title: 'Other execution ticket',
+      description: 'Already in coding.',
+    })
+    patchTicket(otherTicket.id, { status: 'CODING' })
+    blockTicketWithContinuableError(ticket.id, 'PREPARING_EXECUTION_ENV')
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('rejects continue when OpenCode no longer lists the preserved session', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    blockTicketWithContinuableError(ticket.id, 'PREPARING_EXECUTION_ENV')
+    listSessionsMock.mockResolvedValue([])
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(409)
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+})

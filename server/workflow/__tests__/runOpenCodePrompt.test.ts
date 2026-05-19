@@ -25,6 +25,10 @@ import {
   type OpenCodePromptDispatchEvent,
 } from '../runOpenCodePrompt'
 import { listOpenCodeSessionsForTicket } from '../../opencode/sessionManager'
+import {
+  clearAllPendingSessionContinuationsForTests,
+  requestSessionContinuation,
+} from '../../opencode/sessionContinuation'
 
 type OpenCodeSDKClient = NonNullable<ConstructorParameters<typeof OpenCodeSDKAdapter>[1]>
 
@@ -228,6 +232,7 @@ describe('runOpenCodePrompt', () => {
   const repoManager = createTestRepoManager('run-opencode-prompt-')
 
   afterAll(() => {
+    clearAllPendingSessionContinuationsForTests()
     resetTestDb()
     repoManager.cleanup()
   })
@@ -491,10 +496,10 @@ describe('runOpenCodePrompt', () => {
     expect(listOpenCodeSessionsForTicket(ticket.id, ['completed'])).toHaveLength(1)
   })
 
-  it('abandons an owned same-session prompt after transport failure when keepActive is not explicit', async () => {
+  it('preserves an owned same-session prompt after a resumable transport interruption', async () => {
     resetTestDb()
     const { ticket } = createInitializedTestTicket(repoManager, {
-      title: 'Same session prompt cleanup',
+      title: 'Same session prompt continuation',
     })
     patchTicket(ticket.id, { status: 'CODING' })
     const adapter = new TestOpenCodeAdapter([
@@ -525,8 +530,85 @@ describe('runOpenCodePrompt', () => {
       },
     })).rejects.toThrow('Failed to prompt OpenCode session')
 
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['active'])).toHaveLength(1)
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['abandoned'])).toHaveLength(0)
+  })
+
+  it('abandons an owned same-session prompt after a non-continuable auth failure', async () => {
+    resetTestDb()
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Same session auth cleanup',
+    })
+    patchTicket(ticket.id, { status: 'CODING' })
+    const adapter = new TestOpenCodeAdapter([
+      'initial response',
+      new Error('Failed to prompt OpenCode session: HTTP 401 authentication failed'),
+    ])
+
+    const initial = await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Initial prompt' }],
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'CODING',
+        keepActive: true,
+      },
+    })
+
+    await expect(runOpenCodeSessionPrompt({
+      adapter,
+      session: initial.session,
+      parts: [{ type: 'text', content: 'Follow-up prompt' }],
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'CODING',
+      },
+    })).rejects.toThrow('Failed to prompt OpenCode session')
+
     expect(listOpenCodeSessionsForTicket(ticket.id, ['active'])).toHaveLength(0)
     expect(listOpenCodeSessionsForTicket(ticket.id, ['abandoned'])).toHaveLength(1)
+  })
+
+  it('replaces a pending continuation prompt with the bare PROM54 text in the owned active session', async () => {
+    resetTestDb()
+    clearAllPendingSessionContinuationsForTests()
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Same session continuation prompt',
+    })
+    patchTicket(ticket.id, { status: 'PREPARING_EXECUTION_ENV' })
+    const adapter = new TestOpenCodeAdapter(['initial response', 'continued response'])
+
+    const initial = await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Initial setup prompt' }],
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'PREPARING_EXECUTION_ENV',
+        keepActive: true,
+      },
+    })
+
+    requestSessionContinuation({
+      ticketId: ticket.id,
+      phase: 'PREPARING_EXECUTION_ENV',
+      sessionId: initial.session.id,
+    })
+
+    const continued = await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Original prompt should not be resent' }],
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'PREPARING_EXECUTION_ENV',
+      },
+    })
+
+    expect(continued.response).toBe('continued response')
+    expect(adapter.promptCalls[1]?.sessionId).toBe(initial.session.id)
+    expect(adapter.promptCalls[1]?.parts).toEqual([{ type: 'text', content: 'continue please' }])
   })
 
   it('fails fast with an upgrade error when execution-band session permissions are rejected', async () => {

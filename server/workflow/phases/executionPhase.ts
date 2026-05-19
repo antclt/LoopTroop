@@ -13,6 +13,7 @@ import { adapter } from './state'
 import { emitPhaseLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStreamEvent, emitOpenCodePromptLog, createOpenCodeStreamState, resolveExecutionRuntimeSettings, resolveStructuredRetryRuntimeSettings } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { readTicketBeads, recoverCodingBeadWithReset, writeTicketBeads, updateTicketProgressFromBeads } from './beadsPhase'
+import { hasPendingSessionContinuationForTicketPhase } from '../../opencode/sessionContinuation'
 
 function mergeBeadRetryMetadata(
   beads: Bead[],
@@ -176,8 +177,9 @@ export async function handleCoding(
   let activeBead = getLatestInterruptedInProgressBead(beads)
   let beadStartCommit: string | null = activeBead?.beadStartCommit ?? null
   let result: ExecutionResult | null = null
+  const continueActiveBead = Boolean(activeBead && hasPendingSessionContinuationForTicketPhase(ticketId, 'CODING'))
 
-  if (activeBead) {
+  if (activeBead && !continueActiveBead) {
     const executionArtifact = getLatestPhaseArtifact(ticketId, getBeadExecutionArtifactType(activeBead.id), 'CODING')
     if (executionArtifact) {
       try {
@@ -213,53 +215,70 @@ export async function handleCoding(
   }
 
   if (!result) {
-    const interruptedBead = recoverCodingBeadWithReset(ticketId, {
-      worktreePath: paths.worktreePath,
-      onlyInProgress: true,
-      requireReset: true,
-      preservePaths: [...EXECUTION_RUNTIME_PRESERVE_PATHS],
-    })
-    if (interruptedBead) {
+    let executingBead: Bead
+
+    if (continueActiveBead && activeBead) {
       emitPhaseLog(
         ticketId,
         context.externalId,
         'CODING',
         'info',
-        `Recovered interrupted bead ${interruptedBead.id} from its start snapshot and returned it to pending before resuming.`,
-        { source: 'system', modelId: codingModelId, beadId: interruptedBead.id },
+        `Continuing preserved OpenCode session for bead ${activeBead.id}.`,
+        { source: 'system', modelId: codingModelId, beadId: activeBead.id },
       )
-      beads = readTicketBeads(ticketId)
-    }
+      executingBead = activeBead
+      updateTicketProgressFromBeads(ticketId, beads)
+    } else {
+      const interruptedBead = recoverCodingBeadWithReset(ticketId, {
+        worktreePath: paths.worktreePath,
+        onlyInProgress: true,
+        requireReset: true,
+        preservePaths: [...EXECUTION_RUNTIME_PRESERVE_PATHS],
+      })
+      if (interruptedBead) {
+        emitPhaseLog(
+          ticketId,
+          context.externalId,
+          'CODING',
+          'info',
+          `Recovered interrupted bead ${interruptedBead.id} from its start snapshot and returned it to pending before resuming.`,
+          { source: 'system', modelId: codingModelId, beadId: interruptedBead.id },
+        )
+        beads = readTicketBeads(ticketId)
+      }
 
-    const nextBead = getNextBead(beads)
-    if (!nextBead) {
-      throw new Error('No runnable bead found; unresolved dependencies remain')
-    }
+      const nextBead = getNextBead(beads)
+      if (!nextBead) {
+        throw new Error('No runnable bead found; unresolved dependencies remain')
+      }
 
-    const now = new Date().toISOString()
-    const inProgressBeads = beads.map(bead => bead.id === nextBead.id
-      ? { ...bead, status: 'in_progress' as const, updatedAt: now, startedAt: now }
-      : bead)
-    writeTicketBeads(ticketId, inProgressBeads)
-    updateTicketProgressFromBeads(ticketId, inProgressBeads)
-    const executingBead = inProgressBeads.find(bead => bead.id === nextBead.id)
-    if (!executingBead) {
-      throw new Error(`Failed to mark bead ${nextBead.id} as in progress`)
-    }
-    activeBead = executingBead
+      const now = new Date().toISOString()
+      const inProgressBeads = beads.map(bead => bead.id === nextBead.id
+        ? { ...bead, status: 'in_progress' as const, updatedAt: now, startedAt: now }
+        : bead)
+      writeTicketBeads(ticketId, inProgressBeads)
+      updateTicketProgressFromBeads(ticketId, inProgressBeads)
+      const selectedBead = inProgressBeads.find(bead => bead.id === nextBead.id)
+      if (!selectedBead) {
+        throw new Error(`Failed to mark bead ${nextBead.id} as in progress`)
+      }
+      executingBead = selectedBead
+      activeBead = executingBead
 
-    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Executing bead ${executingBead.id}: ${executingBead.title}`, { source: 'system', modelId: codingModelId, beadId: executingBead.id })
+      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Executing bead ${executingBead.id}: ${executingBead.title}`, { source: 'system', modelId: codingModelId, beadId: executingBead.id })
 
-    // Record bead start commit for potential reset on context wipe
-    beadStartCommit = null
-    try {
-      beadStartCommit = await withCommandLoggingFieldsAsync({ beadId: executingBead.id }, async () => recordBeadStartCommit(paths.worktreePath))
-      const beadsWithCommit = readTicketBeads(ticketId).map(b =>
-        b.id === executingBead.id ? { ...b, beadStartCommit } : b)
-      writeTicketBeads(ticketId, beadsWithCommit)
-      activeBead = beadsWithCommit.find(bead => bead.id === executingBead.id) ?? activeBead
-    } catch (err) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not record bead start commit: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: executingBead.id })
+      // Record bead start commit for potential reset on context wipe
+      beadStartCommit = null
+      try {
+        beadStartCommit = await withCommandLoggingFieldsAsync({ beadId: executingBead.id }, async () => recordBeadStartCommit(paths.worktreePath))
+        const beadsWithCommit = readTicketBeads(ticketId).map(b =>
+          b.id === executingBead.id ? { ...b, beadStartCommit } : b)
+        writeTicketBeads(ticketId, beadsWithCommit)
+        activeBead = beadsWithCommit.find(bead => bead.id === executingBead.id) ?? activeBead
+        executingBead = activeBead ?? executingBead
+      } catch (err) {
+        emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not record bead start commit: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: executingBead.id })
+      }
     }
 
     throwIfAborted(signal, ticketId)

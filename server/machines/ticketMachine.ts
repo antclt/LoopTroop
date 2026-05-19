@@ -4,6 +4,45 @@ import { PROFILE_DEFAULTS } from '../db/defaults'
 
 type TicketInput = Partial<TicketContext>
 
+const BLOCKED_ERROR_RESUME_STATUSES = [
+  'DRAFT',
+  'SCANNING_RELEVANT_FILES',
+  'COUNCIL_DELIBERATING',
+  'COUNCIL_VOTING_INTERVIEW',
+  'COMPILING_INTERVIEW',
+  'WAITING_INTERVIEW_ANSWERS',
+  'VERIFYING_INTERVIEW_COVERAGE',
+  'WAITING_INTERVIEW_APPROVAL',
+  'DRAFTING_PRD',
+  'COUNCIL_VOTING_PRD',
+  'REFINING_PRD',
+  'VERIFYING_PRD_COVERAGE',
+  'WAITING_PRD_APPROVAL',
+  'DRAFTING_BEADS',
+  'COUNCIL_VOTING_BEADS',
+  'REFINING_BEADS',
+  'VERIFYING_BEADS_COVERAGE',
+  'EXPANDING_BEADS',
+  'WAITING_BEADS_APPROVAL',
+  'PRE_FLIGHT_CHECK',
+  'WAITING_EXECUTION_SETUP_APPROVAL',
+  'PREPARING_EXECUTION_ENV',
+  'CODING',
+  'RUNNING_FINAL_TEST',
+  'INTEGRATING_CHANGES',
+  'CREATING_PULL_REQUEST',
+  'WAITING_PR_REVIEW',
+  'CLEANING_ENV',
+] as const
+
+function buildBlockedErrorResumeTransitions() {
+  return BLOCKED_ERROR_RESUME_STATUSES.map((status) => ({
+    guard: ({ context }: { context: TicketContext }) => context.previousStatus === status,
+    target: status,
+    actions: ['clearError'] as const,
+  }))
+}
+
 export const ticketMachine = setup({
   types: {
     context: {} as TicketContext,
@@ -35,11 +74,17 @@ export const ticketMachine = setup({
         if (event.type === 'ERROR') return event.diagnostics ?? null
         return null
       },
+      blockedErrorResolution: () => null,
     }),
     clearError: assign({
       error: () => null,
       errorCodes: () => [] as string[],
       errorDiagnostics: () => null,
+      blockedErrorResolution: ({ event }) => {
+        if (event.type === 'CONTINUE') return 'CONTINUED' as const
+        if (event.type === 'RETRY') return 'RETRIED' as const
+        return null
+      },
     }),
     updateStatus: assign({
       previousStatus: ({ context }) => context.status,
@@ -75,6 +120,7 @@ export const ticketMachine = setup({
     error: null,
     errorCodes: [],
     errorDiagnostics: null,
+    blockedErrorResolution: null,
     beadProgress: { total: 0, completed: 0, current: null },
     iterationCount: 0,
     maxIterations: input.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
@@ -423,36 +469,8 @@ export const ticketMachine = setup({
         { type: 'updateStatus', params: { status: 'BLOCKED_ERROR' } },
       ],
       on: {
-        RETRY: [
-          { guard: ({ context }) => context.previousStatus === 'DRAFT', target: 'DRAFT', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'SCANNING_RELEVANT_FILES', target: 'SCANNING_RELEVANT_FILES', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'COUNCIL_DELIBERATING', target: 'COUNCIL_DELIBERATING', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'COUNCIL_VOTING_INTERVIEW', target: 'COUNCIL_VOTING_INTERVIEW', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'COMPILING_INTERVIEW', target: 'COMPILING_INTERVIEW', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'WAITING_INTERVIEW_ANSWERS', target: 'WAITING_INTERVIEW_ANSWERS', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'VERIFYING_INTERVIEW_COVERAGE', target: 'VERIFYING_INTERVIEW_COVERAGE', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'WAITING_INTERVIEW_APPROVAL', target: 'WAITING_INTERVIEW_APPROVAL', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'DRAFTING_PRD', target: 'DRAFTING_PRD', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'COUNCIL_VOTING_PRD', target: 'COUNCIL_VOTING_PRD', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'REFINING_PRD', target: 'REFINING_PRD', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'VERIFYING_PRD_COVERAGE', target: 'VERIFYING_PRD_COVERAGE', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'WAITING_PRD_APPROVAL', target: 'WAITING_PRD_APPROVAL', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'DRAFTING_BEADS', target: 'DRAFTING_BEADS', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'COUNCIL_VOTING_BEADS', target: 'COUNCIL_VOTING_BEADS', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'REFINING_BEADS', target: 'REFINING_BEADS', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'VERIFYING_BEADS_COVERAGE', target: 'VERIFYING_BEADS_COVERAGE', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'EXPANDING_BEADS', target: 'EXPANDING_BEADS', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'WAITING_BEADS_APPROVAL', target: 'WAITING_BEADS_APPROVAL', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'PRE_FLIGHT_CHECK', target: 'PRE_FLIGHT_CHECK', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'WAITING_EXECUTION_SETUP_APPROVAL', target: 'WAITING_EXECUTION_SETUP_APPROVAL', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'PREPARING_EXECUTION_ENV', target: 'PREPARING_EXECUTION_ENV', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'CODING', target: 'CODING', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'RUNNING_FINAL_TEST', target: 'RUNNING_FINAL_TEST', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'INTEGRATING_CHANGES', target: 'INTEGRATING_CHANGES', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'CREATING_PULL_REQUEST', target: 'CREATING_PULL_REQUEST', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'WAITING_PR_REVIEW', target: 'WAITING_PR_REVIEW', actions: ['clearError'] },
-          { guard: ({ context }) => context.previousStatus === 'CLEANING_ENV', target: 'CLEANING_ENV', actions: ['clearError'] },
-        ],
+        RETRY: buildBlockedErrorResumeTransitions(),
+        CONTINUE: buildBlockedErrorResumeTransitions(),
         CANCEL: { target: 'CANCELED' },
       },
     },

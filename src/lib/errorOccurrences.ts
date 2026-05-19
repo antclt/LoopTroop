@@ -11,7 +11,7 @@ export interface TicketErrorOccurrence {
   diagnostics?: BlockedErrorDiagnostics | null
   occurredAt: string
   resolvedAt: string | null
-  resolutionStatus: 'RETRIED' | 'CANCELED' | null
+  resolutionStatus: 'RETRIED' | 'CONTINUED' | 'CANCELED' | null
   resumedToStatus: string | null
 }
 
@@ -58,7 +58,9 @@ function normalizeErrorOccurrence(
     resolvedAt: typeof occurrence.resolvedAt === 'string' && occurrence.resolvedAt.length > 0
       ? occurrence.resolvedAt
       : null,
-    resolutionStatus: occurrence.resolutionStatus === 'RETRIED' || occurrence.resolutionStatus === 'CANCELED'
+    resolutionStatus: occurrence.resolutionStatus === 'RETRIED'
+      || occurrence.resolutionStatus === 'CONTINUED'
+      || occurrence.resolutionStatus === 'CANCELED'
       ? occurrence.resolutionStatus
       : null,
     resumedToStatus: typeof occurrence.resumedToStatus === 'string' && occurrence.resumedToStatus.length > 0
@@ -138,6 +140,9 @@ export function formatErrorOccurrenceLabel(occurrence: TicketErrorOccurrence, fa
 export function formatErrorOccurrenceStatus(occurrence: TicketErrorOccurrence): string {
   if (occurrence.resolutionStatus === 'RETRIED') {
     return occurrence.resumedToStatus ? `Retried to ${getStatusUserLabel(occurrence.resumedToStatus)}` : 'Retried'
+  }
+  if (occurrence.resolutionStatus === 'CONTINUED') {
+    return occurrence.resumedToStatus ? `Continued to ${getStatusUserLabel(occurrence.resumedToStatus)}` : 'Continued'
   }
   if (occurrence.resolutionStatus === 'CANCELED') return 'Canceled'
   if (occurrence.resolvedAt) return 'Resolved'
