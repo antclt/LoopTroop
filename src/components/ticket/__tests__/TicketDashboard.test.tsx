@@ -74,9 +74,13 @@ vi.mock('../ActiveWorkspace', () => ({
   ActiveWorkspace: ({
     ticket,
     selectedPhase,
+    selectedErrorOccurrenceId,
+    fullLogOpen,
   }: {
     ticket: Ticket
     selectedPhase: string
+    selectedErrorOccurrenceId?: string | null
+    fullLogOpen?: boolean
   }) => {
     const logCtx = useLogs()
     const logs = logCtx?.getLogsForPhase(selectedPhase) ?? []
@@ -84,6 +88,8 @@ vi.mock('../ActiveWorkspace', () => ({
     return (
       <div data-testid="active-workspace">
         <div>{selectedPhase}</div>
+        <div data-testid="workspace-full-log">{fullLogOpen ? 'open' : 'closed'}</div>
+        <div data-testid="workspace-error-id">{selectedErrorOccurrenceId ?? ''}</div>
         <div data-testid="workspace-log-count">{logs.length}</div>
         {logs.map((entry) => (
           <div key={entry.entryId}>{entry.line}</div>
@@ -101,26 +107,32 @@ vi.mock('../NavigatorPanel', () => ({
     currentStatus,
     selectedPhase,
     selectedErrorOccurrenceId,
+    fullLogOpen,
     onSelectPhase,
     onSelectErrorOccurrence,
+    onOpenFullLog,
     contextPhase,
   }: {
     currentStatus: string
     selectedPhase: string
     selectedErrorOccurrenceId?: string | null
+    fullLogOpen?: boolean
     onSelectPhase: (phase: string | null) => void
     onSelectErrorOccurrence: (occurrenceId: string | null) => void
+    onOpenFullLog?: () => void
     contextPhase: string
   }) => (
     <div>
       <div data-testid="navigator-current">{currentStatus}</div>
       <div data-testid="navigator-selected">{selectedPhase}</div>
       <div data-testid="navigator-error">{selectedErrorOccurrenceId ?? ''}</div>
+      <div data-testid="navigator-full-log">{fullLogOpen ? 'open' : 'closed'}</div>
       <div data-testid="navigator-context">{contextPhase}</div>
       <button onClick={() => onSelectPhase('DRAFT')}>Select backlog</button>
       <button onClick={() => onSelectPhase('DRAFTING_PRD')}>Select drafting</button>
       <button onClick={() => onSelectErrorOccurrence('error-1')}>Select error</button>
-      {(selectedPhase !== currentStatus || Boolean(selectedErrorOccurrenceId)) && (
+      <button onClick={onOpenFullLog}>Open full log</button>
+      {(selectedPhase !== currentStatus || Boolean(selectedErrorOccurrenceId) || fullLogOpen) && (
         <button onClick={() => onSelectPhase(null)}>Back to live</button>
       )}
     </div>
@@ -724,6 +736,64 @@ describe('TicketDashboard', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/competing PRD drafts\./)).toBeInTheDocument()
+    })
+  })
+
+  it('leaves full log mode when selecting an error occurrence', async () => {
+    const initialTicket = makeTicket({
+      status: 'CODING',
+      id: selectedTicketId,
+      hasPastErrors: true,
+      errorOccurrences: [
+        {
+          id: 'error-1',
+          occurrenceNumber: 1,
+          blockedFromStatus: 'CODING',
+          errorMessage: 'Implementation failed.',
+          errorCodes: [],
+          occurredAt: '2026-05-04T10:00:00.000Z',
+          resolvedAt: '2026-05-04T10:01:00.000Z',
+          resolutionStatus: 'RETRIED',
+          resumedToStatus: 'CODING',
+        },
+      ],
+    })
+
+    queryClient.setQueryData(['ticket', selectedTicketId], initialTicket)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${selectedTicketId}/logs`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}`)) {
+        return createJsonResponse(initialTicket)
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-full-log')).toHaveTextContent('closed')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open full log' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('navigator-full-log')).toHaveTextContent('open')
+      expect(screen.getByTestId('workspace-full-log')).toHaveTextContent('open')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Select error' }))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('navigator-full-log')).toHaveTextContent('closed')
+      expect(screen.getByTestId('workspace-full-log')).toHaveTextContent('closed')
+      expect(screen.getByTestId('workspace-error-id')).toHaveTextContent('error-1')
     })
   })
 

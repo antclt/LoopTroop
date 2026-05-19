@@ -282,6 +282,7 @@ export function TicketDashboard() {
     setErrorSelection({ ticketId, occurrenceId })
     if (occurrenceId != null) {
       setPhaseSelection({ ticketId: null, phase: null })
+      setFullLogOpen(false)
     }
   }, [ticketId])
   const handleLiveStatusChange = useCallback(({ status, previousStatus }: { status: string; previousStatus?: string }) => {

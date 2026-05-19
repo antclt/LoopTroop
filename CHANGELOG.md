@@ -12,6 +12,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
+- Fixed error navigation from Full Log so selecting an error opens its review view.
 
 ### Detailed Changes
 
@@ -36,6 +37,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Fixed
 - ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.
+- Selecting an error from the navigator while Full Log is open now exits full-log mode and opens the error review.
 
 ## [0.2.0] - 2026-05-12
 

@@ -39,7 +39,7 @@ In development, same-origin `/api/*` calls go through the Vite proxy. When `npm 
 Additional routing rules:
 
 - historical phases usually render through `PhaseReviewView`
-- `fullLogOpen` forces `FullLogView`
+- `fullLogOpen` forces `FullLogView` until the user selects another phase or error occurrence
 - reviewable past coding still uses `CodingView` in read-only mode
 - active or selected error occurrences render `ErrorView`
 
@@ -52,6 +52,7 @@ Additional routing rules:
 - `ApprovalNavigator` for interview, PRD, and beads approval context
 - `ContextTree` for context visibility
 - a full-log toggle that opens `FullLogView`
+- error occurrence selection exits full-log mode and opens `ErrorView` for the selected failure
 
 That split matters because the workspace is designed for both live work and historical review.
 
