@@ -96,13 +96,13 @@ npm install
 
 ## 4. Starting the Application
 
-The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. Its preflight restores missing local dependencies when needed, checks LoopTroop-owned ports, and runs daily maintenance for direct dependencies, npm audit remediation, and the OpenCode CLI. Direct npm dependency sync only installs stable releases that are newer than the current version and at least 7 days old; if npm `latest` is too fresh, LoopTroop installs the newest eligible older release instead. Audit remediation previews the proposed lockfile first and holds the whole fix when any proposed npm package version is still inside the same 7-day delay. Normal startup now summarizes maintenance once, including held dependency and audit package counts; set `LOOPTROOP_DEV_VERBOSE=1` when you need held package names, next eligible times, audit notes, raw npm output, socket snapshots, and the full service plan. OpenCode updates are exempt from that release-age delay. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures newly started local services with ephemeral credentials and an ephemeral API token when you have not configured your own. The API token is wired into the backend and Vite dev proxy, not embedded into the frontend bundle.
+The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. Its preflight restores missing local dependencies when needed, checks LoopTroop-owned ports, and runs daily maintenance for direct dependencies, npm audit remediation, and the OpenCode CLI. Direct npm dependency sync only installs stable releases that are newer than the current version and at least 7 days old; if npm `latest` is too fresh, LoopTroop installs the newest eligible older release instead. Audit remediation previews the proposed lockfile first and holds the whole fix when any proposed npm package version is still inside the same 7-day delay. Normal startup now summarizes maintenance once, including each updated package with its previous and new version, plus held dependency and audit releases with their next eligibility time. OpenCode updates are exempt from that release-age delay. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures newly started local services with ephemeral credentials and an ephemeral API token when you have not configured your own. The API token is wired into the backend and Vite dev proxy, not embedded into the frontend bundle.
 
 ```bash
 npm run dev
 ```
 
-For non-mutating startup, forced maintenance, verbose startup output, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
+For non-mutating startup, forced maintenance, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
 
 By default, the services run on these ports:
 

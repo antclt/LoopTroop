@@ -6,7 +6,6 @@ import {
 } from './dev-maintenance'
 
 const report = upgradeOpenCodeCli({
-  verbose: process.env.LOOPTROOP_DEV_VERBOSE === '1',
   skip: process.env.LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE === '1',
   logPrefix: 'opencode:upgrade',
 })

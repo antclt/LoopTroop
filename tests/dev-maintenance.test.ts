@@ -7,8 +7,10 @@ import {
   collectLockfilePackageUpdates,
   decideDailyMaintenanceTask,
   evaluatePackageVersionReleaseAge,
+  formatDependencyUpdateReleaseDetail,
   formatHeldAuditPackageUpdate,
   formatHeldDependencyReleaseDetail,
+  getDependencyUpdateReleaseDetails,
   getHeldAuditPackageReleaseDetails,
   getHeldDependencyReleaseDetails,
   recordDailyMaintenanceSuccess,
@@ -229,6 +231,34 @@ describe('audit lockfile age gating', () => {
 })
 
 describe('held dependency detail formatting', () => {
+  it('lists updated direct dependencies with package type and version movement', () => {
+    const details = getDependencyUpdateReleaseDetails({
+      updatedDependencies: ['alpha'],
+      updatedDevDependencies: ['beta'],
+      updatedDependencyDetails: [
+        {
+          name: 'alpha',
+          current: '1.0.0',
+          target: '1.1.0',
+          bypassedAgeGate: false,
+        },
+      ],
+      updatedDevDependencyDetails: [
+        {
+          name: 'beta',
+          current: '2.0.0',
+          target: '2.1.0',
+          bypassedAgeGate: false,
+        },
+      ],
+    })
+
+    expect(details.map(formatDependencyUpdateReleaseDetail)).toEqual([
+      'updated runtime dependency alpha 1.0.0 -> 1.1.0',
+      'updated dev dependency beta 2.0.0 -> 2.1.0',
+    ])
+  })
+
   it('lists held direct dependencies with package type, versions, and eligibility time', () => {
     const details = getHeldDependencyReleaseDetails({
       heldDependencies: [
@@ -251,8 +281,8 @@ describe('held dependency detail formatting', () => {
     })
 
     expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
-      'held runtime dependency alpha current=1.0.0 latest=1.1.0; until 2026-05-15T00:00:00.000Z',
-      'held dev dependency beta current=2.0.0 latest=2.1.0; until npm publish metadata can be verified',
+      'held runtime dependency alpha 1.0.0 -> 1.1.0; until 2026-05-15T00:00:00.000Z',
+      'held dev dependency beta 2.0.0 -> 2.1.0; until npm publish metadata can be verified',
     ])
   })
 
@@ -268,7 +298,7 @@ describe('held dependency detail formatting', () => {
     ])
 
     expect(details.map(formatHeldAuditPackageUpdate)).toEqual([
-      'held audit fix beta@2.1.0 current=2.0.0; until 2026-05-16T00:00:00.000Z',
+      'held audit fix beta 2.0.0 -> 2.1.0; until 2026-05-16T00:00:00.000Z',
     ])
   })
 })

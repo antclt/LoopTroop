@@ -1,5 +1,7 @@
 import {
+  formatAuditPackageUpdate,
   formatHeldAuditPackageUpdate,
+  getAuditPackageUpdateDetails,
   getHeldAuditPackageReleaseDetails,
   readDailyMaintenanceState,
   recordDailyMaintenanceSuccess,
@@ -8,7 +10,6 @@ import {
 } from './dev-maintenance'
 
 const report = remediateAudit({
-  verbose: process.env.LOOPTROOP_DEV_VERBOSE === '1',
   skip: process.env.LOOPTROOP_DEV_SKIP_DEPS === '1',
 })
 
@@ -27,6 +28,9 @@ if (report.fixHeld) {
   }
 } else if (report.fixChanged) {
   console.log('[audit:remediate] npm audit fix updated the dependency graph.')
+  for (const update of getAuditPackageUpdateDetails(report.appliedPackageUpdates)) {
+    console.log(`[audit:remediate] - ${formatAuditPackageUpdate(update)}`)
+  }
 } else {
   console.log('[audit:remediate] npm audit fix made no dependency changes.')
 }

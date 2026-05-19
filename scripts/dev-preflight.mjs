@@ -23,7 +23,6 @@ const binExtension = process.platform === 'win32' ? '.cmd' : ''
 const tsxBin = resolve(repoRoot, 'node_modules', '.bin', `tsx${binExtension}`)
 const installStamp = resolve(repoRoot, 'node_modules', '.package-lock.json')
 const npmInstallFlags = ['--no-fund', '--no-audit']
-const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
 const trackedManifests = [
   resolve(repoRoot, 'package.json'),
   resolve(repoRoot, 'package-lock.json'),
@@ -78,7 +77,7 @@ if (reasons.length > 0) {
   const result = spawnSync(npmCommand, ['install', ...npmInstallFlags], {
     cwd: repoRoot,
     encoding: 'utf8',
-    stdio: isVerboseLogging ? 'inherit' : 'pipe',
+    stdio: 'pipe',
     windowsHide: true,
   })
 

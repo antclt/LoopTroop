@@ -4,8 +4,12 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getFrontendPort } from '../shared/appConfig'
 import {
+  formatAuditPackageUpdate,
+  formatDependencyUpdateReleaseDetail,
   formatHeldAuditPackageUpdate,
   formatHeldDependencyReleaseDetail,
+  getAuditPackageUpdateDetails,
+  getDependencyUpdateReleaseDetails,
   getHeldAuditPackageReleaseDetails,
   getHeldDependencyReleaseDetails,
   readDevPreflightReport,
@@ -20,7 +24,6 @@ const requestedBaseUrl = process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim() || DEFA
 const hasExplicitBaseUrl = Boolean(process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim())
 const childEnv = { ...process.env }
 const preflightReport = readDevPreflightReport()
-const isVerboseLogging = process.env.LOOPTROOP_DEV_VERBOSE === '1'
 let shutdownSignal: NodeJS.Signals | null = null
 let shutdownStartedAtMs: number | null = null
 
@@ -112,9 +115,29 @@ function getHeldDependencyCount(report: DependencySyncReport) {
   return (report.heldDependencies?.length ?? 0) + (report.heldDevDependencies?.length ?? 0)
 }
 
+function getUpdatedRuntimeDependencyCount(report: DependencySyncReport) {
+  return report.updatedDependencyDetails?.length ?? report.updatedDependencies?.length ?? 0
+}
+
+function getUpdatedDevDependencyCount(report: DependencySyncReport) {
+  return report.updatedDevDependencyDetails?.length ?? report.updatedDevDependencies?.length ?? 0
+}
+
+function printDependencyUpdateDetails(report: DependencySyncReport) {
+  for (const update of getDependencyUpdateReleaseDetails(report)) {
+    console.log(`[dev]   - ${formatDependencyUpdateReleaseDetail(update)}`)
+  }
+}
+
 function printHeldDependencyDetails(report: DependencySyncReport) {
   for (const held of getHeldDependencyReleaseDetails(report)) {
     console.log(`[dev]   - ${formatHeldDependencyReleaseDetail(held)}`)
+  }
+}
+
+function printAuditPackageUpdateDetails(report: NonNullable<ReturnType<typeof readDevPreflightReport>>['audit']) {
+  for (const update of getAuditPackageUpdateDetails(report.appliedPackageUpdates ?? [])) {
+    console.log(`[dev]   - ${formatAuditPackageUpdate(update)}`)
   }
 }
 
@@ -124,12 +147,14 @@ function printHeldAuditDetails(report: NonNullable<ReturnType<typeof readDevPref
   }
 }
 
-function formatVerboseDetailHint(detailCount: number, detailLabel = 'details') {
-  if (isVerboseLogging || detailCount <= 0) {
-    return ''
+function printAuditIssueDetails(report: NonNullable<ReturnType<typeof readDevPreflightReport>>['audit']) {
+  const visibleIssues = report.unresolved.slice(0, 5)
+  for (const issue of visibleIssues) {
+    console.log(`[dev]   - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
   }
-
-  return ` Set LOOPTROOP_DEV_VERBOSE=1 for ${detailLabel}.`
+  if (report.unresolved.length > visibleIssues.length) {
+    console.log(`[dev]   - ${report.unresolved.length - visibleIssues.length} more audit finding(s); run npm run audit:remediate for full details.`)
+  }
 }
 
 const services: DevService[] = [
@@ -203,34 +228,37 @@ if (preflightReport) {
   } else if (preflightReport.dependencySync.alreadyCurrent) {
     printSummaryLine('Dependencies', 'All direct dependencies already matched npm latest stable')
   } else if (
-    preflightReport.dependencySync.updatedDependencies.length === 0 &&
-    preflightReport.dependencySync.updatedDevDependencies.length === 0 &&
+    getUpdatedRuntimeDependencyCount(preflightReport.dependencySync) === 0 &&
+    getUpdatedDevDependencyCount(preflightReport.dependencySync) === 0 &&
     getHeldDependencyCount(preflightReport.dependencySync) > 0
   ) {
     const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
     printSummaryLine(
       'Dependencies',
-      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} inside the 7-day delay.` +
-      formatVerboseDetailHint(heldCount, 'held release details'),
+      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} inside the 7-day delay.`,
     )
   } else {
     const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
+    const runtimeCount = getUpdatedRuntimeDependencyCount(preflightReport.dependencySync)
+    const devCount = getUpdatedDevDependencyCount(preflightReport.dependencySync)
     printSummaryLine(
       'Dependencies',
-      `Updated ${preflightReport.dependencySync.updatedDependencies.length} runtime and ` +
-      `${preflightReport.dependencySync.updatedDevDependencies.length} dev packages to eligible releases` +
+      `Updated ${runtimeCount} runtime and ` +
+      `${devCount} dev packages to eligible releases` +
       (heldCount > 0 ? `; held ${heldCount}` : '') +
       (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : '') +
-      '.' +
-      formatVerboseDetailHint(heldCount, 'held release details'),
+      '.',
     )
   }
   if (
-    isVerboseLogging &&
     !preflightReport.dependencySync.skipped &&
     !preflightReport.dependencySync.deferred &&
-    getHeldDependencyCount(preflightReport.dependencySync) > 0
+    (
+      getDependencyUpdateReleaseDetails(preflightReport.dependencySync).length > 0 ||
+      getHeldDependencyCount(preflightReport.dependencySync) > 0
+    )
   ) {
+    printDependencyUpdateDetails(preflightReport.dependencySync)
     printHeldDependencyDetails(preflightReport.dependencySync)
   }
 
@@ -246,39 +274,29 @@ if (preflightReport) {
     printSummaryLine(
       'Audit',
       `Held remediation; ${heldCount} proposed ` +
-      `${heldCount === 1 ? 'release is' : 'releases are'} inside the 7-day delay.` +
-      formatVerboseDetailHint(heldCount, 'held audit release details'),
+      `${heldCount === 1 ? 'release is' : 'releases are'} inside the 7-day delay.`,
     )
   } else if (preflightReport.audit.unresolved.length === 0) {
-    printSummaryLine('Audit', 'No remaining npm audit findings after remediation')
+    if (preflightReport.audit.fixChanged) {
+      printSummaryLine('Audit', 'npm audit fix updated the dependency graph; no remaining npm audit findings')
+    } else {
+      printSummaryLine('Audit', 'No remaining npm audit findings after remediation')
+    }
   } else {
     printSummaryLine(
       'Audit',
       `${preflightReport.audit.totals.total} remaining finding(s): ` +
-      `high=${preflightReport.audit.totals.high}, moderate=${preflightReport.audit.totals.moderate}.` +
-      formatVerboseDetailHint(preflightReport.audit.unresolved.length, 'audit finding details'),
+      `high=${preflightReport.audit.totals.high}, moderate=${preflightReport.audit.totals.moderate}.`,
     )
-    if (isVerboseLogging) {
-      for (const issue of preflightReport.audit.unresolved.slice(0, 3)) {
-        console.log(`[dev]   - ${issue.name} (${issue.severity})${issue.note ? `: ${issue.note}` : ''}`)
-      }
+    printAuditIssueDetails(preflightReport.audit)
+  }
+  if (!preflightReport.audit.skipped && !preflightReport.audit.deferred) {
+    if (preflightReport.audit.fixHeld) {
+      printHeldAuditDetails(preflightReport.audit)
+    } else if (preflightReport.audit.fixChanged) {
+      printAuditPackageUpdateDetails(preflightReport.audit)
     }
   }
-  if (isVerboseLogging && !preflightReport.audit.skipped && !preflightReport.audit.deferred && preflightReport.audit.fixHeld) {
-    printHeldAuditDetails(preflightReport.audit)
-  }
-}
-
-if (isVerboseLogging) {
-  printDivider('Service Plan')
-  console.log('[dev] Step 1        Preflight checks already completed before this launcher started.')
-  console.log('[dev]               Purpose: install missing packages, validate ports, and run daily dependency/audit/OpenCode maintenance.')
-
-  services.forEach((service, index) => {
-    const stepNumber = index + 2
-    console.log(`[dev] Step ${String(stepNumber).padEnd(8)} ${service.name}  ${service.displayCommand}`)
-    console.log(`[dev]               Purpose: ${service.description}`)
-  })
 }
 
 printDivider('Live Services')

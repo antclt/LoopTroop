@@ -6,7 +6,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Summary
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
-- Made `npm run dev` startup maintenance output summarize once by default, with held package details available in verbose mode.
+- Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 
 ### Detailed Changes
 
@@ -17,7 +17,8 @@ All notable changes to LoopTroop will be documented in this file.
 ### Changed
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
-- Development maintenance output now renders a single default startup summary instead of repeating preflight details, summarizing held direct dependency and audit package counts while keeping package-level names and eligibility times available through `LOOPTROOP_DEV_VERBOSE=1`.
+- Development maintenance output now renders a single default startup summary with package-level dependency update details, held direct dependency details, and held audit remediation eligibility times.
+- Removed the separate verbose dev-startup mode so dependency maintenance details appear in normal `npm run dev` output.
 - The `npm run dev` startup summary now prints the docs URL once instead of repeating its port as a suffix.
 
 ### Fixed
@@ -52,7 +53,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Performance
 - OpenCode text/reasoning live AI detail updates now use a 10ms live cadence with no large-growth bypass, making thinking/model output feel closer to tool-call responsiveness while keeping streaming upserts out of persisted log files until a final row is emitted.
-- `npm run dev` startup logs are quieter by default: held dependency/audit details, raw npm install output, socket snapshots, and the full service plan now require `LOOPTROOP_DEV_VERBOSE=1`.
+- `npm run dev` startup logs are quieter by default while preserving dependency/audit summaries in the normal startup output.
 - Dev port inspection now avoids `netstat` unless earlier inspectors cannot identify the listener, removing noisy platform warnings during normal startup while preserving fallback diagnostics in verbose mode.
 - `contextCache` in `contextBuilder.ts` now evicts stale entries on cache misses, preventing unbounded accumulation in long-running processes.
 - `persistedFingerprintsByTicket` map capped at 100 entries to prevent unbounded memory growth.

@@ -10,7 +10,6 @@ import { getProjectContextById, listProjects } from './storage/projects'
 import { findTicketRefByLocalId, getTicketPaths, listTickets } from './storage/tickets'
 import {
   formatStartupStorageSummary,
-  getStartupStateDebugLine,
   initializeStartupState,
 } from './startupState'
 import { fixTrailingLineCorruption, recoverOrphanTmpFiles } from './io/recovery'
@@ -50,9 +49,6 @@ export async function startupSequence(): Promise<void> {
 
   const startupStatus = initializeStartupState()
   console.log(`[startup] ${formatStartupStorageSummary(startupStatus.storage)}`)
-  if (process.env.LOOPTROOP_DEV_VERBOSE === '1') {
-    console.log(`[startup] ${getStartupStateDebugLine()}`)
-  }
 
   console.log('[startup] Step 2: Recover ticket runtime artifacts')
   const recovery = recoverTicketRuntimeArtifacts()

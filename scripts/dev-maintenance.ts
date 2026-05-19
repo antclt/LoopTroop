@@ -52,10 +52,20 @@ export interface DependencySyncReport {
   errors: string[]
   updatedDependencies: string[]
   updatedDevDependencies: string[]
+  updatedDependencyDetails: DependencyUpdateDetail[]
+  updatedDevDependencyDetails: DependencyUpdateDetail[]
   heldDependencies: HeldDependencyUpdate[]
   heldDevDependencies: HeldDependencyUpdate[]
   lastCompletedAt?: string
   nextEligibleAt?: string
+}
+
+export interface DependencyUpdateDetail {
+  name: string
+  current: string
+  target: string
+  targetPublishedAt?: string
+  bypassedAgeGate: boolean
 }
 
 export interface HeldDependencyUpdate {
@@ -96,6 +106,7 @@ export interface AuditRemediationReport {
   didFixRun: boolean
   fixChanged: boolean
   fixHeld: boolean
+  appliedPackageUpdates: LockfilePackageUpdate[]
   heldPackageUpdates: HeldAuditPackageUpdate[]
   unresolved: AuditIssue[]
   totals: AuditTotals
@@ -113,6 +124,10 @@ export interface HeldAuditPackageUpdate {
 }
 
 export interface HeldDependencyReleaseDetail extends HeldDependencyUpdate {
+  dependencyType: 'runtime' | 'dev'
+}
+
+export interface DependencyReleaseUpdateDetail extends DependencyUpdateDetail {
   dependencyType: 'runtime' | 'dev'
 }
 
@@ -155,6 +170,14 @@ function compareHeldReleaseDetails(left: { name: string; nextEligibleAt?: string
   return left.name.localeCompare(right.name)
 }
 
+function compareDependencyReleaseDetails(left: { dependencyType: 'runtime' | 'dev'; name: string }, right: { dependencyType: 'runtime' | 'dev'; name: string }) {
+  if (left.dependencyType !== right.dependencyType) {
+    return left.dependencyType === 'runtime' ? -1 : 1
+  }
+
+  return left.name.localeCompare(right.name)
+}
+
 function formatHeldReleaseTiming(
   reason: HeldDependencyUpdate['reason'] | HeldAuditPackageUpdate['reason'],
   nextEligibleAt?: string,
@@ -186,12 +209,43 @@ export function getHeldDependencyReleaseDetails(
   ].sort(compareHeldReleaseDetails)
 }
 
+export function getDependencyUpdateReleaseDetails(
+  report: Pick<
+    DependencySyncReport,
+    'updatedDependencyDetails' | 'updatedDevDependencyDetails' | 'updatedDependencies' | 'updatedDevDependencies'
+  >,
+): DependencyReleaseUpdateDetail[] {
+  const runtimeUpdates = report.updatedDependencyDetails?.length
+    ? report.updatedDependencyDetails
+    : (report.updatedDependencies ?? []).map((name) => ({
+      name,
+      current: 'unknown',
+      target: 'unknown',
+      bypassedAgeGate: false,
+    }))
+  const devUpdates = report.updatedDevDependencyDetails?.length
+    ? report.updatedDevDependencyDetails
+    : (report.updatedDevDependencies ?? []).map((name) => ({
+      name,
+      current: 'unknown',
+      target: 'unknown',
+      bypassedAgeGate: false,
+    }))
+
+  return [
+    ...runtimeUpdates.map((update) => ({ ...update, dependencyType: 'runtime' as const })),
+    ...devUpdates.map((update) => ({ ...update, dependencyType: 'dev' as const })),
+  ].sort(compareDependencyReleaseDetails)
+}
+
+export function formatDependencyUpdateReleaseDetail(detail: DependencyReleaseUpdateDetail) {
+  return `updated ${detail.dependencyType} dependency ${detail.name} ${detail.current} -> ${detail.target}`
+}
+
 export function formatHeldDependencyReleaseDetail(detail: HeldDependencyReleaseDetail) {
-  const versions = [
-    detail.current ? `current=${detail.current}` : '',
-    detail.latest ? `latest=${detail.latest}` : '',
-  ].filter(Boolean)
-  const versionSuffix = versions.length > 0 ? ` ${versions.join(' ')}` : ''
+  const versionSuffix = detail.current || detail.latest
+    ? ` ${detail.current ?? 'unknown'} -> ${detail.latest ?? 'unknown'}`
+    : ''
 
   return `held ${detail.dependencyType} dependency ${detail.name}${versionSuffix}; ${formatHeldReleaseTiming(
     detail.reason,
@@ -203,11 +257,27 @@ export function getHeldAuditPackageReleaseDetails(updates: HeldAuditPackageUpdat
   return [...updates].sort(compareHeldReleaseDetails)
 }
 
-export function formatHeldAuditPackageUpdate(update: HeldAuditPackageUpdate) {
-  const targetSuffix = update.version ? `@${update.version}` : ''
-  const currentSuffix = update.currentVersion ? ` current=${update.currentVersion}` : ''
+export function getAuditPackageUpdateDetails(updates: LockfilePackageUpdate[]) {
+  return [...updates].sort((left, right) => {
+    const nameDelta = left.name.localeCompare(right.name)
+    return nameDelta !== 0 ? nameDelta : left.version.localeCompare(right.version)
+  })
+}
 
-  return `held audit fix ${update.name}${targetSuffix}${currentSuffix}; ${formatHeldReleaseTiming(
+export function formatAuditPackageUpdate(update: LockfilePackageUpdate) {
+  if (update.currentVersion) {
+    return `audit fix ${update.name} ${update.currentVersion} -> ${update.version}`
+  }
+
+  return `audit fix ${update.name} -> ${update.version}`
+}
+
+export function formatHeldAuditPackageUpdate(update: HeldAuditPackageUpdate) {
+  const versionSuffix = update.currentVersion || update.version
+    ? ` ${update.currentVersion ?? 'unknown'} -> ${update.version ?? 'unknown'}`
+    : ''
+
+  return `held audit fix ${update.name}${versionSuffix}; ${formatHeldReleaseTiming(
     update.reason,
     update.nextEligibleAt,
   )}`
@@ -1081,6 +1151,16 @@ function formatDependencyUpdateSpecs(updates: DependencyUpdatePlan[]) {
   return updates.map((update) => `${update.name}@${update.targetVersion}`)
 }
 
+function buildDependencyUpdateDetails(updates: DependencyUpdatePlan[]): DependencyUpdateDetail[] {
+  return updates.map((update) => ({
+    name: update.name,
+    current: update.current,
+    target: update.targetVersion,
+    targetPublishedAt: update.targetPublishedAt,
+    bypassedAgeGate: update.bypassedAgeGate,
+  }))
+}
+
 export function syncDirectDependencies(
   { verbose = false, skip = false }: { verbose?: boolean; skip?: boolean } = {},
 ): DependencySyncReport {
@@ -1094,6 +1174,8 @@ export function syncDirectDependencies(
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      updatedDependencyDetails: [],
+      updatedDevDependencyDetails: [],
       heldDependencies: [],
       heldDevDependencies: [],
     }
@@ -1110,6 +1192,8 @@ export function syncDirectDependencies(
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      updatedDependencyDetails: [],
+      updatedDevDependencyDetails: [],
       heldDependencies: [],
       heldDevDependencies: [],
     }
@@ -1127,6 +1211,8 @@ export function syncDirectDependencies(
       errors: message ? [`Unable to parse npm outdated output: ${message}`] : [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      updatedDependencyDetails: [],
+      updatedDevDependencyDetails: [],
       heldDependencies: [],
       heldDevDependencies: [],
     }
@@ -1137,6 +1223,8 @@ export function syncDirectDependencies(
   const devPlan = planDependencyUpdates(outdated, manifest.devDependencies, { verbose })
   const updatedDependencies = runtimePlan.updates.map((update) => update.name)
   const updatedDevDependencies = devPlan.updates.map((update) => update.name)
+  const updatedDependencyDetails = buildDependencyUpdateDetails(runtimePlan.updates)
+  const updatedDevDependencyDetails = buildDependencyUpdateDetails(devPlan.updates)
   const heldDependencies = runtimePlan.held
   const heldDevDependencies = devPlan.held
 
@@ -1155,6 +1243,8 @@ export function syncDirectDependencies(
       errors: [],
       updatedDependencies: [],
       updatedDevDependencies: [],
+      updatedDependencyDetails: [],
+      updatedDevDependencyDetails: [],
       heldDependencies: [],
       heldDevDependencies: [],
     }
@@ -1202,6 +1292,8 @@ export function syncDirectDependencies(
     errors,
     updatedDependencies,
     updatedDevDependencies,
+    updatedDependencyDetails,
+    updatedDevDependencyDetails,
     heldDependencies,
     heldDevDependencies,
   }
@@ -1217,6 +1309,7 @@ export function remediateAudit(
       didFixRun: false,
       fixChanged: false,
       fixHeld: false,
+      appliedPackageUpdates: [],
       heldPackageUpdates: [],
       unresolved: [],
       totals: emptyTotals(),
@@ -1227,6 +1320,7 @@ export function remediateAudit(
   const lockContentsBefore = readFileIfPresent(packageLockPath)
   const errors: string[] = []
   const heldPackageUpdates: HeldAuditPackageUpdate[] = []
+  let appliedPackageUpdates: LockfilePackageUpdate[] = []
   let didFixRun = false
   let fixHeld = false
 
@@ -1248,6 +1342,7 @@ export function remediateAudit(
         fixHeld = heldPackageUpdates.length > 0
 
         if (!fixHeld) {
+          appliedPackageUpdates = lockfileUpdates.updates
           try {
             didFixRun = true
             runCommand(['audit', 'fix'], 'npm audit fix', { verbose })
@@ -1287,6 +1382,7 @@ export function remediateAudit(
     didFixRun,
     fixChanged,
     fixHeld,
+    appliedPackageUpdates,
     heldPackageUpdates,
     unresolved: summarizeAuditIssues(auditJson?.vulnerabilities),
     totals: auditJson?.metadata?.vulnerabilities ?? emptyTotals(),

@@ -1,6 +1,8 @@
 import {
   ensureInstallIfNeeded,
+  formatDependencyUpdateReleaseDetail,
   formatHeldDependencyReleaseDetail,
+  getDependencyUpdateReleaseDetails,
   getHeldDependencyReleaseDetails,
   getMissingBins,
   readDailyMaintenanceState,
@@ -9,8 +11,7 @@ import {
   writeDailyMaintenanceState,
 } from './dev-maintenance'
 
-const verbose = process.env.LOOPTROOP_DEV_VERBOSE === '1'
-const install = ensureInstallIfNeeded({ verbose, allowForceFallback: true })
+const install = ensureInstallIfNeeded({ allowForceFallback: true })
 if (install.errors.length > 0) {
   for (const error of install.errors) {
     console.error(`[deps:sync] ${error}`)
@@ -18,7 +19,7 @@ if (install.errors.length > 0) {
   process.exit(1)
 }
 
-const report = syncDirectDependencies({ verbose, skip: process.env.LOOPTROOP_DEV_SKIP_DEPS === '1' })
+const report = syncDirectDependencies({ skip: process.env.LOOPTROOP_DEV_SKIP_DEPS === '1' })
 if (report.skipped) {
   console.log('[deps:sync] Skipped direct dependency sync because LOOPTROOP_DEV_SKIP_DEPS=1.')
   process.exit(0)
@@ -49,6 +50,9 @@ if (report.alreadyCurrent) {
     `${report.updatedDevDependencies.length} dev dependencies to eligible stable releases` +
     (heldCount > 0 ? `; held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'}.` : '.'),
   )
+  for (const update of getDependencyUpdateReleaseDetails(report)) {
+    console.log(`[deps:sync] - ${formatDependencyUpdateReleaseDetail(update)}`)
+  }
   for (const held of getHeldDependencyReleaseDetails(report)) {
     console.log(`[deps:sync] - ${formatHeldDependencyReleaseDetail(held)}`)
   }
