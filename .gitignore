@@ -53,7 +53,7 @@ Thumbs.db
 .roomodes
 *.aider*
 *.bak
-AGENT_*
+AGENTS.md
 CLAUDE.md
 GEMINI.md
 
