@@ -5,6 +5,7 @@ import {
 } from '@shared/errorCodes'
 import {
   appendBlockedErrorDiagnosticsSummary,
+  attachOpenCodeBlockedErrorDiagnostics,
   buildOpenCodeBlockedErrorDiagnostics,
 } from '../blockedErrorDiagnostics'
 
@@ -130,5 +131,52 @@ describe('OpenCode blocked error diagnostics', () => {
 
     expect(message).toContain('Relevant files scan failed validation')
     expect(message).toContain('Underlying OpenCode error: rate_limit_error')
+  })
+
+  it('classifies usage-limit retry messages captured from OpenCode session status events', () => {
+    const result = buildOpenCodeBlockedErrorDiagnostics({
+      modelId: 'openai/gpt-5.2',
+      sessionId: 'ses-usage-limit',
+      fallbackMessage: 'The usage limit has been reached',
+    })
+
+    expect(result.errorCodes).toEqual([OPENCODE_PROVIDER_ERROR])
+    expect(result.diagnostics).toMatchObject({
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'The usage limit has been reached',
+      modelId: 'openai/gpt-5.2',
+      sessionId: 'ses-usage-limit',
+    })
+  })
+
+  it('preserves attached diagnostics when a higher-level wrapper error is normalized later', () => {
+    const wrapper = attachOpenCodeBlockedErrorDiagnostics(
+      new Error('Coverage output failed validation after 1 structured retry attempt(s): empty'),
+      {
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'The usage limit has been reached',
+          modelId: 'openai/gpt-5.2',
+          sessionId: 'ses-usage-limit',
+        },
+        errorCodes: [OPENCODE_PROVIDER_ERROR],
+      },
+    )
+
+    const result = buildOpenCodeBlockedErrorDiagnostics({
+      error: wrapper,
+      fallbackMessage: wrapper.message,
+    })
+
+    expect(result.errorCodes).toEqual([OPENCODE_PROVIDER_ERROR])
+    expect(result.diagnostics).toMatchObject({
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'The usage limit has been reached',
+      modelId: 'openai/gpt-5.2',
+      sessionId: 'ses-usage-limit',
+    })
   })
 })

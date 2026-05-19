@@ -145,6 +145,38 @@ describe('ErrorView', () => {
     expect(screen.getByText('no')).toBeInTheDocument()
   })
 
+  it('does not repeat the diagnostic summary when it already appears in the primary error', () => {
+    const duplicateMessage = 'Coverage output failed validation after 1 structured retry attempt(s): No coverage result content found'
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'VERIFYING_PRD_COVERAGE',
+      activeErrorOccurrenceId: 'diag-duplicate',
+      errorOccurrences: [{
+        id: 'diag-duplicate',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'VERIFYING_PRD_COVERAGE',
+        errorMessage: duplicateMessage,
+        errorCodes: ['COVERAGE_FAILED'],
+        diagnostics: {
+          kind: 'runtime',
+          source: 'opencode',
+          summary: duplicateMessage,
+        },
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('Underlying error')).toBeInTheDocument()
+    expect(screen.getAllByText(duplicateMessage)).toHaveLength(1)
+    expect(screen.getByText('Kind:')).toBeInTheDocument()
+    expect(screen.getByText('Runtime')).toBeInTheDocument()
+  })
+
   it('omits milliseconds from occurrence timestamps', () => {
     const occurrence = {
       id: '3',

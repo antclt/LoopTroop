@@ -33,12 +33,27 @@ export interface OpenCodeBlockedErrorDiagnosticsResult {
   errorCodes: string[]
 }
 
+type BlockedErrorDiagnosticsCarrier = Error & {
+  blockedErrorDiagnostics?: BlockedErrorDiagnostics | null
+  blockedErrorCodes?: string[]
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function readErrorProperty(error: unknown, key: string): unknown {
   return isRecord(error) ? error[key] : undefined
+}
+
+function normalizeErrorCodes(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return Array.from(new Set(
+    value
+      .filter((code): code is string => typeof code === 'string')
+      .map((code) => code.trim())
+      .filter(Boolean),
+  ))
 }
 
 function hasProviderSignal(info: ModelErrorInfo | undefined): boolean {
@@ -150,6 +165,14 @@ function resolveFallbackMessage(input: BuildOpenCodeBlockedErrorDiagnosticsInput
 export function buildOpenCodeBlockedErrorDiagnostics(
   input: BuildOpenCodeBlockedErrorDiagnosticsInput,
 ): OpenCodeBlockedErrorDiagnosticsResult {
+  const attachedDiagnostics = normalizeBlockedErrorDiagnostics(readErrorProperty(input.error, 'blockedErrorDiagnostics'))
+  if (attachedDiagnostics) {
+    return {
+      diagnostics: attachedDiagnostics,
+      errorCodes: normalizeErrorCodes(readErrorProperty(input.error, 'blockedErrorCodes')),
+    }
+  }
+
   const hasDiagnosticSignal = Boolean(
     input.error !== undefined
     || cleanOptionalMessage(input.fallbackMessage)
@@ -209,6 +232,17 @@ export function appendBlockedErrorDiagnosticsSummary(
   const summary = diagnostics?.summary?.trim()
   if (!summary || message.includes(summary)) return message
   return `${message} Underlying OpenCode error: ${summary}`
+}
+
+export function attachOpenCodeBlockedErrorDiagnostics<T extends Error>(
+  error: T,
+  diagnosticResult: OpenCodeBlockedErrorDiagnosticsResult | null | undefined,
+): T {
+  if (!diagnosticResult?.diagnostics) return error
+  const enriched = error as T & BlockedErrorDiagnosticsCarrier
+  enriched.blockedErrorDiagnostics = diagnosticResult.diagnostics
+  enriched.blockedErrorCodes = normalizeErrorCodes(diagnosticResult.errorCodes)
+  return enriched
 }
 
 export function mergeErrorCodes(primary: string[], secondary: string[]): string[] {

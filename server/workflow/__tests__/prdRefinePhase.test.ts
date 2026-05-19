@@ -558,6 +558,67 @@ describe('handlePrdRefine', () => {
     }))
   })
 
+  it('attaches OpenCode usage-limit diagnostics when PRD coverage exhausts structured retries on empty output', async () => {
+    const { ticket, context, paths, winnerId } = setupCoverageTest()
+    const sendEvent = vi.fn()
+    let callNumber = 0
+
+    runOpenCodePromptMock.mockImplementation(async (options: {
+      onSessionCreated?: (session: { id: string; projectPath: string }) => void
+      onStreamEvent?: (event: unknown) => void
+    }) => {
+      callNumber += 1
+      const session = { id: `coverage-session-${callNumber}`, projectPath: paths.worktreePath }
+      options.onSessionCreated?.(session)
+      options.onStreamEvent?.({
+        type: 'session_status',
+        sessionId: session.id,
+        status: 'retry',
+        attempt: callNumber,
+        message: 'The usage limit has been reached',
+      })
+
+      return {
+        session,
+        response: '',
+        messages: [],
+        responseMeta: {
+          hasAssistantMessage: false,
+          latestAssistantWasEmpty: true,
+          latestAssistantHasError: false,
+          latestAssistantWasStale: false,
+          sessionErrored: false,
+        },
+        attemptMeta: {
+          outcome: 'clean',
+          responseAccepted: true,
+          discardedResponse: false,
+          sessionErrored: false,
+          latestAssistantErrored: false,
+        },
+      }
+    })
+
+    const error = await handleCoverageVerification(ticket.id, context, sendEvent, 'prd', new AbortController().signal)
+      .then(() => null, (caught) => caught)
+
+    expect(runOpenCodePromptMock).toHaveBeenCalledTimes(2)
+    expect(sendEvent).not.toHaveBeenCalled()
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('Coverage output failed validation after 1 structured retry attempt(s): No coverage result content found')
+    expect((error as Error).message).not.toContain('The usage limit has been reached')
+    expect(error).toMatchObject({
+      blockedErrorDiagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'The usage limit has been reached',
+        modelId: winnerId,
+        sessionId: 'coverage-session-2',
+      },
+      blockedErrorCodes: ['OPENCODE_PROVIDER_ERROR'],
+    })
+  })
+
   it('restores a missing prd.yaml from the refined PRD artifact before PRD coverage runs', async () => {
     const { ticket, context, paths, refinement } = setupCoverageTest({ writePrd: false })
     const sendEvent = vi.fn()

@@ -13,6 +13,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
 - Fixed error navigation from Full Log so selecting an error opens its review view.
+- Improved blocked-error diagnostics so OpenCode usage-limit failures remain visible when structured coverage output is empty.
 
 ### Detailed Changes
 
@@ -38,6 +39,7 @@ All notable changes to LoopTroop will be documented in this file.
 ### Fixed
 - ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.
 - Selecting an error from the navigator while Full Log is open now exits full-log mode and opens the error review.
+- Blocked coverage errors now preserve underlying OpenCode retry/provider diagnostics, such as usage limits, and avoid repeating an identical parser-wrapper message in the error details.
 
 ## [0.2.0] - 2026-05-12
 

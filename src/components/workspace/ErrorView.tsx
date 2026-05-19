@@ -108,6 +108,10 @@ function buildDiagnosticRows(diagnostics: NonNullable<TicketErrorOccurrence['dia
   return rows
 }
 
+function normalizeErrorText(value: string): string {
+  return value.replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
 export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewProps) {
   const { mutate: performAction, isPending } = useTicketAction()
   const logCtx = useLogs()
@@ -162,6 +166,13 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && visibleOccurrence?.resolvedAt === null
   const diagnostics = visibleOccurrence?.diagnostics ?? null
   const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
+  const primaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
+  const diagnosticSummary = diagnostics?.summary?.trim() ?? ''
+  const normalizedPrimaryError = normalizeErrorText(primaryErrorMessage)
+  const normalizedDiagnosticSummary = normalizeErrorText(diagnosticSummary)
+  const showDiagnosticSummary = diagnosticSummary.length > 0
+    && normalizedPrimaryError.length > 0
+    && !normalizedPrimaryError.includes(normalizedDiagnosticSummary)
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -211,9 +222,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                   </span>
                 )}
               </div>
-              <p className="text-xs font-mono text-muted-foreground">
-                {visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'}
-              </p>
+              <p className="text-xs font-mono text-muted-foreground">{primaryErrorMessage}</p>
               {visibleOccurrence?.errorCodes && visibleOccurrence.errorCodes.length > 0 && (
                 <div className="flex flex-wrap gap-1">
                   {visibleOccurrence.errorCodes.map((code) => (
@@ -229,7 +238,9 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                     <Info className="h-3.5 w-3.5" />
                     Underlying error
                   </div>
-                  <p className="font-mono whitespace-pre-wrap text-muted-foreground/90">{diagnostics.summary}</p>
+                  {showDiagnosticSummary && (
+                    <p className="font-mono whitespace-pre-wrap text-muted-foreground/90">{diagnosticSummary}</p>
+                  )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">
                     {diagnosticRows.map((row) => (
                       <div key={`${row.label}:${row.value}`} className="min-w-0">

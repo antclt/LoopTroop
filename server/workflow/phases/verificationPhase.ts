@@ -104,11 +104,61 @@ import { buildStructuredOutputFailure } from '../../structuredOutput/failure'
 import { parseUiArtifactCompanionArtifact } from '@shared/artifactCompanions'
 import type { UiRefinementDiffArtifact } from '@shared/refinementDiffArtifacts'
 import {
+  attachOpenCodeBlockedErrorDiagnostics,
   appendBlockedErrorDiagnosticsSummary,
   buildOpenCodeBlockedErrorDiagnostics,
   mergeErrorCodes,
 } from '../../opencode/blockedErrorDiagnostics'
 import { getErrorMessage } from '@shared/typeGuards'
+
+type OpenCodeDiagnosticResult = ReturnType<typeof buildOpenCodeBlockedErrorDiagnostics>
+
+function getSessionRetryMessage(event: unknown): string | undefined {
+  if (!event || typeof event !== 'object') return undefined
+  const record = event as { type?: unknown; status?: unknown; message?: unknown }
+  if (record.type !== 'session_status' || record.status !== 'retry' || typeof record.message !== 'string') {
+    return undefined
+  }
+
+  const message = record.message.replace(/\s+/g, ' ').trim()
+  return message.length > 0 ? message : undefined
+}
+
+function createOpenCodeDiagnosticTracker(modelId: string) {
+  let latestSessionRetryMessage: string | undefined
+
+  return {
+    observeStreamEvent(event: unknown) {
+      latestSessionRetryMessage = getSessionRetryMessage(event) ?? latestSessionRetryMessage
+    },
+    build(runResult: OpenCodeRunResult): OpenCodeDiagnosticResult {
+      const sessionRetryFallback = latestSessionRetryMessage && (
+        runResult.response.trim().length === 0
+        || runResult.responseMeta?.latestAssistantWasEmpty
+        || runResult.responseMeta?.latestAssistantWasStale
+        || runResult.responseMeta?.latestAssistantHasError
+        || runResult.responseMeta?.sessionErrored
+      )
+        ? latestSessionRetryMessage
+        : undefined
+
+      return buildOpenCodeBlockedErrorDiagnostics({
+        responseMeta: runResult.responseMeta,
+        attemptMeta: runResult.attemptMeta,
+        modelId,
+        sessionId: runResult.session.id,
+        fallbackMessage: sessionRetryFallback,
+      })
+    },
+  }
+}
+
+function errorWithOpenCodeDiagnostics(
+  message: string,
+  diagnostics: OpenCodeDiagnosticResult | null | undefined,
+): Error {
+  return attachOpenCodeBlockedErrorDiagnostics(new Error(message), diagnostics)
+}
 
 export function validateRelevantFilesScanResponse(response: string): StructuredOutputResult<RelevantFilesOutputPayload> {
   const trimmed = response.trim()
@@ -535,8 +585,10 @@ async function runPrdCoverageAuditPrompt(params: {
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
+  let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
 
   for (let attempt = 0; attempt <= params.structuredRetryCount; attempt += 1) {
+    const diagnosticTracker = createOpenCodeDiagnosticTracker(params.winnerId)
     try {
       runResult = await runOpenCodePrompt({
         adapter,
@@ -569,6 +621,7 @@ async function runPrdCoverageAuditPrompt(params: {
           )
         },
         onStreamEvent: (event) => {
+          diagnosticTracker.observeStreamEvent(event)
           if (!sessionId) return
           emitOpenCodeStreamEvent(
             params.ticketId,
@@ -601,6 +654,10 @@ async function runPrdCoverageAuditPrompt(params: {
 
     throwIfAborted(params.signal, params.ticketId)
     response = runResult.response
+    const runDiagnostics = diagnosticTracker.build(runResult)
+    if (runDiagnostics.diagnostics) {
+      latestOpenCodeDiagnostics = runDiagnostics
+    }
 
     emitOpenCodeSessionLogs(
       params.ticketId,
@@ -647,7 +704,10 @@ async function runPrdCoverageAuditPrompt(params: {
               failureClass: retryDecision.failureClass,
             })],
           })
-          throw new Error(`PRD coverage output failed semantic validation after ${params.structuredRetryCount} structured retry attempt(s): ${prdCoverageNormalization.validationError}`)
+          throw errorWithOpenCodeDiagnostics(
+            `PRD coverage output failed semantic validation after ${params.structuredRetryCount} structured retry attempt(s): ${prdCoverageNormalization.validationError}`,
+            latestOpenCodeDiagnostics,
+          )
         }
 
         structuredMeta = buildStructuredMetadata(structuredMeta, {
@@ -705,7 +765,10 @@ async function runPrdCoverageAuditPrompt(params: {
           retryDiagnostic: coverageEnvelope.retryDiagnostic,
         })],
       })
-      throw new Error(`Coverage output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${coverageEnvelope.error}`)
+      throw errorWithOpenCodeDiagnostics(
+        `Coverage output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${coverageEnvelope.error}`,
+        latestOpenCodeDiagnostics,
+      )
     }
 
     structuredMeta = buildStructuredMetadata(structuredMeta, {
@@ -727,7 +790,10 @@ async function runPrdCoverageAuditPrompt(params: {
   }
 
   if (!coverageEnvelope?.ok || !runResult) {
-    throw new Error('Coverage verification finished without a parseable structured result.')
+    throw errorWithOpenCodeDiagnostics(
+      'Coverage verification finished without a parseable structured result.',
+      latestOpenCodeDiagnostics,
+    )
   }
 
   return {
@@ -766,9 +832,11 @@ async function runPrdCoverageResolutionPrompt(params: {
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
+  let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
 
   for (let attempt = 0; attempt <= params.structuredRetryCount; attempt += 1) {
     let runResult: Awaited<ReturnType<typeof runOpenCodePrompt>>
+    const diagnosticTracker = createOpenCodeDiagnosticTracker(params.winnerId)
     try {
       runResult = await runOpenCodePrompt({
         adapter,
@@ -801,6 +869,7 @@ async function runPrdCoverageResolutionPrompt(params: {
           )
         },
         onStreamEvent: (event) => {
+          diagnosticTracker.observeStreamEvent(event)
           if (!sessionId) return
           emitOpenCodeStreamEvent(
             params.ticketId,
@@ -833,6 +902,10 @@ async function runPrdCoverageResolutionPrompt(params: {
 
     throwIfAborted(params.signal, params.ticketId)
     response = runResult.response
+    const runDiagnostics = diagnosticTracker.build(runResult)
+    if (runDiagnostics.diagnostics) {
+      latestOpenCodeDiagnostics = runDiagnostics
+    }
 
     emitOpenCodeSessionLogs(
       params.ticketId,
@@ -886,7 +959,10 @@ async function runPrdCoverageResolutionPrompt(params: {
             error,
           })],
         })
-        throw new Error(`PRD coverage resolution output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${validationError}`)
+        throw errorWithOpenCodeDiagnostics(
+          `PRD coverage resolution output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${validationError}`,
+          latestOpenCodeDiagnostics,
+        )
       }
 
       structuredMeta = buildStructuredMetadata(structuredMeta, {
@@ -907,7 +983,10 @@ async function runPrdCoverageResolutionPrompt(params: {
     }
   }
 
-  throw new Error('PRD coverage resolution finished without a validated structured result.')
+  throw errorWithOpenCodeDiagnostics(
+    'PRD coverage resolution finished without a validated structured result.',
+    latestOpenCodeDiagnostics,
+  )
 }
 
 async function runBeadsCoverageAuditPrompt(params: {
@@ -937,8 +1016,10 @@ async function runBeadsCoverageAuditPrompt(params: {
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
+  let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
 
   for (let attempt = 0; attempt <= params.structuredRetryCount; attempt += 1) {
+    const diagnosticTracker = createOpenCodeDiagnosticTracker(params.winnerId)
     try {
       runResult = await runOpenCodePrompt({
         adapter,
@@ -971,6 +1052,7 @@ async function runBeadsCoverageAuditPrompt(params: {
           )
         },
         onStreamEvent: (event) => {
+          diagnosticTracker.observeStreamEvent(event)
           if (!sessionId) return
           emitOpenCodeStreamEvent(
             params.ticketId,
@@ -1003,6 +1085,10 @@ async function runBeadsCoverageAuditPrompt(params: {
 
     throwIfAborted(params.signal, params.ticketId)
     response = runResult.response
+    const runDiagnostics = diagnosticTracker.build(runResult)
+    if (runDiagnostics.diagnostics) {
+      latestOpenCodeDiagnostics = runDiagnostics
+    }
 
     emitOpenCodeSessionLogs(
       params.ticketId,
@@ -1049,7 +1135,10 @@ async function runBeadsCoverageAuditPrompt(params: {
               failureClass: retryDecision.failureClass,
             })],
           })
-          throw new Error(`Beads coverage output failed semantic validation after ${params.structuredRetryCount} structured retry attempt(s): ${beadsCoverageNormalization.validationError}`)
+          throw errorWithOpenCodeDiagnostics(
+            `Beads coverage output failed semantic validation after ${params.structuredRetryCount} structured retry attempt(s): ${beadsCoverageNormalization.validationError}`,
+            latestOpenCodeDiagnostics,
+          )
         }
 
         structuredMeta = buildStructuredMetadata(structuredMeta, {
@@ -1107,7 +1196,10 @@ async function runBeadsCoverageAuditPrompt(params: {
           retryDiagnostic: coverageEnvelope.retryDiagnostic,
         })],
       })
-      throw new Error(`Coverage output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${coverageEnvelope.error}`)
+      throw errorWithOpenCodeDiagnostics(
+        `Coverage output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${coverageEnvelope.error}`,
+        latestOpenCodeDiagnostics,
+      )
     }
 
     structuredMeta = buildStructuredMetadata(structuredMeta, {
@@ -1129,7 +1221,10 @@ async function runBeadsCoverageAuditPrompt(params: {
   }
 
   if (!coverageEnvelope?.ok || !runResult) {
-    throw new Error('Coverage verification finished without a parseable structured result.')
+    throw errorWithOpenCodeDiagnostics(
+      'Coverage verification finished without a parseable structured result.',
+      latestOpenCodeDiagnostics,
+    )
   }
 
   return {
@@ -1167,9 +1262,11 @@ async function runBeadsCoverageResolutionPrompt(params: {
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
+  let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
 
   for (let attempt = 0; attempt <= params.structuredRetryCount; attempt += 1) {
     let runResult: Awaited<ReturnType<typeof runOpenCodePrompt>>
+    const diagnosticTracker = createOpenCodeDiagnosticTracker(params.winnerId)
     try {
       runResult = await runOpenCodePrompt({
         adapter,
@@ -1202,6 +1299,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
           )
         },
         onStreamEvent: (event) => {
+          diagnosticTracker.observeStreamEvent(event)
           if (!sessionId) return
           emitOpenCodeStreamEvent(
             params.ticketId,
@@ -1234,6 +1332,10 @@ async function runBeadsCoverageResolutionPrompt(params: {
 
     throwIfAborted(params.signal, params.ticketId)
     response = runResult.response
+    const runDiagnostics = diagnosticTracker.build(runResult)
+    if (runDiagnostics.diagnostics) {
+      latestOpenCodeDiagnostics = runDiagnostics
+    }
 
     emitOpenCodeSessionLogs(
       params.ticketId,
@@ -1285,7 +1387,10 @@ async function runBeadsCoverageResolutionPrompt(params: {
             error,
           })],
         })
-        throw new Error(`Beads coverage resolution output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${validationError}`)
+        throw errorWithOpenCodeDiagnostics(
+          `Beads coverage resolution output failed validation after ${params.structuredRetryCount} structured retry attempt(s): ${validationError}`,
+          latestOpenCodeDiagnostics,
+        )
       }
 
       structuredMeta = buildStructuredMetadata(structuredMeta, {
@@ -1306,7 +1411,10 @@ async function runBeadsCoverageResolutionPrompt(params: {
     }
   }
 
-  throw new Error('Beads coverage resolution finished without a validated structured result.')
+  throw errorWithOpenCodeDiagnostics(
+    'Beads coverage resolution finished without a validated structured result.',
+    latestOpenCodeDiagnostics,
+  )
 }
 
 async function finalizeBeadsCoverageExpansion(params: {
@@ -2844,8 +2952,10 @@ export async function handleCoverageVerification(
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   let interviewCoverageResolution: ReturnType<typeof resolveInterviewCoverageFollowUpResolution> | null = null
   const structuredRetryCount = resolveStructuredRetryRuntimeSettings(context).structuredRetryCount
+  let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
 
   for (let attempt = 0; attempt <= structuredRetryCount; attempt += 1) {
+    const diagnosticTracker = createOpenCodeDiagnosticTracker(winnerId)
     try {
       runResult = await runOpenCodePrompt({
         adapter,
@@ -2877,6 +2987,7 @@ export async function handleCoverageVerification(
           )
         },
         onStreamEvent: (event) => {
+          diagnosticTracker.observeStreamEvent(event)
           if (!sessionId) return
           emitOpenCodeStreamEvent(
             ticketId,
@@ -2911,6 +3022,10 @@ export async function handleCoverageVerification(
 
     throwIfAborted(signal, ticketId)
     response = runResult.response
+    const runDiagnostics = diagnosticTracker.build(runResult)
+    if (runDiagnostics.diagnostics) {
+      latestOpenCodeDiagnostics = runDiagnostics
+    }
 
     emitOpenCodeSessionLogs(
       ticketId,
@@ -2989,8 +3104,14 @@ export async function handleCoverageVerification(
         })],
       })
       const msg = `Coverage output failed validation after ${structuredRetryCount} structured retry attempt(s): ${coverageEnvelope.error}`
-      emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', msg)
-      sendEvent({ type: 'ERROR', message: msg, codes: ['COVERAGE_FAILED'] })
+      const enrichedMsg = appendBlockedErrorDiagnosticsSummary(msg, latestOpenCodeDiagnostics?.diagnostics)
+      emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', enrichedMsg)
+      sendEvent({
+        type: 'ERROR',
+        message: enrichedMsg,
+        codes: mergeErrorCodes(['COVERAGE_FAILED'], latestOpenCodeDiagnostics?.errorCodes ?? []),
+        ...(latestOpenCodeDiagnostics?.diagnostics ? { diagnostics: latestOpenCodeDiagnostics.diagnostics } : {}),
+      })
       return
     }
 
@@ -3013,8 +3134,14 @@ export async function handleCoverageVerification(
 
   if (!coverageEnvelope?.ok || !runResult) {
     const msg = 'Coverage verification finished without a parseable structured result.'
-    emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', msg)
-    sendEvent({ type: 'ERROR', message: msg, codes: ['COVERAGE_FAILED'] })
+    const enrichedMsg = appendBlockedErrorDiagnosticsSummary(msg, latestOpenCodeDiagnostics?.diagnostics)
+    emitPhaseLog(ticketId, context.externalId, stateLabel, 'error', enrichedMsg)
+    sendEvent({
+      type: 'ERROR',
+      message: enrichedMsg,
+      codes: mergeErrorCodes(['COVERAGE_FAILED'], latestOpenCodeDiagnostics?.errorCodes ?? []),
+      ...(latestOpenCodeDiagnostics?.diagnostics ? { diagnostics: latestOpenCodeDiagnostics.diagnostics } : {}),
+    })
     return
   }
 

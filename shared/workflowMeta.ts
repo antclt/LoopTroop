@@ -943,16 +943,16 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   BLOCKED_ERROR: {
-    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so retry knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, and rate-limit-style failures alongside the human-readable error. You can see the error details, inspect logs around the failing moment, and choose to either retry the failed phase or cancel the ticket entirely.',
+    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so retry knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, OpenCode retry, and rate-limit-style failures alongside the human-readable error. You can see the error details, inspect logs around the failing moment, and choose to either retry the failed phase or cancel the ticket entirely.',
     steps: [
-      'Error Recording: LoopTroop captures the error message, error codes (if available), the precise timestamp of the failure, and the workflow status where the failure occurred. Provider, model, session, timeout, and rate-limit-style diagnostics are persisted as structured fields when the failing subsystem exposes them. This information is stored as an error occurrence record.',
+      'Error Recording: LoopTroop captures the error message, error codes (if available), the precise timestamp of the failure, and the workflow status where the failure occurred. Provider, model, session, timeout, OpenCode retry, and rate-limit-style diagnostics are persisted as structured fields when the failing subsystem exposes them. If structured-output validation later fails because OpenCode returned no usable content, the latest underlying OpenCode retry/provider failure is preserved instead of replacing it with only the parser wrapper. This information is stored as an error occurrence record.',
       'State Preservation: The blocked error becomes the active workflow state while preserving the previous status (the phase that failed). This preserved status is critical — it tells the retry mechanism exactly which phase to re-enter when you click Retry.',
       'Error History: If a ticket has been blocked multiple times (e.g., retry → fail → retry → fail), all error occurrences are preserved in a history list. This helps you identify recurring issues and decide whether retry is likely to succeed.',
-      'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, persisted structured provider/model/session diagnostics, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
+      'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, persisted structured provider/model/session/OpenCode retry diagnostics, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
       'Decision Point: You choose either Retry (which archives the failed tracked phase attempt, creates a fresh attempt, returns the workflow to the previously blocked status, and re-attempts the failed operation) or Cancel (which moves the ticket to the terminal Canceled state, preserving all artifacts).',
     ],
     outputs: [
-      'Error occurrence history with timestamps, error messages, error codes, structured provider/model/session/timeout/rate-limit diagnostics when available, and the phase where each failure occurred.',
+      'Error occurrence history with timestamps, error messages, error codes, structured provider/model/session/timeout/OpenCode retry/rate-limit diagnostics when available, and the phase where each failure occurred.',
       'Blocked state metadata linking the error to the specific phase that failed.',
       'Retry or cancel decision point for manual intervention, with tracked retry artifacts/logs separated by phase attempt.',
     ],
@@ -1419,7 +1419,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'BLOCKED_ERROR',
     label: 'Error (reason)',
-    description: 'A phase failure paused the workflow. Retry preserves the failed tracked phase as an archived version, starts a fresh attempt, and re-enters the preserved status with diagnostics intact.',
+    description: 'A phase failure paused the workflow. Retry archives the failed tracked phase, starts a fresh attempt, and preserves diagnostics, including underlying OpenCode retry/provider failures when available.',
     details: WORKFLOW_PHASE_DETAILS.BLOCKED_ERROR,
     kanbanPhase: 'needs_input',
     groupId: 'errors',
