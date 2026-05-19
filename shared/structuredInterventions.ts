@@ -562,7 +562,7 @@ function buildExactInterventionDetails(
 
   if (code === 'retry_after_validation_failure') {
     return {
-      exactCorrection: 'Retried after validation failed and recorded the resulting artifact state.',
+      exactCorrection: 'Retried after validation failed and preserved the rejected response in Raw attempts.',
     }
   }
 
@@ -1414,7 +1414,7 @@ export function deriveStructuredInterventions(options: {
         ? 'The first response did not match the required machine-readable shape or semantic contract.'
         : 'The saved output did not satisfy strict validation.',
       how: retryCount > 0
-        ? 'LoopTroop issued a structured retry attempt after the earlier validation failure and recorded the resulting artifact state.'
+        ? 'LoopTroop preserved each rejected model response in Raw attempts, retried the structured output request, and recorded the final accepted or rejected artifact state.'
         : 'LoopTroop kept the validator message for debugging and surfaced the saved result with that context.',
       ...(validationError ? { technicalDetail: validationError } : {}),
       ...(validationError ? { rawMessages: [validationError] } : {}),

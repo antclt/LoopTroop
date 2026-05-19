@@ -18,6 +18,7 @@ import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 
 const FINAL_TEST_SCHEMA_REMINDER = [
   'Return exactly one <FINAL_TEST_COMMANDS>...</FINAL_TEST_COMMANDS> block and nothing else.',
@@ -132,19 +133,16 @@ export async function generateFinalTests(
     ...(commandPlan.validationError ? { validationError: commandPlan.validationError } : {}),
   })
   while (commandPlan.errors.length > 0) {
-    const attempt = rawAttempts.length + 1
     const validationError = commandPlan.validationError ?? commandPlan.errors.join('; ')
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
-    rawAttempts.push({
-      attempt,
+    const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'final_test_generation',
-      outcome: 'rejected',
       rawResponse: response,
       validationError,
       failureClass: retryDecision.failureClass,
     })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-      attempt,
+      attempt: rawAttempt.attempt,
       rawResponse: response,
       validationError,
       failureClass: retryDecision.failureClass,
@@ -274,10 +272,8 @@ export async function generateFinalTests(
   }
 
   if (commandPlan.errors.length === 0) {
-    rawAttempts.push({
-      attempt: rawAttempts.length + 1,
+    appendAcceptedRawAttempt(rawAttempts, {
       stage: 'final_test_generation',
-      outcome: 'accepted',
       rawResponse: response,
     })
   }

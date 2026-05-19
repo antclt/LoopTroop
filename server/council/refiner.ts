@@ -8,6 +8,7 @@ import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { getErrorMessage } from '@shared/typeGuards'
 import { classifyStructuredFailureFromError, getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../lib/structuredRawAttempts'
 
 export interface RefineDraftResult {
   content: string
@@ -108,7 +109,6 @@ export async function refineDraft(
   const rawAttempts: RawAttempt[] = []
 
   while (true) {
-    const attempt = attemptCount + 1
     let result: Awaited<ReturnType<typeof runOpenCodePrompt>>
     try {
       result = await runOpenCodePrompt({
@@ -149,11 +149,8 @@ export async function refineDraft(
         },
       })
     } catch (error) {
-      rawAttempts.push({
-        attempt,
+      appendRejectedRawAttempt(rawAttempts, {
         stage: 'refine',
-        outcome: 'rejected',
-        rawResponse: '',
         validationError: getErrorMessage(error),
         failureClass: classifyStructuredFailureFromError(error),
       })
@@ -171,10 +168,8 @@ export async function refineDraft(
     })
 
     if (!validateResponse) {
-      rawAttempts.push({
-        attempt,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'refine',
-        outcome: 'accepted',
         rawResponse: refined,
       })
       return { content: refined, rawAttempts }
@@ -182,20 +177,16 @@ export async function refineDraft(
 
     try {
       const validation = validateResponse(refined)
-      rawAttempts.push({
-        attempt,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'refine',
-        outcome: 'accepted',
         rawResponse: refined,
       })
       return { content: validation.normalizedContent ?? refined, rawAttempts }
     } catch (error) {
       const validationError = getErrorMessage(error)
       const retryDecision = getStructuredRetryDecision(refined, result.responseMeta)
-      rawAttempts.push({
-        attempt,
+      appendRejectedRawAttempt(rawAttempts, {
         stage: 'refine',
-        outcome: 'rejected',
         rawResponse: refined,
         validationError,
         failureClass: retryDecision.failureClass,

@@ -16,6 +16,7 @@ import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../../lib/constants'
 import { classifyStructuredFailureFromError, getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import { parseExecutionSetupResult } from './parser'
 import type { ExecutionSetupGenerationResult } from './types'
@@ -48,21 +49,16 @@ function buildPromptFailureGeneration(
 ): GenerateExecutionSetupResult {
   const validationError = `Execution setup prompt failed: ${errorMessage(error)}`
   const failureClass = classifyStructuredFailureFromError(error)
-  const rawAttempts: RawAttempt[] = [
-    ...previousRawAttempts,
-    {
-      attempt: previousRawAttempts.length + 1,
-      stage: 'execution_setup',
-      outcome: 'rejected',
-      rawResponse: '',
-      validationError,
-      failureClass,
-    },
-  ]
+  const rawAttempts: RawAttempt[] = [...previousRawAttempts]
+  const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
+    stage: 'execution_setup',
+    validationError,
+    failureClass,
+  })
   const retryDiagnostics = [
     ...previousDiagnostics,
     resolveStructuredRetryDiagnostic({
-      attempt: previousDiagnostics.length + 1,
+      attempt: rawAttempt.attempt,
       rawResponse: '',
       validationError,
       failureClass,
@@ -171,6 +167,12 @@ export async function generateExecutionSetup(
       if (!activeSession) {
         throw retryError
       }
+      const promptFailureAttempts: RawAttempt[] = []
+      appendRejectedRawAttempt(promptFailureAttempts, {
+        stage: 'execution_setup',
+        validationError: `Execution setup prompt failed: ${errorMessage(error)}`,
+        failureClass: classifyStructuredFailureFromError(error),
+      })
       return buildPromptFailureGeneration(
         activeSession,
         retryError,
@@ -182,14 +184,7 @@ export async function generateExecutionSetup(
             failureClass: classifyStructuredFailureFromError(error),
           }),
         ],
-        [{
-          attempt: 1,
-          stage: 'execution_setup',
-          outcome: 'rejected',
-          rawResponse: '',
-          validationError: `Execution setup prompt failed: ${errorMessage(error)}`,
-          failureClass: classifyStructuredFailureFromError(error),
-        }],
+        promptFailureAttempts,
       )
     }
   }
@@ -212,19 +207,16 @@ export async function generateExecutionSetup(
   })
 
   while (parsed.errors.length > 0) {
-    const attempt = rawAttempts.length + 1
     const validationError = parsed.validationError ?? parsed.errors.join('; ')
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
-    rawAttempts.push({
-      attempt,
+    const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'execution_setup',
-      outcome: 'rejected',
       rawResponse: response,
       validationError,
       failureClass: retryDecision.failureClass,
     })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-      attempt,
+      attempt: rawAttempt.attempt,
       rawResponse: response,
       validationError,
       failureClass: retryDecision.failureClass,
@@ -339,10 +331,8 @@ export async function generateExecutionSetup(
   }
 
   if (parsed.errors.length === 0) {
-    rawAttempts.push({
-      attempt: rawAttempts.length + 1,
+    appendAcceptedRawAttempt(rawAttempts, {
       stage: 'execution_setup',
-      outcome: 'accepted',
       rawResponse: response,
     })
   }

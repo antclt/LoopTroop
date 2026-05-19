@@ -364,6 +364,8 @@ export function WithRawTab({
         </div>
       </div>
 
+      {notice}
+
       {activeTab === 'raw' && (
         <>
           {rawSourceOptions.length > 1 && (
@@ -452,7 +454,6 @@ export function WithRawTab({
 
       {activeTab === 'structured' ? (
         <>
-          {notice}
           {children}
         </>
       ) : (
@@ -511,18 +512,18 @@ function RefinedArtifactTabs({ content, hasChanges, sectionsContent, diffContent
         </div>
       </div>
 
+      {hasDiffTab ? notice : null}
+
       {currentTab === 'raw' && (
         <RawDisplayStats content={rawDisplayContent} />
       )}
 
       {currentTab === 'sections' ? (
         <>
-          {hasDiffTab ? notice : null}
           {sectionsContent}
         </>
       ) : currentTab === 'diff' && diffContent ? (
         <>
-          {hasDiffTab ? notice : null}
           {diffContent}
         </>
       ) : currentTab === 'raw' ? (
@@ -1592,6 +1593,7 @@ function FinalInterviewArtifactView({
           {currentTab === 'raw' && <CopyButton content={content} />}
         </div>
       </div>
+      {notice}
       {currentTab === 'raw' ? (
         <div className="min-w-0 max-w-full space-y-3">
           <RawDisplayStats content={rawDisplayContent} />
@@ -1600,13 +1602,11 @@ function FinalInterviewArtifactView({
       ) : currentTab === 'final'
         ? (
           <div className="space-y-3">
-            {notice}
             <InterviewDraftView content={refinedContent} />
           </div>
         )
         : (
           <div className="space-y-3">
-            {notice}
             <InterviewDraftDiffView content={content} phase={phase} />
           </div>
         )}
@@ -1730,7 +1730,7 @@ function FinalPrdDraftView({
   const shouldShowDiffTab = showDiffTab ?? !hideDiffInApproval
   const hasDiffTab = shouldShowDiffTab && (diffEntries.length > 0 || Boolean(parsed?.winnerDraftContent) || Boolean(parsed?.coverageBaselineContent))
   const currentTab = activeTab === 'raw' ? 'raw' : (hasDiffTab ? activeTab : 'final')
-  const notice = hasDiffTab ? <ArtifactProcessingNotice structuredOutput={parsed?.structuredOutput} kind="diff" /> : null
+  const notice = <ArtifactProcessingNotice structuredOutput={parsed?.structuredOutput} kind="diff" />
 
   const tabButtonClass = (tab: string) =>
     currentTab === tab
@@ -1756,6 +1756,7 @@ function FinalPrdDraftView({
           {currentTab === 'raw' && <CopyButton content={activeRawContent} />}
         </div>
       </div>
+      {notice}
       {currentTab === 'raw' ? (
         <div className="min-w-0 max-w-full space-y-3">
           {rawVariantSelector}
@@ -1766,13 +1767,11 @@ function FinalPrdDraftView({
         ? (
           <div className="space-y-3">
             <CleanCoverageCallout coverageResult={coverageResult} phase={phase} fallbackCandidateVersion={parsed?.candidateVersion} />
-            {notice}
             {isBeads ? <BeadsDraftView content={refinedContent} /> : <PrdDraftView content={refinedContent} />}
           </div>
         )
         : (
           <div className="space-y-3">
-            {notice}
             <RefinementDiffView content={content} domain={domain} phase={phase} />
           </div>
         )}

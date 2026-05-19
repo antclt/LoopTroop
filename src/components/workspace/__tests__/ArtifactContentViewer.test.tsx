@@ -1067,6 +1067,19 @@ describe('ArtifactContentViewer', () => {
           winnerId: 'openai/gpt-5.2',
           winnerDraftContent: prdContent,
           refinedContent: prdContent,
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Missing PRD document fields.',
+            retryDiagnostics: [
+              {
+                attempt: 1,
+                validationError: 'Missing PRD document fields.',
+                excerpt: rejectedRawResponse,
+              },
+            ],
+          }),
           rawAttempts: [
             {
               attempt: 1,
@@ -1086,8 +1099,11 @@ describe('ArtifactContentViewer', () => {
       />,
     )
 
+    expect(screen.getByText('LoopTroop adjusted this diff.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
+    expect(screen.getByText('LoopTroop adjusted this diff.')).toBeInTheDocument()
+    expect(screen.getByText('Retried 1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Accepted Output' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attempt 2 Accepted' })).toBeInTheDocument()
@@ -1096,6 +1112,9 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Attempt 1 Rejected' }))
 
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
+    openNotice('LoopTroop adjusted this diff.')
+    expect(screen.getByText(/Retry Attempts/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Missing PRD document fields.').length).toBeGreaterThan(0)
   })
 
   it('renders coverage report with changes tab when only revision content is provided', () => {
@@ -2214,6 +2233,61 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getAllByText(/4 \| files:/i).length).toBeGreaterThan(0)
   })
 
+  it('keeps multiple rejected relevant-files attempts available in Raw while showing the intervention warning', () => {
+    render(
+      <ArtifactContent
+        artifactId="relevant-files-scan"
+        content={JSON.stringify({
+          fileCount: 0,
+          files: [],
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Relevant files output still had no files.',
+            retryDiagnostics: [
+              {
+                attempt: 1,
+                validationError: 'Relevant files output was empty.',
+                excerpt: '[empty response]',
+              },
+              {
+                attempt: 2,
+                validationError: 'Relevant files output still had no files.',
+                excerpt: 'files: []',
+              },
+            ],
+          }),
+          rawAttempts: [
+            {
+              attempt: 1,
+              stage: 'relevant_files_scan',
+              outcome: 'rejected',
+              rawResponse: '',
+              validationError: 'Relevant files output was empty.',
+            },
+            {
+              attempt: 2,
+              stage: 'relevant_files_scan',
+              outcome: 'rejected',
+              rawResponse: 'files: []',
+              validationError: 'Relevant files output still had no files.',
+            },
+          ],
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    expect(screen.getByText('LoopTroop adjusted this relevant files scan.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Attempt 2 Rejected' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Attempt 2 Rejected' }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'files: []')).toBeInTheDocument()
+  })
+
   it('does not derive parser notices from bare legacy repair warnings', () => {
     const copy = buildArtifactProcessingNoticeCopy({
       repairApplied: true,
@@ -2837,10 +2911,14 @@ describe('ArtifactContentViewer', () => {
 
     expect(screen.getByText(/LoopTroop validated this final test plan and recorded the intervention details below/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Missing final test marker on first pass/i).length).toBeGreaterThan(0)
-    expect(screen.getByText('Retried after validation failed and recorded the resulting artifact state.')).toBeInTheDocument()
-    expect(screen.getByText('LoopTroop issued a structured retry attempt after the earlier validation failure and recorded the resulting artifact state.')).toBeInTheDocument()
+    expect(screen.getByText('Retried after validation failed and preserved the rejected response in Raw attempts.')).toBeInTheDocument()
+    expect(screen.getByText('LoopTroop preserved each rejected model response in Raw attempts, retried the structured output request, and recorded the final accepted or rejected artifact state.')).toBeInTheDocument()
     expect(screen.queryByText(/successful validated result/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/successful pass/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    expect(screen.getByText('LoopTroop adjusted this final test plan.')).toBeInTheDocument()
+    expect(screen.getByText('Retried 1')).toBeInTheDocument()
   })
 
   it('renders integration reports with structured metadata and deferred push guidance', () => {

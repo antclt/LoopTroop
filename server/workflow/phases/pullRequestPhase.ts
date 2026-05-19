@@ -44,6 +44,7 @@ import { getErrorMessage } from '@shared/typeGuards'
 import { buildStructuredRetryPrompt, buildStructuredOutputMetadata, type StructuredOutputMetadata } from '../../structuredOutput'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 import type { RawAttempt } from '../../council/types'
 
 const PULL_REQUEST_REPORT_ARTIFACT = 'pull_request_report'
@@ -509,26 +510,22 @@ export async function handleCreatePullRequest(
         while (true) {
           try {
             prDraft = parsePullRequestDraftResponse(draftResponse, fallbackTitle)
-            rawAttempts.push({
-              attempt: rawAttempts.length + 1,
+            appendAcceptedRawAttempt(rawAttempts, {
               stage: 'pull_request_draft',
-              outcome: 'accepted',
               rawResponse: draftResponse,
             })
             break
           } catch (error) {
             const validationError = getErrorMessage(error)
             const retryDecision = getStructuredRetryDecision(draftResponse, draftResult.responseMeta)
-            rawAttempts.push({
-              attempt: rawAttempts.length + 1,
+            const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
               stage: 'pull_request_draft',
-              outcome: 'rejected',
               rawResponse: draftResponse,
               validationError,
               failureClass: retryDecision.failureClass,
             })
             retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-              attempt: rawAttempts.length,
+              attempt: rawAttempt.attempt,
               rawResponse: draftResponse,
               validationError,
               failureClass: retryDecision.failureClass,

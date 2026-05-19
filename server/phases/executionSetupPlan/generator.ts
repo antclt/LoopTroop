@@ -20,6 +20,7 @@ import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../../lib/constants'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import { parseExecutionSetupPlanResult } from './parser'
 import type { ExecutionSetupPlanGenerationResult } from './types'
@@ -136,19 +137,16 @@ export async function generateExecutionSetupPlan(
   })
 
   while (parsed.errors.length > 0) {
-    const attempt = rawAttempts.length + 1
     const validationError = parsed.validationError ?? parsed.errors.join('; ')
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
-    rawAttempts.push({
-      attempt,
+    const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'execution_setup_plan',
-      outcome: 'rejected',
       rawResponse: response,
       validationError,
       failureClass: retryDecision.failureClass,
     })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-      attempt,
+      attempt: rawAttempt.attempt,
       rawResponse: response,
       validationError,
       failureClass: retryDecision.failureClass,
@@ -262,10 +260,8 @@ export async function generateExecutionSetupPlan(
   }
 
   if (parsed.errors.length === 0) {
-    rawAttempts.push({
-      attempt: rawAttempts.length + 1,
+    appendAcceptedRawAttempt(rawAttempts, {
       stage: 'execution_setup_plan',
-      outcome: 'accepted',
       rawResponse: response,
     })
   }

@@ -24,6 +24,7 @@ import type { InterviewDocument } from '@shared/interviewArtifact'
 import jsYaml from 'js-yaml'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 import { getErrorMessage } from '@shared/typeGuards'
 
 interface StepValidationResult {
@@ -482,10 +483,8 @@ async function executeStructuredStep(
     try {
       validation = options.validateStep(rawResponse)
       const content = validation.normalizedContent ?? rawResponse
-      rawAttempts.push({
-        attempt: attemptCount + 1,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: options.step,
-        outcome: 'accepted',
         rawResponse,
       })
       return {
@@ -510,16 +509,14 @@ async function executeStructuredStep(
             useStructuredRetryPrompt: false,
           }
         : baseRetryDecision
-      rawAttempts.push({
-        attempt: attemptCount + 1,
+      const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: options.step,
-        outcome: 'rejected',
         rawResponse,
         validationError: lastValidationError,
         failureClass: retryDecision.failureClass,
       })
       retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-        attempt: attemptCount + 1,
+        attempt: rawAttempt.attempt,
         rawResponse,
         validationError: lastValidationError,
         failureClass: retryDecision.failureClass,

@@ -99,6 +99,7 @@ import { executeBeadsExpandStep } from './beadsPhase'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 import { buildStructuredOutputFailure } from '../../structuredOutput/failure'
 import { parseUiArtifactCompanionArtifact } from '@shared/artifactCompanions'
 import type { UiRefinementDiffArtifact } from '@shared/refinementDiffArtifacts'
@@ -629,10 +630,8 @@ async function runPrdCoverageAuditPrompt(params: {
 
       if (prdCoverageNormalization.validationError) {
         const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
-        rawAttempts.push({
-          attempt: attempt + 1,
+        const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
           stage: 'prd_coverage_audit',
-          outcome: 'rejected',
           rawResponse: response,
           validationError: prdCoverageNormalization.validationError,
           failureClass: retryDecision.failureClass,
@@ -642,7 +641,7 @@ async function runPrdCoverageAuditPrompt(params: {
             autoRetryCount: attempt,
             validationError: prdCoverageNormalization.validationError,
             retryDiagnostics: [resolveStructuredRetryDiagnostic({
-              attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+              attempt: rawAttempt.attempt,
               rawResponse: response,
               validationError: prdCoverageNormalization.validationError,
               failureClass: retryDecision.failureClass,
@@ -655,7 +654,7 @@ async function runPrdCoverageAuditPrompt(params: {
           autoRetryCount: attempt + 1,
           validationError: prdCoverageNormalization.validationError,
           retryDiagnostics: [resolveStructuredRetryDiagnostic({
-            attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+            attempt: rawAttempt.attempt,
             rawResponse: response,
             validationError: prdCoverageNormalization.validationError,
             failureClass: retryDecision.failureClass,
@@ -680,20 +679,16 @@ async function runPrdCoverageAuditPrompt(params: {
         repairApplied: coverageEnvelope.repairApplied || prdCoverageNormalization.repairWarnings.length > 0,
         repairWarnings: [...coverageEnvelope.repairWarnings, ...prdCoverageNormalization.repairWarnings],
       }
-      rawAttempts.push({
-        attempt: attempt + 1,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'prd_coverage_audit',
-        outcome: 'accepted',
         rawResponse: response,
       })
       break
     }
 
     const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
-    rawAttempts.push({
-      attempt: attempt + 1,
+    const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'prd_coverage_audit',
-      outcome: 'rejected',
       rawResponse: response,
       validationError: coverageEnvelope.error,
       failureClass: retryDecision.failureClass,
@@ -703,7 +698,7 @@ async function runPrdCoverageAuditPrompt(params: {
         autoRetryCount: attempt,
         validationError: coverageEnvelope.error,
         retryDiagnostics: [resolveStructuredRetryDiagnostic({
-          attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+          attempt: rawAttempt.attempt,
           rawResponse: response,
           validationError: coverageEnvelope.error,
           failureClass: retryDecision.failureClass,
@@ -717,7 +712,7 @@ async function runPrdCoverageAuditPrompt(params: {
       autoRetryCount: attempt + 1,
       validationError: coverageEnvelope.error,
       retryDiagnostics: [resolveStructuredRetryDiagnostic({
-        attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+        attempt: rawAttempt.attempt,
         rawResponse: response,
         validationError: coverageEnvelope.error,
         failureClass: retryDecision.failureClass,
@@ -864,10 +859,8 @@ async function runPrdCoverageResolutionPrompt(params: {
         repairWarnings: revision.repairWarnings,
       })
 
-      rawAttempts.push({
-        attempt: attempt + 1,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'prd_coverage_revision',
-        outcome: 'accepted',
         rawResponse: response,
       })
 
@@ -875,10 +868,8 @@ async function runPrdCoverageResolutionPrompt(params: {
     } catch (error) {
       const validationError = getErrorMessage(error)
       const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
-      rawAttempts.push({
-        attempt: attempt + 1,
+      const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'prd_coverage_revision',
-        outcome: 'rejected',
         rawResponse: response,
         validationError,
         failureClass: retryDecision.failureClass,
@@ -888,7 +879,7 @@ async function runPrdCoverageResolutionPrompt(params: {
           autoRetryCount: attempt,
           validationError,
           retryDiagnostics: [resolveStructuredRetryDiagnostic({
-            attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+            attempt: rawAttempt.attempt,
             rawResponse: response,
             validationError,
             failureClass: retryDecision.failureClass,
@@ -902,7 +893,7 @@ async function runPrdCoverageResolutionPrompt(params: {
         autoRetryCount: attempt + 1,
         validationError,
         retryDiagnostics: [resolveStructuredRetryDiagnostic({
-          attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+          attempt: rawAttempt.attempt,
           rawResponse: response,
           validationError,
           failureClass: retryDecision.failureClass,
@@ -1041,10 +1032,8 @@ async function runBeadsCoverageAuditPrompt(params: {
 
       if (beadsCoverageNormalization.validationError) {
         const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
-        rawAttempts.push({
-          attempt: attempt + 1,
+        const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
           stage: 'beads_coverage_audit',
-          outcome: 'rejected',
           rawResponse: response,
           validationError: beadsCoverageNormalization.validationError,
           failureClass: retryDecision.failureClass,
@@ -1054,7 +1043,7 @@ async function runBeadsCoverageAuditPrompt(params: {
             autoRetryCount: attempt,
             validationError: beadsCoverageNormalization.validationError,
             retryDiagnostics: [resolveStructuredRetryDiagnostic({
-              attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+              attempt: rawAttempt.attempt,
               rawResponse: response,
               validationError: beadsCoverageNormalization.validationError,
               failureClass: retryDecision.failureClass,
@@ -1067,7 +1056,7 @@ async function runBeadsCoverageAuditPrompt(params: {
           autoRetryCount: attempt + 1,
           validationError: beadsCoverageNormalization.validationError,
           retryDiagnostics: [resolveStructuredRetryDiagnostic({
-            attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+            attempt: rawAttempt.attempt,
             rawResponse: response,
             validationError: beadsCoverageNormalization.validationError,
             failureClass: retryDecision.failureClass,
@@ -1092,20 +1081,16 @@ async function runBeadsCoverageAuditPrompt(params: {
         repairApplied: coverageEnvelope.repairApplied || beadsCoverageNormalization.repairWarnings.length > 0,
         repairWarnings: [...coverageEnvelope.repairWarnings, ...beadsCoverageNormalization.repairWarnings],
       }
-      rawAttempts.push({
-        attempt: attempt + 1,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'beads_coverage_audit',
-        outcome: 'accepted',
         rawResponse: response,
       })
       break
     }
 
     const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
-    rawAttempts.push({
-      attempt: attempt + 1,
+    const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'beads_coverage_audit',
-      outcome: 'rejected',
       rawResponse: response,
       validationError: coverageEnvelope.error,
       failureClass: retryDecision.failureClass,
@@ -1115,7 +1100,7 @@ async function runBeadsCoverageAuditPrompt(params: {
         autoRetryCount: attempt,
         validationError: coverageEnvelope.error,
         retryDiagnostics: [resolveStructuredRetryDiagnostic({
-          attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+          attempt: rawAttempt.attempt,
           rawResponse: response,
           validationError: coverageEnvelope.error,
           failureClass: retryDecision.failureClass,
@@ -1129,7 +1114,7 @@ async function runBeadsCoverageAuditPrompt(params: {
       autoRetryCount: attempt + 1,
       validationError: coverageEnvelope.error,
       retryDiagnostics: [resolveStructuredRetryDiagnostic({
-        attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+        attempt: rawAttempt.attempt,
         rawResponse: response,
         validationError: coverageEnvelope.error,
         failureClass: retryDecision.failureClass,
@@ -1273,10 +1258,8 @@ async function runBeadsCoverageResolutionPrompt(params: {
         repairWarnings: revision.repairWarnings,
       })
 
-      rawAttempts.push({
-        attempt: attempt + 1,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'beads_coverage_revision',
-        outcome: 'accepted',
         rawResponse: response,
       })
 
@@ -1284,10 +1267,8 @@ async function runBeadsCoverageResolutionPrompt(params: {
     } catch (error) {
       const validationError = getErrorMessage(error)
       const retryDecision = getStructuredRetryDecision(response, runResult.responseMeta)
-      rawAttempts.push({
-        attempt: attempt + 1,
+      const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'beads_coverage_revision',
-        outcome: 'rejected',
         rawResponse: response,
         validationError,
         failureClass: retryDecision.failureClass,
@@ -1297,7 +1278,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
           autoRetryCount: attempt,
           validationError,
           retryDiagnostics: [resolveStructuredRetryDiagnostic({
-            attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+            attempt: rawAttempt.attempt,
             rawResponse: response,
             validationError,
             failureClass: retryDecision.failureClass,
@@ -1311,7 +1292,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
         autoRetryCount: attempt + 1,
         validationError,
         retryDiagnostics: [resolveStructuredRetryDiagnostic({
-          attempt: (structuredMeta.autoRetryCount ?? 0) + 1,
+          attempt: rawAttempt.attempt,
           rawResponse: response,
           validationError,
           failureClass: retryDecision.failureClass,
@@ -2242,10 +2223,8 @@ export async function handleRelevantFilesScan(
     const structuredRetryCount = resolveStructuredRetryRuntimeSettings(context).structuredRetryCount
     while (!normalized.ok && retryMeta.autoRetryCount < structuredRetryCount) {
       const retryDecision = getStructuredRetryDecision(finalResponse, finalResponseMeta)
-      rawAttempts.push({
-        attempt: rawAttempts.length + 1,
+      const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'relevant_files_scan',
-        outcome: 'rejected',
         rawResponse: finalResponse,
         validationError: normalized.error,
         failureClass: retryDecision.failureClass,
@@ -2258,7 +2237,7 @@ export async function handleRelevantFilesScan(
         retryDiagnostics: [
           ...(retryMeta.retryDiagnostics ?? []),
           resolveStructuredRetryDiagnostic({
-            attempt: rawAttempts.length,
+            attempt: rawAttempt.attempt,
             rawResponse: finalResponse,
             validationError: normalized.error,
             failureClass: retryDecision.failureClass,
@@ -2403,10 +2382,8 @@ export async function handleRelevantFilesScan(
 
     if (!normalized.ok) {
       const retryDecision = getStructuredRetryDecision(finalResponse, finalResponseMeta)
-      rawAttempts.push({
-        attempt: rawAttempts.length + 1,
+      const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'relevant_files_scan',
-        outcome: 'rejected',
         rawResponse: finalResponse,
         validationError: normalized.error,
         failureClass: retryDecision.failureClass,
@@ -2417,7 +2394,7 @@ export async function handleRelevantFilesScan(
         retryDiagnostics: [
           ...(retryMeta.retryDiagnostics ?? []),
           resolveStructuredRetryDiagnostic({
-            attempt: rawAttempts.length,
+            attempt: rawAttempt.attempt,
             rawResponse: finalResponse,
             validationError: normalized.error,
             failureClass: retryDecision.failureClass,
@@ -2451,10 +2428,8 @@ export async function handleRelevantFilesScan(
     }
 
     if (rawAttempts.length === 0 || rawAttempts.at(-1)?.outcome === 'rejected') {
-      rawAttempts.push({
-        attempt: rawAttempts.length + 1,
+      appendAcceptedRawAttempt(rawAttempts, {
         stage: 'relevant_files_scan',
-        outcome: 'accepted',
         rawResponse: finalResponse,
       })
     }

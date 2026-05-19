@@ -229,9 +229,24 @@ describe('handleRelevantFilesScan', () => {
     expect(artifactRow).toBeDefined()
     const artifact = JSON.parse(artifactRow!.content) as {
       fileCount?: number
+      structuredOutput?: {
+        retryDiagnostics?: Array<{ attempt?: number; validationError?: string; excerpt?: string }>
+      }
       rawAttempts?: Array<{ attempt?: number; outcome?: string; rawResponse?: string; validationError?: string }>
     }
     expect(artifact.fileCount).toBe(0)
+    expect(artifact.structuredOutput?.retryDiagnostics).toEqual([
+      expect.objectContaining({
+        attempt: 1,
+        validationError: 'Relevant files output echoed the prompt instead of returning a <RELEVANT_FILES_RESULT> artifact',
+        excerpt: expect.stringContaining('CRITICAL OUTPUT RULE'),
+      }),
+      expect.objectContaining({
+        attempt: 2,
+        validationError: 'Relevant files output is missing files list',
+        excerpt: expect.stringContaining('files: []'),
+      }),
+    ])
     expect(artifact.rawAttempts).toEqual([
       expect.objectContaining({
         attempt: 1,

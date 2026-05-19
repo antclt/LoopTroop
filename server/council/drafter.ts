@@ -18,6 +18,7 @@ import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, classifyDraft
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount } from '../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../lib/structuredRawAttempts'
 import { getErrorMessage } from '@shared/typeGuards'
 
 interface DraftValidationResult {
@@ -254,10 +255,8 @@ export async function generateDrafts(
           if (normalizedContent !== content) {
             normalizedResponse = normalizedContent
           }
-          rawAttempts.push({
-            attempt: attemptCount + 1,
+          appendAcceptedRawAttempt(rawAttempts, {
             stage: 'draft',
-            outcome: 'accepted',
             rawResponse: content,
           })
           content = normalizedContent
@@ -267,16 +266,14 @@ export async function generateDrafts(
           lastValidationError = validationError
           const retryDecision = getStructuredRetryDecision(content, result.responseMeta)
           lastFailureClass = retryDecision.failureClass
-          rawAttempts.push({
-            attempt: attemptCount + 1,
+          const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
             stage: 'draft',
-            outcome: 'rejected',
             rawResponse: content,
             validationError,
             failureClass: retryDecision.failureClass,
           })
           retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-            attempt: attemptCount + 1,
+            attempt: rawAttempt.attempt,
             rawResponse: content,
             validationError,
             failureClass: retryDecision.failureClass,
@@ -298,10 +295,8 @@ export async function generateDrafts(
       }
 
       if (!validateDraft && rawResponse !== undefined && rawAttempts.length === 0) {
-        rawAttempts.push({
-          attempt: 1,
+        appendAcceptedRawAttempt(rawAttempts, {
           stage: 'draft',
-          outcome: 'accepted',
           rawResponse,
         })
       }

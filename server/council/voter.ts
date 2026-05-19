@@ -22,6 +22,7 @@ import { buildStructuredOutputMetadata } from '../structuredOutput/metadata'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../lib/structuredRetryPolicy'
+import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../lib/structuredRawAttempts'
 import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError } from './draftUtils'
 import { getErrorMessage } from '@shared/typeGuards'
 
@@ -316,10 +317,8 @@ export async function conductVoting(
         )
 
         if (scorecardResult.ok) {
-          rawAttempts.push({
-            attempt: attemptCount + 1,
+          appendAcceptedRawAttempt(rawAttempts, {
             stage: 'vote',
-            outcome: 'accepted',
             rawResponse: response,
           })
           const normalizedResponse = scorecardResult.repairApplied || scorecardResult.normalizedContent.trim() !== response.trim()
@@ -355,16 +354,14 @@ export async function conductVoting(
 
         lastValidationError = scorecardResult.error
         const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
-        rawAttempts.push({
-          attempt: attemptCount + 1,
+        const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
           stage: 'vote',
-          outcome: 'rejected',
           rawResponse: response,
           validationError: scorecardResult.error,
           failureClass: retryDecision.failureClass,
         })
         retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-          attempt: attemptCount + 1,
+          attempt: rawAttempt.attempt,
           rawResponse: response,
           validationError: scorecardResult.error,
           failureClass: retryDecision.failureClass,
