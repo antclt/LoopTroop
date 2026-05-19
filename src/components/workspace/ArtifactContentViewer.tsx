@@ -364,7 +364,7 @@ export function WithRawTab({
         </div>
       </div>
 
-      {notice}
+      {activeTab === 'structured' ? notice : null}
 
       {activeTab === 'raw' && (
         <>
@@ -387,10 +387,18 @@ export function WithRawTab({
                         disabled && 'opacity-45',
                       )}
                     >
-                      {source.variants.map((variant, index) => {
+                      <span
+                        className={cn(
+                          'inline-flex min-w-0 max-w-full items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium',
+                          sourceActive ? 'bg-muted text-foreground' : 'text-muted-foreground',
+                        )}
+                      >
+                        {source.modelId ? <ModelIcon modelId={source.modelId} className="h-3 w-3" /> : null}
+                        <span className="min-w-0 truncate">{label}</span>
+                      </span>
+                      {source.variants.map((variant) => {
                         const active = activeRawSource.id === variant.id
                         const variantDisabled = Boolean(variant.disabled)
-                        const variantLabel = index === 0 ? label : variant.label
                         return (
                           <Tooltip key={variant.id}>
                               <TooltipTrigger asChild>
@@ -398,19 +406,18 @@ export function WithRawTab({
                                                         type="button"
                                                         disabled={variantDisabled}
                                                         aria-pressed={active}
-                                                        aria-label={variant.ariaLabel ?? (index === 0 ? label : `${label} ${variant.label}`)}
+                                                        aria-label={variant.ariaLabel ?? `${label} ${variant.label}`}
                                                         onClick={() => setActiveRawSourceId(variant.id)}
                                                         className={cn(
                                                           'inline-flex min-w-0 max-w-full items-center gap-1.5 px-2.5 py-1 text-[10px] font-medium transition-colors',
-                                                          index > 0 && 'border-l border-border',
+                                                          'border-l border-border',
                                                           active
                                                             ? 'bg-primary text-primary-foreground'
                                                             : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
                                                           variantDisabled && 'cursor-not-allowed hover:bg-background hover:text-muted-foreground',
                                                         )}
                                                       >
-                                                        {index === 0 && source.modelId ? <ModelIcon modelId={source.modelId} className="h-3 w-3" /> : null}
-                                                        <span className={cn('min-w-0 truncate', variant.labelClassName)}>{variantLabel}</span>
+                                                        <span className={cn('min-w-0 truncate', variant.labelClassName)}>{variant.label}</span>
                                                       </button>
                               </TooltipTrigger>
                               <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
@@ -512,7 +519,7 @@ function RefinedArtifactTabs({ content, hasChanges, sectionsContent, diffContent
         </div>
       </div>
 
-      {hasDiffTab ? notice : null}
+      {currentTab === 'sections' ? notice : null}
 
       {currentTab === 'raw' && (
         <RawDisplayStats content={rawDisplayContent} />
@@ -1593,7 +1600,7 @@ function FinalInterviewArtifactView({
           {currentTab === 'raw' && <CopyButton content={content} />}
         </div>
       </div>
-      {notice}
+      {currentTab === 'final' ? notice : null}
       {currentTab === 'raw' ? (
         <div className="min-w-0 max-w-full space-y-3">
           <RawDisplayStats content={rawDisplayContent} />
@@ -1756,7 +1763,7 @@ function FinalPrdDraftView({
           {currentTab === 'raw' && <CopyButton content={activeRawContent} />}
         </div>
       </div>
-      {notice}
+      {currentTab === 'final' ? notice : null}
       {currentTab === 'raw' ? (
         <div className="min-w-0 max-w-full space-y-3">
           {rawVariantSelector}
@@ -4027,7 +4034,7 @@ function RelevantFilesScanView({ content }: { content: string }) {
 
   return (
     <div className="space-y-3">
-      <ArtifactProcessingNotice structuredOutput={parsed.structuredOutput} kind="relevant-files" />
+      {activeTab === 'files' ? <ArtifactProcessingNotice structuredOutput={parsed.structuredOutput} kind="relevant-files" /> : null}
       <div className="flex items-center gap-2">
         {parsed.modelId && (
           <ModelBadge modelId={parsed.modelId} active className="px-3 py-2 h-auto flex-1 justify-start">
@@ -6041,11 +6048,11 @@ export function ArtifactContent({
         const rawAttemptVariants = buildRawAttemptVariants(`voter:${voterId}`, label, detail?.rawAttempts)
         const variants: RawContentVariant[] = [{
           id: `voter:${voterId}:raw`,
-          label,
+          label: 'Raw Output',
           content: rawResponse,
           displayContent: rawResponse,
           disabled: !hasRawResponse,
-          ariaLabel: label,
+          ariaLabel: `${label} Raw Output`,
           title: hasRawResponse
             ? `Show raw vote response from ${label}`
             : `No exact raw vote response stored for ${label}`,

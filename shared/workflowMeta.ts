@@ -117,7 +117,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     outputs: [
       'Canonical `relevant-files.yaml` inside the ticket workspace — this becomes a shared context artifact that interview, PRD, and beads phases all receive as part of their input context.',
-      'Structured scan artifact containing file paths, content previews, relevance levels (high/medium/low), natural-language rationales, Raw attempt variants for any automatic structured retry, and intervention notices that stay visible while Raw attempts are inspected.',
+      'Structured scan artifact containing file paths, content previews, relevance levels (high/medium/low), natural-language rationales, Raw attempt variants for any automatic structured retry, and intervention notices on the primary Files tab.',
       'Normal phase logs with session lifecycle, prompt dispatch, retry history, and diagnostics.',
     ],
     transitions: [
@@ -962,7 +962,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'Past error occurrences remain reviewable even after the ticket moves on (via retry) or is canceled — the error history is never deleted.',
-      'Manual retry versions are reviewed through the phase previous-version selector; automatic structured retries inside a version are reviewed through artifact Raw attempt tabs with parser/retry intervention warnings kept in view.',
+      'Manual retry versions are reviewed through the phase previous-version selector; automatic structured retries inside a version are reviewed through artifact Raw attempt tabs, with parser/retry intervention warnings summarized on the primary artifact tab.',
       'Context available: Current Bead Data (if the failure occurred during the coding phase) + Error Context (error message, codes, phase, timing).',
       'Common causes of blocked errors: provider or model failures, session interruptions, model timeouts, rate-limit-style failures, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
       'Tip: Before retrying, check the error details. If the error is a transient issue (timeout, connectivity), retry is likely to succeed. If the error indicates a fundamental problem (malformed output, missing configuration), retry may fail again.',
@@ -1062,7 +1062,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'SCANNING_RELEVANT_FILES',
     label: 'Scanning Relevant Files',
-    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Configured structured scan retries are preserved in Raw attempts with retry warnings kept visible while the shared context artifact contains only accepted normalized files.',
+    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Configured structured scan retries are preserved in Raw attempts, while retry warnings remain on the Files tab and the shared context artifact contains only accepted normalized files.',
     details: WORKFLOW_PHASE_DETAILS.SCANNING_RELEVANT_FILES,
     kanbanPhase: 'in_progress',
     groupId: 'discovery',

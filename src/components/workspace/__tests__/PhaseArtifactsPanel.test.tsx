@@ -2204,7 +2204,6 @@ describe('PhaseArtifactsPanel', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /PRD Candidate/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^Diff(?: \(\d+\))?$/i }))
 
     const noticeButton = screen.getByText(expectedText).closest('button')!
     expect(noticeButton).toBeInTheDocument()
@@ -2216,6 +2215,9 @@ describe('PhaseArtifactsPanel', () => {
     expect(screen.getByText(expectedDetail)).toBeInTheDocument()
     expect(screen.getByText(expectedCount)).toBeInTheDocument()
     expect(screen.queryByText(notExpected)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Diff(?: \(\d+\))?$/i }))
+    expect(screen.queryByText(expectedText)).not.toBeInTheDocument()
   })
 
   it('uses category counts for mixed repair warnings and shows raw technical detail on expand', () => {
@@ -2251,7 +2253,6 @@ describe('PhaseArtifactsPanel', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /PRD Candidate/i }))
-    fireEvent.click(screen.getByRole('button', { name: /^Diff(?: \(\d+\))?$/i }))
 
     const noticeButton = screen.getByText('LoopTroop adjusted this diff.').closest('button')!
     expect(noticeButton).toBeInTheDocument()
@@ -2266,6 +2267,9 @@ describe('PhaseArtifactsPanel', () => {
     expect(screen.getByText('Dropped 1')).toBeInTheDocument()
     expect(screen.getByText(/Dropped no-op interview refinement modified at index 0/i)).toBeInTheDocument()
     expect(screen.getByText(/Inferred missing PRD refinement item_type at index 0 as epic/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /^Diff(?: \(\d+\))?$/i }))
+    expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
   })
 
   it('hides the interview diff repair notice when only a bare repair flag is present', () => {

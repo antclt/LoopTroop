@@ -1100,10 +1100,17 @@ describe('ArtifactContentViewer', () => {
     )
 
     expect(screen.getByText('LoopTroop adjusted this diff.')).toBeInTheDocument()
+    openNotice('LoopTroop adjusted this diff.')
+    expect(screen.getByText(/Retry Attempts/i)).toBeInTheDocument()
+    expect(screen.getAllByText('Missing PRD document fields.').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Diff(?: \(\d+\))?$/i }))
+    expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
-    expect(screen.getByText('LoopTroop adjusted this diff.')).toBeInTheDocument()
-    expect(screen.getByText('Retried 1')).toBeInTheDocument()
+    expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Retried 1')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Accepted Output' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attempt 2 Accepted' })).toBeInTheDocument()
@@ -1112,9 +1119,6 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Attempt 1 Rejected' }))
 
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
-    openNotice('LoopTroop adjusted this diff.')
-    expect(screen.getByText(/Retry Attempts/i)).toBeInTheDocument()
-    expect(screen.getAllByText('Missing PRD document fields.').length).toBeGreaterThan(0)
   })
 
   it('renders coverage report with changes tab when only revision content is provided', () => {
@@ -1463,7 +1467,9 @@ describe('ArtifactContentViewer', () => {
     const allModelsButton = screen.getByRole('button', { name: 'All Models' })
     expect(allModelsButton).toHaveAttribute('aria-pressed', 'true')
     const voterAGroup = screen.getByRole('group', { name: /voter-a raw output/i })
-    expect(within(voterAGroup).getByRole('button', { name: /voter-a$/ })).toBeInTheDocument()
+    expect(within(voterAGroup).getByText('voter-a')).toBeInTheDocument()
+    expect(within(voterAGroup).queryByRole('button', { name: /voter-a$/ })).not.toBeInTheDocument()
+    expect(within(voterAGroup).getByRole('button', { name: /voter-a Raw Output/ })).toBeInTheDocument()
     expect(within(voterAGroup).getByRole('button', { name: /voter-a Validated/ })).toBeInTheDocument()
     const allModelsPre = screen.getByText((_text, element) =>
       element?.tagName === 'PRE'
@@ -1474,9 +1480,9 @@ describe('ArtifactContentViewer', () => {
     await clickCopyRawOutput()
     expect(writeTextMock).toHaveBeenLastCalledWith(content)
 
-    fireEvent.click(within(voterAGroup).getByRole('button', { name: /voter-a$/ }))
+    fireEvent.click(within(voterAGroup).getByRole('button', { name: /voter-a Raw Output/ }))
 
-    expect(within(voterAGroup).getByRole('button', { name: /voter-a$/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(within(voterAGroup).getByRole('button', { name: /voter-a Raw Output/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText(`${firstRawResponse.split('\n').length.toLocaleString()} Lines`)).toBeInTheDocument()
     expect(screen.getByText(`${firstRawResponse.length.toLocaleString()} Characters`)).toBeInTheDocument()
     expect(screen.getByText(`${encode(firstRawResponse).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
@@ -1542,7 +1548,9 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
     const voterGroup = screen.getByRole('group', { name: /voter-a raw output/i })
-    expect(within(voterGroup).getByRole('button', { name: /voter-a$/ })).toBeInTheDocument()
+    expect(within(voterGroup).getByText('voter-a')).toBeInTheDocument()
+    expect(within(voterGroup).queryByRole('button', { name: /voter-a$/ })).not.toBeInTheDocument()
+    expect(within(voterGroup).getByRole('button', { name: /voter-a Raw Output/ })).toBeInTheDocument()
     expect(within(voterGroup).getByRole('button', { name: /voter-a Validated/ })).toBeInTheDocument()
     const rejectedButton = within(voterGroup).getByRole('button', { name: /voter-a Rejected/ })
     expect(rejectedButton).toBeEnabled()
@@ -1635,7 +1643,9 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
-    expect(screen.getByRole('button', { name: /voter-a$/ })).toBeEnabled()
+    const voterGroup = screen.getByRole('group', { name: /voter-a raw output/i })
+    expect(within(voterGroup).queryByRole('button', { name: /voter-a$/ })).not.toBeInTheDocument()
+    expect(within(voterGroup).getByRole('button', { name: /voter-a Raw Output/ })).toBeEnabled()
     expect(screen.queryByRole('button', { name: /voter-a Validated/ })).not.toBeInTheDocument()
   })
 
@@ -1857,12 +1867,14 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
     const draftGroup = screen.getByRole('group', { name: /gpt-5.2 raw output/i })
+    expect(within(draftGroup).getByText('gpt-5.2')).toBeInTheDocument()
+    expect(within(draftGroup).queryByRole('button', { name: /^gpt-5.2$/ })).not.toBeInTheDocument()
     expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Raw Output/ })).toBeInTheDocument()
     expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Validated/ })).toBeInTheDocument()
     const rejectedButton = within(draftGroup).getByRole('button', { name: /gpt-5.2 Rejected/ })
     expect(rejectedButton).toBeEnabled()
     expect(within(draftGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'gpt-5.2',
+      'Raw Output',
       'Rejected',
       'Validated',
     ])
@@ -2233,7 +2245,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getAllByText(/4 \| files:/i).length).toBeGreaterThan(0)
   })
 
-  it('keeps multiple rejected relevant-files attempts available in Raw while showing the intervention warning', () => {
+  it('keeps multiple rejected relevant-files attempts available in Raw without duplicating the intervention warning', () => {
     render(
       <ArtifactContent
         artifactId="relevant-files-scan"
@@ -2278,9 +2290,10 @@ describe('ArtifactContentViewer', () => {
       />,
     )
 
+    expect(screen.getByText('LoopTroop adjusted this relevant files scan.')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
-    expect(screen.getByText('LoopTroop adjusted this relevant files scan.')).toBeInTheDocument()
+    expect(screen.queryByText('LoopTroop adjusted this relevant files scan.')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Attempt 2 Rejected' })).toBeInTheDocument()
 
@@ -2917,8 +2930,8 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByText(/successful pass/i)).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
-    expect(screen.getByText('LoopTroop adjusted this final test plan.')).toBeInTheDocument()
-    expect(screen.getByText('Retried 1')).toBeInTheDocument()
+    expect(screen.queryByText('LoopTroop adjusted this final test plan.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Retried 1')).not.toBeInTheDocument()
   })
 
   it('renders integration reports with structured metadata and deferred push guidance', () => {

@@ -7,7 +7,7 @@ All notable changes to LoopTroop will be documented in this file.
 ### Summary
 - Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
-- Kept structured retry intervention warnings visible while inspecting rejected and accepted Raw attempt diagnostics.
+- Kept structured retry audit controls clearer by making model labels passive in Raw selectors and limiting intervention warnings to the primary artifact tab.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 
 ### Detailed Changes
@@ -23,7 +23,8 @@ All notable changes to LoopTroop will be documented in this file.
 - Documented the four retry classes and standardized status/details wording around **continued session**, **fresh session**, and broader **new attempt** loops.
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
-- Structured artifact viewers now keep parser/retry intervention notices visible on Raw tabs, and retry producers share one raw-attempt helper so accepted/rejected attempt metadata stays consistent across phases.
+- Structured artifact viewers now keep parser/retry intervention notices on the primary artifact tab, while retry producers share one raw-attempt helper so accepted/rejected attempt metadata stays consistent across phases.
+- Made grouped Raw selector model labels passive metadata, with only concrete raw variants such as `Raw Output`, `Attempt 1 Rejected`, and `Validated` remaining clickable.
 - Development maintenance output now renders a single default startup summary with package-level dependency update details, held direct dependency details, and held audit remediation eligibility times.
 - Removed the separate verbose dev-startup mode so dependency maintenance details appear in normal `npm run dev` output.
 - The `npm run dev` startup summary now prints the docs URL once instead of repeating its port as a suffix.
