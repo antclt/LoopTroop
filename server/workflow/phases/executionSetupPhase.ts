@@ -21,6 +21,7 @@ import {
   emitPhaseLog,
   createOpenCodeStreamState,
   resolveExecutionSetupRuntimeSettings,
+  resolveStructuredRetryRuntimeSettings,
 } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { handleMockExecutionUnsupported } from './executionPhase'
@@ -185,6 +186,7 @@ export async function handleExecutionSetup(
           variant: context.lockedMainImplementerVariant ?? undefined,
           maxIterations: runtimeSettings.maxIterations,
           timeoutMs: runtimeSettings.timeoutMs,
+          structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
           initialRetryNotes: retryNotes,
         },
         {

@@ -43,6 +43,7 @@ import {
 import type { StructuredLogFields, StructuredLogAudience, StructuredLogKind, StructuredLogOp, OpenCodeStreamState, PhaseIntermediateData } from './types'
 import { phaseIntermediate } from './state'
 import { formatStructuredFailureForLog, type StructuredFailureClass } from '../../lib/structuredOutputRetry'
+import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
 import { getErrorMessage } from '@shared/typeGuards'
 
@@ -1394,6 +1395,31 @@ export function resolveCoverageRuntimeSettings(context: TicketContext): {
       ?? profile?.maxBeadsCoveragePasses
       ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
   }
+}
+
+export function resolveStructuredRetryRuntimeSettings(context: TicketContext): {
+  structuredRetryCount: number
+} {
+  const profile = appDb.select().from(profiles).get()
+
+  return {
+    structuredRetryCount: normalizeStructuredRetryCount(
+      context.lockedStructuredRetryCount
+        ?? profile?.structuredRetryCount
+        ?? PROFILE_DEFAULTS.structuredRetryCount,
+    ),
+  }
+}
+
+export function resolveStructuredRetryCountForTicket(ticketId: string): number {
+  const storedContext = getStoredTicketContext(ticketId)
+  const profile = appDb.select().from(profiles).get()
+
+  return normalizeStructuredRetryCount(
+    storedContext?.localTicket.lockedStructuredRetryCount
+      ?? profile?.structuredRetryCount
+      ?? PROFILE_DEFAULTS.structuredRetryCount,
+  )
 }
 
 export function getCoverageStateLabel(phase: 'interview' | 'prd' | 'beads'): string {

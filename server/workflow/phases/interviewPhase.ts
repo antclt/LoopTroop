@@ -58,6 +58,8 @@ import {
   createOpenCodeStreamState,
   resolveInterviewDraftSettings,
   resolveCouncilRuntimeSettings,
+  resolveStructuredRetryRuntimeSettings,
+  resolveStructuredRetryCountForTicket,
   resolveCouncilMembers,
   loadTicketDirContext,
   formatCouncilResolutionLog,
@@ -407,6 +409,7 @@ export async function handleInterviewDeliberate(
     worktreePath,
     {
       ...draftSettings,
+      maxStructuredRetries: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
       ticketId,
     },
     signal,
@@ -649,6 +652,7 @@ export async function handleInterviewVote(
       phase: 'COUNCIL_VOTING_INTERVIEW',
     },
     PROM2.toolPolicy,
+    resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
   )
 
   const voteQuorum = checkMemberResponseQuorum(voteRun.memberOutcomes, councilSettings.minQuorum)
@@ -811,11 +815,12 @@ export async function handleInterviewCompile(
         losingDraftMeta,
       )
       if (!result.ok) {
+        const retryAttempt = (structuredMeta.autoRetryCount ?? 0) + 1
         structuredMeta = buildStructuredMetadata(structuredMeta, {
-          autoRetryCount: 1,
+          autoRetryCount: retryAttempt,
           validationError: result.error,
           ...(result.retryDiagnostic
-            ? { retryDiagnostics: [withStructuredRetryDiagnosticAttempt(result.retryDiagnostic, (structuredMeta.autoRetryCount ?? 0) + 1)!] }
+            ? { retryDiagnostics: [withStructuredRetryDiagnosticAttempt(result.retryDiagnostic, retryAttempt)!] }
             : {}),
         })
         throw new Error(result.error)
@@ -831,6 +836,7 @@ export async function handleInterviewCompile(
     PROM3.outputFormat,
     undefined,
     PROM3.toolPolicy,
+    resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
   )
   const refinedContent = refinementRun.content
 
@@ -1041,6 +1047,8 @@ export async function handleInterviewQAStart(
       )
     },
     ticketId,
+    undefined,
+    resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
   )
   throwIfAborted(signal, ticketId)
 
@@ -1275,6 +1283,7 @@ export async function handleInterviewQABatch(
     ticketId,
     undefined,
     restartOptions,
+    resolveStructuredRetryCountForTicket(ticketId),
   )
   throwIfAborted(signal, ticketId)
 

@@ -148,6 +148,7 @@ describe('ticketRouter POST /tickets/:id/start', () => {
       message: 'Start action accepted',
     })
     expect(getTicketByRef(ticket.id)?.status).toBe('SCANNING_RELEVANT_FILES')
+    expect(getTicketByRef(ticket.id)?.lockedStructuredRetryCount).toBe(1)
 
     expect(getDraftLogMessages(ticket.id)).toEqual([
       'Start requested.',
@@ -175,6 +176,31 @@ describe('ticketRouter POST /tickets/:id/start', () => {
       '✓ Start Config: Configuration locked.',
       '✓ Workflow Dispatch: Start dispatched.',
     ])
+
+    broadcaster.clearTicket(ticket.id)
+  })
+
+  it('locks the configured structured retry count at ticket start', async () => {
+    sqlite.exec(`
+      INSERT INTO profiles (
+        main_implementer,
+        council_members,
+        structured_retry_count
+      ) VALUES (
+        'openai/codex-mini-latest',
+        '["openai/codex-mini-latest","openai/gpt-5.3-codex"]',
+        4
+      );
+    `)
+
+    const { app, ticket } = setupStartTicketApp()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/start`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(200)
+    expect(getTicketByRef(ticket.id)?.lockedStructuredRetryCount).toBe(4)
 
     broadcaster.clearTicket(ticket.id)
   })

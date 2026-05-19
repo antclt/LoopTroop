@@ -50,6 +50,7 @@ function migrateLegacyProfilesTable() {
         max_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxCoveragePasses},
         max_prd_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxPrdCoveragePasses},
         max_beads_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses},
+        structured_retry_count INTEGER DEFAULT ${PROFILE_DEFAULTS.structuredRetryCount},
         max_iterations INTEGER DEFAULT ${PROFILE_DEFAULTS.maxIterations},
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -68,6 +69,7 @@ function migrateLegacyProfilesTable() {
         max_coverage_passes,
         max_prd_coverage_passes,
         max_beads_coverage_passes,
+        structured_retry_count,
         max_iterations,
         created_at,
         updated_at
@@ -85,6 +87,7 @@ function migrateLegacyProfilesTable() {
         ${selectLegacyProfileValue(columnSet, 'max_coverage_passes', PROFILE_DEFAULTS.maxCoveragePasses)},
         ${selectLegacyProfileValue(columnSet, 'max_prd_coverage_passes', PROFILE_DEFAULTS.maxPrdCoveragePasses)},
         ${selectLegacyProfileValue(columnSet, 'max_beads_coverage_passes', PROFILE_DEFAULTS.maxBeadsCoveragePasses)},
+        ${selectLegacyProfileValue(columnSet, 'structured_retry_count', PROFILE_DEFAULTS.structuredRetryCount)},
         ${selectLegacyProfileValue(columnSet, 'max_iterations', PROFILE_DEFAULTS.maxIterations)},
         ${selectLegacyProfileExpression(columnSet, 'created_at', "datetime('now')")},
         ${selectLegacyProfileExpression(columnSet, 'updated_at', "datetime('now')")}
@@ -113,6 +116,7 @@ export function initializeDatabase() {
       max_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxCoveragePasses},
       max_prd_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxPrdCoveragePasses},
       max_beads_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses},
+      structured_retry_count INTEGER DEFAULT ${PROFILE_DEFAULTS.structuredRetryCount},
       max_iterations INTEGER DEFAULT ${PROFILE_DEFAULTS.maxIterations},
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -137,6 +141,7 @@ export function initializeDatabase() {
   ensureColumn('profiles', 'max_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxCoveragePasses}`)
   ensureColumn('profiles', 'max_prd_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxPrdCoveragePasses}`)
   ensureColumn('profiles', 'max_beads_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses}`)
+  ensureColumn('profiles', 'structured_retry_count', `INTEGER DEFAULT ${PROFILE_DEFAULTS.structuredRetryCount}`)
   ensureColumn('profiles', 'execution_setup_timeout', `INTEGER DEFAULT ${PROFILE_DEFAULTS.executionSetupTimeout}`)
   ensureColumn('profiles', 'main_implementer_variant', 'TEXT')
   ensureColumn('profiles', 'council_member_variants', 'TEXT')

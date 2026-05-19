@@ -18,6 +18,7 @@ import { clearContextCache } from '../opencode/contextBuilder'
 import { getOpenCodeAdapter, isMockOpenCodeMode } from '../opencode/factory'
 import { broadcaster } from '../sse/broadcaster'
 import { appendLogEvent, shouldSkipLogEmission } from '../log/executionLog'
+import { normalizeStructuredRetryCount } from '../lib/structuredRetryPolicy'
 import { cancelTicket, handleInterviewQABatch, processInterviewBatchAsync, skipAllInterviewQuestionsToApproval } from '../workflow/runner'
 import { abortTicketWork } from '../workflow/phases/state'
 import { createTicket as createTicketRecord } from '../ticket/create'
@@ -631,6 +632,7 @@ function rollbackTicketStartToDraft(ticketId: string): void {
     lockedMaxCoveragePasses: null,
     lockedMaxPrdCoveragePasses: null,
     lockedMaxBeadsCoveragePasses: null,
+    lockedStructuredRetryCount: null,
   })
   stopActor(ticketId)
 }
@@ -1075,6 +1077,7 @@ export async function handleStartTicket(c: Context) {
     ?? PROFILE_DEFAULTS.maxPrdCoveragePasses
   const lockedMaxBeadsCoveragePasses = profile?.maxBeadsCoveragePasses
     ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses
+  const lockedStructuredRetryCount = normalizeStructuredRetryCount(profile?.structuredRetryCount)
   const lockedMainImplementerVariant = profile?.mainImplementerVariant ?? null
   let lockedCouncilMemberVariants: Record<string, string> | null = null
   if (profile?.councilMemberVariants) {
@@ -1106,6 +1109,7 @@ export async function handleStartTicket(c: Context) {
       lockedMaxCoveragePasses,
       lockedMaxPrdCoveragePasses,
       lockedMaxBeadsCoveragePasses,
+      lockedStructuredRetryCount,
     })
     if (!lockedTicket) {
       rollbackTicketStartToDraft(ticketId)
@@ -1143,6 +1147,7 @@ export async function handleStartTicket(c: Context) {
       lockedMaxCoveragePasses,
       lockedMaxPrdCoveragePasses,
       lockedMaxBeadsCoveragePasses,
+      lockedStructuredRetryCount,
     })
   } catch (err) {
     rollbackTicketStartToDraft(ticketId)

@@ -14,6 +14,7 @@ import {
   emitPhaseLog,
   createOpenCodeStreamState,
   resolveExecutionSetupRuntimeSettings,
+  resolveStructuredRetryRuntimeSettings,
 } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { handleMockExecutionUnsupported } from './executionPhase'
@@ -155,6 +156,7 @@ async function generateAndPersistExecutionSetupPlan(input: {
       model: planModelId,
       variant: input.context.lockedMainImplementerVariant ?? undefined,
       timeoutMs: runtimeSettings.timeoutMs,
+      structuredRetryCount: resolveStructuredRetryRuntimeSettings(input.context).structuredRetryCount,
       phaseAttempt,
       promptTemplate: input.source === 'regenerate'
         ? PROM_EXECUTION_SETUP_PLAN_REGENERATE

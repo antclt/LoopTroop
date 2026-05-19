@@ -96,6 +96,7 @@ export async function executeFinalTestWithRetries(
     variant?: string
     maxIterations: number
     timeoutMs: number
+    structuredRetryCount?: number
   },
   callbacks: {
     executePlan: (input: { attempt: number; generation: FinalTestGenerationResult }) => Promise<FinalTestExecutionReport>
@@ -162,6 +163,7 @@ export async function executeFinalTestWithRetries(
         model: options.model,
         variant: options.variant,
         timeoutMs: options.timeoutMs,
+        structuredRetryCount: options.structuredRetryCount,
         phaseAttempt: attempt,
         onSessionCreated: (sessionId) => {
           callbacks.onSessionCreated?.(sessionId, attempt)

@@ -101,7 +101,7 @@ describe('hydrateAllTickets', () => {
       actor.send({ type: 'START', lockedMainImplementer: 'model-a', lockedCouncilMembers: ['model-a'] })
       actor.send({
         type: 'ERROR',
-        message: 'Relevant files scan failed validation after retry: Relevant files output was empty. Underlying OpenCode error: rate_limit_error: Model usage limit reached (HTTP 429)',
+        message: 'Relevant files scan failed validation after 1 structured retry attempt(s): Relevant files output was empty. Underlying OpenCode error: rate_limit_error: Model usage limit reached (HTTP 429)',
         codes: ['RELEVANT_FILES_SCAN_FAILED', 'OPENCODE_PROVIDER_ERROR'],
         diagnostics: {
           kind: 'opencode_provider',

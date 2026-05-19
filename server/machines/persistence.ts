@@ -37,6 +37,7 @@ type TicketActorInput = {
   lockedMaxCoveragePasses?: number | null
   lockedMaxPrdCoveragePasses?: number | null
   lockedMaxBeadsCoveragePasses?: number | null
+  lockedStructuredRetryCount?: number | null
 }
 
 function isKnownWorkflowState(status: string): boolean {
@@ -83,6 +84,7 @@ function buildMachineContext(
     lockedMaxCoveragePasses: input.lockedMaxCoveragePasses ?? null,
     lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
+    lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
     previousStatus: options.previousStatus ?? null,
     error: options.error ?? null,
     errorCodes: options.errorCodes ?? [],
@@ -151,6 +153,7 @@ function reconcileSnapshotForTicket(
   context.lockedMaxCoveragePasses = input.lockedMaxCoveragePasses ?? null
   context.lockedMaxPrdCoveragePasses = input.lockedMaxPrdCoveragePasses ?? null
   context.lockedMaxBeadsCoveragePasses = input.lockedMaxBeadsCoveragePasses ?? null
+  context.lockedStructuredRetryCount = input.lockedStructuredRetryCount ?? null
 
   if (
     dbStatus === 'BLOCKED_ERROR'
@@ -330,6 +333,7 @@ export function ensureActorForTicket(ticketRef: string | number) {
     lockedMaxCoveragePasses: ticket.localTicket.lockedMaxCoveragePasses ?? null,
     lockedMaxPrdCoveragePasses: ticket.localTicket.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: ticket.localTicket.lockedMaxBeadsCoveragePasses ?? null,
+    lockedStructuredRetryCount: ticket.localTicket.lockedStructuredRetryCount ?? null,
   }
 
   if (ticket.localTicket.xstateSnapshot) {
@@ -471,6 +475,7 @@ export function createTicketActor(
       lockedMaxCoveragePasses: input.lockedMaxCoveragePasses ?? null,
       lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
       lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
+      lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
     },
   })
 
@@ -506,6 +511,7 @@ function hydrateTicketActor(
       lockedMaxCoveragePasses: input.lockedMaxCoveragePasses ?? null,
       lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
       lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
+      lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
     },
   })
 
@@ -539,6 +545,7 @@ export function hydrateAllTickets() {
       lockedMaxCoveragePasses: ticket.lockedMaxCoveragePasses ?? null,
       lockedMaxPrdCoveragePasses: ticket.lockedMaxPrdCoveragePasses ?? null,
       lockedMaxBeadsCoveragePasses: ticket.lockedMaxBeadsCoveragePasses ?? null,
+      lockedStructuredRetryCount: ticket.lockedStructuredRetryCount ?? null,
     }
 
     try {
@@ -641,6 +648,7 @@ export function revertTicketToApprovalStatus(
     lockedMaxCoveragePasses: ticket.localTicket.lockedMaxCoveragePasses ?? null,
     lockedMaxPrdCoveragePasses: ticket.localTicket.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: ticket.localTicket.lockedMaxBeadsCoveragePasses ?? null,
+    lockedStructuredRetryCount: ticket.localTicket.lockedStructuredRetryCount ?? null,
   }, {
     skipFirstPersist: false,
   })

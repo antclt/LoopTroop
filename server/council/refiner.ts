@@ -7,6 +7,7 @@ import { buildStructuredRetryPrompt } from '../structuredOutput'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { getErrorMessage } from '@shared/typeGuards'
 import { classifyStructuredFailureFromError, getStructuredRetryDecision } from '../lib/structuredOutputRetry'
+import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../lib/structuredRetryPolicy'
 
 export interface RefineDraftResult {
   content: string
@@ -83,6 +84,7 @@ export async function refineDraft(
     rawResponse: string
   }) => PromptPart[],
   toolPolicy: OpenCodeToolPolicy = 'default',
+  maxStructuredRetries: number = 1,
 ): Promise<RefineDraftResult> {
   let sessionId = ''
   const refineParts = buildPrompt
@@ -102,7 +104,7 @@ export async function refineDraft(
       ]
   let promptParts = refineParts
   let attemptCount = 0
-  const maxStructuredRetries = 1
+  const normalizedMaxStructuredRetries = normalizeStructuredRetryCount(maxStructuredRetries)
   const rawAttempts: RawAttempt[] = []
 
   while (true) {
@@ -198,7 +200,7 @@ export async function refineDraft(
         validationError,
         failureClass: retryDecision.failureClass,
       })
-      if (attemptCount >= maxStructuredRetries) {
+      if (!shouldRetryStructuredOutput(attemptCount, normalizedMaxStructuredRetries)) {
         throwWithRawAttempts(error, rawAttempts)
       }
       attemptCount += 1

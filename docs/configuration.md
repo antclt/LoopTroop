@@ -11,6 +11,7 @@ All configuration lives in your profile, accessible via the **Configuration** bu
 | [Council Response Timeout](#council-response-timeout) | 1200 s | 10–3600 s | AI Thinking |
 | [Min Council Quorum](#min-council-quorum) | 2 | 1–4 | AI Thinking |
 | [Max Interview Questions](#max-interview-questions) | 50 | 0–50 | AI Thinking |
+| [Structured Output Retries](#structured-output-retries) | 1 | 0–5 | AI Thinking |
 | [Coverage Follow-Up Budget](#coverage-follow-up-budget) | 20 % | 0–100 % | Coverage |
 | [Interview Coverage Passes](#interview-coverage-passes) | 2 | 1–10 | Coverage |
 | [PRD Coverage Passes](#prd-coverage-passes) | 5 | 2–20 | Coverage |
@@ -192,6 +193,31 @@ After `COMPILING_INTERVIEW` finishes, the interview document can have up to this
 - Set to 0 to skip the interview question batch entirely and go straight to coverage (rarely useful unless you pre-fill answers externally).
 
 **See also:** [Ticket Flow → Interview](/ticket-flow#interview)
+
+---
+
+### Structured Output Retries
+
+**Type:** integer
+**Default:** 1
+**Range:** 0–5
+
+Controls how many automatic retry prompts LoopTroop may send after the first model response fails structured-output validation. The value is locked onto each ticket when it starts, so profile changes affect future tickets and unstarted tickets only.
+
+This setting applies to structured-output repair paths such as council drafts/votes/refinements, relevant-files scan, PROM4 interview batches, PRD/beads coverage, execution setup reports, final-test generation, PR drafting, and the BEAD_STATUS parser repair inside one coding iteration. It does not change coverage pass limits, coding bead iteration count, execution setup/final-test attempt budgets, or manual Retry from `BLOCKED_ERROR`.
+
+**Session behavior:**
+
+- Validation errors normally use a **continued session** retry prompt so the model can correct only the malformed output.
+- Empty responses, provider/session errors, and transport-style failures use a **fresh session** where the original prompt is sent again.
+- Council draft/vote/refine retries are documented fresh-session structured retries by design.
+
+**Trade-offs:**
+
+| Lower (0) | Higher (2–5) |
+| --- | --- |
+| Fails fast and spends fewer tokens | More tolerance for malformed YAML/JSON or transient provider output |
+| 0 disables automatic structured repair prompts | Higher values can delay surfacing persistent prompt/parser issues |
 
 ---
 

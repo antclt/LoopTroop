@@ -10,6 +10,7 @@ export const PROFILE_DEFAULTS = {
   maxCoveragePasses: 2,
   maxPrdCoveragePasses: 5,
   maxBeadsCoveragePasses: 5,
+  structuredRetryCount: 1,
   maxIterations: 5,
   toolInputMaxChars: 4000,
   toolOutputMaxChars: 12_000,

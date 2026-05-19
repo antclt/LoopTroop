@@ -26,6 +26,7 @@ export async function draftBeads(
   options: {
     draftTimeoutMs: number
     minQuorum: number
+    maxStructuredRetries?: number
     ticketId?: string
     phaseAttempt?: number
   },
@@ -91,6 +92,7 @@ export async function draftBeads(
       phaseAttempt: options.phaseAttempt,
       toolPolicy: PROM20.toolPolicy,
       onPromptDispatched: onOpenCodePromptDispatched,
+      maxStructuredRetries: options.maxStructuredRetries,
       structuredRetrySchemaReminder: PROM20.outputFormat,
     },
   )

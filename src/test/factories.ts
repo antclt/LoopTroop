@@ -54,6 +54,7 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     lockedMaxCoveragePasses: null,
     lockedMaxPrdCoveragePasses: null,
     lockedMaxBeadsCoveragePasses: null,
+    lockedStructuredRetryCount: null,
     lockedCouncilMembers: [...TEST.councilMembers],
     lockedCouncilMemberVariants: null,
     availableActions: [],

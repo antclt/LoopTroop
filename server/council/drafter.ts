@@ -17,6 +17,7 @@ import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, classifyDraftFailure } from './draftUtils'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
+import { normalizeStructuredRetryCount } from '../lib/structuredRetryPolicy'
 import { getErrorMessage } from '@shared/typeGuards'
 
 interface DraftValidationResult {
@@ -169,7 +170,7 @@ export async function generateDrafts(
       if (signal?.aborted) throw new CancelledError()
       let promptParts = contextParts
       let result: Awaited<ReturnType<typeof runOpenCodePrompt>> | undefined
-      const maxStructuredRetries = runtimeOptions?.maxStructuredRetries ?? 1
+      const maxStructuredRetries = normalizeStructuredRetryCount(runtimeOptions?.maxStructuredRetries)
 
       while (true) {
         result = await runOpenCodePrompt({

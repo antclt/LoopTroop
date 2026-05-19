@@ -221,7 +221,7 @@ describe('handleRelevantFilesScan', () => {
 
     expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'ERROR',
-      message: expect.stringContaining('failed validation after retry'),
+      message: expect.stringContaining('failed validation after 1 structured retry attempt(s)'),
       codes: ['RELEVANT_FILES_SCAN_FAILED'],
     }))
     expect(existsSync(`${paths.ticketDir}/relevant-files.yaml`)).toBe(false)
@@ -425,7 +425,7 @@ describe('handleRelevantFilesScan', () => {
     expect(runOpenCodeSessionPromptMock).not.toHaveBeenCalled()
     expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({
       type: 'ERROR',
-      message: expect.stringContaining('Relevant files scan failed validation after retry: Relevant files output was empty.'),
+      message: expect.stringContaining('Relevant files scan failed validation after 1 structured retry attempt(s): Relevant files output was empty.'),
       codes: ['RELEVANT_FILES_SCAN_FAILED', OPENCODE_PROVIDER_AUTH_FAILED],
       diagnostics: expect.objectContaining({
         kind: 'opencode_provider',

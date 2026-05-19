@@ -59,6 +59,7 @@ export function makeTicketContext(
     lockedMaxCoveragePasses: null,
     lockedMaxPrdCoveragePasses: null,
     lockedMaxBeadsCoveragePasses: null,
+    lockedStructuredRetryCount: null,
     previousStatus: null,
     error: null,
     errorCodes: [],

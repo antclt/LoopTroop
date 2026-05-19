@@ -22,6 +22,7 @@ import type { InterviewSessionSnapshot } from '@shared/interviewSession'
 import { buildInterviewQuestionViews } from './sessionState'
 import { SessionManager } from '../../opencode/sessionManager'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
+import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 
 export { calculateFollowUpLimit } from './followUpBudget'
 
@@ -171,6 +172,7 @@ export async function startInterviewSession(
   onPromptDispatched?: (entry: { sessionId: string; event: OpenCodePromptDispatchEvent }) => void,
   ticketId?: string,
   timeoutMs: number = COUNCIL_RESPONSE_TIMEOUT_MS,
+  structuredRetryCount?: number,
 ): Promise<{ sessionId: string; firstBatch: BatchResponse }> {
   const contextParts = buildMinimalContext('interview_qa', ticketState)
   const prompt = buildConversationalPrompt(PROM4, contextParts)
@@ -245,9 +247,10 @@ export async function startInterviewSession(
     onOpenCodeStreamEvent,
     onPromptDispatched,
     ticketId,
-    restartSession: async () => {
+    structuredRetryCount,
+    restartSession: async (currentSessionId) => {
       if (sessionManager) {
-        await sessionManager.abandonSession(result.session.id)
+        await sessionManager.abandonSession(currentSessionId)
       }
       const restarted = await runOpenCodePrompt({
         adapter,
@@ -283,7 +286,7 @@ export async function startInterviewSession(
           })
         },
       })
-      return { sessionId: restarted.session.id, response: restarted.response }
+      return { sessionId: restarted.session.id, response: restarted.response, responseMeta: restarted.responseMeta }
     },
   })
   return { sessionId: firstBatch.sessionId ?? result.session.id, firstBatch }
@@ -308,6 +311,7 @@ export async function submitBatchToSession(
     ticketState: TicketState
     snapshot: InterviewSessionSnapshot
   },
+  structuredRetryCount?: number,
 ): Promise<BatchResponse> {
   const answerLines = Object.entries(batchAnswers).map(([id, answer]) => {
     const text = answer.trim() || '[SKIPPED]'
@@ -364,10 +368,11 @@ export async function submitBatchToSession(
     onOpenCodeStreamEvent,
     onPromptDispatched,
     ticketId,
+    structuredRetryCount,
     restartSession: restartOptions
-      ? async () => {
+      ? async (currentSessionId) => {
           if (sessionManager) {
-            await sessionManager.abandonSession(sessionId)
+            await sessionManager.abandonSession(currentSessionId)
           }
           const restarted = await runOpenCodePrompt({
             adapter,
@@ -400,7 +405,7 @@ export async function submitBatchToSession(
               })
             },
           })
-          return { sessionId: restarted.session.id, response: restarted.response }
+          return { sessionId: restarted.session.id, response: restarted.response, responseMeta: restarted.responseMeta }
         }
       : undefined,
   })
@@ -461,74 +466,80 @@ async function parseBatchResponseWithRetry(input: {
   onOpenCodeStreamEvent?: (entry: { sessionId: string; event: StreamEvent }) => void
   onPromptDispatched?: (entry: { sessionId: string; event: OpenCodePromptDispatchEvent }) => void
   ticketId?: string
-  restartSession?: () => Promise<{ sessionId: string; response: string }>
+  structuredRetryCount?: number
+  restartSession?: (currentSessionId: string) => Promise<{ sessionId: string; response: string; responseMeta?: OpenCodeResponseMeta }>
 }): Promise<BatchResponse> {
-  const normalized = normalizeInterviewTurnOutput(input.response)
-  if (normalized.ok) {
-    logInterviewTurnRepairWarnings(normalized.repairWarnings, input.ticketId)
-    return toBatchResponse(normalized.value)
-  }
+  const structuredRetryCount = normalizeStructuredRetryCount(input.structuredRetryCount)
+  let response = input.response
+  let responseMeta = input.responseMeta
+  let sessionId = input.sessionId
+  let lastError = 'Unknown PROM4 validation error'
 
-  const retryDecision = getStructuredRetryDecision(input.response, input.responseMeta)
-  if (!retryDecision.reuseSession) {
-    if (!input.restartSession) {
-      throw new Error(`PROM4 output failed validation without a recoverable session: ${normalized.error}`)
+  for (let attempt = 0; attempt <= structuredRetryCount; attempt += 1) {
+    const normalized = normalizeInterviewTurnOutput(response)
+    if (normalized.ok) {
+      logInterviewTurnRepairWarnings(normalized.repairWarnings, input.ticketId)
+      return {
+        ...toBatchResponse(normalized.value),
+        ...(sessionId !== input.sessionId ? { sessionId } : {}),
+      }
     }
 
-    const restarted = await input.restartSession()
-    throwIfAborted(input.signal)
-    const restartedNormalized = normalizeInterviewTurnOutput(restarted.response)
-    if (!restartedNormalized.ok) {
-      throw new Error(`PROM4 output failed validation after fresh session: ${restartedNormalized.error}`)
+    lastError = normalized.error
+    if (attempt >= structuredRetryCount) {
+      break
     }
 
-    logInterviewTurnRepairWarnings(restartedNormalized.repairWarnings, input.ticketId)
-    return {
-      ...toBatchResponse(restartedNormalized.value),
-      ...(restarted.sessionId !== input.sessionId ? { sessionId: restarted.sessionId } : {}),
+    const retryDecision = getStructuredRetryDecision(response, responseMeta)
+    if (!retryDecision.reuseSession) {
+      if (!input.restartSession) {
+        throw new Error(`PROM4 output failed validation without a recoverable session: ${normalized.error}`)
+      }
+
+      const restarted = await input.restartSession(sessionId)
+      throwIfAborted(input.signal)
+      sessionId = restarted.sessionId
+      response = restarted.response
+      responseMeta = restarted.responseMeta
+      continue
     }
-  }
 
-  const retryParts = buildStructuredRetryPrompt([], {
-    validationError: normalized.error,
-    rawResponse: input.response,
-    schemaReminder: PROM4_SCHEMA_REMINDER,
-  })
-
-  let retryResult: Awaited<ReturnType<typeof runOpenCodeSessionPrompt>>
-  try {
-    retryResult = await runOpenCodeSessionPrompt({
-      adapter: input.adapter,
-      session: { id: input.sessionId },
-      parts: retryParts,
-      signal: input.signal,
-      timeoutMs: input.timeoutMs ?? COUNCIL_RESPONSE_TIMEOUT_MS,
-      model: input.model,
-      toolPolicy: PROM4.toolPolicy,
-      onStreamEvent: (event) => {
-        input.onOpenCodeStreamEvent?.({
-          sessionId: input.sessionId,
-          event,
-        })
-      },
-      onPromptDispatched: (event) => {
-        input.onPromptDispatched?.({
-          sessionId: event.session.id,
-          event,
-        })
-      },
+    const retryParts = buildStructuredRetryPrompt([], {
+      validationError: normalized.error,
+      rawResponse: response,
+      schemaReminder: PROM4_SCHEMA_REMINDER,
     })
-  } catch (error) {
-    throwIfCancelled(error, input.signal)
-    throw error
+
+    try {
+      const retryResult = await runOpenCodeSessionPrompt({
+        adapter: input.adapter,
+        session: { id: sessionId },
+        parts: retryParts,
+        signal: input.signal,
+        timeoutMs: input.timeoutMs ?? COUNCIL_RESPONSE_TIMEOUT_MS,
+        model: input.model,
+        toolPolicy: PROM4.toolPolicy,
+        onStreamEvent: (event) => {
+          input.onOpenCodeStreamEvent?.({
+            sessionId,
+            event,
+          })
+        },
+        onPromptDispatched: (event) => {
+          input.onPromptDispatched?.({
+            sessionId: event.session.id,
+            event,
+          })
+        },
+      })
+      throwIfAborted(input.signal)
+      response = retryResult.response
+      responseMeta = retryResult.responseMeta
+    } catch (error) {
+      throwIfCancelled(error, input.signal)
+      throw error
+    }
   }
 
-  throwIfAborted(input.signal)
-  const retried = normalizeInterviewTurnOutput(retryResult.response)
-  if (!retried.ok) {
-    throw new Error(`PROM4 output failed validation after retry: ${retried.error}`)
-  }
-
-  logInterviewTurnRepairWarnings(retried.repairWarnings, input.ticketId)
-  return toBatchResponse(retried.value)
+  throw new Error(`PROM4 output failed validation after ${structuredRetryCount} structured retry attempt(s): ${lastError}`)
 }

@@ -16,6 +16,7 @@ import { buildStructuredRetryPrompt } from '../../structuredOutput'
 import { SessionManager } from '../../opencode/sessionManager'
 import { COUNCIL_RESPONSE_TIMEOUT_MS, EXECUTOR_NOTE_TRUNCATION_LENGTH, EXECUTOR_DETAIL_TRUNCATION_LENGTH } from '../../lib/constants'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
+import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import { buildPromptFromTemplate, buildSameSessionPromptFromTemplate, PROM_CODING, PROM51 } from '../../prompts/index'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../shared/errorCodes'
 
@@ -251,6 +252,7 @@ export async function executeBead(
     onPromptDispatched?: (entry: { sessionId: string; iteration: number; event: OpenCodePromptDispatchEvent }) => void
     onPromptCompleted?: (entry: { iteration: number; stage: CodingPromptStage; event: OpenCodePromptCompletedEvent }) => void
     onContextWipe?: (entry: { beadId: string; notes: string; iteration: number }) => Promise<void>
+    structuredRetryCount?: number
   },
 ): Promise<ExecutionResult> {
   const startingIteration = Number.isInteger(bead.iteration) && bead.iteration > 0
@@ -264,6 +266,7 @@ export async function executeBead(
   let lastOutput = ''
   const errors: string[] = []
   const sessionManager = callbacks?.ticketId ? new SessionManager(adapter) : null
+  const structuredRetryCount = normalizeStructuredRetryCount(callbacks?.structuredRetryCount)
 
   while (maxAttemptIteration == null || iteration <= maxAttemptIteration) {
     lastAttemptIteration = iteration
@@ -337,6 +340,7 @@ export async function executeBead(
       })
 
       let runResult = await runBeadPrompt()
+      let structuredRetryAttempts = 0
 
       while (true) {
         throwIfAborted(signal)
@@ -367,6 +371,10 @@ export async function executeBead(
         }
 
         if (shouldUseStructuredRetry(result)) {
+          if (structuredRetryAttempts >= structuredRetryCount) {
+            throw new Error(`Completion marker failed validation after ${structuredRetryCount} structured retry attempt(s): ${result.errors.join('; ') || 'Completion marker missing or invalid.'}`)
+          }
+          structuredRetryAttempts += 1
           const retryDecision = getStructuredRetryDecision(lastOutput, runResult.responseMeta)
           if (retryDecision.reuseSession) {
             const retryParts = buildStructuredRetryPrompt([], {

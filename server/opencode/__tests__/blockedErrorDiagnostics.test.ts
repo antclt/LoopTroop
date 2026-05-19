@@ -122,7 +122,7 @@ describe('OpenCode blocked error diagnostics', () => {
   })
 
   it('appends an underlying error summary when it adds useful context', () => {
-    const message = appendBlockedErrorDiagnosticsSummary('Relevant files scan failed validation after retry: empty', {
+    const message = appendBlockedErrorDiagnosticsSummary('Relevant files scan failed validation after 1 structured retry attempt(s): empty', {
       kind: 'opencode_provider',
       source: 'provider',
       summary: 'rate_limit_error: Model usage limit reached (HTTP 429)',

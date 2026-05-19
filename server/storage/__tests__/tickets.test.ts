@@ -69,6 +69,7 @@ describe('ticket start configuration locking', () => {
       lockedMaxCoveragePasses: 2,
       lockedMaxPrdCoveragePasses: 5,
       lockedMaxBeadsCoveragePasses: 5,
+      lockedStructuredRetryCount: 3,
     })
 
     expect(lockedTicket?.lockedMainImplementer).toBe(lockedMainImplementer)
@@ -77,6 +78,7 @@ describe('ticket start configuration locking', () => {
     expect(lockedTicket?.lockedMaxCoveragePasses).toBe(2)
     expect(lockedTicket?.lockedMaxPrdCoveragePasses).toBe(5)
     expect(lockedTicket?.lockedMaxBeadsCoveragePasses).toBe(5)
+    expect(lockedTicket?.lockedStructuredRetryCount).toBe(3)
     expect(lockedTicket?.startedAt).toBe(startedAt)
 
     const meta = readTicketMeta(repoDir, ticket.externalId)
@@ -94,6 +96,7 @@ describe('ticket start configuration locking', () => {
       lockedMaxCoveragePasses: 2,
       lockedMaxPrdCoveragePasses: 5,
       lockedMaxBeadsCoveragePasses: 5,
+      lockedStructuredRetryCount: 3,
     })
 
     expect(repeatedLock?.startedAt).toBe(startedAt)

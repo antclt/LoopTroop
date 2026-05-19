@@ -90,6 +90,14 @@ export const numericFields = {
     fromStore: (v: number) => String(v),
     toStore: (v: number) => v,
   },
+  structuredRetryCount: {
+    min: 0,
+    max: 5,
+    label: 'Structured Output Retries',
+    docsPath: '/configuration#structured-output-retries',
+    fromStore: (v: number) => String(v),
+    toStore: (v: number) => v,
+  },
   toolInputMaxChars: {
     min: 500,
     max: 50_000,
@@ -145,6 +153,7 @@ export function buildInitialRawNumeric(data: Record<string, unknown>): Record<st
     maxCoveragePasses: String(data.maxCoveragePasses ?? PROFILE_DEFAULTS.maxCoveragePasses),
     maxPrdCoveragePasses: String(data.maxPrdCoveragePasses ?? PROFILE_DEFAULTS.maxPrdCoveragePasses),
     maxBeadsCoveragePasses: String(data.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses),
+    structuredRetryCount: String(data.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount),
     toolInputMaxChars: String(data.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars),
     toolOutputMaxChars: String(data.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars),
     toolErrorMaxChars: String(data.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars),

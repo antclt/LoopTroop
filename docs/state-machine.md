@@ -69,7 +69,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | `WAITING_INTERVIEW_ANSWERS` | Answer the interview questions that will shape the PRD. Your responses and skip decisions are recorded; submitting a non-final batch keeps you here with the next batch, while coverage-generated follow-up batches may bring you back later. |
 | `VERIFYING_INTERVIEW_COVERAGE` | Coverage check for interview completeness; may add targeted follow-up questions before approval. |
 | `WAITING_INTERVIEW_APPROVAL` | Review and approve the final interview Q&A before PRD drafting starts. Edits are allowed; saving a post-approval edit archives the current version and restarts downstream PRD planning. |
-| `DRAFTING_PRD` | Models produce per-model Full Answers artifacts and competing PRD drafts. Invalid Full Answers skip that member's PRD draft and malformed bodies stay in Raw diagnostics only. |
+| `DRAFTING_PRD` | Models produce per-model Full Answers artifacts and competing PRD drafts. Invalid Full Answers skip that member's PRD draft after configured structured retries and malformed bodies stay in Raw diagnostics only. |
 | `COUNCIL_VOTING_PRD` | Council members score all anonymized PRD drafts against a weighted rubric (requirement completeness, acceptance criteria quality, edge-case coverage, test intent clarity) to select the strongest specification baseline. |
 | `REFINING_PRD` | Winning draft is consolidated into PRD Candidate v1 using useful ideas from the losing drafts. |
 | `VERIFYING_PRD_COVERAGE` | LoopTroop checks the current PRD against the winning model's Full Answers artifact. If something is missing, it updates the PRD and checks again. |
@@ -86,7 +86,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | `CODING` | AI coding agent executes beads one at a time; each bead has its own session, context-wipe recovery, concise internal CMD summaries, and a git commit after success. |
 | `RUNNING_FINAL_TEST` | The main implementer generates a comprehensive test plan from ticket details, PRD, beads, and retry notes, then runs it against the ticket branch while LoopTroop logs internal reset/git commands as concise CMD summaries. |
 | `INTEGRATING_CHANGES` | Squashes all individual bead commits into one clean candidate commit on the ticket branch, with progress-free internal git audit rows. Per-bead history is preserved in the audit trail. |
-| `CREATING_PULL_REQUEST` | Pushing the final candidate branch without progress-style command chatter and drafting the PR from ticket details, PRD, final reports, and git diff sections in a fresh owned session. |
+| `CREATING_PULL_REQUEST` | Drafting and validating PR title/body before remote side effects, then pushing the final candidate branch and creating or updating the draft PR without retrying git/GitHub operations. |
 | `WAITING_PR_REVIEW` | Review the draft pull request on GitHub, then choose Merge PR & Finish or Finish Without Merge; merge/sync commands are audited as concise CMD summaries before cleanup. |
 | `CLEANING_ENV` | Removes transient runtime resources (lock files, session folders, temp files) while preserving permanent artifacts (interview, PRD, beads, logs, test and integration reports) for long-term review and audit. |
 | `COMPLETED` | The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible. The ticket records whether it closed as a merged PR or finished without merge. |

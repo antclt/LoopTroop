@@ -46,12 +46,13 @@ Key columns:
 - `max_coverage_passes`
 - `max_prd_coverage_passes`
 - `max_beads_coverage_passes`
+- `structured_retry_count`
 - `max_iterations`
 - `tool_input_max_chars`
 - `tool_output_max_chars`
 - `tool_error_max_chars`
 
-This table provides the baseline configuration that projects and tickets inherit from when they start.
+This table provides the baseline configuration that projects and tickets inherit from when they start. `structured_retry_count` defaults to `1` and is validated by the API/UI as a value from `0` through `5`.
 
 ## Project Database
 
@@ -104,11 +105,11 @@ Important columns:
 - `total_beads`
 - `percent_complete`
 - `error_message`
-- locked model and planning settings, including interview coverage passes plus PRD/beads coverage pass caps frozen at ticket start
+- locked model and planning settings, including interview coverage passes, PRD/beads coverage pass caps, and `locked_structured_retry_count` frozen at ticket start
 - `started_at`
 - `planned_date`
 
-This table is the operational center of a ticket, but it is not the only place ticket truth lives. Review artifacts and runtime logs still live in `.ticket/**`.
+This table is the operational center of a ticket, but it is not the only place ticket truth lives. Review artifacts and runtime logs still live in `.ticket/**`. Existing tickets without `locked_structured_retry_count` fall back to the current profile value and then the default structured retry count.
 
 ### `phase_artifacts`
 

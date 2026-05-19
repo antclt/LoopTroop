@@ -5,16 +5,21 @@ All notable changes to LoopTroop will be documented in this file.
 ## [Unreleased]
 
 ### Summary
+- Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 
 ### Detailed Changes
 
 ### Added
+- Added configurable structured-output retry counts with profile/API/UI validation, ticket-start locking, and documented continued-session versus fresh-session retry classes.
+- Added structured retry for pull request title/body drafting before branch push or PR create/update, with diagnostics and deterministic fallback text when parsing remains invalid.
 - Added raw attempt persistence for PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime generation, and final-test generation.
 - Added Raw tab variants for structured artifacts with `rawAttempts`, including diagnostic entries when a retry failed before model text existed.
 
 ### Changed
+- Replaced hardcoded one-shot structured retries across scanning, interview/PROM4 parsing, PRD/beads planning, coverage repair, execution setup, coding marker repair, and final-test generation with the locked ticket retry count while keeping broader workflow attempt budgets separate.
+- Documented the four retry classes and standardized status/details wording around **continued session**, **fresh session**, and broader **new attempt** loops.
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
 - Development maintenance output now renders a single default startup summary with package-level dependency update details, held direct dependency details, and held audit remediation eligibility times.

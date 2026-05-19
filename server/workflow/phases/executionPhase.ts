@@ -10,7 +10,7 @@ import { throwIfAborted } from '../../council/types'
 import { broadcaster } from '../../sse/broadcaster'
 import { withCommandLoggingAsync, withCommandLoggingFieldsAsync } from '../../log/commandLogger'
 import { adapter } from './state'
-import { emitPhaseLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStreamEvent, emitOpenCodePromptLog, createOpenCodeStreamState, resolveExecutionRuntimeSettings } from './helpers'
+import { emitPhaseLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStreamEvent, emitOpenCodePromptLog, createOpenCodeStreamState, resolveExecutionRuntimeSettings, resolveStructuredRetryRuntimeSettings } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { readTicketBeads, recoverCodingBeadWithReset, writeTicketBeads, updateTicketProgressFromBeads } from './beadsPhase'
 
@@ -277,6 +277,7 @@ export async function handleCoding(
         ticketId,
         model: codingModelId,
         variant: context.lockedMainImplementerVariant ?? undefined,
+        structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
         onSessionCreated: (sessionId, iteration) => {
           const currentBeads = readTicketBeads(ticketId)
           const updated = currentBeads.map((bead) => bead.id === executingBead.id

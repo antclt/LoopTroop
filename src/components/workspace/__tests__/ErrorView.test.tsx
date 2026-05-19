@@ -113,7 +113,7 @@ describe('ErrorView', () => {
         id: 'diag-1',
         occurrenceNumber: 1,
         blockedFromStatus: 'SCANNING_RELEVANT_FILES',
-        errorMessage: 'Relevant files scan failed validation after retry.',
+        errorMessage: 'Relevant files scan failed validation after 1 structured retry attempt(s).',
         errorCodes: ['RELEVANT_FILES_SCAN_FAILED', 'OPENCODE_PROVIDER_AUTH_FAILED'],
         diagnostics: {
           kind: 'opencode_provider',

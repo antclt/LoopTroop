@@ -15,6 +15,7 @@ interface Profile {
   maxCoveragePasses: number
   maxPrdCoveragePasses: number
   maxBeadsCoveragePasses: number
+  structuredRetryCount: number
   maxIterations: number
   toolInputMaxChars: number
   toolOutputMaxChars: number
@@ -37,6 +38,7 @@ interface CreateProfileInput {
   maxCoveragePasses?: number
   maxPrdCoveragePasses?: number
   maxBeadsCoveragePasses?: number
+  structuredRetryCount?: number
   maxIterations?: number
   toolInputMaxChars?: number
   toolOutputMaxChars?: number

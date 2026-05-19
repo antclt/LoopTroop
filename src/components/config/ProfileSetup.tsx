@@ -43,6 +43,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
     maxCoveragePasses: profile?.maxCoveragePasses ?? PROFILE_DEFAULTS.maxCoveragePasses,
     maxPrdCoveragePasses: profile?.maxPrdCoveragePasses ?? PROFILE_DEFAULTS.maxPrdCoveragePasses,
     maxBeadsCoveragePasses: profile?.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
+    structuredRetryCount: profile?.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount,
     maxIterations: profile?.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
     toolInputMaxChars: profile?.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
     toolOutputMaxChars: profile?.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
@@ -91,6 +92,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
       maxCoveragePasses: profile.maxCoveragePasses ?? PROFILE_DEFAULTS.maxCoveragePasses,
       maxPrdCoveragePasses: profile.maxPrdCoveragePasses ?? PROFILE_DEFAULTS.maxPrdCoveragePasses,
       maxBeadsCoveragePasses: profile.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
+      structuredRetryCount: profile.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount,
       maxIterations: profile.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
       toolInputMaxChars: profile.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
       toolOutputMaxChars: profile.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
@@ -107,6 +109,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
       maxCoveragePasses: profile.maxCoveragePasses ?? PROFILE_DEFAULTS.maxCoveragePasses,
       maxPrdCoveragePasses: profile.maxPrdCoveragePasses ?? PROFILE_DEFAULTS.maxPrdCoveragePasses,
       maxBeadsCoveragePasses: profile.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
+      structuredRetryCount: profile.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount,
       toolInputMaxChars: profile.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
       toolOutputMaxChars: profile.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
       toolErrorMaxChars: profile.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
@@ -360,6 +363,9 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
           </div>
           <div className="mt-3">
             <NumericField fieldKey="interviewQuestions" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum clarifying questions (5–50)" />
+          </div>
+          <div className="mt-3">
+            <NumericField fieldKey="structuredRetryCount" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Retries after invalid structured output (0–5)." />
           </div>
 
           <Separator />

@@ -19,6 +19,7 @@ import { SessionManager } from '../../opencode/sessionManager'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../../lib/constants'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
+import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import { parseExecutionSetupPlanResult } from './parser'
 import type { ExecutionSetupPlanGenerationResult } from './types'
@@ -53,6 +54,7 @@ export async function generateExecutionSetupPlan(
     model?: string
     variant?: string
     timeoutMs?: number
+    structuredRetryCount?: number
     phaseAttempt?: number
     promptTemplate?: ExecutionSetupPlanTemplate
     onSessionCreated?: (sessionId: string) => void
@@ -124,6 +126,8 @@ export async function generateExecutionSetupPlan(
   let parsed = parseExecutionSetupPlanResult(response)
   const rawAttempts: RawAttempt[] = []
   const retryDiagnostics: NonNullable<StructuredOutputMetadata['retryDiagnostics']> = []
+  const structuredRetryCount = normalizeStructuredRetryCount(callbacks?.structuredRetryCount)
+  let retryAttemptsUsed = 0
   let structuredOutput = buildStructuredOutputMetadata({
     autoRetryCount: 0,
     repairApplied: Boolean(parsed.repairApplied),
@@ -131,33 +135,42 @@ export async function generateExecutionSetupPlan(
     ...(parsed.validationError ? { validationError: parsed.validationError } : {}),
   })
 
-  if (parsed.errors.length > 0) {
+  while (parsed.errors.length > 0) {
+    const attempt = rawAttempts.length + 1
+    const validationError = parsed.validationError ?? parsed.errors.join('; ')
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
     rawAttempts.push({
-      attempt: 1,
+      attempt,
       stage: 'execution_setup_plan',
       outcome: 'rejected',
       rawResponse: response,
-      validationError: parsed.validationError ?? parsed.errors.join('; '),
+      validationError,
       failureClass: retryDecision.failureClass,
     })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-      attempt: 1,
+      attempt,
       rawResponse: response,
-      validationError: parsed.validationError ?? parsed.errors.join('; '),
+      validationError,
       failureClass: retryDecision.failureClass,
       retryDiagnostic: parsed.retryDiagnostic,
     }))
     structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
-      autoRetryCount: 1,
-      validationError: parsed.validationError,
+      autoRetryCount: retryAttemptsUsed,
+      validationError,
       retryDiagnostics,
+    })
+    if (!shouldRetryStructuredOutput(retryAttemptsUsed, structuredRetryCount)) {
+      break
+    }
+    retryAttemptsUsed += 1
+    structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
+      autoRetryCount: retryAttemptsUsed,
     })
 
     try {
       if (retryDecision.reuseSession) {
         const retryParts = buildStructuredRetryPrompt([], {
-          validationError: parsed.errors.join('; '),
+          validationError,
           rawResponse: response,
           schemaReminder: EXECUTION_SETUP_PLAN_SCHEMA_REMINDER,
         })
@@ -182,6 +195,7 @@ export async function generateExecutionSetupPlan(
           },
         })
         throwIfAborted(signal)
+        result = retryResult
         response = retryResult.response
       } else {
         if (activeSessionId && sessionManager) {
@@ -245,37 +259,11 @@ export async function generateExecutionSetupPlan(
       repairWarnings: parsed.repairWarnings ?? [],
       ...(parsed.validationError ? { validationError: parsed.validationError } : {}),
     })
-    if (parsed.errors.length > 0) {
-      const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
-      rawAttempts.push({
-        attempt: 2,
-        stage: 'execution_setup_plan',
-        outcome: 'rejected',
-        rawResponse: response,
-        validationError: parsed.validationError ?? parsed.errors.join('; '),
-        failureClass: retryDecision.failureClass,
-      })
-      retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-        attempt: 2,
-        rawResponse: response,
-        validationError: parsed.validationError ?? parsed.errors.join('; '),
-        failureClass: retryDecision.failureClass,
-        retryDiagnostic: parsed.retryDiagnostic,
-      }))
-      structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
-        retryDiagnostics,
-      })
-    } else {
-      rawAttempts.push({
-        attempt: 2,
-        stage: 'execution_setup_plan',
-        outcome: 'accepted',
-        rawResponse: response,
-      })
-    }
-  } else {
+  }
+
+  if (parsed.errors.length === 0) {
     rawAttempts.push({
-      attempt: 1,
+      attempt: rawAttempts.length + 1,
       stage: 'execution_setup_plan',
       outcome: 'accepted',
       rawResponse: response,

@@ -459,6 +459,7 @@ export function lockTicketStartConfiguration(
     lockedMaxCoveragePasses: number
     lockedMaxPrdCoveragePasses: number
     lockedMaxBeadsCoveragePasses: number
+    lockedStructuredRetryCount: number
   },
 ): PublicTicket | undefined {
   const context = getTicketContext(ticketRef)
@@ -503,6 +504,7 @@ export function lockTicketStartConfiguration(
       lockedMaxCoveragePasses: input.lockedMaxCoveragePasses,
       lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses,
       lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses,
+      lockedStructuredRetryCount: input.lockedStructuredRetryCount,
       startedAt: meta.startedAt ?? input.startedAt,
       updatedAt: new Date().toISOString(),
     })

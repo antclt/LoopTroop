@@ -17,6 +17,7 @@ import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../../lib/constants'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
+import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
 
 const FINAL_TEST_SCHEMA_REMINDER = [
   'Return exactly one <FINAL_TEST_COMMANDS>...</FINAL_TEST_COMMANDS> block and nothing else.',
@@ -46,6 +47,7 @@ export async function generateFinalTests(
     model?: string
     variant?: string
     timeoutMs?: number
+    structuredRetryCount?: number
     phaseAttempt?: number
     onSessionCreated?: (sessionId: string) => void
     onOpenCodeStreamEvent?: (entry: { sessionId: string; event: StreamEvent }) => void
@@ -121,38 +123,49 @@ export async function generateFinalTests(
   let commandPlan = parseFinalTestCommands(response)
   const rawAttempts: RawAttempt[] = []
   const retryDiagnostics: NonNullable<StructuredOutputMetadata['retryDiagnostics']> = []
+  const structuredRetryCount = normalizeStructuredRetryCount(callbacks?.structuredRetryCount)
+  let retryAttemptsUsed = 0
   let structuredOutput = buildStructuredOutputMetadata({
     autoRetryCount: 0,
     repairApplied: Boolean(commandPlan.repairApplied),
     repairWarnings: commandPlan.repairWarnings ?? [],
     ...(commandPlan.validationError ? { validationError: commandPlan.validationError } : {}),
   })
-  if (commandPlan.errors.length > 0) {
+  while (commandPlan.errors.length > 0) {
+    const attempt = rawAttempts.length + 1
+    const validationError = commandPlan.validationError ?? commandPlan.errors.join('; ')
     const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
     rawAttempts.push({
-      attempt: 1,
+      attempt,
       stage: 'final_test_generation',
       outcome: 'rejected',
       rawResponse: response,
-      validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
+      validationError,
       failureClass: retryDecision.failureClass,
     })
     retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-      attempt: 1,
+      attempt,
       rawResponse: response,
-      validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
+      validationError,
       failureClass: retryDecision.failureClass,
       retryDiagnostic: commandPlan.retryDiagnostic,
     }))
     structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
-      autoRetryCount: 1,
-      validationError: commandPlan.validationError,
+      autoRetryCount: retryAttemptsUsed,
+      validationError,
       retryDiagnostics,
+    })
+    if (!shouldRetryStructuredOutput(retryAttemptsUsed, structuredRetryCount)) {
+      break
+    }
+    retryAttemptsUsed += 1
+    structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
+      autoRetryCount: retryAttemptsUsed,
     })
     try {
       if (retryDecision.reuseSession) {
         const retryParts = buildStructuredRetryPrompt([], {
-          validationError: commandPlan.errors.join('; '),
+          validationError,
           rawResponse: response,
           schemaReminder: FINAL_TEST_SCHEMA_REMINDER,
         })
@@ -186,6 +199,7 @@ export async function generateFinalTests(
           },
         })
         throwIfAborted(signal)
+        result = retryResult
         response = retryResult.response
       } else {
         if (activeSessionId && sessionManager) {
@@ -257,37 +271,11 @@ export async function generateFinalTests(
       repairWarnings: commandPlan.repairWarnings ?? [],
       ...(commandPlan.validationError ? { validationError: commandPlan.validationError } : {}),
     })
-    if (commandPlan.errors.length > 0) {
-      const retryDecision = getStructuredRetryDecision(response, result.responseMeta)
-      rawAttempts.push({
-        attempt: 2,
-        stage: 'final_test_generation',
-        outcome: 'rejected',
-        rawResponse: response,
-        validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
-        failureClass: retryDecision.failureClass,
-      })
-      retryDiagnostics.push(resolveStructuredRetryDiagnostic({
-        attempt: 2,
-        rawResponse: response,
-        validationError: commandPlan.validationError ?? commandPlan.errors.join('; '),
-        failureClass: retryDecision.failureClass,
-        retryDiagnostic: commandPlan.retryDiagnostic,
-      }))
-      structuredOutput = buildStructuredOutputMetadata(structuredOutput, {
-        retryDiagnostics,
-      })
-    } else {
-      rawAttempts.push({
-        attempt: 2,
-        stage: 'final_test_generation',
-        outcome: 'accepted',
-        rawResponse: response,
-      })
-    }
-  } else {
+  }
+
+  if (commandPlan.errors.length === 0) {
     rawAttempts.push({
-      attempt: 1,
+      attempt: rawAttempts.length + 1,
       stage: 'final_test_generation',
       outcome: 'accepted',
       rawResponse: response,

@@ -23,6 +23,7 @@ const profileSchema = z.object({
   maxCoveragePasses: z.number().int().min(1).max(10).optional(),
   maxPrdCoveragePasses: z.number().int().min(2).max(20).optional(),
   maxBeadsCoveragePasses: z.number().int().min(2).max(20).optional(),
+  structuredRetryCount: z.number().int().min(0).max(5).optional(),
   maxIterations: z.number().int().min(0).max(20).optional(),
   toolInputMaxChars: z.number().int().min(500).max(50_000).optional(),
   toolOutputMaxChars: z.number().int().min(1_000).max(100_000).optional(),

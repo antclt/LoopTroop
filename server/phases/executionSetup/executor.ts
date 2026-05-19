@@ -85,6 +85,7 @@ export async function executeExecutionSetupWithRetries(
     variant?: string
     maxIterations: number
     timeoutMs: number
+    structuredRetryCount?: number
     initialRetryNotes?: string[]
   },
   callbacks: {
@@ -151,6 +152,7 @@ export async function executeExecutionSetupWithRetries(
         model: options.model,
         variant: options.variant,
         timeoutMs: options.timeoutMs,
+        structuredRetryCount: options.structuredRetryCount,
         phaseAttempt: attempt,
         onSessionCreated: (sessionId) => {
           callbacks.onSessionCreated?.(sessionId, attempt)

@@ -15,6 +15,7 @@ export interface TicketContext {
   lockedMaxCoveragePasses: number | null
   lockedMaxPrdCoveragePasses: number | null
   lockedMaxBeadsCoveragePasses: number | null
+  lockedStructuredRetryCount: number | null
   previousStatus: string | null
   error: string | null
   errorCodes: string[]
@@ -43,6 +44,7 @@ export type TicketEvent =
       lockedMaxCoveragePasses?: number | null
       lockedMaxPrdCoveragePasses?: number | null
       lockedMaxBeadsCoveragePasses?: number | null
+      lockedStructuredRetryCount?: number | null
     }
   | { type: 'INIT_FAILED'; message: string; codes?: string[] }
   | { type: 'QUESTIONS_READY'; result: Record<string, unknown> }

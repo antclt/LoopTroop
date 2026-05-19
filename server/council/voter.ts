@@ -21,6 +21,7 @@ import { buildStructuredRetryPrompt, normalizeVoteScorecardOutput } from '../str
 import { buildStructuredOutputMetadata } from '../structuredOutput/metadata'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
+import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../lib/structuredRetryPolicy'
 import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError } from './draftUtils'
 import { getErrorMessage } from '@shared/typeGuards'
 
@@ -128,6 +129,7 @@ export async function conductVoting(
     phaseAttempt?: number
   },
   toolPolicy: OpenCodeToolPolicy = 'default',
+  maxStructuredRetries: number = 1,
 ): Promise<VotingPhaseResult> {
   const votes: Vote[] = []
   const validDrafts = drafts.filter(d => d.outcome === 'completed' && d.content)
@@ -244,7 +246,7 @@ export async function conductVoting(
       let result: Awaited<ReturnType<typeof runOpenCodePrompt>> | undefined
       let attemptCount = 0
       let lastValidationError: string | undefined
-      const maxStructuredRetries = 1
+      const normalizedMaxStructuredRetries = normalizeStructuredRetryCount(maxStructuredRetries)
       const retryDiagnostics: NonNullable<DraftStructuredOutputMeta['retryDiagnostics']> = []
 
       while (true) {
@@ -368,7 +370,7 @@ export async function conductVoting(
           failureClass: retryDecision.failureClass,
           retryDiagnostic: scorecardResult.retryDiagnostic,
         }))
-        if (attemptCount >= maxStructuredRetries) {
+        if (!shouldRetryStructuredOutput(attemptCount, normalizedMaxStructuredRetries)) {
           const structuredOutput = buildStructuredOutputMeta(
             scorecardResult.repairApplied,
             scorecardResult.repairWarnings,

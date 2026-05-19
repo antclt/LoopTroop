@@ -40,6 +40,7 @@ import {
   emitDraftProgressInfoLog,
   createOpenCodeStreamState,
   resolveCouncilRuntimeSettings,
+  resolveStructuredRetryRuntimeSettings,
   resolveCouncilMembers,
   loadTicketDirContext,
   formatCouncilResolutionLog,
@@ -57,6 +58,7 @@ import {
   getStructuredRetryDiagnosticFromError,
   resolveStructuredRetryDiagnostic,
 } from '../../lib/structuredRetryDiagnostics'
+import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import type { OpenCodeStreamState } from './types'
 import { persistUiRefinementDiffArtifact } from '../refinementDiffArtifacts'
 import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
@@ -78,6 +80,7 @@ export async function executeBeadsExpandStep(params: {
   signal: AbortSignal
   ticketState: TicketState
   beadSubsets: BeadSubset[]
+  maxStructuredRetries?: number
   variant?: string
   onSessionLog: (entry: {
     memberId: string
@@ -98,8 +101,9 @@ export async function executeBeadsExpandStep(params: {
   const baseParts: PromptPart[] = [{ type: 'text', content: buildPromptFromTemplate(PROM25, buildMinimalContext('beads_expand', params.ticketState)) }]
   let promptParts: PromptPart[] = baseParts
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
+  const maxStructuredRetries = normalizeStructuredRetryCount(params.maxStructuredRetries)
 
-  for (let attempt = 0; attempt <= 1; attempt += 1) {
+  for (let attempt = 0; attempt <= maxStructuredRetries; attempt += 1) {
     let sessionId = ''
     const result = await runOpenCodePrompt({
       adapter,
@@ -201,9 +205,9 @@ export async function executeBeadsExpandStep(params: {
         }),
         (structuredMeta.autoRetryCount ?? 0) + 1,
       )
-      if (attempt >= 1) {
+      if (attempt >= maxStructuredRetries) {
         structuredMeta = buildStructuredMetadata(structuredMeta, {
-          autoRetryCount: 1,
+          autoRetryCount: attempt,
           validationError,
           ...(retryDiagnostic ? { retryDiagnostics: [retryDiagnostic] } : {}),
         })
@@ -211,7 +215,7 @@ export async function executeBeadsExpandStep(params: {
       }
 
       structuredMeta = buildStructuredMetadata(structuredMeta, {
-        autoRetryCount: 1,
+        autoRetryCount: attempt + 1,
         validationError,
         ...(retryDiagnostic ? { retryDiagnostics: [retryDiagnostic] } : {}),
       })
@@ -303,6 +307,7 @@ export async function handleBeadsDraft(
     worktreePath,
     {
       ...councilSettings,
+      maxStructuredRetries: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
       ticketId,
     },
     signal,
@@ -574,6 +579,7 @@ export async function handleBeadsVote(
       phase: 'COUNCIL_VOTING_BEADS',
     },
     PROM21.toolPolicy,
+    resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
   )
 
   const voteQuorum = checkMemberResponseQuorum(voteRun.memberOutcomes, councilSettings.minQuorum)
@@ -741,11 +747,12 @@ export async function handleBeadsRefine(
           return { normalizedContent: validated.refinedContent }
         } catch (error) {
           const diagnostic = getStructuredRetryDiagnosticFromError(error)
+          const retryAttempt = (refineStructuredMeta.autoRetryCount ?? 0) + 1
           refineStructuredMeta = buildStructuredMetadata(refineStructuredMeta, {
-            autoRetryCount: 1,
+            autoRetryCount: retryAttempt,
             validationError: getErrorMessage(error),
             ...(diagnostic
-              ? { retryDiagnostics: [withStructuredRetryDiagnosticAttempt(diagnostic, (refineStructuredMeta.autoRetryCount ?? 0) + 1)!] }
+              ? { retryDiagnostics: [withStructuredRetryDiagnosticAttempt(diagnostic, retryAttempt)!] }
               : {}),
           })
           throw error
@@ -754,6 +761,7 @@ export async function handleBeadsRefine(
       PROM22.outputFormat,
       undefined,
       PROM22.toolPolicy,
+      resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
     )
     refinedContent = refinementRun.content
     refinementRawAttempts = refinementRun.rawAttempts

@@ -76,6 +76,7 @@ export interface Ticket {
   lockedMaxCoveragePasses?: number | null
   lockedMaxPrdCoveragePasses?: number | null
   lockedMaxBeadsCoveragePasses?: number | null
+  lockedStructuredRetryCount?: number | null
   lockedCouncilMembers: string[]
   lockedCouncilMemberVariants?: Record<string, string> | null
   availableActions: WorkflowAction[]

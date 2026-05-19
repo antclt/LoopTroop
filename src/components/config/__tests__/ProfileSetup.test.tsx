@@ -23,7 +23,11 @@ const existingProfile = {
   maxCoveragePasses: 2,
   maxPrdCoveragePasses: 5,
   maxBeadsCoveragePasses: 5,
+  structuredRetryCount: 1,
   maxIterations: 5,
+  toolInputMaxChars: 4000,
+  toolOutputMaxChars: 12000,
+  toolErrorMaxChars: 6000,
   createdAt: '2026-03-08T14:28:53.309Z',
   updatedAt: '2026-03-11T10:49:38.623Z',
 }
@@ -122,6 +126,7 @@ describe('ProfileSetup', () => {
     expect(screen.getByText('Coverage')).toBeInTheDocument()
     expect(screen.getByText('Coverage Follow-Up Budget (%)')).toBeInTheDocument()
     expect(screen.getByText('Interview Coverage Passes')).toBeInTheDocument()
+    expect(screen.getByText('Structured Output Retries')).toBeInTheDocument()
     expect(screen.getByText('PRD Coverage Passes')).toBeInTheDocument()
     expect(screen.getByText('Beads Coverage Passes')).toBeInTheDocument()
     expect(screen.getByText('Execution Setup Timeout (s)')).toBeInTheDocument()
@@ -144,7 +149,7 @@ describe('ProfileSetup', () => {
     await renderProfileSetup()
 
     const docsLinks = screen.getAllByRole('link', { name: /Open documentation for / })
-    expect(docsLinks).toHaveLength(15)
+    expect(docsLinks).toHaveLength(16)
 
     const mainImplementerLink = screen.getByRole('link', { name: 'Open documentation for Main Implementer Model' })
     expect(mainImplementerLink).toHaveAttribute('href', `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#main-implementer-model`)
@@ -158,6 +163,10 @@ describe('ProfileSetup', () => {
     expect(screen.getByRole('link', { name: 'Open documentation for Interview Coverage Passes' })).toHaveAttribute(
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#interview-coverage-passes`,
+    )
+    expect(screen.getByRole('link', { name: 'Open documentation for Structured Output Retries' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#structured-output-retries`,
     )
     expect(screen.getByRole('link', { name: 'Open documentation for PRD Coverage Passes' })).toHaveAttribute(
       'href',
@@ -176,17 +185,20 @@ describe('ProfileSetup', () => {
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Open detailed documentation')
   })
 
-  it('validates PRD and beads coverage pass inputs', async () => {
+  it('validates PRD, beads, and structured retry numeric inputs', async () => {
     await renderProfileSetup()
 
     const prdInput = screen.getByLabelText('PRD Coverage Passes') as HTMLInputElement
     const beadsInput = screen.getByLabelText('Beads Coverage Passes') as HTMLInputElement
+    const structuredRetryInput = screen.getByLabelText('Structured Output Retries') as HTMLInputElement
 
     fireEvent.change(prdInput, { target: { value: '1' } })
     fireEvent.change(beadsInput, { target: { value: '21' } })
+    fireEvent.change(structuredRetryInput, { target: { value: '6' } })
 
     expect(screen.getByText('Minimum is 2')).toBeInTheDocument()
     expect(screen.getByText('Maximum is 20')).toBeInTheDocument()
+    expect(screen.getByText('Maximum is 5')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 })

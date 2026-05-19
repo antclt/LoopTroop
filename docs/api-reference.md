@@ -83,6 +83,7 @@ Example profile update payload:
   "maxCoveragePasses": 2,
   "maxPrdCoveragePasses": 5,
   "maxBeadsCoveragePasses": 5,
+  "structuredRetryCount": 1,
   "maxIterations": 5,
   "toolInputMaxChars": 4000,
   "toolOutputMaxChars": 12000,
@@ -91,6 +92,8 @@ Example profile update payload:
 ```
 
 `councilMemberVariants` is a JSON-encoded map of model ID → variant string (e.g. `"high"` or `"low"`) that pins specific effort levels per council member.
+
+`structuredRetryCount` controls automatic structured-output retry prompts after the first invalid or missing structured response. It defaults to `1`, accepts `0` through `5`, and is locked onto each ticket at start; missing locked values on older tickets fall back to the current profile value and then the default.
 
 ## Project Routes
 

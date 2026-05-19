@@ -36,6 +36,7 @@ import {
   emitDraftProgressInfoLog,
   createOpenCodeStreamState,
   resolveCouncilRuntimeSettings,
+  resolveStructuredRetryRuntimeSettings,
   resolveCouncilMembers,
   loadTicketDirContext,
   formatCouncilResolutionLog,
@@ -325,6 +326,7 @@ export async function handlePrdDraft(
     worktreePath,
     {
       ...councilSettings,
+      maxStructuredRetries: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
       ticketId,
       ticketExternalId: context.externalId,
     },
@@ -682,6 +684,7 @@ export async function handlePrdVote(
       phase: 'COUNCIL_VOTING_PRD',
     },
     PROM11.toolPolicy,
+    resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
   )
 
   const voteQuorum = checkMemberResponseQuorum(voteRun.memberOutcomes, councilSettings.minQuorum)
@@ -864,7 +867,7 @@ export async function handlePrdRefine(
           (structuredMeta.autoRetryCount ?? 0) + 1,
         )
         structuredMeta = buildStructuredMetadata(structuredMeta, {
-          autoRetryCount: Math.max(structuredMeta.autoRetryCount ?? 0, 1),
+          autoRetryCount: (structuredMeta.autoRetryCount ?? 0) + 1,
           validationError,
           ...(retryDiagnostic ? { retryDiagnostics: [retryDiagnostic] } : {}),
         })
@@ -877,6 +880,7 @@ export async function handlePrdRefine(
       rawResponse,
     }),
     PROM12.toolPolicy,
+    resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
     )
   } catch (error) {
     const rawAttempts = getRawAttemptsFromRefinementError(error)

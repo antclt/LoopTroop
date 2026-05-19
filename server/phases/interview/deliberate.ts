@@ -11,6 +11,7 @@ interface InterviewDeliberationOptions {
   draftTimeoutMs: number
   minQuorum: number
   maxInitialQuestions: number
+  maxStructuredRetries?: number
   ticketId?: string
   phaseAttempt?: number
 }
@@ -84,6 +85,7 @@ export async function deliberateInterview(
       phaseAttempt: options.phaseAttempt,
       toolPolicy: PROM1.toolPolicy,
       onPromptDispatched: onOpenCodePromptDispatched,
+      maxStructuredRetries: options.maxStructuredRetries,
       structuredRetrySchemaReminder: PROM1.outputFormat,
     },
   )

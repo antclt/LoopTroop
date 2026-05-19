@@ -23,6 +23,7 @@ import { validatePrdDraft, validateResolvedInterview } from './validation'
 import type { InterviewDocument } from '@shared/interviewArtifact'
 import jsYaml from 'js-yaml'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
+import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
 import { getErrorMessage } from '@shared/typeGuards'
 
 interface StepValidationResult {
@@ -349,6 +350,7 @@ async function executeStructuredStep(
     activeSession?: Session
     deadlineAt: number | null
     toolPolicy: OpenCodeToolPolicy
+    maxStructuredRetries?: number
     validateStep: (content: string) => StepValidationResult
     schemaReminder: string
     buildRetryPrompt?: (params: {
@@ -380,6 +382,7 @@ async function executeStructuredStep(
   let session = options.activeSession
   let promptParts = baseParts
   let attemptCount = 0
+  const maxStructuredRetries = normalizeStructuredRetryCount(options.maxStructuredRetries)
   let validation: StepValidationResult | undefined
   let lastValidationError: string | undefined
   let rawResponse = ''
@@ -522,7 +525,7 @@ async function executeStructuredStep(
         failureClass: retryDecision.failureClass,
         error,
       }))
-      if (attemptCount >= 1) {
+      if (!shouldRetryStructuredOutput(attemptCount, maxStructuredRetries)) {
         throw new StructuredStepError(
           lastValidationError,
           rawResponse,
@@ -564,6 +567,7 @@ export async function draftPRD(
   options: {
     draftTimeoutMs: number
     minQuorum: number
+    maxStructuredRetries?: number
     ticketId?: string
     ticketExternalId?: string
     phaseAttempt?: number
@@ -766,6 +770,7 @@ export async function draftPRD(
           activeSession: currentSession,
           deadlineAt,
           toolPolicy: PROM10a.toolPolicy,
+          maxStructuredRetries: options.maxStructuredRetries,
           validateStep: (content) => {
             const result = validateResolvedInterview(content, {
               ticketId: options.ticketExternalId ?? options.ticketId ?? '',
@@ -891,6 +896,7 @@ export async function draftPRD(
         activeSession: currentSession,
         deadlineAt,
         toolPolicy: PROM10b.toolPolicy,
+        maxStructuredRetries: options.maxStructuredRetries,
         validateStep: (content) => {
           const result = validatePrdDraft(content, {
             ticketId: options.ticketExternalId ?? options.ticketId ?? '',
