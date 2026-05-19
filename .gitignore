@@ -53,6 +53,9 @@ Thumbs.db
 .roomodes
 *.aider*
 *.bak
+AGENT_*
+CLAUDE_*
+GEMINI_*
 
 # Removed repo metadata/assets
 /CITATION.cff
@@ -82,3 +85,4 @@ test-results/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/.vitepress/.temp/
+
