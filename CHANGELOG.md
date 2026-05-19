@@ -8,6 +8,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
 - Kept structured retry audit controls clearer by making model labels passive in Raw selectors and limiting intervention warnings to the primary artifact tab.
+- Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 
@@ -25,7 +26,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
 - Structured artifact viewers now keep parser/retry intervention notices on the primary artifact tab, while retry producers share one raw-attempt helper so accepted/rejected attempt metadata stays consistent across phases.
-- Made grouped Raw selector model labels passive metadata, with only concrete raw variants such as `Raw Output`, `Attempt 1 Rejected`, and `Validated` remaining clickable.
+- Made grouped Raw selector model labels passive metadata and deduplicated identical Raw variants, with per-attempt retry tabs preferred over generic `Raw Output`, `Model Output`, `Accepted Output`, or `Rejected` shortcuts.
 - Added a project-level OpenCode plugin that sets the Node/Bun event listener warning threshold to 20 inside the OpenCode process.
 - Development maintenance output now renders a single default startup summary with package-level dependency update details, held direct dependency details, and held audit remediation eligibility times.
 - Removed the separate verbose dev-startup mode so dependency maintenance details appear in normal `npm run dev` output.

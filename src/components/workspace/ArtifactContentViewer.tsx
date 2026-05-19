@@ -2128,7 +2128,7 @@ function buildCoverageRawSources(coverageResult: CoverageArtifactData | null): R
   return [{
     id: 'coverage-model-output',
     label: 'Model Output',
-    variants: [
+    variants: dedupeRawContentVariants([
       ...(coverageResult.response ? [{
         id: 'coverage-model-output:current',
         label: 'Model Output',
@@ -2137,7 +2137,7 @@ function buildCoverageRawSources(coverageResult: CoverageArtifactData | null): R
         title: 'Show coverage model output',
       }] : []),
       ...buildRawAttemptVariants('coverage-audit', 'coverage audit', coverageResult.rawAttempts),
-    ],
+    ]),
     disabled: !coverageResult.response && !coverageResult.rawAttempts?.length,
     title: 'Show coverage raw diagnostics',
   }]
@@ -3486,6 +3486,62 @@ function buildRawAttemptVariants(
   })
 }
 
+function getRawVariantRenderedContent(variant: RawContentVariant): string | undefined {
+  if (typeof variant.displayContent === 'string') return variant.displayContent
+  if (typeof variant.content === 'string') return buildReadableRawDisplayContent(variant.content)
+  return undefined
+}
+
+function normalizeRawVariantComparisonContent(content: string): string {
+  return content.replace(/\r\n/g, '\n').trimEnd()
+}
+
+function getRawVariantDedupPriority(variant: RawContentVariant): number {
+  const label = variant.label.toLowerCase()
+  if (variant.id.includes(':attempt:') || /^attempt\s+\d+/i.test(variant.label)) {
+    if (label.includes('accepted')) return 120
+    if (label.includes('rejected')) return 110
+    return 100
+  }
+  if (label === 'rejected') return 80
+  if (label === 'validated') return 70
+  if (label === 'accepted output') return 60
+  if (label === 'model output') return 20
+  if (label === 'raw output') return 10
+  return 50
+}
+
+function dedupeRawContentVariants(variants: RawContentVariant[]): RawContentVariant[] {
+  const byContent = new Map<string, { variant: RawContentVariant; index: number; priority: number }>()
+  const unkeyed: Array<{ variant: RawContentVariant; index: number }> = []
+
+  variants.forEach((variant, index) => {
+    const renderedContent = getRawVariantRenderedContent(variant)
+    if (typeof renderedContent !== 'string') {
+      unkeyed.push({ variant, index })
+      return
+    }
+
+    const key = normalizeRawVariantComparisonContent(renderedContent)
+    const priority = getRawVariantDedupPriority(variant)
+    const existing = byContent.get(key)
+    if (!existing || priority > existing.priority) {
+      byContent.set(key, {
+        variant,
+        index: existing?.index ?? index,
+        priority,
+      })
+    }
+  })
+
+  return [
+    ...byContent.values(),
+    ...unkeyed.map((entry) => ({ ...entry, priority: getRawVariantDedupPriority(entry.variant) })),
+  ]
+    .sort((a, b) => a.index - b.index)
+    .map((entry) => entry.variant)
+}
+
 function buildRawAttemptInspectionVariants(
   ownerId: string,
   ownerLabel: string,
@@ -3494,7 +3550,7 @@ function buildRawAttemptInspectionVariants(
   const attempts = rawAttempts ?? []
   const latestAcceptedAttempt = [...attempts].reverse().find((attempt) => getRawAttemptStatus(attempt)?.toLowerCase() === 'accepted')
   const latestAcceptedContent = latestAcceptedAttempt ? getRawAttemptContent(latestAcceptedAttempt) : undefined
-  return [
+  return dedupeRawContentVariants([
     ...(typeof latestAcceptedContent === 'string'
       ? [{
           id: `${ownerId}:accepted-latest`,
@@ -3505,7 +3561,7 @@ function buildRawAttemptInspectionVariants(
         }]
       : []),
     ...buildRawAttemptVariants(ownerId, ownerLabel, rawAttempts),
-  ]
+  ])
 }
 
 function buildRejectedRawVariant(
@@ -3565,12 +3621,13 @@ function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: str
       title: `Show validated output from ${label}`,
     })
   }
+  const uniqueVariants = dedupeRawContentVariants(variants)
   return [{
     id: `draft:${draft.memberId}`,
     label,
     modelId: draft.memberId,
-    variants,
-    disabled: !variants.some((v) => !v.disabled),
+    variants: uniqueVariants,
+    disabled: !uniqueVariants.some((v) => !v.disabled),
     title: typeof rawResponse === 'string'
       ? `Show raw model output from ${label}`
       : `No exact raw output stored for ${label}`,
@@ -4239,7 +4296,7 @@ function ExecutionSetupPlanView({
     ? [{
         id: 'execution-setup-plan-model-output',
         label: 'Model Output',
-        variants: [
+        variants: dedupeRawContentVariants([
           ...(report?.modelOutput ? [{
             id: 'execution-setup-plan-model-output:current',
             label: 'Model Output',
@@ -4248,7 +4305,7 @@ function ExecutionSetupPlanView({
             title: 'Show execution setup plan model output',
           }] : []),
           ...buildRawAttemptVariants('execution-setup-plan', 'Execution setup plan', report?.rawAttempts),
-        ],
+        ]),
         disabled: !report?.modelOutput && !report?.rawAttempts?.length,
         title: 'Show execution setup plan raw diagnostics',
       }]
@@ -4821,7 +4878,7 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
     ? [{
         id: 'execution-setup-model-output',
         label: 'Model Output',
-        variants: [
+        variants: dedupeRawContentVariants([
           ...(report.modelOutput ? [{
             id: 'execution-setup-model-output:current',
             label: 'Model Output',
@@ -4830,7 +4887,7 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
             title: 'Show execution setup model output',
           }] : []),
           ...buildRawAttemptVariants('execution-setup', 'Execution setup', report.rawAttempts),
-        ],
+        ]),
         disabled: !report.modelOutput && !report.rawAttempts?.length,
         title: 'Show execution setup raw diagnostics',
       }]
@@ -4987,7 +5044,7 @@ function FinalTestResultsView({ content }: { content: string }) {
     ? [{
         id: 'final-test-model-output',
         label: 'Model Output',
-        variants: [
+        variants: dedupeRawContentVariants([
           ...(parsed.modelOutput ? [{
             id: 'final-test-model-output:current',
             label: 'Model Output',
@@ -4996,7 +5053,7 @@ function FinalTestResultsView({ content }: { content: string }) {
             title: 'Show final-test model output',
           }] : []),
           ...buildRawAttemptVariants('final-test', 'final test generation', parsed.rawAttempts),
-        ],
+        ]),
         disabled: !parsed.modelOutput && !parsed.rawAttempts?.length,
         title: 'Show final-test raw diagnostics',
       }]
@@ -6071,12 +6128,13 @@ export function ArtifactContent({
             title: `Show validated vote scorecard from ${label}`,
           })
         }
+        const uniqueVariants = dedupeRawContentVariants(variants)
         return {
           id: `voter:${voterId}`,
           label,
           modelId: voterId,
-          variants,
-          disabled: !variants.some((variant) => !variant.disabled),
+          variants: uniqueVariants,
+          disabled: !uniqueVariants.some((variant) => !variant.disabled),
           title: hasRawResponse
             ? `Show raw vote response from ${label}`
             : `No exact raw vote response stored for ${label}`,
