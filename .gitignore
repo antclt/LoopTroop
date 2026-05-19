@@ -54,8 +54,8 @@ Thumbs.db
 *.aider*
 *.bak
 AGENT_*
-CLAUDE_*
-GEMINI_*
+CLAUDE.md
+GEMINI.md
 
 # Removed repo metadata/assets
 /CITATION.cff
