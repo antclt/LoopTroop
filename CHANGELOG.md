@@ -5,6 +5,12 @@ All notable changes to LoopTroop will be documented in this file.
 ## [Unreleased]
 
 ### Summary
+
+### Detailed Changes
+
+## [0.2.1] - 2026-05-20
+
+### Summary
 - Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
 - Kept structured retry audit controls clearer by making model labels passive, labeling validated retry outputs with their attempt number, and limiting intervention warnings to the primary artifact tab.
