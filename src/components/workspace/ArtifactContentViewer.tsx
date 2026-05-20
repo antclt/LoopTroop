@@ -282,6 +282,35 @@ function findRawSourceSelection(sources: RawContentSource[], selectionId: string
   return null
 }
 
+function isRawContentSourceSelectable(source: RawContentSource): boolean {
+  return getRawSourceDefaultSelection(source) !== null
+}
+
+function shouldShowRawSourceSelector(rawSourceOptions: RawContentSource[]): boolean {
+  return rawSourceOptions.length > 1
+    || rawSourceOptions.some((source) => Boolean(source.modelId) || (source.variants?.length ?? 0) > 1)
+}
+
+function buildAggregateRawSource(content: string, rawSources: RawContentSource[] | undefined): RawContentSource {
+  const rawSourceCount = rawSources?.length ?? 0
+  const selectableSourceCount = rawSources?.filter(isRawContentSourceSelectable).length ?? 0
+  const hasMultipleSelectableSources = selectableSourceCount > 1 || (selectableSourceCount === 0 && rawSourceCount > 1)
+  return {
+    id: 'all',
+    label: hasMultipleSelectableSources ? 'All Models' : 'Artifact',
+    content,
+    title: hasMultipleSelectableSources ? 'Show raw artifact for all models' : 'Show stored raw artifact',
+  }
+}
+
+function getRawSourceFallbackSelection(sources: RawContentSource[]): ActiveRawContentSource | null {
+  for (const source of sources) {
+    const selection = getRawSourceDefaultSelection(source)
+    if (selection) return selection
+  }
+  return sources[0] ? normalizeRawContentSource(sources[0]) : null
+}
+
 function RawDisplayStats({ content }: { content: string }) {
   const tokenCount = useMemo(() => encode(content).length, [content])
   const lineCount = content.split('\n').length
@@ -323,19 +352,20 @@ export function WithRawTab({
 }) {
   const [activeTab, setActiveTab] = useState<'structured' | 'raw'>('structured')
   const [activeRawSourceId, setActiveRawSourceId] = useState('all')
-  const rawSourceOptions = useMemo<RawContentSource[]>(() => [
-    { id: 'all', label: 'All Models', content, title: 'Show raw vote artifact for all models' },
-    ...(rawSources ?? []),
-  ], [content, rawSources])
+  const rawSourceOptions = useMemo<RawContentSource[]>(() => {
+    const aggregateSource = buildAggregateRawSource(content, rawSources)
+    return [aggregateSource, ...(rawSources ?? [])]
+  }, [content, rawSources])
   const activeRawSource = findRawSourceSelection(rawSourceOptions, activeRawSourceId)
-    ?? getRawSourceDefaultSelection(rawSourceOptions[0]!)
-    ?? normalizeRawContentSource(rawSourceOptions[0]!)
+    ?? getRawSourceFallbackSelection(rawSourceOptions)
+    ?? { id: 'all', label: 'All Models', content, parentId: 'all' }
   const activeRawContent = activeRawSource.content ?? ''
   const activeRawDisplayContent = activeRawSource.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
+  const showRawSourceSelector = shouldShowRawSourceSelector(rawSourceOptions)
 
   useEffect(() => {
     if (!findRawSourceSelection(rawSourceOptions, activeRawSourceId)) {
-      setActiveRawSourceId('all')
+      setActiveRawSourceId(getRawSourceFallbackSelection(rawSourceOptions)?.id ?? 'all')
     }
   }, [activeRawSourceId, rawSourceOptions])
 
@@ -368,7 +398,7 @@ export function WithRawTab({
 
       {activeTab === 'raw' && (
         <>
-          {rawSourceOptions.length > 1 && (
+          {showRawSourceSelector && (
             <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden" aria-label="Raw vote source">
               {rawSourceOptions.map((source) => {
                 const label = source.label || (source.modelId ? getModelDisplayName(source.modelId) : source.id)

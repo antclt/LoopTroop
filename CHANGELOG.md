@@ -9,7 +9,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
 - Kept structured retry audit controls clearer by making model labels passive, labeling validated retry outputs with their attempt number, and limiting intervention warnings to the primary artifact tab.
 - Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
-- Kept single-model Raw views focused by hiding the aggregate All Models selector when only one raw source exists.
+- Kept single-source Raw views focused by labeling the stored artifact selector as Artifact instead of All Models.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
@@ -46,7 +46,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Selecting an error from the navigator while Full Log is open now exits full-log mode and opens the error review.
 - Blocked coverage errors now preserve underlying OpenCode retry/provider diagnostics, such as usage limits, and avoid repeating an identical parser-wrapper message in the error details.
 - Structured-output failures caused by OpenCode `finish_reason=length` are now classified as output truncation and shown in the blocked-error underlying details instead of only surfacing secondary parser messages like missing fields.
-- Single-model Raw artifact views no longer show the aggregate `All Models` selector; raw, validated, and retry variants remain available under the model source.
+- Single-source Raw artifact views now label the stored artifact selector as `Artifact` instead of `All Models`; raw, validated, and retry variants remain available under the source or model.
 
 ## [0.2.0] - 2026-05-12
 

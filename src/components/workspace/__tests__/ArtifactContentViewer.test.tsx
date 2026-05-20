@@ -1547,6 +1547,7 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
+    expect(screen.queryByRole('button', { name: 'All Models' })).not.toBeInTheDocument()
     const voterGroup = screen.getByRole('group', { name: /voter-a raw output/i })
     expect(within(voterGroup).getByText('voter-a')).toBeInTheDocument()
     expect(within(voterGroup).queryByRole('button', { name: /voter-a$/ })).not.toBeInTheDocument()
@@ -1705,6 +1706,7 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
+    expect(screen.queryByRole('button', { name: 'All Models' })).not.toBeInTheDocument()
     const draftGroup = screen.getByRole('group', { name: /draft-a raw output/i })
     expect(within(draftGroup).getByRole('button', { name: /draft-a Raw Output/ })).toBeInTheDocument()
     expect(within(draftGroup).getByRole('button', { name: /draft-a Validated/ })).toBeInTheDocument()
