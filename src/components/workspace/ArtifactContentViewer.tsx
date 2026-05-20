@@ -340,6 +340,61 @@ function RawDisplayPre({ content }: { content: string }) {
   )
 }
 
+function RawAttemptVariantSelector({
+  source,
+  activeVariantId,
+  onSelect,
+  ariaLabel,
+}: {
+  source?: RawContentSource
+  activeVariantId?: string
+  onSelect: (variantId: string) => void
+  ariaLabel: string
+}) {
+  if (!source?.variants?.length) return null
+  const label = source.label || (source.modelId ? getModelDisplayName(source.modelId) : source.id)
+
+  return (
+    <div
+      role="group"
+      aria-label={ariaLabel}
+      className="inline-flex min-w-0 max-w-full overflow-hidden rounded-md border border-border bg-background"
+    >
+      <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 bg-muted px-2.5 py-1 text-[10px] font-medium text-foreground">
+        {source.modelId ? <ModelIcon modelId={source.modelId} className="h-3 w-3" /> : null}
+        <span className="min-w-0 truncate">{label}</span>
+      </span>
+      {source.variants.map((variant) => {
+        const active = activeVariantId === variant.id
+        const disabled = Boolean(variant.disabled)
+        return (
+          <Tooltip key={variant.id}>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                disabled={disabled}
+                aria-pressed={active}
+                aria-label={variant.ariaLabel ?? `${label} ${variant.label}`}
+                onClick={() => onSelect(variant.id)}
+                className={cn(
+                  'inline-flex min-w-0 max-w-full items-center gap-1.5 border-l border-border px-2.5 py-1 text-[10px] font-medium transition-colors',
+                  active
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent/70 hover:text-foreground',
+                  disabled && 'cursor-not-allowed hover:bg-background hover:text-muted-foreground',
+                )}
+              >
+                <span className={cn('min-w-0 truncate', variant.labelClassName)}>{variant.label}</span>
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
+          </Tooltip>
+        )
+      })}
+    </div>
+  )
+}
+
 export function WithRawTab({
   content,
   structuredLabel,
@@ -1680,21 +1735,16 @@ function FinalPrdDraftView({
   const parsed = parseRefinementArtifact(content)
   const fallbackRawAttempts = useMemo(() => getRawAttemptsFromContent(content), [content])
   const rawAttempts = parsed?.rawAttempts ?? fallbackRawAttempts
-  const rawAttemptVariants = useMemo(
-    () => buildRawAttemptInspectionVariants('raw-attempts', isBeads ? 'beads refinement' : 'PRD refinement', rawAttempts),
-    [isBeads, rawAttempts],
+  const rawAttemptSource = useMemo(
+    () => buildRawAttemptSource(
+      'raw-attempts',
+      isBeads ? 'beads refinement' : 'PRD refinement',
+      rawAttempts,
+      parsed?.winnerId,
+    ),
+    [isBeads, parsed?.winnerId, rawAttempts],
   )
-  const artifactRawContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
-  const rawVariantOptions = useMemo<RawContentVariant[]>(() => [
-    ...rawAttemptVariants,
-    {
-      id: 'raw-attempts:artifact',
-      label: 'Artifact JSON',
-      content,
-      displayContent: artifactRawContent,
-      title: 'Show stored refinement artifact JSON',
-    },
-  ], [artifactRawContent, content, rawAttemptVariants])
+  const rawVariantOptions = useMemo(() => rawAttemptSource?.variants ?? [], [rawAttemptSource])
   const activeRawVariant = rawVariantOptions.find((variant) => variant.id === activeRawVariantId && !variant.disabled)
     ?? rawVariantOptions.find((variant) => !variant.disabled)
     ?? rawVariantOptions[0]
@@ -1702,39 +1752,20 @@ function FinalPrdDraftView({
   const activeRawDisplayContent = activeRawVariant?.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
   useEffect(() => {
     if (!rawVariantOptions.some((variant) => variant.id === activeRawVariantId && !variant.disabled)) {
-      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'raw-attempts:artifact')
+      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'raw-attempts:accepted-latest')
     }
   }, [activeRawVariantId, rawVariantOptions])
   const coverageResult = parseCoverageArtifact(content)
-  const rawVariantSelector = rawVariantOptions.length > 1
+  const hasRawTab = rawVariantOptions.length > 0
+  const rawVariantSelector = rawAttemptSource && rawVariantOptions.length > 0
     ? (
-      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden" aria-label="Raw refinement attempts">
-        {rawVariantOptions.map((variant) => {
-          const active = activeRawVariant?.id === variant.id
-          const disabled = Boolean(variant.disabled)
-          return (
-            <Tooltip key={variant.id}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  aria-pressed={active}
-                  onClick={() => setActiveRawVariantId(variant.id)}
-                  className={cn(
-                    'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors',
-                    active
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-background text-muted-foreground hover:bg-accent/70 hover:text-foreground',
-                    disabled && 'cursor-not-allowed opacity-45 hover:bg-background hover:text-muted-foreground',
-                  )}
-                >
-                  <span className="min-w-0 truncate">{variant.label}</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
-            </Tooltip>
-          )
-        })}
+      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden">
+        <RawAttemptVariantSelector
+          source={rawAttemptSource}
+          activeVariantId={activeRawVariant?.id}
+          onSelect={setActiveRawVariantId}
+          ariaLabel="Raw refinement attempts"
+        />
       </div>
       )
     : null
@@ -1772,7 +1803,9 @@ function FinalPrdDraftView({
   const hideDiffInApproval = phase === 'WAITING_PRD_APPROVAL' || phase === 'WAITING_BEADS_APPROVAL'
   const shouldShowDiffTab = showDiffTab ?? !hideDiffInApproval
   const hasDiffTab = shouldShowDiffTab && (diffEntries.length > 0 || Boolean(parsed?.winnerDraftContent) || Boolean(parsed?.coverageBaselineContent))
-  const currentTab = activeTab === 'raw' ? 'raw' : (hasDiffTab ? activeTab : 'final')
+  const currentTab = activeTab === 'raw'
+    ? (hasRawTab ? 'raw' : 'final')
+    : (hasDiffTab ? activeTab : 'final')
   const notice = <ArtifactProcessingNotice structuredOutput={parsed?.structuredOutput} kind="diff" />
 
   const tabButtonClass = (tab: string) =>
@@ -1793,9 +1826,11 @@ function FinalPrdDraftView({
               {diffLabel}{diffEntries.length > 0 ? ` (${diffEntries.length})` : ''}
             </button>
           )}
-          <button onClick={() => setActiveTab('raw')} className={tabButtonClass('raw')}>
-            Raw
-          </button>
+          {hasRawTab && (
+            <button onClick={() => setActiveTab('raw')} className={tabButtonClass('raw')}>
+              Raw
+            </button>
+          )}
           {currentTab === 'raw' && <CopyButton content={activeRawContent} />}
         </div>
       </div>
@@ -2161,18 +2196,21 @@ function CoverageReportView({ content, phase }: { content: string; phase?: strin
 
 function buildCoverageRawSources(coverageResult: CoverageArtifactData | null): RawContentSource[] | undefined {
   if (!coverageResult?.response && !coverageResult?.rawAttempts?.length) return undefined
+  const label = formatRawAttemptSourceLabel('coverage audit', coverageResult.winnerId)
   return [{
     id: 'coverage-model-output',
-    label: 'Model Output',
+    label,
+    modelId: coverageResult.winnerId,
     variants: dedupeRawContentVariants([
       ...(coverageResult.response ? [{
         id: 'coverage-model-output:current',
         label: 'Model Output',
         content: coverageResult.response,
         displayContent: coverageResult.response,
+        ariaLabel: `${label} Model Output`,
         title: 'Show coverage model output',
       }] : []),
-      ...buildRawAttemptVariants('coverage-audit', 'coverage audit', coverageResult.rawAttempts),
+      ...buildRawAttemptVariants('coverage-audit', label, coverageResult.rawAttempts),
     ]),
     disabled: !coverageResult.response && !coverageResult.rawAttempts?.length,
     title: 'Show coverage raw diagnostics',
@@ -3647,6 +3685,31 @@ function buildRawAttemptInspectionVariants(
   ])
 }
 
+function formatRawAttemptSourceLabel(modeLabel: string, modelId?: string): string {
+  const trimmedMode = modeLabel.trim()
+  return modelId ? `${getModelDisplayName(modelId)} · ${trimmedMode}` : trimmedMode
+}
+
+function buildRawAttemptSource(
+  ownerId: string,
+  modeLabel: string,
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+  modelId?: string,
+): RawContentSource | undefined {
+  const label = formatRawAttemptSourceLabel(modeLabel, modelId)
+  const variants = buildRawAttemptInspectionVariants(ownerId, label, rawAttempts)
+  if (variants.length === 0) return undefined
+
+  return {
+    id: ownerId,
+    label,
+    modelId,
+    variants,
+    disabled: !variants.some((variant) => !variant.disabled),
+    title: `Show raw ${modeLabel.toLowerCase()} attempts${modelId ? ` from ${getModelDisplayName(modelId)}` : ''}`,
+  }
+}
+
 function buildRejectedRawVariant(
   id: string,
   label: string,
@@ -4148,20 +4211,16 @@ function RelevantFilesScanView({ content }: { content: string }) {
   const rawDisplayContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
   const raw = tryParseStructuredContent(content) as (RelevantFilesScanData & { files: Array<RelevantFileScanEntry & { content_preview?: string }> }) | null
   const rawAttempts = useMemo(() => getRawAttemptsFromContent(content), [content])
-  const rawAttemptVariants = useMemo(
-    () => buildRawAttemptInspectionVariants('relevant-files-scan', 'relevant files scan', rawAttempts),
-    [rawAttempts],
+  const rawAttemptSource = useMemo(
+    () => buildRawAttemptSource(
+      'relevant-files-scan',
+      'relevant files scan',
+      rawAttempts,
+      raw?.modelId,
+    ),
+    [raw?.modelId, rawAttempts],
   )
-  const rawVariantOptions = useMemo<RawContentVariant[]>(() => [
-    ...rawAttemptVariants,
-    {
-      id: 'relevant-files-scan:artifact',
-      label: 'Artifact JSON',
-      content,
-      displayContent: rawDisplayContent,
-      title: 'Show stored relevant-files artifact JSON',
-    },
-  ], [content, rawAttemptVariants, rawDisplayContent])
+  const rawVariantOptions = useMemo(() => rawAttemptSource?.variants ?? [], [rawAttemptSource])
   const activeRawVariant = rawVariantOptions.find((variant) => variant.id === activeRawVariantId && !variant.disabled)
     ?? rawVariantOptions.find((variant) => !variant.disabled)
     ?? rawVariantOptions[0]
@@ -4169,7 +4228,7 @@ function RelevantFilesScanView({ content }: { content: string }) {
   const activeRawDisplayContent = activeRawVariant?.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
   useEffect(() => {
     if (!rawVariantOptions.some((variant) => variant.id === activeRawVariantId && !variant.disabled)) {
-      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'relevant-files-scan:artifact')
+      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'relevant-files-scan:accepted-latest')
     }
   }, [activeRawVariantId, rawVariantOptions])
   if (!raw?.files) return <RawContentWithCopy content={content} />
@@ -4184,35 +4243,17 @@ function RelevantFilesScanView({ content }: { content: string }) {
     })),
     rawAttempts,
   }
-  const rawVariantSelector = rawVariantOptions.length > 1
+  const hasRawTab = rawVariantOptions.length > 0
+  const currentTab = activeTab === 'raw' && hasRawTab ? 'raw' : 'files'
+  const rawVariantSelector = rawAttemptSource && rawVariantOptions.length > 0
     ? (
-      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden" aria-label="Relevant files raw attempts">
-        {rawVariantOptions.map((variant) => {
-          const active = activeRawVariant?.id === variant.id
-          const disabled = Boolean(variant.disabled)
-          return (
-            <Tooltip key={variant.id}>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  disabled={disabled}
-                  aria-pressed={active}
-                  onClick={() => setActiveRawVariantId(variant.id)}
-                  className={cn(
-                    'inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md border px-2.5 py-1 text-[10px] font-medium transition-colors',
-                    active
-                      ? 'border-primary bg-primary text-primary-foreground'
-                      : 'border-border bg-background text-muted-foreground hover:bg-accent/70 hover:text-foreground',
-                    disabled && 'cursor-not-allowed opacity-45 hover:bg-background hover:text-muted-foreground',
-                  )}
-                >
-                  <span className="min-w-0 truncate">{variant.label}</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs text-center text-balance">{variant.title}</TooltipContent>
-            </Tooltip>
-          )
-        })}
+      <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden">
+        <RawAttemptVariantSelector
+          source={rawAttemptSource}
+          activeVariantId={activeRawVariant?.id}
+          onSelect={setActiveRawVariantId}
+          ariaLabel="Relevant files raw attempts"
+        />
       </div>
       )
     : null
@@ -4224,7 +4265,7 @@ function RelevantFilesScanView({ content }: { content: string }) {
 
   return (
     <div className="space-y-3">
-      {activeTab === 'files' ? <ArtifactProcessingNotice structuredOutput={parsed.structuredOutput} kind="relevant-files" /> : null}
+      {currentTab === 'files' ? <ArtifactProcessingNotice structuredOutput={parsed.structuredOutput} kind="relevant-files" /> : null}
       <div className="flex items-center gap-2">
         {parsed.modelId && (
           <ModelBadge modelId={parsed.modelId} active className="px-3 py-2 h-auto flex-1 justify-start">
@@ -4237,25 +4278,27 @@ function RelevantFilesScanView({ content }: { content: string }) {
         <div className={`inline-flex items-center gap-1 rounded-md border border-border bg-background p-1 shrink-0 ${parsed.modelId ? 'ml-auto' : ''}`}>
           <button
             onClick={() => setActiveTab('files')}
-            className={activeTab === 'files'
+            className={currentTab === 'files'
               ? 'rounded px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground'
               : 'rounded px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent/70 hover:text-foreground'}
           >
             Files
           </button>
-          <button
-            onClick={() => setActiveTab('raw')}
-            className={activeTab === 'raw'
-              ? 'rounded px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground'
-              : 'rounded px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent/70 hover:text-foreground'}
-          >
-            Raw
-          </button>
-          {activeTab === 'raw' && <CopyButton content={activeRawContent} />}
+          {hasRawTab && (
+            <button
+              onClick={() => setActiveTab('raw')}
+              className={currentTab === 'raw'
+                ? 'rounded px-2.5 py-1 text-xs font-medium bg-primary text-primary-foreground'
+                : 'rounded px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-accent/70 hover:text-foreground'}
+            >
+              Raw
+            </button>
+          )}
+          {currentTab === 'raw' && <CopyButton content={activeRawContent} />}
         </div>
       </div>
 
-      {activeTab === 'raw' ? (
+      {currentTab === 'raw' ? (
         <>
           {rawVariantSelector}
           <RawDisplayStats content={activeRawDisplayContent} />
@@ -4425,19 +4468,22 @@ function ExecutionSetupPlanView({
   const showModelOutput = Boolean(report?.modelOutput)
     && !isExecutionSetupModelOutputEquivalentToRawPlan(content, report?.modelOutput)
     && !failed
+  const rawSourceLabel = formatRawAttemptSourceLabel('Execution setup plan', report?.generatedBy)
   const rawSources: RawContentSource[] | undefined = report?.modelOutput || report?.rawAttempts?.length
     ? [{
         id: 'execution-setup-plan-model-output',
-        label: 'Model Output',
+        label: rawSourceLabel,
+        modelId: report?.generatedBy,
         variants: dedupeRawContentVariants([
           ...(report?.modelOutput ? [{
             id: 'execution-setup-plan-model-output:current',
             label: 'Model Output',
             content: report.modelOutput,
             displayContent: report.modelOutput,
+            ariaLabel: `${rawSourceLabel} Model Output`,
             title: 'Show execution setup plan model output',
           }] : []),
-          ...buildRawAttemptVariants('execution-setup-plan', 'Execution setup plan', report?.rawAttempts),
+          ...buildRawAttemptVariants('execution-setup-plan', rawSourceLabel, report?.rawAttempts),
         ]),
         disabled: !report?.modelOutput && !report?.rawAttempts?.length,
         title: 'Show execution setup plan raw diagnostics',
@@ -5007,19 +5053,22 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
   const statusTone = failed
     ? 'border-red-300 bg-red-50 text-red-950 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-100'
     : 'border-green-300 bg-green-50 text-green-950 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-100'
+  const rawSourceLabel = formatRawAttemptSourceLabel('Execution setup', report.preparedBy)
   const rawSources: RawContentSource[] | undefined = report.modelOutput || report.rawAttempts?.length
     ? [{
         id: 'execution-setup-model-output',
-        label: 'Model Output',
+        label: rawSourceLabel,
+        modelId: report.preparedBy,
         variants: dedupeRawContentVariants([
           ...(report.modelOutput ? [{
             id: 'execution-setup-model-output:current',
             label: 'Model Output',
             content: report.modelOutput,
             displayContent: report.modelOutput,
+            ariaLabel: `${rawSourceLabel} Model Output`,
             title: 'Show execution setup model output',
           }] : []),
-          ...buildRawAttemptVariants('execution-setup', 'Execution setup', report.rawAttempts),
+          ...buildRawAttemptVariants('execution-setup', rawSourceLabel, report.rawAttempts),
         ]),
         disabled: !report.modelOutput && !report.rawAttempts?.length,
         title: 'Show execution setup raw diagnostics',
@@ -5173,19 +5222,22 @@ function FinalTestResultsView({ content }: { content: string }) {
       </ModelBadge>
       )
     : <div className="text-xs font-semibold px-1">Final Test Results</div>
+  const rawSourceLabel = formatRawAttemptSourceLabel('final test generation', parsed.plannedBy)
   const rawSources: RawContentSource[] | undefined = parsed.modelOutput || parsed.rawAttempts?.length
     ? [{
         id: 'final-test-model-output',
-        label: 'Model Output',
+        label: rawSourceLabel,
+        modelId: parsed.plannedBy,
         variants: dedupeRawContentVariants([
           ...(parsed.modelOutput ? [{
             id: 'final-test-model-output:current',
             label: 'Model Output',
             content: parsed.modelOutput,
             displayContent: parsed.modelOutput,
+            ariaLabel: `${rawSourceLabel} Model Output`,
             title: 'Show final-test model output',
           }] : []),
-          ...buildRawAttemptVariants('final-test', 'final test generation', parsed.rawAttempts),
+          ...buildRawAttemptVariants('final-test', rawSourceLabel, parsed.rawAttempts),
         ]),
         disabled: !parsed.modelOutput && !parsed.rawAttempts?.length,
         title: 'Show final-test raw diagnostics',

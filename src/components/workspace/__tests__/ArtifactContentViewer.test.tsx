@@ -5,7 +5,6 @@ import { encode } from 'gpt-tokenizer'
 import { deriveStructuredInterventions } from '@shared/structuredInterventions'
 import { ArtifactContent, CollapsibleSection, InterviewAnswersView } from '../ArtifactContentViewer'
 import { buildArtifactProcessingNoticeCopy } from '../artifactProcessingNotice'
-import { buildReadableRawDisplayContent } from '../rawDisplayContent'
 import type { ArtifactStructuredOutputData } from '../phaseArtifactTypes'
 import { LogContext } from '@/context/logContextDef'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
@@ -195,7 +194,8 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
     expect(screen.getByRole('button', { name: 'Copy raw output' })).toBeInTheDocument()
-    expect(screen.getByText(/project bootstrap/)).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /gpt-5 · Execution setup plan raw output/i })).toBeInTheDocument()
+    expect(screen.getByText(/summary: regenerated/)).toBeInTheDocument()
   })
 
   it('hides failed execution setup plan model output from details and exposes it in raw diagnostics', () => {
@@ -271,7 +271,8 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
     expect(screen.getByRole('button', { name: 'Copy raw output' })).toBeInTheDocument()
-    expect(screen.getByText(/executionAddedCommands/)).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /gpt-5 · Execution setup raw output/i })).toBeInTheDocument()
+    expect(screen.getByText(/EXECUTION_SETUP_RESULT/)).toBeInTheDocument()
   })
 
   it('renders the combined execution setup runtime artifact with one structured runtime tab', () => {
@@ -290,7 +291,8 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
     expect(screen.getByRole('button', { name: 'Copy raw output' })).toBeInTheDocument()
-    expect(screen.getByText(/executionAddedCommands/)).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: /gpt-5 · Execution setup raw output/i })).toBeInTheDocument()
+    expect(screen.getByText(/EXECUTION_SETUP_RESULT/)).toBeInTheDocument()
   })
 
   it('falls back to raw output for malformed execution setup runtime artifacts', () => {
@@ -1117,11 +1119,14 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
     expect(screen.queryByText('Retried 1')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Accepted Output' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Attempt 2 Accepted' })).toBeInTheDocument()
+    const rawGroup = screen.getByRole('group', { name: /raw refinement attempts/i })
+    expect(within(rawGroup).getByText(/gpt-5.2 · PRD refinement/i)).toBeInTheDocument()
+    expect(within(rawGroup).getByRole('button', { name: /gpt-5.2 · PRD refinement Attempt 1 Rejected/i })).toBeInTheDocument()
+    expect(within(rawGroup).getByRole('button', { name: /gpt-5.2 · PRD refinement Attempt 2 Accepted/i })).toBeInTheDocument()
+    expect(within(rawGroup).queryByRole('button', { name: /Artifact JSON/i })).not.toBeInTheDocument()
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse.trimEnd())).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attempt 1 Rejected' }))
+    fireEvent.click(within(rawGroup).getByRole('button', { name: /Attempt 1 Rejected/i }))
 
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
   })
@@ -1241,17 +1246,18 @@ describe('ArtifactContentViewer', () => {
   })
 
   it('hides PRD coverage gap details and follow-up questions while preserving summaries', () => {
+    const coverageResponse = [
+      'status: gaps',
+      'gaps:',
+      '  - "Missing PRD approval sequencing."',
+      'follow_up_questions:',
+      '  - id: FU01',
+      '    question: "Which approval step should trigger Beads?"',
+      '    phase: PRD',
+    ].join('\n')
     const coverageContent = JSON.stringify({
       winnerId: 'openai/gpt-5.2',
-      response: [
-        'status: gaps',
-        'gaps:',
-        '  - "Missing PRD approval sequencing."',
-        'follow_up_questions:',
-        '  - id: FU01',
-        '    question: "Which approval step should trigger Beads?"',
-        '    phase: PRD',
-      ].join('\n'),
+      response: coverageResponse,
       hasGaps: true,
       coverageRunNumber: 2,
       maxCoveragePasses: 2,
@@ -1271,7 +1277,7 @@ describe('ArtifactContentViewer', () => {
         ],
       },
     })
-    const coverageDisplayContent = buildReadableRawDisplayContent(coverageContent)
+    const coverageDisplayContent = coverageResponse
 
     render(
       <ArtifactContent
@@ -1291,6 +1297,7 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
+    expect(screen.getByRole('group', { name: /gpt-5.2 · coverage audit raw output/i })).toBeInTheDocument()
     expect(screen.getByText(`${coverageDisplayContent.split('\n').length.toLocaleString()} Lines`)).toBeInTheDocument()
     expect(screen.getByText(`${coverageDisplayContent.length.toLocaleString()} Characters`)).toBeInTheDocument()
     expect(screen.getByText(`${encode(coverageDisplayContent).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
@@ -2511,6 +2518,7 @@ describe('ArtifactContentViewer', () => {
         content={JSON.stringify({
           fileCount: 0,
           files: [],
+          modelId: 'openai/gpt-5.2',
           structuredOutput: futureStructuredOutput({
             repairApplied: false,
             repairWarnings: [],
@@ -2553,10 +2561,13 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
     expect(screen.queryByText('LoopTroop adjusted this relevant files scan.')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Attempt 1 Rejected' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Attempt 2 Rejected' })).toBeInTheDocument()
+    const rawGroup = screen.getByRole('group', { name: /relevant files raw attempts/i })
+    expect(within(rawGroup).getByText(/gpt-5.2 · relevant files scan/i)).toBeInTheDocument()
+    expect(within(rawGroup).getByRole('button', { name: /gpt-5.2 · relevant files scan Attempt 1 Rejected/i })).toBeInTheDocument()
+    expect(within(rawGroup).getByRole('button', { name: /gpt-5.2 · relevant files scan Attempt 2 Rejected/i })).toBeInTheDocument()
+    expect(within(rawGroup).queryByRole('button', { name: /Artifact JSON/i })).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Attempt 2 Rejected' }))
+    fireEvent.click(within(rawGroup).getByRole('button', { name: /Attempt 2 Rejected/i }))
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'files: []')).toBeInTheDocument()
   })
 
@@ -2905,7 +2916,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByText('LoopTroop adjusted this relevant files scan.')).not.toBeInTheDocument()
   })
 
-  it('renders relevant files raw JSON strings with real line breaks and wrapped display text', () => {
+  it('keeps relevant files without raw attempts focused on structured file details', () => {
     const longQuestion = LONG_GLOBAL_THEME_PROMPT
     render(
       <ArtifactContent
@@ -2928,20 +2939,16 @@ describe('ArtifactContentViewer', () => {
       />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    expect(screen.queryByRole('button', { name: 'Raw' })).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /src\/theme\.ts/i }))
 
-    const rawPre = screen.getByText((_text, element) =>
+    const previewPre = screen.getByText((_text, element) =>
       element?.tagName === 'PRE'
-      && element.textContent?.includes('contentPreview: |-')
       && element.textContent.includes('export const primary = "blue"'),
     )
-    expect(rawPre.textContent).toMatch(/export const primary = "blue"\n\s+export const accent = "slate"/)
-    expect(rawPre.textContent).toContain(`question: "${longQuestion}"`)
-    expect(rawPre.textContent).toContain('  - path: "src/theme.ts"')
-    expect(rawPre.textContent).not.toContain('\\n')
-    expect(rawPre.textContent).not.toContain('  -\n    path')
-    expect(rawPre.textContent).not.toContain('all\n      users')
-    expect(rawPre).toHaveClass('whitespace-pre-wrap', 'overflow-x-hidden')
+    expect(previewPre.textContent).toBe('export const primary = "blue"\nexport const accent = "slate"')
+    expect(screen.queryByText(`question: "${longQuestion}"`)).not.toBeInTheDocument()
+    expect(previewPre).toHaveClass('whitespace-pre-wrap')
   })
 
   it('renders simple folded YAML scalars in raw tabs as quoted single-line values', async () => {

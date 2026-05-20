@@ -10,6 +10,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Kept structured retry audit controls clearer by making model labels passive, labeling validated retry outputs with their attempt number, and limiting intervention warnings to the primary artifact tab.
 - Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
 - Kept single-model Raw views focused by omitting the aggregate selector when only one model source has raw output.
+- Kept Raw attempt inspection focused by removing stored artifact JSON shortcuts and grouping single-model attempts under model/mode labels.
 - Kept voting-phase winner artifact Raw views scoped to the winning draft instead of vote scorecards.
 - Kept previous draft Raw views canonical after drafting by showing only the validated draft in voting/refining artifacts.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
@@ -38,6 +39,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Canonical artifact flow keeps rejected malformed model output diagnostic-only while downstream phases continue to consume accepted normalized content.
 - Structured artifact viewers now keep parser/retry intervention notices on the primary artifact tab, while retry producers share one raw-attempt helper so accepted/rejected attempt metadata stays consistent across phases.
 - Made grouped Raw selector model labels passive metadata, labeled validated retry outputs with their accepted attempt number, and deduplicated identical Raw variants, with per-attempt retry/validated tabs preferred over generic `Raw Output`, `Model Output`, `Accepted Output`, `Validated`, or `Rejected` shortcuts.
+- Removed explicit stored `Artifact JSON` Raw variants from structured attempt viewers; Raw now focuses on model output attempts grouped under their model/mode source label.
 - Added a project-level OpenCode plugin that sets the Node/Bun event listener warning threshold to 20 inside the OpenCode process.
 - Development maintenance output now renders a single default startup summary with package-level dependency update details, held direct dependency details, and held audit remediation eligibility times.
 - Removed the separate verbose dev-startup mode so dependency maintenance details appear in normal `npm run dev` output.
