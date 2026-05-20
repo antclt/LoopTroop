@@ -4124,9 +4124,7 @@ function buildCoverageSummaryText(coverageResult: CoverageArtifactData, phase?: 
 
   const status = coverageResult.status ?? coverageResult.parsed?.status ?? (coverageResult.hasGaps ? 'gaps' : 'clean')
   const finalCandidateVersion = coverageResult.finalCandidateVersion ?? coverageResult.attempts?.[coverageResult.attempts.length - 1]?.candidateVersion
-  const gaps = coverageResult.remainingGaps?.length
-    ? coverageResult.remainingGaps
-    : coverageResult.gaps ?? coverageResult.parsed?.gaps ?? []
+  const gaps = getCoverageDisplayGaps(coverageResult)
   const reviewedArtifact = getCoverageCandidateLabel(phase, finalCandidateVersion)
   const reviewedAgainst = getCoverageReviewedAgainst(phase)
   const isVerifyPrdCoverage = phase === 'VERIFYING_PRD_COVERAGE'
@@ -4136,6 +4134,38 @@ function buildCoverageSummaryText(coverageResult: CoverageArtifactData, phase?: 
       ? `This ${isVerifyPrdCoverage ? 'check' : 'pass'} found ${gaps.length === 1 ? '1 gap' : `${gaps.length} gaps`} between the ${reviewedArtifact} and the ${reviewedAgainst}.`
       : `This ${isVerifyPrdCoverage ? 'check' : 'pass'} found coverage gaps between the ${reviewedArtifact} and the ${reviewedAgainst}.`
     : `The ${reviewedArtifact} covers the ${reviewedAgainst}. No gaps were ${isVerifyPrdCoverage ? 'found in this check' : 'flagged in this pass'}.`
+}
+
+function normalizeCoverageGapList(gaps: string[] | undefined): string[] {
+  const seen = new Set<string>()
+  const normalized: string[] = []
+  for (const gap of gaps ?? []) {
+    const trimmed = gap.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    normalized.push(trimmed)
+  }
+  return normalized
+}
+
+function getCoverageDisplayGaps(coverageResult: CoverageArtifactData): string[] {
+  const directGaps = [
+    coverageResult.remainingGaps,
+    coverageResult.gaps,
+    coverageResult.parsed?.gaps,
+  ]
+
+  for (const gaps of directGaps) {
+    const normalized = normalizeCoverageGapList(gaps)
+    if (normalized.length > 0) return normalized
+  }
+
+  const latestGapAttempt = coverageResult.attempts
+    ?.slice()
+    .reverse()
+    .find((attempt) => attempt.status === 'gaps' && attempt.gaps.length > 0)
+
+  return normalizeCoverageGapList(latestGapAttempt?.gaps)
 }
 
 function CleanCoverageCallout({
@@ -4179,11 +4209,16 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
   const isPrdCoverage = phase === 'VERIFYING_PRD_COVERAGE' || phase === 'WAITING_PRD_APPROVAL'
   const status = coverageResult.status ?? coverageResult.parsed?.status ?? (coverageResult.hasGaps ? 'gaps' : 'clean')
   const finalCandidateVersion = coverageResult.finalCandidateVersion ?? coverageResult.attempts?.[coverageResult.attempts.length - 1]?.candidateVersion
+  const openGaps = getCoverageDisplayGaps(coverageResult)
+  const hasOpenCoverageGaps = status === 'gaps'
+    || coverageResult.hasGaps === true
+    || coverageResult.hasRemainingGaps === true
+    || openGaps.length > 0
   const followUpQuestions = isPrdCoverage
     ? []
     : normalizeCoverageFollowUpArtifacts(
         coverageResult.parsed?.followUpQuestions ?? coverageResult.parsed?.follow_up_questions,
-    )
+      )
   const hasStructuredFollowUps = !isPrdCoverage && followUpQuestions.length > 0
   const summaryText = buildCoverageSummaryText(coverageResult, phase)
   const terminationSummary = coverageResult.terminationReason === 'coverage_pass_limit_reached'
@@ -4198,11 +4233,11 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
       {header && <div className="flex items-center gap-2">{header}</div>}
 
       <div className={`rounded-md border px-3 py-2 text-xs font-medium ${
-        status === 'gaps'
+        hasOpenCoverageGaps
           ? 'border-amber-300 bg-amber-50 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200'
           : 'border-green-300 bg-green-50 text-green-900 dark:border-green-900/60 dark:bg-green-950/30 dark:text-green-200'
       }`}>
-        {status === 'gaps'
+        {hasOpenCoverageGaps
           ? 'Coverage review found gaps'
           : finalCandidateVersion && finalCandidateVersion > 1
             ? 'No remaining coverage gaps found'
@@ -4217,6 +4252,31 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
         <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
           {terminationSummary}
         </div>
+      )}
+
+      {hasOpenCoverageGaps && openGaps.length > 0 && (
+        <CollapsibleSection
+          title={(
+            <span className="flex items-center gap-2">
+              <span>Open Coverage Gaps</span>
+              <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                {openGaps.length}
+              </span>
+            </span>
+          )}
+          defaultOpen
+        >
+          <div className="space-y-2">
+            {openGaps.map((gap, index) => (
+              <div
+                key={`${gap}:${index}`}
+                className="rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs leading-5 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100"
+              >
+                {gap}
+              </div>
+            ))}
+          </div>
+        </CollapsibleSection>
       )}
 
       {typeof coverageResult.followUpBudgetTotal === 'number' && (

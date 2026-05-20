@@ -1311,7 +1311,7 @@ describe('ArtifactContentViewer', () => {
     ).toBeInTheDocument()
   })
 
-  it('hides PRD coverage gap details and follow-up questions while preserving summaries', () => {
+  it('shows PRD coverage gap details while hiding follow-up questions', () => {
     const coverageResponse = [
       'status: gaps',
       'gaps:',
@@ -1356,8 +1356,8 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Coverage review found gaps')).toBeInTheDocument()
     expect(screen.getByText('This check found 1 gap between the current PRD candidate and the winner Full Answers.')).toBeInTheDocument()
     expect(screen.getByText('Retry cap reached; moving to approval with unresolved gaps.')).toBeInTheDocument()
-    expect(screen.queryByText('Open Coverage Gaps')).not.toBeInTheDocument()
-    expect(screen.queryByText('Missing PRD approval sequencing.')).not.toBeInTheDocument()
+    expect(screen.getByText('Open Coverage Gaps')).toBeInTheDocument()
+    expect(screen.getByText('Missing PRD approval sequencing.')).toBeInTheDocument()
     expect(screen.queryByText('Follow-up Questions')).not.toBeInTheDocument()
     expect(screen.queryByText('Which approval step should trigger Beads?')).not.toBeInTheDocument()
 
@@ -1367,6 +1367,44 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText(`${coverageDisplayContent.split('\n').length.toLocaleString()} Lines`)).toBeInTheDocument()
     expect(screen.getByText(`${coverageDisplayContent.length.toLocaleString()} Characters`)).toBeInTheDocument()
     expect(screen.getByText(`${encode(coverageDisplayContent).length.toLocaleString()} Tokens (GPT-5 tokenizer)`)).toBeInTheDocument()
+  })
+
+  it('shows terminal beads coverage remaining gaps for the latest implementation plan', () => {
+    render(
+      <ArtifactContent
+        artifactId="coverage-report"
+        phase="WAITING_BEADS_APPROVAL"
+        content={JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          status: 'gaps',
+          summary: 'Implementation Plan v5 still has 2 gaps.',
+          finalCandidateVersion: 5,
+          hasRemainingGaps: true,
+          remainingGaps: [
+            'Stable-channel feature-flag rollout behavior is still missing from the implementation plan.',
+            'GUI verification needs a concrete repo-standard test path before approval.',
+          ],
+          attempts: [
+            {
+              candidateVersion: 5,
+              status: 'gaps',
+              summary: 'Implementation Plan v5 still has 2 gaps.',
+              gaps: [
+                'Stale attempt gap that should not win over remainingGaps.',
+              ],
+              auditNotes: 'status: gaps',
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getByText('Coverage review found gaps')).toBeInTheDocument()
+    expect(screen.getByText('Implementation Plan v5 still has 2 gaps.')).toBeInTheDocument()
+    expect(screen.getByText('Open Coverage Gaps')).toBeInTheDocument()
+    expect(screen.getByText('Stable-channel feature-flag rollout behavior is still missing from the implementation plan.')).toBeInTheDocument()
+    expect(screen.getByText('GUI verification needs a concrete repo-standard test path before approval.')).toBeInTheDocument()
+    expect(screen.queryByText('Stale attempt gap that should not win over remainingGaps.')).not.toBeInTheDocument()
   })
 
   it('shows a friendly clean summary for PRD coverage results', () => {
