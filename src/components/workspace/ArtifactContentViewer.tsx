@@ -291,6 +291,11 @@ function shouldShowRawSourceSelector(rawSourceOptions: RawContentSource[]): bool
     || rawSourceOptions.some((source) => Boolean(source.modelId) || (source.variants?.length ?? 0) > 1)
 }
 
+function shouldOmitAggregateRawSource(rawSources: RawContentSource[] | undefined): boolean {
+  const selectableSources = rawSources?.filter(isRawContentSourceSelectable) ?? []
+  return selectableSources.length === 1 && Boolean(selectableSources[0]?.modelId)
+}
+
 function buildAggregateRawSource(content: string, rawSources: RawContentSource[] | undefined): RawContentSource {
   const rawSourceCount = rawSources?.length ?? 0
   const selectableSourceCount = rawSources?.filter(isRawContentSourceSelectable).length ?? 0
@@ -353,6 +358,7 @@ export function WithRawTab({
   const [activeTab, setActiveTab] = useState<'structured' | 'raw'>('structured')
   const [activeRawSourceId, setActiveRawSourceId] = useState('all')
   const rawSourceOptions = useMemo<RawContentSource[]>(() => {
+    if (shouldOmitAggregateRawSource(rawSources)) return rawSources ?? []
     const aggregateSource = buildAggregateRawSource(content, rawSources)
     return [aggregateSource, ...(rawSources ?? [])]
   }, [content, rawSources])
