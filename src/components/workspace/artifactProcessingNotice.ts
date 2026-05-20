@@ -66,7 +66,7 @@ export const INTERVENTION_CATEGORY_COPY: Record<StructuredInterventionCategory, 
     className: 'border-violet-300 bg-violet-100/80 text-violet-900 dark:border-violet-700 dark:bg-violet-900/40 dark:text-violet-100',
   },
   retry: {
-    label: 'Retried',
+    label: 'Retry',
     className: 'border-slate-300 bg-slate-100/80 text-slate-900 dark:border-slate-700 dark:bg-slate-900/40 dark:text-slate-100',
   },
 }
@@ -99,7 +99,25 @@ export function hasArtifactProcessingNotice(structuredOutput?: ArtifactStructure
   return Boolean(structuredOutput && getStructuredOutputInterventions(structuredOutput).length > 0)
 }
 
-function buildInterventionBadges(interventions: StructuredIntervention[]): Array<{ label: string; count: number; className: string }> {
+function getStructuredRetryAttemptCount(structuredOutput?: ArtifactStructuredOutputData): number {
+  const autoRetryCount = structuredOutput?.autoRetryCount
+  return Number.isInteger(autoRetryCount) && (autoRetryCount ?? 0) > 0
+    ? autoRetryCount ?? 0
+    : 0
+}
+
+function getContextRetryAttemptCount(context?: ArtifactProcessingNoticeContext): number {
+  return (context?.ownerInterventions ?? []).reduce(
+    (total, owner) => total + getStructuredRetryAttemptCount(owner.structuredOutput),
+    0,
+  )
+}
+
+function buildInterventionBadges(
+  interventions: StructuredIntervention[],
+  structuredOutput?: ArtifactStructuredOutputData,
+  context?: ArtifactProcessingNoticeContext,
+): Array<{ label: string; count: number; className: string }> {
   const counts = interventions.reduce<Record<StructuredInterventionCategory, number>>((acc, intervention) => {
     acc[intervention.category] = (acc[intervention.category] ?? 0) + 1
     return acc
@@ -114,11 +132,24 @@ function buildInterventionBadges(interventions: StructuredIntervention[]): Array
 
   return STRUCTURED_INTERVENTION_CATEGORY_ORDER
     .filter((category) => counts[category] > 0)
-    .map((category) => ({
-      label: INTERVENTION_CATEGORY_COPY[category].label,
-      count: counts[category],
-      className: INTERVENTION_CATEGORY_COPY[category].className,
-    }))
+    .map((category) => {
+      if (category === 'retry') {
+        const retryAttemptCount = getContextRetryAttemptCount(context) || getStructuredRetryAttemptCount(structuredOutput)
+        if (retryAttemptCount > 0) {
+          return {
+            label: 'Retries',
+            count: retryAttemptCount,
+            className: INTERVENTION_CATEGORY_COPY[category].className,
+          }
+        }
+      }
+
+      return {
+        label: INTERVENTION_CATEGORY_COPY[category].label,
+        count: counts[category],
+        className: INTERVENTION_CATEGORY_COPY[category].className,
+      }
+    })
 }
 
 function buildInterventionSummary(interventions: StructuredIntervention[]): string {
@@ -287,7 +318,7 @@ export function buildArtifactProcessingNoticeCopy(
 
   const strings = getArtifactProcessingStrings(kind, context)
   const status = context?.status ?? 'completed'
-  const badges = buildInterventionBadges(interventions)
+  const badges = buildInterventionBadges(interventions, structuredOutput, context)
 
   return {
     title: status === 'completed' ? strings.completedTitle : strings.nonCompletedTitle,

@@ -8,6 +8,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
 - Kept structured retry audit controls clearer by making model labels passive, labeling validated retry outputs with their attempt number, and limiting intervention warnings to the primary artifact tab.
+- Kept structured retry notice badges aligned with the actual retry attempt count.
 - Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
 - Kept single-model Raw views focused by omitting the aggregate selector when only one model source has raw output.
 - Kept Raw attempt inspection focused by removing stored artifact JSON shortcuts and grouping single-model attempts under model/mode labels.
@@ -55,6 +56,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Single-model Raw artifact views no longer show a redundant aggregate selector; raw, validated, and retry variants remain available under the model source.
 - Voting-phase winner artifacts now ignore vote-phase model logs when draft raw output is missing, so Raw and validated views stay focused on the selected draft across interview, PRD, and beads voting.
 - Previous draft artifacts shown after their drafting phase now render only the validated draft in Raw, keeping rejected/raw model text scoped to the original drafting diagnostics while downstream phases show the canonical content they actually consume.
+- Structured artifact notice badges now show retry attempt totals, so multi-retry council drafts and similar statuses no longer appear as a single retry intervention.
 
 ## [0.2.0] - 2026-05-12
 

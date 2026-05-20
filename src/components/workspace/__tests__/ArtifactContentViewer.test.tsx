@@ -1117,7 +1117,7 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
     expect(screen.queryByText('LoopTroop adjusted this diff.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Retried 1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Retries 1')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Accepted Output' })).not.toBeInTheDocument()
     const rawGroup = screen.getByRole('group', { name: /raw refinement attempts/i })
     expect(within(rawGroup).getByText(/gpt-5.2 · PRD refinement/i)).toBeInTheDocument()
@@ -2450,6 +2450,22 @@ describe('ArtifactContentViewer', () => {
     ])
   })
 
+  it('counts retry attempts rather than retry intervention rows in parser notice badges', () => {
+    const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
+      repairApplied: false,
+      repairWarnings: [],
+      autoRetryCount: 2,
+      validationError: 'PRD parser rejected the second retry.',
+    }), 'prd-draft')
+
+    expect(copy?.badges).toEqual([
+      expect.objectContaining({ label: 'Retries', count: 2 }),
+    ])
+    expect(copy?.interventions).toEqual([
+      expect.objectContaining({ category: 'retry', code: 'retry_after_validation_failure' }),
+    ])
+  })
+
   it('keeps reserved-scalar parser fixes separate from retry interventions in parser notices', () => {
     const copy = buildArtifactProcessingNoticeCopy(futureStructuredOutput({
       repairApplied: true,
@@ -2461,7 +2477,7 @@ describe('ArtifactContentViewer', () => {
     expect(copy?.summary).toBe('2 interventions across 2 categories: Reserved Scalar Repair, Validation Retry.')
     expect(copy?.badges).toEqual([
       expect.objectContaining({ label: 'Parser Fix', count: 1 }),
-      expect.objectContaining({ label: 'Retried', count: 1 }),
+      expect.objectContaining({ label: 'Retries', count: 1 }),
     ])
     expect(copy?.interventions).toEqual([
       expect.objectContaining({
@@ -3143,7 +3159,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('LoopTroop adjusted some vote scorecards.')).toBeInTheDocument()
     expect(screen.getByText('2 interventions across 2 categories: Reordering, Validation Retry.')).toBeInTheDocument()
     expect(screen.getByText('Cleanup 1')).toBeInTheDocument()
-    expect(screen.getByText('Retried 1')).toBeInTheDocument()
+    expect(screen.getByText('Retries 1')).toBeInTheDocument()
     expect(screen.queryByText('Affected Models')).not.toBeInTheDocument()
     expect(screen.queryByText(/Retry Attempts/i)).not.toBeInTheDocument()
 
@@ -3199,7 +3215,7 @@ describe('ArtifactContentViewer', () => {
     )
 
     expect(screen.getByText('LoopTroop adjusted this final test plan.')).toBeInTheDocument()
-    expect(screen.getByText('Retried 1')).toBeInTheDocument()
+    expect(screen.getByText('Retries 1')).toBeInTheDocument()
     expect(screen.queryByText(/LoopTroop validated this final test plan and recorded the intervention details below/i)).not.toBeInTheDocument()
 
     openNotice('LoopTroop adjusted this final test plan.')
@@ -3213,7 +3229,7 @@ describe('ArtifactContentViewer', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
     expect(screen.queryByText('LoopTroop adjusted this final test plan.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Retried 1')).not.toBeInTheDocument()
+    expect(screen.queryByText('Retries 1')).not.toBeInTheDocument()
   })
 
   it('renders integration reports with structured metadata and deferred push guidance', () => {
