@@ -3445,10 +3445,16 @@ function getRawAttemptStatus(attempt: ArtifactRawAttemptData): string | undefine
   return attempt.status ?? attempt.outcome
 }
 
+function isValidatedRawAttemptStatus(status: string | undefined): boolean {
+  const normalized = status?.toLowerCase()
+  return normalized === 'accepted' || normalized === 'completed' || normalized === 'validated'
+}
+
 function formatRawAttemptStatusLabel(status: string | undefined): string {
   const normalized = status?.toLowerCase()
   if (normalized === 'rejected' || normalized === 'invalid_output' || normalized === 'failed' || normalized === 'timed_out') return 'Rejected'
   if (normalized === 'accepted' || normalized === 'completed') return 'Accepted'
+  if (normalized === 'validated') return 'Validated'
   return ''
 }
 
@@ -3460,6 +3466,46 @@ function isRejectedRawAttempt(attempt: ArtifactRawAttemptData): boolean {
 function getRejectedRawAttempt(rawAttempts: ArtifactRawAttemptData[] | undefined): string | undefined {
   const rejected = rawAttempts?.filter(isRejectedRawAttempt).map(getRawAttemptContent).filter((content): content is string => typeof content === 'string')
   return rejected?.[rejected.length - 1]
+}
+
+function getRawAttemptNumber(attempt: ArtifactRawAttemptData, index: number): number {
+  return typeof attempt.attempt === 'number' && Number.isFinite(attempt.attempt) && attempt.attempt > 0
+    ? attempt.attempt
+    : index + 1
+}
+
+function getLatestValidatedRawAttemptNumber(rawAttempts: ArtifactRawAttemptData[] | undefined): number | undefined {
+  const attempts = rawAttempts ?? []
+  for (let index = attempts.length - 1; index >= 0; index -= 1) {
+    const attempt = attempts[index]!
+    if (isValidatedRawAttemptStatus(getRawAttemptStatus(attempt))) {
+      return getRawAttemptNumber(attempt, index)
+    }
+  }
+  return undefined
+}
+
+function inferValidatedAttemptNumber(
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+  structuredOutput: ArtifactStructuredOutputData | undefined,
+): number | undefined {
+  const rawAttemptNumber = getLatestValidatedRawAttemptNumber(rawAttempts)
+  if (typeof rawAttemptNumber === 'number') return rawAttemptNumber
+
+  const autoRetryCount = structuredOutput?.autoRetryCount
+  if (typeof autoRetryCount === 'number' && Number.isFinite(autoRetryCount) && autoRetryCount > 0) {
+    return Math.trunc(autoRetryCount) + 1
+  }
+
+  return undefined
+}
+
+function formatValidatedRawVariantLabel(
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+  structuredOutput: ArtifactStructuredOutputData | undefined,
+): string {
+  const attemptNumber = inferValidatedAttemptNumber(rawAttempts, structuredOutput)
+  return typeof attemptNumber === 'number' ? `Attempt ${attemptNumber} Validated` : 'Validated'
 }
 
 function buildRawAttemptVariants(
@@ -3498,6 +3544,7 @@ function normalizeRawVariantComparisonContent(content: string): string {
 
 function getRawVariantDedupPriority(variant: RawContentVariant): number {
   const label = variant.label.toLowerCase()
+  if (/^attempt\s+\d+\s+validated/i.test(variant.label)) return 130
   if (variant.id.includes(':attempt:') || /^attempt\s+\d+/i.test(variant.label)) {
     if (label.includes('accepted')) return 120
     if (label.includes('rejected')) return 110
@@ -3612,13 +3659,14 @@ function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: str
   }
   variants.push(...rawAttemptVariants)
   if (typeof normalizedResponse === 'string') {
+    const validatedLabel = formatValidatedRawVariantLabel(draft.rawAttempts, draft.structuredOutput)
     variants.push({
       id: `draft:${draft.memberId}:validated`,
-      label: 'Validated',
+      label: validatedLabel,
       content: normalizedResponse,
       displayContent: normalizedResponse,
-      ariaLabel: `${label} Validated`,
-      title: `Show validated output from ${label}`,
+      ariaLabel: `${label} ${validatedLabel}`,
+      title: `Show ${validatedLabel.toLowerCase()} output from ${label}`,
     })
   }
   const uniqueVariants = dedupeRawContentVariants(variants)
@@ -6119,13 +6167,14 @@ export function ArtifactContent({
         }
         variants.push(...rawAttemptVariants)
         if (hasValidatedResponse) {
+          const validatedLabel = formatValidatedRawVariantLabel(detail?.rawAttempts, detail?.structuredOutput)
           variants.push({
             id: `voter:${voterId}:validated`,
-            label: 'Validated',
+            label: validatedLabel,
             content: validatedResponse,
             displayContent: validatedResponse,
-            ariaLabel: `${label} Validated`,
-            title: `Show validated vote scorecard from ${label}`,
+            ariaLabel: `${label} ${validatedLabel}`,
+            title: `Show ${validatedLabel.toLowerCase()} vote scorecard from ${label}`,
           })
         }
         const uniqueVariants = dedupeRawContentVariants(variants)

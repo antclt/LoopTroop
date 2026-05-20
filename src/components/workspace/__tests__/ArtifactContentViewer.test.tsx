@@ -1551,7 +1551,7 @@ describe('ArtifactContentViewer', () => {
     expect(within(voterGroup).getByText('voter-a')).toBeInTheDocument()
     expect(within(voterGroup).queryByRole('button', { name: /voter-a$/ })).not.toBeInTheDocument()
     expect(within(voterGroup).queryByRole('button', { name: /voter-a Raw Output/ })).not.toBeInTheDocument()
-    expect(within(voterGroup).getByRole('button', { name: /voter-a Validated/ })).toBeInTheDocument()
+    expect(within(voterGroup).getByRole('button', { name: /voter-a Attempt 2 Validated/ })).toBeInTheDocument()
     const rejectedButton = within(voterGroup).getByRole('button', { name: /voter-a Rejected/ })
     expect(rejectedButton).toBeEnabled()
 
@@ -1870,11 +1870,11 @@ describe('ArtifactContentViewer', () => {
     expect(within(draftGroup).getByText('gpt-5.2')).toBeInTheDocument()
     expect(within(draftGroup).queryByRole('button', { name: /^gpt-5.2$/ })).not.toBeInTheDocument()
     expect(within(draftGroup).queryByRole('button', { name: /gpt-5.2 Raw Output/ })).not.toBeInTheDocument()
-    expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Validated/ })).toBeInTheDocument()
+    expect(within(draftGroup).getByRole('button', { name: /gpt-5.2 Attempt 2 Validated/ })).toBeInTheDocument()
     const rejectedButton = within(draftGroup).getByRole('button', { name: /gpt-5.2 Rejected/ })
     expect(rejectedButton).toBeEnabled()
     expect(within(draftGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Validated',
+      'Attempt 2 Validated',
       'Rejected',
     ])
     expect(within(draftGroup).getByText('Rejected')).toHaveClass('italic')
@@ -1938,6 +1938,59 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByRole('button', { name: /gpt-5.2 Attempt 1/ })).toBeInTheDocument()
   })
 
+  it('labels validated draft output with the accepted retry attempt number', () => {
+    const modelId = 'vendor/draft-a'
+    const rejectedRawResponse = 'questions: prose instead of structured interview yaml'
+    const acceptedRawResponse = '<think>Normalizing question ids.</think>\n\nquestions:\n  - id: Q1\n    question: What is the scope?'
+    const validatedResponse = 'questions:\n  - id: Q01\n    question: What is the scope?\n'
+    const content = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: validatedResponse,
+          rawResponse: acceptedRawResponse,
+          normalizedResponse: validatedResponse,
+          rawAttempts: [
+            {
+              attempt: 1,
+              outcome: 'rejected',
+              rawResponse: rejectedRawResponse,
+              validationError: 'Missing required question fields.',
+            },
+            {
+              attempt: 2,
+              outcome: 'accepted',
+              rawResponse: acceptedRawResponse,
+            },
+          ],
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Missing required question fields.',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+    })
+
+    render(<ArtifactContent artifactId={`draft-member-${encodeURIComponent(modelId)}`} phase="COUNCIL_DRAFTING_INTERVIEW" content={content} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const draftGroup = screen.getByRole('group', { name: /draft-a raw output/i })
+    expect(within(draftGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Attempt 2 Accepted',
+      'Attempt 1 Rejected',
+      'Attempt 2 Validated',
+    ])
+
+    fireEvent.click(within(draftGroup).getByRole('button', { name: /draft-a Attempt 2 Validated/ }))
+
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === validatedResponse)).toBeInTheDocument()
+  })
+
   it('deduplicates raw output and retry shortcuts when raw attempts have the same payloads', () => {
     const modelId = 'openai/gpt-5.2'
     const rejectedRawResponse = 'rejected draft payload'
@@ -1984,7 +2037,7 @@ describe('ArtifactContentViewer', () => {
     expect(within(draftGroup).queryByRole('button', { name: /^gpt-5.2 Rejected$/ })).not.toBeInTheDocument()
     expect(within(draftGroup).queryByRole('button', { name: /gpt-5.2 Validated/ })).not.toBeInTheDocument()
     expect(within(draftGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
-      'Attempt 2 Accepted',
+      'Attempt 2 Validated',
       'Attempt 1 Rejected',
     ])
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse.trimEnd())).toBeInTheDocument()
