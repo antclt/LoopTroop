@@ -3666,7 +3666,41 @@ function buildRejectedRawVariant(
   }
 }
 
-function buildDraftRawSources(draft: CouncilDraftData, rejectedRawResponse?: string): RawContentSource[] | undefined {
+function getValidatedDraftContent(draft: CouncilDraftData): string | undefined {
+  if (typeof draft.normalizedResponse === 'string') return draft.normalizedResponse
+  if (isFailedCouncilDraftOutcome(draft.outcome)) return undefined
+  if (typeof draft.content === 'string') return draft.content
+  return undefined
+}
+
+function buildValidatedDraftRawSources(draft: CouncilDraftData): RawContentSource[] | undefined {
+  const validatedContent = getValidatedDraftContent(draft)
+  if (typeof validatedContent !== 'string') return undefined
+
+  const label = getModelDisplayName(draft.memberId)
+  return [{
+    id: `draft:${draft.memberId}`,
+    label,
+    modelId: draft.memberId,
+    variants: [{
+      id: `draft:${draft.memberId}:validated`,
+      label: 'Validated',
+      content: validatedContent,
+      displayContent: validatedContent,
+      ariaLabel: `${label} Validated`,
+      title: `Show validated draft output from ${label}`,
+    }],
+    title: `Show validated draft output from ${label}`,
+  }]
+}
+
+function buildDraftRawSources(
+  draft: CouncilDraftData,
+  rejectedRawResponse?: string,
+  options: { validatedOnly?: boolean } = {},
+): RawContentSource[] | undefined {
+  if (options.validatedOnly) return buildValidatedDraftRawSources(draft)
+
   const rawResponse = draft.rawResponse
   const normalizedResponse = draft.normalizedResponse ?? (
     draft.structuredOutput?.repairApplied && draft.content ? draft.content : undefined
@@ -3728,6 +3762,10 @@ function shouldReadDraftRawLogsForPhase(phase?: string): boolean {
     || phase === 'DRAFTING_BEADS'
     || phase === 'COUNCIL_DELIBERATING'
     || phase === 'COUNCIL_DRAFTING_INTERVIEW'
+}
+
+function shouldShowValidatedDraftRawOnly(phase?: string): boolean {
+  return Boolean(phase) && !shouldReadDraftRawLogsForPhase(phase)
 }
 
 function createEmptyDraftRawLogFallbacks(): DraftRawLogFallbacks {
@@ -6162,6 +6200,7 @@ export function ArtifactContent({
 
   const councilResult = tryParseCouncilResult(content)
   if (councilResult) {
+    const validatedDraftRawOnly = shouldShowValidatedDraftRawOnly(phase)
     const isVotes = artifactId?.includes('vote')
     if (isVotes) {
       const votes = Array.isArray(councilResult.votes) ? councilResult.votes : []
@@ -6253,12 +6292,15 @@ export function ArtifactContent({
       if (winnerDraft && isFailedCouncilDraftOutcome(winnerDraft.outcome)) {
         const isPrd = isStructuredPrdArtifactId(artifactId)
         const isBeads = Boolean(artifactId?.includes('beads'))
-        const rawContent = winnerDraft.rawResponse ?? getRejectedRawAttempt(winnerDraft.rawAttempts) ?? winnerDraft.content ?? JSON.stringify({
+        const diagnosticContent = JSON.stringify({
           memberId: winnerDraft.memberId,
           outcome: winnerDraft.outcome,
           error: winnerDraft.error,
           validationError: winnerDraft.structuredOutput?.validationError,
         }, null, 2)
+        const rawContent = validatedDraftRawOnly
+          ? (getValidatedDraftContent(winnerDraft) ?? diagnosticContent)
+          : winnerDraft.rawResponse ?? getRejectedRawAttempt(winnerDraft.rawAttempts) ?? winnerDraft.content ?? diagnosticContent
         return (
           <WithRawTab
             content={rawContent}
@@ -6271,6 +6313,7 @@ export function ArtifactContent({
             rawSources={buildDraftRawSources(
               winnerDraft,
               getRejectedDraftRawResponse(winnerDraft, phase, artifactId, draftRawLogHistories),
+              { validatedOnly: validatedDraftRawOnly },
             )}
           >
             <CouncilDraftFailureDiagnostics draft={winnerDraft} />
@@ -6300,7 +6343,9 @@ export function ArtifactContent({
         isBeads,
       })
       const noticeOutput = winnerDraft
-        ? withRawNormalizationNotice(winnerDraft.structuredOutput, winnerDraft.rawResponse, winnerDraft.normalizedResponse, winnerContent)
+        ? validatedDraftRawOnly
+          ? winnerDraft.structuredOutput
+          : withRawNormalizationNotice(winnerDraft.structuredOutput, winnerDraft.rawResponse, winnerDraft.normalizedResponse, winnerContent)
         : undefined
       const structured = isPrd ? <PrdDraftView content={winnerContent} />
         : isBeads ? <BeadsDraftView content={winnerContent} />
@@ -6315,6 +6360,7 @@ export function ArtifactContent({
             ? buildDraftRawSources(
                 winnerDraft,
                 getRejectedDraftRawResponse(winnerDraft, phase, artifactId, draftRawLogHistories),
+                { validatedOnly: validatedDraftRawOnly },
               )
             : undefined}
         >
@@ -6373,13 +6419,18 @@ export function ArtifactContent({
       const isInterview = Boolean(artifactId?.startsWith('draft') || artifactId?.includes('interview'))
       const isPrd = isStructuredPrdArtifactId(artifactId) && !isFullAnswers
       const isBeads = Boolean(artifactId?.includes('beads'))
-      const noticeOutput = withRawNormalizationNotice(draft.structuredOutput, draft.rawResponse, draft.normalizedResponse, '')
-      const rawContent = draft.rawResponse ?? getRejectedRawAttempt(draft.rawAttempts) ?? draft.content ?? JSON.stringify({
+      const noticeOutput = validatedDraftRawOnly
+        ? draft.structuredOutput
+        : withRawNormalizationNotice(draft.structuredOutput, draft.rawResponse, draft.normalizedResponse, '')
+      const diagnosticContent = JSON.stringify({
         memberId: draft.memberId,
         outcome: draft.outcome,
         error: draft.error,
         validationError: draft.structuredOutput?.validationError,
       }, null, 2)
+      const rawContent = validatedDraftRawOnly
+        ? (getValidatedDraftContent(draft) ?? diagnosticContent)
+        : draft.rawResponse ?? getRejectedRawAttempt(draft.rawAttempts) ?? draft.content ?? diagnosticContent
       return (
         <WithRawTab
           content={rawContent}
@@ -6389,6 +6440,7 @@ export function ArtifactContent({
           rawSources={buildDraftRawSources(
             draft,
             getRejectedDraftRawResponse(draft, phase, artifactId, draftRawLogHistories),
+            { validatedOnly: validatedDraftRawOnly },
           )}
         >
           <CouncilDraftFailureDiagnostics draft={draft} />
@@ -6404,7 +6456,9 @@ export function ArtifactContent({
       const noticeKind = getCouncilDraftNoticeKind({ isFullAnswers, isInterview, isPrd, isBeads })
       const noticeContext = isFullAnswers ? getFullAnswersNoticeContext(draftContent) : undefined
       const noticeOutput = draft
-        ? withRawNormalizationNotice(draft.structuredOutput, draft.rawResponse, draft.normalizedResponse, draftContent)
+        ? validatedDraftRawOnly
+          ? draft.structuredOutput
+          : withRawNormalizationNotice(draft.structuredOutput, draft.rawResponse, draft.normalizedResponse, draftContent)
         : undefined
 
       const structured = isFullAnswers ? <InterviewAnswersView content={draftContent} />
@@ -6424,6 +6478,7 @@ export function ArtifactContent({
               ? buildDraftRawSources(
                   draft,
                   getRejectedDraftRawResponse(draft, phase, artifactId, draftRawLogHistories),
+                  { validatedOnly: validatedDraftRawOnly },
                 )
               : undefined}
           >

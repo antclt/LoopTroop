@@ -103,7 +103,7 @@ describe.concurrent('workflow metadata', () => {
     const beadsRefinePhase = WORKFLOW_PHASES.find((phase) => phase.id === 'REFINING_BEADS')
 
     expect(beadsRefinePhase?.description).toContain(
-      'Winning draft is consolidated into the final semantic beads blueprint using the strongest ideas from the losing drafts.',
+      'Winning draft is consolidated into the final semantic beads blueprint using the strongest ideas from losing drafts; previous blueprint Raw views are validated-only.',
     )
   })
 

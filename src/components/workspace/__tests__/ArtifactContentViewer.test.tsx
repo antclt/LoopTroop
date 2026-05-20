@@ -688,8 +688,13 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByText('Hidden future invalid story')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
-    fireEvent.click(screen.getByRole('button', { name: /gpt-5.2 Attempt 1 Rejected/ }))
-    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'raw invalid future winner payload')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /gpt-5.2 Attempt 1 Rejected/ })).not.toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === 'raw invalid future winner payload')).not.toBeInTheDocument()
+    expect(screen.getByText((_text, element) =>
+      element?.tagName === 'PRE'
+      && Boolean(element.textContent?.includes('"outcome": "invalid_output"'))
+      && Boolean(element.textContent?.includes('"validationError": "PRD parser rejected the winner draft."')),
+    )).toBeInTheDocument()
   })
 
   it('renders refined PRD artifacts with the same structured PRD viewer', () => {
@@ -1747,10 +1752,84 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
 
     const draftGroup = screen.getByRole('group', { name: /draft-a raw output/i })
-    expect(within(draftGroup).getByRole('button', { name: /draft-a Raw Output/ })).toBeDisabled()
+    expect(within(draftGroup).queryByRole('button', { name: /draft-a Raw Output/ })).not.toBeInTheDocument()
     expect(within(draftGroup).getByRole('button', { name: /draft-a Validated/ })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === draftContent)).toBeInTheDocument()
     expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === voteRawResponse)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    {
+      label: 'voting winner',
+      artifactId: 'winner-prd-draft',
+      phase: 'COUNCIL_VOTING_PRD',
+    },
+    {
+      label: 'refining previous draft',
+      artifactId: `prd-draft-member-${encodeURIComponent('vendor/draft-a')}`,
+      phase: 'REFINING_PRD',
+    },
+  ])('shows only the validated draft in Raw for a $label artifact', ({ artifactId, phase }) => {
+    const modelId = 'vendor/draft-a'
+    const rejectedDraftResponse = 'schema_version: 1\nartifact: prd\nstatus: draft\nepics: []'
+    const rawDraftResponse = `<think>Normalizing PRD.</think>\n\n${buildPrdDocumentContent({ epicTitle: 'Wrapped PRD draft' })}`
+    const validatedDraftResponse = buildPrdDocumentContent({ epicTitle: 'Validated PRD draft' })
+    const content = JSON.stringify({
+      drafts: [
+        {
+          memberId: modelId,
+          outcome: 'completed',
+          content: validatedDraftResponse,
+          rawResponse: rawDraftResponse,
+          normalizedResponse: validatedDraftResponse,
+          rawAttempts: [
+            {
+              attempt: 1,
+              outcome: 'rejected',
+              rawResponse: rejectedDraftResponse,
+              validationError: 'Missing user stories.',
+            },
+            {
+              attempt: 2,
+              outcome: 'accepted',
+              rawResponse: rawDraftResponse,
+            },
+          ],
+          structuredOutput: futureStructuredOutput({
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 1,
+            validationError: 'Missing user stories.',
+          }),
+        },
+      ],
+      memberOutcomes: { [modelId]: 'completed' },
+      votes: [
+        {
+          voterId: modelId,
+          draftId: modelId,
+          totalScore: 99,
+          scores: [{ category: 'Coverage of requirements', score: 20 }],
+        },
+      ],
+      voterOutcomes: { [modelId]: 'completed' },
+      winnerId: modelId,
+      isFinal: true,
+    })
+
+    render(<ArtifactContent artifactId={artifactId} phase={phase} content={content} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const draftGroup = screen.getByRole('group', { name: /draft-a raw output/i })
+    expect(within(draftGroup).getAllByRole('button').map((button) => button.textContent)).toEqual(['Validated'])
+    expect(within(draftGroup).queryByRole('button', { name: /draft-a Raw Output/ })).not.toBeInTheDocument()
+    expect(within(draftGroup).queryByRole('button', { name: /draft-a Rejected/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /draft-a Attempt 1 Rejected/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /draft-a Attempt 2 Accepted/ })).not.toBeInTheDocument()
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === validatedDraftResponse)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rawDraftResponse)).not.toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedDraftResponse)).not.toBeInTheDocument()
   })
 
   it('switches draft raw tabs between raw output and validated version when both exist', async () => {

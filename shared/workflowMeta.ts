@@ -187,6 +187,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Anonymization and randomized ordering are both designed to reduce bias — models cannot identify their own draft and cannot benefit from a favorable presentation position.',
       'Context available: Relevant Files + Ticket Details + Competing Drafts (all anonymized).',
+      'Previous draft artifacts shown during voting use the accepted validated draft as their Raw view; original raw model text remains scoped to the drafting phase diagnostics and logs.',
       'The voting rubric is consistent across all council members to ensure scores are comparable.',
       'Why vote instead of just picking one? Voting aggregates multiple perspectives on quality. A draft that impresses all council members is more likely to be genuinely strong than one that a single model happened to prefer.',
     ],
@@ -218,6 +219,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This phase produces the first user-facing interactive artifact in the planning flow — everything before this was AI-only work.',
       'The refinement is done by the winning model (from the vote), not the main implementer or all council members.',
+      'Earlier draft artifacts inspected here show the validated draft content that refinement consumed in Raw, not the original drafting model response.',
       'Context available: Relevant Files + Ticket Details + Competing Drafts (used for reference during normalization).',
       'The session snapshot is designed to support multiple interview rounds — if coverage later adds follow-up questions, the same snapshot structure accommodates them.',
     ],
@@ -375,6 +377,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Context available: Relevant Files + Ticket Details + Interview Results + Competing Drafts (all anonymized).',
       'The winning draft is not the final PRD — it still goes through refinement and coverage checking before approval.',
+      'Previous PRD draft artifacts shown during voting use the accepted validated draft as their Raw view; original raw/rejected drafting text remains available only from the drafting phase diagnostics.',
       'The voting rubric is weighted, meaning some categories (like requirement completeness) may count more than others (like structural coherence) in the final score.',
     ],
     equivalents: [
@@ -403,6 +406,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'The refinement is done by the winning model (from the vote), ensuring the refiner understands the winning approach and can merge additions coherently.',
       'Context available: Relevant Files + Ticket Details + Full Answers + Competing Drafts (the winner is labeled, losers are provided for mining improvements).',
+      'Competing draft artifacts reviewed here show their validated canonical draft in Raw, matching the content the refinement prompt used. Refinement model retries keep their own Raw attempt diagnostics separately.',
       'PRD Candidate v1 is a versioned identifier — coverage may produce later versions if gaps are found and revisions are needed.',
       'Why refine? The winning draft scored highest overall, but losing drafts often contain individual insights that the winner lacks. Refinement captures those insights without losing the winning structure.',
     ],
@@ -528,6 +532,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Context available: Relevant Files + Ticket Details + PRD + Competing Drafts (all anonymized).',
       'The architecture rubric differs from the PRD and interview rubrics — it focuses on implementation feasibility and dependency structure rather than requirement coverage.',
+      'Previous blueprint draft artifacts shown during voting use the accepted validated blueprint as their Raw view; original raw/rejected drafting text remains scoped to the drafting phase diagnostics.',
       'The winning blueprint is not the final plan — it still goes through refinement, coverage checking (Coverage Check (Beads)), and expansion (Expanding Blueprint) before becoming execution-ready beads.',
     ],
     equivalents: [
@@ -556,6 +561,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This phase still works on the semantic plan, not execution-ready bead records. Execution fields are added in the Expanding Blueprint phase, after coverage checking.',
       'Context available: Relevant Files + Ticket Details + PRD + Competing Drafts.',
+      'Competing blueprint artifacts reviewed here show their validated canonical draft in Raw, matching the content the refinement prompt used. Refinement retries keep their own Raw attempt diagnostics separately.',
       'Why refine before expansion? Semantic-level refinement is cheaper and more flexible. It is easier to add or modify task descriptions than to redo execution-specific fields after expansion.',
     ],
     equivalents: [
@@ -1088,7 +1094,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'COUNCIL_VOTING_INTERVIEW',
     label: 'Voting on Questions',
-    description: 'Council members score all anonymized interview drafts against a structured rubric (question relevance, coverage breadth, clarity, and actionability) to select the strongest candidate.',
+    description: 'Council members score all anonymized interview drafts against a structured rubric to select the strongest candidate; previous draft Raw views show only validated draft content.',
     details: WORKFLOW_PHASE_DETAILS.COUNCIL_VOTING_INTERVIEW,
     kanbanPhase: 'in_progress',
     groupId: 'interview',
@@ -1100,7 +1106,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'COMPILING_INTERVIEW',
     label: 'Refining Interview',
-    description: 'The winning interview draft is normalized into an interactive session: questions get unique IDs, types, and display metadata, and a batch-state snapshot is built for the interview UI.',
+    description: 'The winning interview draft is normalized into an interactive session; previous draft Raw views stay aligned to the validated content consumed by refinement.',
     details: WORKFLOW_PHASE_DETAILS.COMPILING_INTERVIEW,
     kanbanPhase: 'in_progress',
     groupId: 'interview',
@@ -1163,7 +1169,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'COUNCIL_VOTING_PRD',
     label: 'Voting on Specs',
-    description: 'Council members score all anonymized PRD drafts against a weighted rubric (requirement completeness, acceptance criteria quality, edge-case coverage, test intent clarity) to select the strongest specification baseline.',
+    description: 'Council members score all anonymized PRD drafts against a weighted rubric to select the strongest specification baseline; previous draft Raw views show only validated draft content.',
     details: WORKFLOW_PHASE_DETAILS.COUNCIL_VOTING_PRD,
     kanbanPhase: 'in_progress',
     groupId: 'prd',
@@ -1175,7 +1181,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'REFINING_PRD',
     label: 'Refining Specs',
-    description: 'Winning draft is consolidated into PRD Candidate v1 using useful ideas from the losing drafts; rejected refinement retries remain inspectable in Raw attempts.',
+    description: 'Winning draft is consolidated into PRD Candidate v1 using useful ideas from losing drafts; previous draft Raw views are validated-only, while refinement retries remain inspectable.',
     details: WORKFLOW_PHASE_DETAILS.REFINING_PRD,
     kanbanPhase: 'in_progress',
     groupId: 'prd',
@@ -1224,7 +1230,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'COUNCIL_VOTING_BEADS',
     label: 'Voting on Blueprint',
-    description: 'Council members score all anonymized beads blueprints against an architecture rubric (decomposition quality, feasibility, dependency correctness, and testability) to select the best implementation plan.',
+    description: 'Council members score all anonymized beads blueprints against an architecture rubric to select the best implementation plan; previous blueprint Raw views show only validated content.',
     details: WORKFLOW_PHASE_DETAILS.COUNCIL_VOTING_BEADS,
     kanbanPhase: 'in_progress',
     groupId: 'beads',
@@ -1236,7 +1242,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'REFINING_BEADS',
     label: 'Refining Blueprint',
-    description: 'Winning draft is consolidated into the final semantic beads blueprint using the strongest ideas from the losing drafts.',
+    description: 'Winning draft is consolidated into the final semantic beads blueprint using the strongest ideas from losing drafts; previous blueprint Raw views are validated-only.',
     details: WORKFLOW_PHASE_DETAILS.REFINING_BEADS,
     kanbanPhase: 'in_progress',
     groupId: 'beads',
