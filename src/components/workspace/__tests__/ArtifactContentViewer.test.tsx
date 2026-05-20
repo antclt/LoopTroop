@@ -873,6 +873,64 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByText('LoopTroop adjusted this vote scorecard.')).not.toBeInTheDocument()
   })
 
+  it('counts duplicate parser fixes across Voting on Blueprint detail owners', () => {
+    render(
+      <ArtifactContent
+        artifactId="beads-votes"
+        phase="COUNCIL_VOTING_BEADS"
+        content={JSON.stringify({
+          winnerId: 'vendor/draft-a',
+          drafts: [
+            { memberId: 'vendor/draft-a', outcome: 'completed', content: buildBeadsDraftContent({ title: 'Draft A' }) },
+            { memberId: 'vendor/draft-b', outcome: 'completed', content: buildBeadsDraftContent({ title: 'Draft B' }) },
+          ],
+          votes: [
+            {
+              voterId: 'vendor/voter-a',
+              draftId: 'vendor/draft-a',
+              totalScore: 91,
+              scores: [{ category: 'Coverage of requirements', score: 19 }],
+            },
+            {
+              voterId: 'vendor/voter-b',
+              draftId: 'vendor/draft-b',
+              totalScore: 89,
+              scores: [{ category: 'Coverage of requirements', score: 18 }],
+            },
+          ],
+          voterOutcomes: {
+            'vendor/voter-a': 'completed',
+            'vendor/voter-b': 'completed',
+          },
+          voterDetails: [
+            {
+              voterId: 'vendor/voter-a',
+              structuredOutput: futureStructuredOutput({
+                repairApplied: true,
+                repairWarnings: ['Unwrapped markdown code fence wrapping the YAML payload.'],
+              }),
+            },
+            {
+              voterId: 'vendor/voter-b',
+              structuredOutput: futureStructuredOutput({
+                repairApplied: true,
+                repairWarnings: ['Unwrapped markdown code fence wrapping the YAML payload.'],
+              }),
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getByText('LoopTroop adjusted some vote scorecards.')).toBeInTheDocument()
+    expect(screen.getByText('2 interventions: Markdown Fence Unwrap.')).toBeInTheDocument()
+    expect(screen.getByText('Parser Fix 2')).toBeInTheDocument()
+
+    openNotice('LoopTroop adjusted some vote scorecards.')
+    expect(screen.getByText('Affected Models')).toBeInTheDocument()
+    expect(screen.getAllByText('Markdown Fence Unwrap')).toHaveLength(2)
+  })
+
   it('keeps legacy string bead guidance working for final bead drafts', () => {
     render(
       <ArtifactContent
@@ -2463,6 +2521,45 @@ describe('ArtifactContentViewer', () => {
     ])
     expect(copy?.interventions).toEqual([
       expect.objectContaining({ category: 'retry', code: 'retry_after_validation_failure' }),
+    ])
+  })
+
+  it('counts aggregate notice badges from affected model intervention rows', () => {
+    const ownerA = futureStructuredOutput({
+      repairApplied: true,
+      repairWarnings: [
+        'Unwrapped markdown code fence wrapping the YAML payload.',
+        'Canonicalized source_interview.content_sha256 from the approved Interview Results artifact.',
+      ],
+      autoRetryCount: 2,
+      validationError: 'Vote parser rejected the second retry.',
+    })
+    const ownerB = futureStructuredOutput({
+      repairApplied: true,
+      repairWarnings: [
+        'Unwrapped markdown code fence wrapping the YAML payload.',
+        'Synthesized omitted beads refinement modified change for bead "bead-1" by matching id across the winning and refined drafts.',
+        'Dropped no-op beads refinement modified change at index 0 because the winning and refined bead "bead-1" are identical.',
+        'Cleared out-of-range beads refinement inspiration at index 0.',
+      ],
+      autoRetryCount: 0,
+    })
+    const copy = buildArtifactProcessingNoticeCopy(ownerA, 'vote-aggregate', {
+      affectedCount: 2,
+      ownerInterventions: [
+        { label: 'model-a', structuredOutput: ownerA },
+        { label: 'model-b', structuredOutput: ownerB },
+      ],
+    })
+
+    expect(copy?.summary).toBe('7 interventions across 6 categories: Markdown Fence Unwrap, Content Hash, Validation Retry, +3 more.')
+    expect(copy?.badges).toEqual([
+      expect.objectContaining({ label: 'Parser Fix', count: 2 }),
+      expect.objectContaining({ label: 'Cleanup', count: 1 }),
+      expect.objectContaining({ label: 'Synthesized', count: 1 }),
+      expect.objectContaining({ label: 'Dropped', count: 1 }),
+      expect.objectContaining({ label: 'Attribution', count: 1 }),
+      expect.objectContaining({ label: 'Retries', count: 2 }),
     ])
   })
 

@@ -113,6 +113,12 @@ function getContextRetryAttemptCount(context?: ArtifactProcessingNoticeContext):
   )
 }
 
+function getContextInterventions(context?: ArtifactProcessingNoticeContext): StructuredIntervention[] {
+  return (context?.ownerInterventions ?? []).flatMap((owner) =>
+    getStructuredOutputInterventions(owner.structuredOutput),
+  )
+}
+
 function buildInterventionBadges(
   interventions: StructuredIntervention[],
   structuredOutput?: ArtifactStructuredOutputData,
@@ -318,11 +324,13 @@ export function buildArtifactProcessingNoticeCopy(
 
   const strings = getArtifactProcessingStrings(kind, context)
   const status = context?.status ?? 'completed'
-  const badges = buildInterventionBadges(interventions, structuredOutput, context)
+  const contextInterventions = getContextInterventions(context)
+  const displayInterventions = contextInterventions.length > 0 ? contextInterventions : interventions
+  const badges = buildInterventionBadges(displayInterventions, structuredOutput, context)
 
   return {
     title: status === 'completed' ? strings.completedTitle : strings.nonCompletedTitle,
-    summary: buildInterventionSummary(interventions),
+    summary: buildInterventionSummary(displayInterventions),
     body: status === 'completed' ? strings.completedBody : strings.nonCompletedBody(status),
     badges,
     interventions,
