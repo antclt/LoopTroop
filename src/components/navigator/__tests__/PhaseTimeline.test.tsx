@@ -105,6 +105,29 @@ describe('PhaseTimeline', () => {
     expect(container.querySelector('.animate-spin')).toBeNull()
   })
 
+  it('uses static indicators for current needs-input phases', () => {
+    const needsInputStatuses = [
+      'WAITING_INTERVIEW_ANSWERS',
+      'WAITING_INTERVIEW_APPROVAL',
+      'WAITING_PRD_APPROVAL',
+      'WAITING_BEADS_APPROVAL',
+      'WAITING_EXECUTION_SETUP_APPROVAL',
+      'WAITING_PR_REVIEW',
+    ]
+
+    for (const status of needsInputStatuses) {
+      const { container, unmount } = renderWithProviders(<PhaseTimeline currentStatus={status} />)
+      expect(container.querySelector('.animate-spin')).toBeNull()
+      unmount()
+    }
+  })
+
+  it('keeps spinning indicators for actively running phases', () => {
+    const { container } = renderWithProviders(<PhaseTimeline currentStatus="CODING" />)
+
+    expect(container.querySelector('.animate-spin')).not.toBeNull()
+  })
+
   it('preserves live BLOCKED_ERROR phase review behavior', () => {
     const onSelect = vi.fn()
     renderWithProviders(

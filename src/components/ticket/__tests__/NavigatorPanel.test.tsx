@@ -1,5 +1,5 @@
 import { fireEvent, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { makeTicket } from '@/test/factories'
 import { renderWithProviders } from '@/test/renderHelpers'
 import { NavigatorPanel } from '../NavigatorPanel'
@@ -17,6 +17,10 @@ const errorOccurrence = {
 }
 
 describe('NavigatorPanel', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('renders the errors section after the timeline with a separator', () => {
     const { container } = renderWithProviders(
       <NavigatorPanel
@@ -148,5 +152,31 @@ describe('NavigatorPanel', () => {
     )
 
     expect(screen.getByText(/back to live/i)).toBeTruthy()
+  })
+
+  it('shows the setup plan navigator during setup approval', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      plan: {
+        readiness: { status: 'ready' },
+        steps: [],
+        summary: 'No setup actions are currently required.',
+      },
+    }), { status: 200 }) as Response)
+
+    renderWithProviders(
+      <NavigatorPanel
+        ticketId="1:T-42"
+        ticket={makeTicket({ status: 'WAITING_EXECUTION_SETUP_APPROVAL' })}
+        currentStatus="WAITING_EXECUTION_SETUP_APPROVAL"
+        selectedPhase="WAITING_EXECUTION_SETUP_APPROVAL"
+        selectedErrorOccurrenceId={null}
+        onSelectPhase={vi.fn()}
+        onSelectErrorOccurrence={vi.fn()}
+        contextPhase="WAITING_EXECUTION_SETUP_APPROVAL"
+      />,
+    )
+
+    expect(screen.getByText('Setup Plan')).toBeInTheDocument()
+    expect(await screen.findByText('No setup actions are currently required.')).toBeInTheDocument()
   })
 })

@@ -14,6 +14,7 @@ export function getStatusColor(status: string): string {
     case 'WAITING_INTERVIEW_APPROVAL':
     case 'WAITING_PRD_APPROVAL':
     case 'WAITING_BEADS_APPROVAL':
+    case 'WAITING_EXECUTION_SETUP_APPROVAL':
     case 'WAITING_PR_REVIEW':
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
     case 'DRAFTING_PRD':
@@ -81,6 +82,7 @@ export function getStatusRingColor(status: string): string {
     case 'WAITING_INTERVIEW_APPROVAL':
     case 'WAITING_PRD_APPROVAL':
     case 'WAITING_BEADS_APPROVAL':
+    case 'WAITING_EXECUTION_SETUP_APPROVAL':
     case 'WAITING_PR_REVIEW':
       return 'text-yellow-500'
     case 'DRAFTING_PRD':

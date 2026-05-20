@@ -20,6 +20,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
 - Fixed error navigation from Full Log so selecting an error opens its review view.
 - Fixed coverage reports so unresolved PRD, interview, and blueprint gaps are visible from the report instead of only approval warnings.
+- Kept human-input workflow phases visually paused by replacing left-timeline spinners with static waiting indicators.
 - Improved blocked-error diagnostics so OpenCode usage-limit failures remain visible when structured coverage output is empty.
 - Made blocked-error diagnostics explain when AI output was cut off by an OpenCode/model length stop, including finish reason and token counts.
 - Added a Continue recovery action for eligible blocked OpenCode sessions so temporary model interruptions can resume without starting a fresh phase attempt.
@@ -59,6 +60,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Previous draft artifacts shown after their drafting phase now render only the validated draft in Raw, keeping rejected/raw model text scoped to the original drafting diagnostics while downstream phases show the canonical content they actually consume.
 - Structured artifact notice badges now count the owner-level fixes and retry attempt totals shown in expanded details, so aggregate vote details and multi-retry council drafts no longer underreport adjustments.
 - Coverage reports now render the current open gap list from `remainingGaps`, `gaps`, `parsed.gaps`, or the latest gap attempt so terminal cap warnings match the inspectable report details.
+- Needs-input phases now use static waiting indicators in the left timeline, and workspace setup approval now follows the same side-navigation styling as the other approval gates.
 
 ## [0.2.0] - 2026-05-12
 

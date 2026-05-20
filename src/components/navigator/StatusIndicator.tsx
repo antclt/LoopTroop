@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils'
 import { Check, Loader2, Circle, AlertTriangle, Minus } from 'lucide-react'
 
-type IndicatorStatus = 'completed' | 'active' | 'pending' | 'error' | 'completed-final' | 'canceled'
+type IndicatorStatus = 'completed' | 'active' | 'waiting' | 'pending' | 'error' | 'completed-final' | 'canceled'
 
 interface StatusIndicatorProps {
   status: IndicatorStatus
@@ -16,6 +16,8 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
       return <Check className={cn('h-3.5 w-3.5 text-blue-500', className)} />
     case 'active':
       return <Loader2 className={cn('h-3.5 w-3.5 text-blue-500 animate-spin', className)} />
+    case 'waiting':
+      return <Circle className={cn('h-3.5 w-3.5 text-amber-500', className)} />
     case 'canceled':
       return <Minus className={cn('h-3.5 w-3.5 text-muted-foreground', className)} />
     case 'error':

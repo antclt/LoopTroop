@@ -4,7 +4,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { StatusIndicator } from './StatusIndicator'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { STATUS_DESCRIPTIONS, getStatusUserLabel } from '@/lib/workflowMeta'
+import { STATUS_DESCRIPTIONS, STATUS_TO_PHASE, getStatusUserLabel } from '@/lib/workflowMeta'
 import { useWorkflowMeta } from '@/hooks/useWorkflowMeta'
 import type { Ticket } from '@/hooks/useTickets'
 
@@ -19,7 +19,7 @@ interface PhaseTimelineProps {
   ticket?: Ticket
 }
 
-type PhaseIndicatorStatus = 'completed' | 'active' | 'pending' | 'error' | 'completed-final' | 'canceled'
+type PhaseIndicatorStatus = 'completed' | 'active' | 'waiting' | 'pending' | 'error' | 'completed-final' | 'canceled'
 
 function getPhaseIndicatorStatus(
   phaseId: string,
@@ -70,7 +70,9 @@ function getPhaseIndicatorStatus(
   }
 
   if (currentStatus === 'COMPLETED' && phaseId === 'COMPLETED') return 'completed-final'
-  if (phaseId === currentStatus) return 'active'
+  if (phaseId === currentStatus) {
+    return STATUS_TO_PHASE[currentStatus] === 'needs_input' ? 'waiting' : 'active'
+  }
 
   const currentIndex = phaseOrder.indexOf(currentStatus)
   const phaseIndex = phaseOrder.indexOf(phaseId)
@@ -101,6 +103,7 @@ function getGroupStatus(
   }
 
   if (statuses.some(s => s === 'completed-final')) return 'completed-final'
+  if (statuses.some(s => s === 'waiting')) return 'waiting'
   if (statuses.some(s => s === 'active')) return 'active'
   if (statuses.some(s => s === 'error')) return 'error'
   if (statuses.every(s => s === 'canceled')) return 'canceled'
@@ -186,6 +189,7 @@ export function PhaseTimeline({
                                   className={cn(
                                     'w-full flex items-center gap-1.5 px-2 py-1.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors text-left',
                                     groupStatus === 'active' && 'text-primary',
+                                    groupStatus === 'waiting' && 'text-amber-600 dark:text-amber-400',
                                     groupStatus === 'completed' && 'text-green-600',
                                     groupStatus === 'error' && 'text-destructive',
                                     groupStatus === 'pending' && 'text-muted-foreground',

@@ -36,7 +36,10 @@ export function NavigatorPanel({
   onOpenFullLog,
   contextPhase,
 }: NavigatorPanelProps) {
-  const isApprovalNavigatorPhase = contextPhase === 'WAITING_INTERVIEW_APPROVAL' || contextPhase === 'WAITING_PRD_APPROVAL' || contextPhase === 'WAITING_BEADS_APPROVAL'
+  const isApprovalNavigatorPhase = contextPhase === 'WAITING_INTERVIEW_APPROVAL'
+    || contextPhase === 'WAITING_PRD_APPROVAL'
+    || contextPhase === 'WAITING_BEADS_APPROVAL'
+    || contextPhase === 'WAITING_EXECUTION_SETUP_APPROVAL'
 
   return (
     <div className="h-full flex flex-col">
