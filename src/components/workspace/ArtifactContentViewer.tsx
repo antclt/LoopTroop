@@ -3537,6 +3537,10 @@ function isRejectedRawAttempt(attempt: ArtifactRawAttemptData): boolean {
   return status === 'rejected' || status === 'failed' || status === 'invalid_output' || status === 'timed_out' || Boolean(attempt.error || attempt.validationError)
 }
 
+function hasRejectedRawAttempt(rawAttempts: ArtifactRawAttemptData[] | undefined): boolean {
+  return rawAttempts?.some(isRejectedRawAttempt) ?? false
+}
+
 function getRejectedRawAttempt(rawAttempts: ArtifactRawAttemptData[] | undefined): string | undefined {
   const rejected = rawAttempts?.filter(isRejectedRawAttempt).map(getRawAttemptContent).filter((content): content is string => typeof content === 'string')
   return rejected?.[rejected.length - 1]
@@ -3582,17 +3586,57 @@ function formatValidatedRawVariantLabel(
   return typeof attemptNumber === 'number' ? `Attempt ${attemptNumber} Validated` : 'Validated'
 }
 
+function inferRejectedRawVariantAttemptNumber(
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+  structuredOutput: ArtifactStructuredOutputData | undefined,
+): number | undefined {
+  if (hasRejectedRawAttempt(rawAttempts)) return undefined
+
+  const autoRetryCount = structuredOutput?.autoRetryCount
+  if (typeof autoRetryCount === 'number' && Number.isFinite(autoRetryCount) && autoRetryCount > 0) {
+    return Math.trunc(autoRetryCount)
+  }
+
+  const diagnosticAttemptNumbers = structuredOutput?.retryDiagnostics
+    ?.map((diagnostic) => diagnostic.attempt)
+    .filter((attempt): attempt is number => Number.isInteger(attempt) && attempt > 0) ?? []
+  if (diagnosticAttemptNumbers.length > 0) {
+    return Math.max(...diagnosticAttemptNumbers)
+  }
+
+  const validatedAttemptNumber = inferValidatedAttemptNumber(rawAttempts, structuredOutput)
+  return typeof validatedAttemptNumber === 'number' && validatedAttemptNumber > 1
+    ? validatedAttemptNumber - 1
+    : undefined
+}
+
+function formatRejectedRawVariantLabel(
+  rawAttempts: ArtifactRawAttemptData[] | undefined,
+  structuredOutput: ArtifactStructuredOutputData | undefined,
+): string {
+  const attemptNumber = inferRejectedRawVariantAttemptNumber(rawAttempts, structuredOutput)
+  return typeof attemptNumber === 'number' ? `Attempt ${attemptNumber} Rejected` : 'Rejected'
+}
+
 function buildRawAttemptVariants(
   ownerId: string,
   ownerLabel: string,
   rawAttempts: ArtifactRawAttemptData[] | undefined,
 ): RawContentVariant[] {
-  return (rawAttempts ?? []).flatMap((attempt, index) => {
+  const orderedAttempts = (rawAttempts ?? [])
+    .map((attempt, index) => ({
+      attempt,
+      index,
+      attemptNumber: getRawAttemptNumber(attempt, index),
+    }))
+    .sort((a, b) => a.attemptNumber - b.attemptNumber || a.index - b.index)
+
+  return orderedAttempts.flatMap(({ attempt, index, attemptNumber }) => {
     const content = getRawAttemptContent(attempt)
     if (typeof content !== 'string') return []
     const status = getRawAttemptStatus(attempt)
     const statusLabel = formatRawAttemptStatusLabel(status)
-    const baseLabel = typeof attempt.attempt === 'number' ? `Attempt ${attempt.attempt}` : `Attempt ${index + 1}`
+    const baseLabel = `Attempt ${attemptNumber}`
     const attemptLabel = attempt.label ?? `${baseLabel}${statusLabel ? ` ${statusLabel}` : ''}`
     const titleStatus = status ? ` · ${status}` : ''
     return [{
@@ -3649,7 +3693,7 @@ function dedupeRawContentVariants(variants: RawContentVariant[]): RawContentVari
     if (!existing || priority > existing.priority) {
       byContent.set(key, {
         variant,
-        index: existing?.index ?? index,
+        index,
         priority,
       })
     }
@@ -3714,18 +3758,19 @@ function buildRejectedRawVariant(
   id: string,
   label: string,
   rejectedRawResponse: string | undefined,
+  variantLabel = 'Rejected',
 ): RawContentVariant {
   return {
     id,
-    label: 'Rejected',
+    label: variantLabel,
     content: rejectedRawResponse,
     displayContent: rejectedRawResponse,
     disabled: typeof rejectedRawResponse !== 'string',
-    ariaLabel: `${label} Rejected`,
+    ariaLabel: `${label} ${variantLabel}`,
     labelClassName: 'italic',
     title: typeof rejectedRawResponse === 'string'
-      ? `Show rejected pre-retry output from ${label}`
-      : `Rejected pre-retry output was not found in logs for ${label}`,
+      ? `Show ${variantLabel.toLowerCase()} pre-retry output from ${label}`
+      : `${variantLabel} pre-retry output was not found in logs for ${label}`,
   }
 }
 
@@ -3788,6 +3833,7 @@ function buildDraftRawSources(
       `draft:${draft.memberId}:rejected`,
       label,
       getRejectedRawAttempt(draft.rawAttempts) ?? rejectedRawResponse,
+      formatRejectedRawVariantLabel(draft.rawAttempts, draft.structuredOutput),
     ))
   }
   variants.push(...rawAttemptVariants)
@@ -6301,7 +6347,12 @@ export function ArtifactContent({
             : `No exact raw vote response stored for ${label}`,
         }]
         if (shouldShowRejected) {
-          variants.push(buildRejectedRawVariant(`voter:${voterId}:rejected`, label, rejectedResponse))
+          variants.push(buildRejectedRawVariant(
+            `voter:${voterId}:rejected`,
+            label,
+            rejectedResponse,
+            formatRejectedRawVariantLabel(detail?.rawAttempts, detail?.structuredOutput),
+          ))
         }
         variants.push(...rawAttemptVariants)
         if (hasValidatedResponse) {
