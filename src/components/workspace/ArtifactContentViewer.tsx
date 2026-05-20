@@ -3723,6 +3723,13 @@ type DraftRawLogStage = 'draft' | 'full_answers' | 'prd_draft'
 type DraftRawLogFallbacks = Record<DraftRawLogStage, Map<string, string>>
 type DraftRawLogHistories = Record<DraftRawLogStage, Map<string, string[]>>
 
+function shouldReadDraftRawLogsForPhase(phase?: string): boolean {
+  return phase === 'DRAFTING_PRD'
+    || phase === 'DRAFTING_BEADS'
+    || phase === 'COUNCIL_DELIBERATING'
+    || phase === 'COUNCIL_DRAFTING_INTERVIEW'
+}
+
 function createEmptyDraftRawLogFallbacks(): DraftRawLogFallbacks {
   return {
     draft: new Map<string, string>(),
@@ -3799,6 +3806,8 @@ function updateDraftRawLogStage(
 
 function buildDraftRawLogFallbacks(logs: LogEntry[], phase?: string): DraftRawLogFallbacks {
   const fallbacks = createEmptyDraftRawLogFallbacks()
+  if (!shouldReadDraftRawLogsForPhase(phase)) return fallbacks
+
   const stagesByMember = new Map<string, DraftRawLogStage>()
 
   for (const log of logs) {
@@ -3818,6 +3827,8 @@ function buildDraftRawLogFallbacks(logs: LogEntry[], phase?: string): DraftRawLo
 
 function buildDraftRawLogHistories(logs: LogEntry[], phase?: string): DraftRawLogHistories {
   const histories = createEmptyDraftRawLogHistories()
+  if (!shouldReadDraftRawLogsForPhase(phase)) return histories
+
   const stagesByMember = new Map<string, DraftRawLogStage>()
 
   for (const log of logs) {

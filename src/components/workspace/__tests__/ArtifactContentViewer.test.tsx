@@ -1683,6 +1683,76 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === content)).toBeInTheDocument()
   })
 
+  it.each([
+    {
+      label: 'interview',
+      artifactId: 'winner-draft',
+      phase: 'COUNCIL_VOTING_INTERVIEW',
+      draftContent: 'questions:\n  - id: Q01\n    phase: foundation\n    question: "Winning interview question?"',
+    },
+    {
+      label: 'PRD',
+      artifactId: 'winner-prd-draft',
+      phase: 'COUNCIL_VOTING_PRD',
+      draftContent: buildPrdDocumentContent({ epicTitle: 'Winning PRD draft raw content' }),
+    },
+    {
+      label: 'beads',
+      artifactId: 'winner-beads-draft',
+      phase: 'COUNCIL_VOTING_BEADS',
+      draftContent: buildBeadsDraftContent({ title: 'Winning beads draft raw content' }),
+    },
+  ])('keeps $label winner raw views on the winning draft when voting logs are present', ({ artifactId, phase, draftContent }) => {
+    const winnerId = 'vendor/draft-a'
+    const voteRawResponse = 'draft_scores:\n  Draft 1:\n    total_score: 99'
+    const content = JSON.stringify({
+      drafts: [
+        {
+          memberId: winnerId,
+          outcome: 'completed',
+          content: draftContent,
+          structuredOutput: {
+            repairApplied: true,
+            repairWarnings: ['Normalized the winning draft.'],
+            autoRetryCount: 0,
+          },
+        },
+      ],
+      votes: [
+        {
+          voterId: winnerId,
+          draftId: winnerId,
+          totalScore: 99,
+          scores: [{ category: 'Coverage of requirements', score: 20 }],
+        },
+      ],
+      voterOutcomes: { [winnerId]: 'completed' },
+      winnerId,
+      isFinal: true,
+    })
+    const logs = [
+      makeLogEntry(`[MODEL] ${voteRawResponse}`, {
+        modelId: winnerId,
+        source: `model:${winnerId}`,
+        status: phase,
+        audience: 'ai',
+        kind: 'text',
+      }),
+    ]
+
+    renderWithLogContext(<ArtifactContent artifactId={artifactId} phase={phase} content={content} />, {
+      [phase]: logs,
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const draftGroup = screen.getByRole('group', { name: /draft-a raw output/i })
+    expect(within(draftGroup).getByRole('button', { name: /draft-a Raw Output/ })).toBeDisabled()
+    expect(within(draftGroup).getByRole('button', { name: /draft-a Validated/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === draftContent)).toBeInTheDocument()
+    expect(screen.queryByText((_text, element) => element?.tagName === 'PRE' && element.textContent === voteRawResponse)).not.toBeInTheDocument()
+  })
+
   it('switches draft raw tabs between raw output and validated version when both exist', async () => {
     const writeTextMock = mockClipboard()
 

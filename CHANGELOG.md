@@ -10,6 +10,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Kept structured retry audit controls clearer by making model labels passive, labeling validated retry outputs with their attempt number, and limiting intervention warnings to the primary artifact tab.
 - Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
 - Kept single-model Raw views focused by omitting the aggregate selector when only one model source has raw output.
+- Kept voting-phase winner artifact Raw views scoped to the winning draft instead of vote scorecards.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
@@ -47,6 +48,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Blocked coverage errors now preserve underlying OpenCode retry/provider diagnostics, such as usage limits, and avoid repeating an identical parser-wrapper message in the error details.
 - Structured-output failures caused by OpenCode `finish_reason=length` are now classified as output truncation and shown in the blocked-error underlying details instead of only surfacing secondary parser messages like missing fields.
 - Single-model Raw artifact views no longer show a redundant aggregate selector; raw, validated, and retry variants remain available under the model source.
+- Voting-phase winner artifacts now ignore vote-phase model logs when draft raw output is missing, so Raw and validated views stay focused on the selected draft across interview, PRD, and beads voting.
 
 ## [0.2.0] - 2026-05-12
 
