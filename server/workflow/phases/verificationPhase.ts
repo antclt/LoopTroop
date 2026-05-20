@@ -34,8 +34,7 @@ import { runPreFlightChecks } from '../../phases/preflight/doctor'
 import type { FinalTestGenerationResult } from '../../phases/finalTest/generator'
 import { executeFinalTestWithRetries } from '../../phases/finalTest/executor'
 import { executeFinalTestCommands } from '../../phases/finalTest/runner'
-import { recordWorktreeStartCommit, resetWorktreeToCommit } from '../../phases/execution/gitOps'
-import { EXECUTION_RUNTIME_PRESERVE_PATHS } from '../../phases/executionSetup/storage'
+import { recordWorktreeStartCommit, resetWorktreeToCommit, WORKTREE_RESET_PRESERVE_PATHS } from '../../phases/execution/gitOps'
 import { broadcaster } from '../../sse/broadcaster'
 import { resolveInterviewCoverageFollowUpResolution } from '../interviewCoverageFollowUps'
 import { resolveCoverageGapDisposition, resolveCoverageRunState } from '../coverageControl'
@@ -3974,7 +3973,7 @@ export async function handleFinalTest(
       },
       beforeRetry: ({ nextAttempt }) => {
         resetWorktreeToCommit(worktreePath, phaseStartCommit, {
-          preservePaths: [...EXECUTION_RUNTIME_PRESERVE_PATHS],
+          preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
         })
         emitPhaseLog(
           ticketId,

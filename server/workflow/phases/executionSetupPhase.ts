@@ -25,14 +25,13 @@ import {
 } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { handleMockExecutionUnsupported } from './executionPhase'
-import { recordWorktreeStartCommit, resetWorktreeToCommit } from '../../phases/execution/gitOps'
+import { recordWorktreeStartCommit, resetWorktreeToCommit, WORKTREE_RESET_PRESERVE_PATHS } from '../../phases/execution/gitOps'
 import { executeExecutionSetupWithRetries } from '../../phases/executionSetup/executor'
 import { readExecutionSetupPlan } from '../../phases/executionSetupPlan/document'
 import { flattenExecutionSetupPlanCommands } from '../../phases/executionSetupPlan/types'
 import {
   clearExecutionSetupRuntimeArtifacts,
   describeExecutionSetupPaths,
-  EXECUTION_RUNTIME_PRESERVE_PATHS,
   writeExecutionSetupProfileMirror,
 } from '../../phases/executionSetup/storage'
 import {
@@ -343,7 +342,7 @@ export async function handleExecutionSetup(
           beforeRetry: async ({ generation, nextAttempt }) => {
             await sessionManager.abandonSession(generation.session.id)
             resetWorktreeToCommit(paths.worktreePath, phaseStartCommit, {
-              preservePaths: [...EXECUTION_RUNTIME_PRESERVE_PATHS],
+              preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
             })
             clearExecutionSetupRuntimeArtifacts(ticketId)
             emitPhaseLog(

@@ -100,6 +100,7 @@ Important `gitOps.ts` behavior:
 - diffs are captured without `.ticket/**`
 - bead commit creation is best-effort
 - resets can hard-reset and clean the worktree back to the bead start snapshot
+- resets preserve LoopTroop-owned `.ticket` state, including beads, PRD, relevant files, approvals, metadata, UI companions, and logs
 - runtime directories like `.ticket/runtime`, `.ticket/locks`, `.ticket/streams`, `.ticket/sessions`, `.ticket/tmp`, `node_modules`, `.looptroop`, `dist`, and `build` are blocked from normal change capture
 
 This is what makes retries safe: the next attempt starts from a known repository state.

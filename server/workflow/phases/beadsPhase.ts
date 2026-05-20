@@ -66,8 +66,7 @@ import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
 import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../runOpenCodePrompt'
 import { syncTicketRuntimeProjection } from '../../storage/ticketRuntimeProjection'
 import { upsertBeadsApprovalSnapshot } from '../../phases/beads/document'
-import { resetToBeadStart } from '../../phases/execution/gitOps'
-import { EXECUTION_RUNTIME_PRESERVE_PATHS } from '../../phases/executionSetup/storage'
+import { resetToBeadStart, WORKTREE_RESET_PRESERVE_PATHS } from '../../phases/execution/gitOps'
 import { isBeforeExecution } from '@shared/workflowMeta'
 
 export async function executeBeadsExpandStep(params: {
@@ -930,7 +929,7 @@ export function recoverCodingBeadWithReset(
     }
   } else {
     resetToBeadStart(options.worktreePath, failedBead.beadStartCommit, {
-      preservePaths: options.preservePaths ?? [...EXECUTION_RUNTIME_PRESERVE_PATHS],
+      preservePaths: options.preservePaths ?? [...WORKTREE_RESET_PRESERVE_PATHS],
     })
   }
 

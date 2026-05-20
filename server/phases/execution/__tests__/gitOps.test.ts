@@ -175,22 +175,34 @@ describe('resetToBeadStart', () => {
     expect(readFileSync(join(dir, 'debug.log'), 'utf8')).toBe('log content\n')
   })
 
-  it('preserves execution runtime log and setup artifacts when exclusions are supplied', () => {
+  it('preserves LoopTroop ticket artifacts when the .ticket exclusion is supplied', () => {
     const [dir, sha] = makeFreshRepo()
+    mkdirSync(join(dir, '.ticket', 'beads', 'master', '.beads'), { recursive: true })
+    mkdirSync(join(dir, '.ticket', 'meta'), { recursive: true })
+    mkdirSync(join(dir, '.ticket', 'approvals'), { recursive: true })
+    mkdirSync(join(dir, '.ticket', 'ui', 'artifact-companions'), { recursive: true })
     mkdirSync(join(dir, '.ticket', 'runtime', 'execution-setup'), { recursive: true })
+    writeFileSync(join(dir, '.ticket', 'beads', 'master', '.beads', 'issues.jsonl'), '{"id":"bead-1"}\n')
+    writeFileSync(join(dir, '.ticket', 'prd.yaml'), 'artifact: prd\n')
+    writeFileSync(join(dir, '.ticket', 'relevant-files.yaml'), 'files: []\n')
+    writeFileSync(join(dir, '.ticket', 'meta', 'ticket.meta.json'), '{"baseBranch":"master"}\n')
+    writeFileSync(join(dir, '.ticket', 'approvals', 'beads.json'), '{"approved":true}\n')
+    writeFileSync(join(dir, '.ticket', 'ui', 'artifact-companions', 'beads_expanded.json'), '{"ok":true}\n')
     writeFileSync(join(dir, '.ticket', 'runtime', 'execution-log.jsonl'), '{"message":"kept"}\n')
     writeFileSync(join(dir, '.ticket', 'runtime', 'execution-setup-profile.json'), '{"status":"ready"}\n')
     writeFileSync(join(dir, '.ticket', 'runtime', 'execution-setup', 'cache.txt'), 'warm\n')
     writeFileSync(join(dir, 'scratch.ts'), 'throw new Error("remove")\n')
 
     resetToBeadStart(dir, sha, {
-      preservePaths: [
-        '.ticket/runtime/execution-log.jsonl',
-        '.ticket/runtime/execution-setup',
-        '.ticket/runtime/execution-setup-profile.json',
-      ],
+      preservePaths: ['.ticket'],
     })
 
+    expect(readFileSync(join(dir, '.ticket', 'beads', 'master', '.beads', 'issues.jsonl'), 'utf8')).toContain('bead-1')
+    expect(readFileSync(join(dir, '.ticket', 'prd.yaml'), 'utf8')).toContain('artifact: prd')
+    expect(readFileSync(join(dir, '.ticket', 'relevant-files.yaml'), 'utf8')).toContain('files: []')
+    expect(readFileSync(join(dir, '.ticket', 'meta', 'ticket.meta.json'), 'utf8')).toContain('master')
+    expect(readFileSync(join(dir, '.ticket', 'approvals', 'beads.json'), 'utf8')).toContain('approved')
+    expect(readFileSync(join(dir, '.ticket', 'ui', 'artifact-companions', 'beads_expanded.json'), 'utf8')).toContain('ok')
     expect(readFileSync(join(dir, '.ticket', 'runtime', 'execution-log.jsonl'), 'utf8')).toContain('"kept"')
     expect(readFileSync(join(dir, '.ticket', 'runtime', 'execution-setup-profile.json'), 'utf8')).toContain('"ready"')
     expect(readFileSync(join(dir, '.ticket', 'runtime', 'execution-setup', 'cache.txt'), 'utf8')).toBe('warm\n')

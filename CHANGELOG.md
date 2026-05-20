@@ -24,6 +24,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Improved blocked-error diagnostics so OpenCode usage-limit failures remain visible when structured coverage output is empty.
 - Made blocked-error diagnostics explain when AI output was cut off by an OpenCode/model length stop, including finish reason and token counts.
 - Added a Continue recovery action for eligible blocked OpenCode sessions so temporary model interruptions can resume without starting a fresh phase attempt.
+- Preserved ticket artifacts during execution resets so retries no longer lose bead plans or planning context.
 
 ### Detailed Changes
 
@@ -61,6 +62,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Structured artifact notice badges now count the owner-level fixes and retry attempt totals shown in expanded details, so aggregate vote details and multi-retry council drafts no longer underreport adjustments.
 - Coverage reports now render the current open gap list from `remainingGaps`, `gaps`, `parsed.gaps`, or the latest gap attempt so terminal cap warnings match the inspectable report details.
 - Needs-input phases now use static waiting indicators in the left timeline, and workspace setup approval now follows the same side-navigation styling as the other approval gates.
+- Execution setup, coding, and final-test retry resets now preserve LoopTroop-owned `.ticket` artifacts while still rolling back project file changes.
 
 ## [0.2.0] - 2026-05-12
 

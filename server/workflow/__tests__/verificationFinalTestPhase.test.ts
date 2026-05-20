@@ -27,6 +27,7 @@ vi.mock('../../phases/finalTest/executor', () => ({
 }))
 
 vi.mock('../../phases/execution/gitOps', () => ({
+  WORKTREE_RESET_PRESERVE_PATHS: ['.ticket'],
   recordWorktreeStartCommit: recordWorktreeStartCommitMock,
   resetWorktreeToCommit: resetWorktreeToCommitMock,
   recordBeadStartCommit: vi.fn(),
@@ -152,6 +153,66 @@ describe('handleFinalTest', () => {
         && part.content.includes('Prior retry note: avoid repeating the broad contrast assertion.')
       )),
     ).toBe(true)
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'TESTS_PASSED' })
+  })
+
+  it('preserves LoopTroop ticket artifacts when resetting before a final-test retry', async () => {
+    const { ticket, context, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Final test reset preservation',
+    })
+
+    writeFileSync(`${paths.ticketDir}/interview.yaml`, makeInterviewYaml())
+    writeFileSync(`${paths.ticketDir}/prd.yaml`, makePrdYaml({ ticketId: ticket.externalId }))
+    writeFileSync(paths.beadsPath, makeBeadsYaml({ beadCount: 1 }))
+
+    executeFinalTestWithRetriesMock.mockImplementationOnce(async (
+      _adapter: unknown,
+      _contextParts: unknown,
+      _projectPath: unknown,
+      _signal: AbortSignal,
+      _options: unknown,
+      callbacks: {
+        beforeRetry: (entry: { nextAttempt: number }) => void
+      },
+    ) => {
+      callbacks.beforeRetry({ nextAttempt: 2 })
+      return {
+        status: 'passed' as const,
+        passed: true,
+        checkedAt: '2026-04-09T12:00:00.000Z',
+        plannedBy: TEST.implementer,
+        summary: 'passed after retry reset',
+        testFiles: [],
+        modifiedFiles: [],
+        testsCount: 0,
+        modelOutput: '<FINAL_TEST_COMMANDS>{"commands":[]}</FINAL_TEST_COMMANDS>',
+        commands: [],
+        errors: [],
+        attempt: 2,
+        maxIterations: 2,
+        attemptHistory: [],
+        retryNotes: [],
+      }
+    })
+
+    const sendEvent = vi.fn()
+    await handleFinalTest(
+      ticket.id,
+      {
+        ...context,
+        lockedMainImplementer: TEST.implementer,
+      },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(resetWorktreeToCommitMock).toHaveBeenCalledWith(
+      paths.worktreePath,
+      'abc123',
+      expect.objectContaining({
+        preservePaths: expect.arrayContaining(['.ticket']),
+      }),
+    )
     expect(sendEvent).toHaveBeenCalledWith({ type: 'TESTS_PASSED' })
   })
 })

@@ -76,6 +76,10 @@ interface ResetWorktreeOptions {
   preservePaths?: string[]
 }
 
+export const WORKTREE_RESET_PRESERVE_PATHS = [
+  '.ticket',
+] as const
+
 export function isAllowedFile(path: string): boolean {
   // Check blocked patterns first
   for (const pattern of BLOCKED_PATTERNS) {

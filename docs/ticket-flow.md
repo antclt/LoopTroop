@@ -226,6 +226,8 @@ Two extra guards matter at the user-action layer:
 | Frontend resume | ticket UI-state artifacts for approval drafts and interview drafts, plus SSE last-event id in browser storage |
 | Final delivery | final test report, integration report, pull request report, merge report, cleanup report |
 
+Execution setup, coding, and final-test retry resets preserve the LoopTroop-owned `.ticket` directory so planning artifacts, bead state, approvals, UI companions, and logs remain available while project file changes are rolled back.
+
 ## Planning Edit Restarts
 
 Approved interview and PRD artifacts can still be edited while the ticket is in planning before `PRE_FLIGHT_CHECK`. These saves intentionally cancel active downstream planning work instead of trying to patch artifacts generated from stale inputs. The cancellation is intentional session cancellation, not a blocked error.

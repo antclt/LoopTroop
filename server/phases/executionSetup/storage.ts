@@ -32,11 +32,6 @@ export const EXECUTION_SETUP_ALLOWED_RUNTIME_PATHS = [
   EXECUTION_SETUP_PROFILE_MIRROR,
 ] as const
 
-export const EXECUTION_RUNTIME_PRESERVE_PATHS = [
-  EXECUTION_LOG_RUNTIME_PATH,
-  ...EXECUTION_SETUP_ALLOWED_RUNTIME_PATHS,
-] as const
-
 export interface ExecutionSetupPathSnapshot {
   untrackedPaths: string[]
 }

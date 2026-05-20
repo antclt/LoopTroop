@@ -4,8 +4,7 @@ import { isMockOpenCodeMode } from '../../opencode/factory'
 import { executeBead, type ExecutionResult } from '../../phases/execution/executor'
 import { getNextBead, isAllComplete } from '../../phases/execution/scheduler'
 import type { Bead } from '../../phases/beads/types'
-import { recordBeadStartCommit, commitBeadChanges, resetToBeadStart, captureBeadDiff } from '../../phases/execution/gitOps'
-import { EXECUTION_RUNTIME_PRESERVE_PATHS } from '../../phases/executionSetup/storage'
+import { recordBeadStartCommit, commitBeadChanges, resetToBeadStart, captureBeadDiff, WORKTREE_RESET_PRESERVE_PATHS } from '../../phases/execution/gitOps'
 import { throwIfAborted } from '../../council/types'
 import { broadcaster } from '../../sse/broadcaster'
 import { withCommandLoggingAsync, withCommandLoggingFieldsAsync } from '../../log/commandLogger'
@@ -233,7 +232,7 @@ export async function handleCoding(
         worktreePath: paths.worktreePath,
         onlyInProgress: true,
         requireReset: true,
-        preservePaths: [...EXECUTION_RUNTIME_PRESERVE_PATHS],
+        preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
       })
       if (interruptedBead) {
         emitPhaseLog(
@@ -372,7 +371,7 @@ export async function handleCoding(
             await withCommandLoggingFieldsAsync(
               { beadId },
               async () => resetToBeadStart(paths.worktreePath, beadStartCommit!, {
-                preservePaths: [...EXECUTION_RUNTIME_PRESERVE_PATHS],
+                preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
               }),
             )
           } catch (err) {

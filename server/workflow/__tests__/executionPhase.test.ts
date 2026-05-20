@@ -41,6 +41,7 @@ vi.mock('../../phases/execution/executor', () => ({
 }))
 
 vi.mock('../../phases/execution/gitOps', () => ({
+  WORKTREE_RESET_PRESERVE_PATHS: ['.ticket'],
   recordBeadStartCommit: recordBeadStartCommitMock,
   commitBeadChanges: commitBeadChangesMock,
   resetToBeadStart: resetToBeadStartMock,
@@ -320,11 +321,7 @@ describe('handleCoding', () => {
       expect.any(String),
       'abc123',
       expect.objectContaining({
-        preservePaths: expect.arrayContaining([
-          '.ticket/runtime/execution-log.jsonl',
-          '.ticket/runtime/execution-setup',
-          '.ticket/runtime/execution-setup-profile.json',
-        ]),
+        preservePaths: expect.arrayContaining(['.ticket']),
       }),
     )
 
@@ -446,7 +443,7 @@ describe('handleCoding', () => {
       expect.any(String),
       'start-sha',
       expect.objectContaining({
-        preservePaths: expect.arrayContaining(['.ticket/runtime/execution-log.jsonl']),
+        preservePaths: expect.arrayContaining(['.ticket']),
       }),
     )
     const executedBead = executeBeadMock.mock.calls[0]![1] as Bead
@@ -573,7 +570,7 @@ describe('handleCoding', () => {
       expect.any(String),
       'start-sha',
       expect.objectContaining({
-        preservePaths: expect.arrayContaining(['.ticket/runtime/execution-log.jsonl']),
+        preservePaths: expect.arrayContaining(['.ticket']),
       }),
     )
     expect(executeBeadMock).toHaveBeenCalledTimes(1)
