@@ -9,11 +9,13 @@ All notable changes to LoopTroop will be documented in this file.
 - Standardized automatic retry inspection in Raw tabs and manual retry review through archived phase versions.
 - Kept structured retry audit controls clearer by making model labels passive, labeling validated retry outputs with their attempt number, and limiting intervention warnings to the primary artifact tab.
 - Removed duplicate Raw selector tabs so identical payloads appear once, preferring per-attempt retry tabs over generic raw-output shortcuts.
+- Kept single-model Raw views focused by hiding the aggregate All Models selector when only one raw source exists.
 - Raised the OpenCode event-listener warning threshold to reduce noisy stream warnings during parallel ticket activity.
 - Made `npm run dev` startup maintenance output include package names, version changes, and held-release eligibility times by default.
 - Added a global reconnecting banner that appears on all views when the backend is unreachable, polling every 3 seconds.
 - Fixed error navigation from Full Log so selecting an error opens its review view.
 - Improved blocked-error diagnostics so OpenCode usage-limit failures remain visible when structured coverage output is empty.
+- Made blocked-error diagnostics explain when AI output was cut off by an OpenCode/model length stop, including finish reason and token counts.
 - Added a Continue recovery action for eligible blocked OpenCode sessions so temporary model interruptions can resume without starting a fresh phase attempt.
 
 ### Detailed Changes
@@ -43,6 +45,8 @@ All notable changes to LoopTroop will be documented in this file.
 - ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.
 - Selecting an error from the navigator while Full Log is open now exits full-log mode and opens the error review.
 - Blocked coverage errors now preserve underlying OpenCode retry/provider diagnostics, such as usage limits, and avoid repeating an identical parser-wrapper message in the error details.
+- Structured-output failures caused by OpenCode `finish_reason=length` are now classified as output truncation and shown in the blocked-error underlying details instead of only surfacing secondary parser messages like missing fields.
+- Single-model Raw artifact views no longer show the aggregate `All Models` selector; raw, validated, and retry variants remain available under the model source.
 
 ## [0.2.0] - 2026-05-12
 

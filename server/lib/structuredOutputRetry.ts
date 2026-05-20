@@ -45,6 +45,10 @@ export function classifyStructuredFailureFromValidation(
     return 'empty_response'
   }
 
+  if (isOutputTruncatedFinishReason(responseMeta?.latestStepFinishReason)) {
+    return 'output_truncated'
+  }
+
   if (!response.trim()) {
     return 'empty_response'
   }
@@ -62,6 +66,11 @@ export function getStructuredRetryDecision(
     reuseSession: failureClass === 'validation_error',
     useStructuredRetryPrompt: failureClass === 'validation_error',
   }
+}
+
+function isOutputTruncatedFinishReason(reason: string | undefined): boolean {
+  if (!reason) return false
+  return /^(length|max[_ -]?tokens?|output[_ -]?limit|token[_ -]?limit)$/i.test(reason.trim())
 }
 
 export function formatStructuredFailureForLog(

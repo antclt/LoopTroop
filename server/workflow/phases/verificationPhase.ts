@@ -126,24 +126,54 @@ function getSessionRetryMessage(event: unknown): string | undefined {
 
 function createOpenCodeDiagnosticTracker(modelId: string) {
   let latestSessionRetryMessage: string | undefined
+  let latestStepFinishReason: string | undefined
+  let latestStepFinishTokens: OpenCodePromptCompletedEvent['responseMeta']['latestStepFinishTokens'] | undefined
 
   return {
     observeStreamEvent(event: unknown) {
       latestSessionRetryMessage = getSessionRetryMessage(event) ?? latestSessionRetryMessage
+      if (event && typeof event === 'object') {
+        const record = event as {
+          type?: unknown
+          step?: unknown
+          reason?: unknown
+          tokens?: OpenCodePromptCompletedEvent['responseMeta']['latestStepFinishTokens']
+        }
+        if (record.type === 'step' && record.step === 'finish') {
+          latestStepFinishReason = typeof record.reason === 'string' && record.reason.trim().length > 0
+            ? record.reason.trim()
+            : latestStepFinishReason
+          latestStepFinishTokens = record.tokens ?? latestStepFinishTokens
+        }
+      }
     },
     build(runResult: OpenCodeRunResult): OpenCodeDiagnosticResult {
+      const baseResponseMeta = runResult.responseMeta ?? {
+        hasAssistantMessage: false,
+        latestAssistantWasEmpty: runResult.response.trim().length === 0,
+        latestAssistantHasError: false,
+        latestAssistantWasStale: false,
+        sessionErrored: false,
+      }
+      const resolvedStepFinishReason = baseResponseMeta.latestStepFinishReason ?? latestStepFinishReason
+      const resolvedStepFinishTokens = baseResponseMeta.latestStepFinishTokens ?? latestStepFinishTokens
+      const responseMeta = {
+        ...baseResponseMeta,
+        ...(resolvedStepFinishReason ? { latestStepFinishReason: resolvedStepFinishReason } : {}),
+        ...(resolvedStepFinishTokens ? { latestStepFinishTokens: resolvedStepFinishTokens } : {}),
+      }
       const sessionRetryFallback = latestSessionRetryMessage && (
         runResult.response.trim().length === 0
-        || runResult.responseMeta?.latestAssistantWasEmpty
-        || runResult.responseMeta?.latestAssistantWasStale
-        || runResult.responseMeta?.latestAssistantHasError
-        || runResult.responseMeta?.sessionErrored
+        || responseMeta?.latestAssistantWasEmpty
+        || responseMeta?.latestAssistantWasStale
+        || responseMeta?.latestAssistantHasError
+        || responseMeta?.sessionErrored
       )
         ? latestSessionRetryMessage
         : undefined
 
       return buildOpenCodeBlockedErrorDiagnostics({
-        responseMeta: runResult.responseMeta,
+        responseMeta,
         attemptMeta: runResult.attemptMeta,
         modelId,
         sessionId: runResult.session.id,

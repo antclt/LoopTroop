@@ -215,6 +215,47 @@ describe('ErrorView', () => {
     expect(screen.getByText('no')).toBeInTheDocument()
   })
 
+  it('renders model output truncation diagnostics with finish reason and token counts', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'VERIFYING_PRD_COVERAGE',
+      activeErrorOccurrenceId: 'diag-length',
+      errorOccurrences: [{
+        id: 'diag-length',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'VERIFYING_PRD_COVERAGE',
+        errorMessage: 'PRD coverage resolution output failed validation after 1 structured retry attempt(s): PRD is missing epics',
+        errorCodes: ['COVERAGE_FAILED', 'OPENCODE_OUTPUT_TRUNCATED'],
+        diagnostics: {
+          kind: 'model_output_truncated',
+          source: 'opencode',
+          summary: 'The model stopped because OpenCode reported finish reason "length", which usually means the response reached the model or provider output length limit.',
+          modelId: 'opencode-go/deepseek-v4-flash',
+          sessionId: 'ses-length',
+          finishReason: 'length',
+          outputTokens: 2923,
+          reasoningTokens: 29077,
+          inputTokens: 13252,
+        },
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('Underlying error')).toBeInTheDocument()
+    expect(screen.getByText('Model Output Truncated')).toBeInTheDocument()
+    expect(screen.getByText('Finish reason:')).toBeInTheDocument()
+    expect(screen.getByText('length')).toBeInTheDocument()
+    expect(screen.getByText('Output tokens:')).toBeInTheDocument()
+    expect(screen.getByText('2,923')).toBeInTheDocument()
+    expect(screen.getByText('Reasoning tokens:')).toBeInTheDocument()
+    expect(screen.getByText('29,077')).toBeInTheDocument()
+  })
+
   it('does not repeat the diagnostic summary when it already appears in the primary error', () => {
     const duplicateMessage = 'Coverage output failed validation after 1 structured retry attempt(s): No coverage result content found'
     const ticket = makeTicket({

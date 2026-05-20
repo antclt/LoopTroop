@@ -13,13 +13,15 @@ LoopTroop uses four distinct retry classes. The names matter because they descri
 | Class | Session behavior | Controlled by `Structured Output Retries` |
 | --- | --- | --- |
 | Structured repair retry | Sends a targeted correction prompt in a **continued session** after schema/validation failure | yes |
-| Fresh structured retry | Starts a **fresh session** after empty output, provider/session/transport failure, or a status-specific fresh-session policy | yes |
+| Fresh structured retry | Starts a **fresh session** after empty output, provider/session/transport failure, output truncation, or a status-specific fresh-session policy | yes |
 | Workflow attempt retry | Starts a broader **new attempt**, such as coverage passes, execution setup attempts, final-test attempts, or coding bead iterations | no |
 | No auto retry | Does not retry automatically, usually because the status is a user gate, terminal state, cleanup state, or has git/GitHub side effects | no |
 
 `Structured Output Retries` is counted after the first response. With the default of `1`, LoopTroop can make one structured retry after an invalid first response. With `0`, it records the rejected response and follows the status failure path immediately.
 
 Council draft, vote, and refine phases use structured retry prompts but run those retry prompts in fresh sessions by design. That keeps each council response isolated while still preserving rejected and accepted attempts in Raw diagnostics.
+
+When OpenCode reports a step finish reason such as `length`, LoopTroop treats the response as output truncation rather than an ordinary schema mistake. The partial artifact is still preserved in Raw diagnostics, but blocked-error details call out the length stop directly because later parser messages, such as missing sections or fields, are often just symptoms of the response being cut off.
 
 ---
 
@@ -548,7 +550,7 @@ A `repairApplied: true` flag is set on any result where at least one repair warn
 
 Repairs never silently drop required fields — if a required field cannot be recovered after all repairs, the parse fails and the run may be retried with a structured retry prompt that explains the specific validation error, up to the locked `Structured Output Retries` count.
 
-Structured retry loops store `rawAttempts` next to the artifact/report detail when model text is available. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class. This covers council drafts/votes, PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime, final-test generation, and PR draft generation. If a failure occurs before model text exists, the attempt is diagnostic-only with the error/failure class and no invented raw response. Artifact viewers show retry intervention notices on the primary artifact tab, while Raw/Diff tabs focus on diagnostic payload inspection. Duplicate Raw variants are collapsed by rendered payload, with per-attempt retry tabs preferred over generic model/raw-output shortcuts and validated council draft/vote selectors labeled with the accepted attempt number when known.
+Structured retry loops store `rawAttempts` next to the artifact/report detail when model text is available. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class. This covers council drafts/votes, PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime, final-test generation, and PR draft generation. If a failure occurs before model text exists, the attempt is diagnostic-only with the error/failure class and no invented raw response. Artifact viewers show retry intervention notices on the primary artifact tab, while Raw/Diff tabs focus on diagnostic payload inspection. Duplicate Raw variants are collapsed by rendered payload, with per-attempt retry tabs preferred over generic model/raw-output shortcuts and validated council draft/vote selectors labeled with the accepted attempt number when known. The aggregate `All Models` Raw selector is shown only when multiple selectable model/source outputs are available; single-model artifacts keep the raw, validated, and retry variants grouped under that model instead.
 
 Automatic structured retries are attempt history inside one phase run. They appear as Raw variants on the artifact and do not create a new canonical artifact version. User-triggered Retry from `BLOCKED_ERROR` is different: for phase-attempt tracked statuses, LoopTroop archives the failed active phase attempt and creates a fresh active attempt before rerunning, so prior rerun artifacts/logs are inspected through the previous-version selector.
 

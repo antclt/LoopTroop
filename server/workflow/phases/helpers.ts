@@ -44,6 +44,10 @@ import type { StructuredLogFields, StructuredLogAudience, StructuredLogKind, Str
 import { phaseIntermediate } from './state'
 import { formatStructuredFailureForLog, type StructuredFailureClass } from '../../lib/structuredOutputRetry'
 import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
+import {
+  attachOpenCodeBlockedErrorDiagnostics,
+  buildOutputTruncatedBlockedErrorDiagnostics,
+} from '../../opencode/blockedErrorDiagnostics'
 import { persistUiArtifactCompanionArtifact } from '../artifactCompanions'
 import { getErrorMessage } from '@shared/typeGuards'
 
@@ -1591,6 +1595,36 @@ export function summarizeDraftOutcomes(drafts: DraftResult[]) {
       return summary
     },
     { completed: 0, timedOut: 0, invalidOutput: 0, failed: 0 },
+  )
+}
+
+type StructuredFailureDiagnosticSource = {
+  memberId?: string
+  voterId?: string
+  outcome?: MemberOutcome
+  structuredOutput?: DraftStructuredOutputMeta
+  rawAttempts?: RawAttempt[]
+}
+
+export function buildCouncilQuorumErrorWithDiagnostics(
+  message: string,
+  sources: StructuredFailureDiagnosticSource[],
+): Error {
+  const truncatedSource = sources.find((source) =>
+    source.outcome !== 'completed'
+    && (
+      source.structuredOutput?.failureClass === 'output_truncated'
+      || source.rawAttempts?.some((attempt) => attempt.failureClass === 'output_truncated')
+    ),
+  )
+  if (!truncatedSource) return new Error(message)
+  const modelId = truncatedSource.memberId ?? truncatedSource.voterId
+
+  return attachOpenCodeBlockedErrorDiagnostics(
+    new Error(message),
+    buildOutputTruncatedBlockedErrorDiagnostics({
+      ...(modelId ? { modelId } : {}),
+    }),
   )
 }
 

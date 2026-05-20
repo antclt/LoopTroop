@@ -1,6 +1,6 @@
 import type { ModelErrorInfo } from './errorDetails'
 import { extractModelErrorInfo } from './errorDetails'
-import type { Message, MessagePart } from './types'
+import type { Message, MessagePart, StepFinishMessagePart } from './types'
 
 export interface OpenCodeResponseMeta {
   hasAssistantMessage: boolean
@@ -13,6 +13,8 @@ export interface OpenCodeResponseMeta {
   sessionErrored?: boolean
   sessionError?: string
   sessionErrorDetails?: unknown
+  latestStepFinishReason?: string
+  latestStepFinishTokens?: StepFinishMessagePart['tokens']
 }
 
 export interface AssistantMessageAnalysis {
@@ -55,12 +57,34 @@ function stringifyStructuredValue(value: unknown): string {
   }
 }
 
+function findLatestStepFinish(parts: MessagePart[] | undefined): {
+  reason?: string
+  tokens?: StepFinishMessagePart['tokens']
+} {
+  if (!Array.isArray(parts)) return {}
+
+  for (let index = parts.length - 1; index >= 0; index -= 1) {
+    const part = parts[index]
+    if (part?.type !== 'step-finish') continue
+    const reason = typeof part.reason === 'string' && part.reason.trim().length > 0
+      ? part.reason.trim()
+      : undefined
+    return {
+      ...(reason ? { reason } : {}),
+      ...(part.tokens ? { tokens: part.tokens } : {}),
+    }
+  }
+
+  return {}
+}
+
 function analyzeSingleAssistantMessage(
   message: Message,
   options?: {
     stale?: boolean
   },
 ): AssistantMessageAnalysis {
+  const stepFinish = findLatestStepFinish(message.parts as MessagePart[] | undefined)
   const latestAssistantError = normalizeAssistantError(message.info?.error)
   if (latestAssistantError) {
     return {
@@ -73,6 +97,8 @@ function analyzeSingleAssistantMessage(
         latestAssistantError,
         latestAssistantErrorInfo: extractModelErrorInfo(message.info?.error),
         latestAssistantWasStale: Boolean(options?.stale),
+        ...(stepFinish.reason ? { latestStepFinishReason: stepFinish.reason } : {}),
+        ...(stepFinish.tokens ? { latestStepFinishTokens: stepFinish.tokens } : {}),
       },
     }
   }
@@ -91,6 +117,8 @@ function analyzeSingleAssistantMessage(
       latestAssistantWasEmpty: text.length === 0 || Boolean(options?.stale),
       latestAssistantHasError: false,
       latestAssistantWasStale: Boolean(options?.stale),
+      ...(stepFinish.reason ? { latestStepFinishReason: stepFinish.reason } : {}),
+      ...(stepFinish.tokens ? { latestStepFinishTokens: stepFinish.tokens } : {}),
     },
   }
 }

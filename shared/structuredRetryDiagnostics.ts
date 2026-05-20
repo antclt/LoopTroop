@@ -2,6 +2,7 @@ import { normalizeString } from '@shared/typeGuards'
 
 export type StructuredFailureClass =
   | 'validation_error'
+  | 'output_truncated'
   | 'empty_response'
   | 'provider_error'
   | 'connection_reset'
@@ -26,6 +27,7 @@ function normalizeExcerpt(value: unknown): string | undefined {
 
 export function normalizeStructuredFailureClass(value: unknown): StructuredFailureClass | undefined {
   return value === 'validation_error'
+    || value === 'output_truncated'
     || value === 'empty_response'
     || value === 'provider_error'
     || value === 'connection_reset'

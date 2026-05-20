@@ -191,6 +191,7 @@ export function getStructuredFailureClassFromError(error: unknown): StructuredFa
   if (!isRecord(error)) return undefined
   const failureClass = error.structuredFailureClass
   return failureClass === 'validation_error'
+    || failureClass === 'output_truncated'
     || failureClass === 'empty_response'
     || failureClass === 'provider_error'
     || failureClass === 'connection_reset'

@@ -1,4 +1,5 @@
 export type BlockedErrorDiagnosticKind =
+  | 'model_output_truncated'
   | 'opencode_provider'
   | 'opencode_session'
   | 'timeout'
@@ -21,6 +22,12 @@ export interface BlockedErrorDiagnostics {
   providerErrorTitle?: string
   providerErrorMessage?: string
   responseBodyPreview?: string
+  finishReason?: string
+  inputTokens?: number
+  outputTokens?: number
+  reasoningTokens?: number
+  cacheReadTokens?: number
+  cacheWriteTokens?: number
 }
 
 import { isRecord } from './typeGuards'
@@ -66,7 +73,8 @@ function cleanBoolean(value: unknown): boolean | undefined {
 
 function cleanKind(value: unknown): BlockedErrorDiagnosticKind | undefined {
   if (
-    value === 'opencode_provider'
+    value === 'model_output_truncated'
+    || value === 'opencode_provider'
     || value === 'opencode_session'
     || value === 'timeout'
     || value === 'transport'
@@ -101,6 +109,7 @@ export function normalizeBlockedErrorDiagnostics(value: unknown): BlockedErrorDi
   const providerErrorTitle = cleanString(value.providerErrorTitle, 500)
   const providerErrorMessage = cleanString(value.providerErrorMessage)
   const responseBodyPreview = cleanString(value.responseBodyPreview)
+  const finishReason = cleanString(value.finishReason, 240)
 
   return {
     kind: cleanKind(value.kind) ?? 'unknown',
@@ -115,5 +124,11 @@ export function normalizeBlockedErrorDiagnostics(value: unknown): BlockedErrorDi
     ...(providerErrorTitle ? { providerErrorTitle } : {}),
     ...(providerErrorMessage ? { providerErrorMessage } : {}),
     ...(responseBodyPreview ? { responseBodyPreview } : {}),
+    ...(finishReason ? { finishReason } : {}),
+    ...(cleanNumber(value.inputTokens) !== undefined ? { inputTokens: cleanNumber(value.inputTokens) } : {}),
+    ...(cleanNumber(value.outputTokens) !== undefined ? { outputTokens: cleanNumber(value.outputTokens) } : {}),
+    ...(cleanNumber(value.reasoningTokens) !== undefined ? { reasoningTokens: cleanNumber(value.reasoningTokens) } : {}),
+    ...(cleanNumber(value.cacheReadTokens) !== undefined ? { cacheReadTokens: cleanNumber(value.cacheReadTokens) } : {}),
+    ...(cleanNumber(value.cacheWriteTokens) !== undefined ? { cacheWriteTokens: cleanNumber(value.cacheWriteTokens) } : {}),
   }
 }

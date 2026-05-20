@@ -442,9 +442,17 @@ export async function runOpenCodeSessionPrompt({
     ...(stepFinishSafetyMs !== undefined ? { stepFinishSafetyMs } : {}),
   }
   let sessionErrorEvent: SessionErrorStreamEvent | undefined
+  let latestStepFinishReason: string | undefined
+  let latestStepFinishTokens: OpenCodeResponseMeta['latestStepFinishTokens'] | undefined
   promptOptions.onEvent = (event) => {
     if (event.type === 'session_error') {
       sessionErrorEvent = event
+    }
+    if (event.type === 'step' && event.step === 'finish') {
+      latestStepFinishReason = typeof event.reason === 'string' && event.reason.trim().length > 0
+        ? event.reason.trim()
+        : latestStepFinishReason
+      latestStepFinishTokens = event.tokens ?? latestStepFinishTokens
     }
     onStreamEvent?.(event)
   }
@@ -555,6 +563,13 @@ export async function runOpenCodeSessionPrompt({
     messages = []
   }
   responseMeta = mergeSessionErrorIntoResponseMeta(responseMeta, sessionErrorEvent)
+  const resolvedStepFinishReason = responseMeta.latestStepFinishReason ?? latestStepFinishReason
+  const resolvedStepFinishTokens = responseMeta.latestStepFinishTokens ?? latestStepFinishTokens
+  responseMeta = {
+    ...responseMeta,
+    ...(resolvedStepFinishReason ? { latestStepFinishReason: resolvedStepFinishReason } : {}),
+    ...(resolvedStepFinishTokens ? { latestStepFinishTokens: resolvedStepFinishTokens } : {}),
+  }
   const attemptMeta = buildAttemptMeta(responseMeta, erroredSessionPolicy)
   response = attemptMeta.discardedResponse
     ? ''

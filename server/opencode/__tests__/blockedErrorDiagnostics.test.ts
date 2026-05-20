@@ -150,6 +150,41 @@ describe('OpenCode blocked error diagnostics', () => {
     })
   })
 
+  it('explains OpenCode length-finished model output as a truncation limit', () => {
+    const result = buildOpenCodeBlockedErrorDiagnostics({
+      modelId: 'opencode-go/deepseek-v4-flash',
+      sessionId: 'ses-length',
+      responseMeta: {
+        hasAssistantMessage: true,
+        latestAssistantWasEmpty: false,
+        latestAssistantHasError: false,
+        latestAssistantWasStale: false,
+        sessionErrored: false,
+        latestStepFinishReason: 'length',
+        latestStepFinishTokens: {
+          input: 13252,
+          output: 2923,
+          reasoning: 29077,
+        },
+      },
+    })
+
+    expect(result.errorCodes).toEqual(['OPENCODE_OUTPUT_TRUNCATED'])
+    expect(result.diagnostics).toMatchObject({
+      kind: 'model_output_truncated',
+      source: 'opencode',
+      modelId: 'opencode-go/deepseek-v4-flash',
+      sessionId: 'ses-length',
+      finishReason: 'length',
+      inputTokens: 13252,
+      outputTokens: 2923,
+      reasoningTokens: 29077,
+      isRetryable: false,
+    })
+    expect(result.diagnostics?.summary).toContain('output length limit')
+    expect(result.diagnostics?.summary).toContain('missing sections')
+  })
+
   it('preserves attached diagnostics when a higher-level wrapper error is normalized later', () => {
     const wrapper = attachOpenCodeBlockedErrorDiagnostics(
       new Error('Coverage output failed validation after 1 structured retry attempt(s): empty'),

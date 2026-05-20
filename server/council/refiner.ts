@@ -9,6 +9,10 @@ import { getErrorMessage } from '@shared/typeGuards'
 import { classifyStructuredFailureFromError, getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../lib/structuredRetryPolicy'
 import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../lib/structuredRawAttempts'
+import {
+  attachOpenCodeBlockedErrorDiagnostics,
+  buildOutputTruncatedBlockedErrorDiagnostics,
+} from '../opencode/blockedErrorDiagnostics'
 
 export interface RefineDraftResult {
   content: string
@@ -192,7 +196,21 @@ export async function refineDraft(
         failureClass: retryDecision.failureClass,
       })
       if (!shouldRetryStructuredOutput(attemptCount, normalizedMaxStructuredRetries)) {
-        throwWithRawAttempts(error, rawAttempts)
+        const enrichedError = (() => {
+          if (!(error instanceof Error) || retryDecision.failureClass !== 'output_truncated') return error
+          const finishReason = result.responseMeta.latestStepFinishReason
+          const tokens = result.responseMeta.latestStepFinishTokens
+          return attachOpenCodeBlockedErrorDiagnostics(
+            error,
+            buildOutputTruncatedBlockedErrorDiagnostics({
+              modelId: winnerDraft.memberId,
+              sessionId: result.session.id,
+              ...(finishReason ? { finishReason } : {}),
+              ...(tokens ? { tokens } : {}),
+            }),
+          )
+        })()
+        throwWithRawAttempts(enrichedError, rawAttempts)
       }
       attemptCount += 1
       promptParts = buildRetryPrompt?.({

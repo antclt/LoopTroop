@@ -69,6 +69,7 @@ import {
   upsertCouncilDraftArtifact,
   upsertCouncilVoteArtifact,
   emitCouncilDecisionLogs,
+  buildCouncilQuorumErrorWithDiagnostics,
   buildStructuredMetadata,
   mapCouncilStageToStatus,
 } from './helpers'
@@ -532,7 +533,10 @@ export async function handleInterviewDeliberate(
   )
 
   if (!quorum.passed) {
-    throw new Error(`Council quorum not met for interview_draft: ${quorum.message}`)
+    throw buildCouncilQuorumErrorWithDiagnostics(
+      `Council quorum not met for interview_draft: ${quorum.message}`,
+      result.drafts,
+    )
   }
 
   // Store intermediate data for vote/refine steps
@@ -682,7 +686,10 @@ export async function handleInterviewVote(
       undefined,
       true,
     )
-    throw new Error(`Interview voting quorum not met: ${voteQuorum.message}`)
+    throw buildCouncilQuorumErrorWithDiagnostics(
+      `Interview voting quorum not met: ${voteQuorum.message}`,
+      voteRun.voterDetails,
+    )
   }
 
   if (voteRun.votes.length === 0) {

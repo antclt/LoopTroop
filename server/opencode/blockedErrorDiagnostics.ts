@@ -1,4 +1,5 @@
 import {
+  OPENCODE_OUTPUT_TRUNCATED,
   OPENCODE_PROVIDER_AUTH_FAILED,
   OPENCODE_PROVIDER_ERROR,
 } from '@shared/errorCodes'
@@ -8,6 +9,7 @@ import {
   type BlockedErrorDiagnosticKind,
 } from '@shared/errorDiagnostics'
 import type { OpenCodeResponseMeta } from './assistantMessageAnalysis'
+import type { StepFinishMessagePart } from './types'
 import type { ModelErrorInfo } from './errorDetails'
 import { extractModelErrorInfo, summarizeModelErrorForLog } from './errorDetails'
 
@@ -118,6 +120,57 @@ function parseHttpStatus(message: string): number | undefined {
   return Number.isFinite(status) ? status : undefined
 }
 
+function isOutputTruncatedFinishReason(reason: string | undefined): boolean {
+  if (!reason) return false
+  return /^(length|max[_ -]?tokens?|output[_ -]?limit|token[_ -]?limit)$/i.test(reason.trim())
+}
+
+function formatTokenSummary(tokens: StepFinishMessagePart['tokens'] | undefined): string {
+  const parts = [
+    typeof tokens?.output === 'number' ? `output=${tokens.output}` : '',
+    typeof tokens?.reasoning === 'number' ? `reasoning=${tokens.reasoning}` : '',
+    typeof tokens?.input === 'number' ? `input=${tokens.input}` : '',
+  ].filter(Boolean)
+  return parts.length > 0 ? ` Token usage reported by OpenCode: ${parts.join(', ')}.` : ''
+}
+
+function buildOutputTruncatedSummary(reason: string, tokens: StepFinishMessagePart['tokens'] | undefined): string {
+  return [
+    `The model stopped because OpenCode reported finish reason "${reason}", which usually means the response reached the model or provider output length limit.`,
+    'The structured artifact may be incomplete or cut off; later parser errors such as missing sections are probably secondary validation symptoms.',
+    formatTokenSummary(tokens),
+  ].join(' ').replace(/\s+/g, ' ').trim()
+}
+
+export function buildOutputTruncatedBlockedErrorDiagnostics(input: {
+  modelId?: string
+  sessionId?: string
+  finishReason?: string
+  tokens?: StepFinishMessagePart['tokens']
+}): OpenCodeBlockedErrorDiagnosticsResult {
+  const finishReason = input.finishReason?.trim() || 'length'
+  const tokens = input.tokens
+  const diagnostics = normalizeBlockedErrorDiagnostics({
+    kind: 'model_output_truncated',
+    source: 'opencode',
+    summary: buildOutputTruncatedSummary(finishReason, tokens),
+    modelId: input.modelId,
+    sessionId: input.sessionId,
+    finishReason,
+    isRetryable: false,
+    inputTokens: tokens?.input,
+    outputTokens: tokens?.output,
+    reasoningTokens: tokens?.reasoning,
+    cacheReadTokens: tokens?.cache?.read,
+    cacheWriteTokens: tokens?.cache?.write,
+  })
+
+  return {
+    diagnostics,
+    errorCodes: diagnostics ? [OPENCODE_OUTPUT_TRUNCATED] : [],
+  }
+}
+
 function isTimeoutLike(message: string): boolean {
   return /\b(timeout|timed out|deadline|aborterror)\b/i.test(message)
 }
@@ -176,6 +229,7 @@ export function buildOpenCodeBlockedErrorDiagnostics(
   const hasDiagnosticSignal = Boolean(
     input.error !== undefined
     || cleanOptionalMessage(input.fallbackMessage)
+    || isOutputTruncatedFinishReason(input.responseMeta?.latestStepFinishReason)
     || input.responseMeta?.sessionErrored
     || input.responseMeta?.latestAssistantHasError
     || input.attemptMeta?.error
@@ -183,6 +237,22 @@ export function buildOpenCodeBlockedErrorDiagnostics(
   )
   if (!hasDiagnosticSignal) {
     return { diagnostics: null, errorCodes: [] }
+  }
+
+  if (
+    isOutputTruncatedFinishReason(input.responseMeta?.latestStepFinishReason)
+    && !input.responseMeta?.sessionErrored
+    && !input.responseMeta?.latestAssistantHasError
+    && !input.attemptMeta?.error
+    && input.error === undefined
+    && !cleanOptionalMessage(input.fallbackMessage)
+  ) {
+    return buildOutputTruncatedBlockedErrorDiagnostics({
+      modelId: input.modelId,
+      sessionId: input.sessionId,
+      finishReason: input.responseMeta?.latestStepFinishReason,
+      tokens: input.responseMeta?.latestStepFinishTokens,
+    })
   }
 
   const details = resolveDetails(input)

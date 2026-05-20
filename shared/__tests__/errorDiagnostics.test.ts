@@ -30,4 +30,25 @@ describe('shared blocked error diagnostics', () => {
     expect(diagnostics?.summary).not.toContain('secret-token-123')
     expect(diagnostics?.summary).not.toContain('sk-openai-secret-123')
   })
+
+  it('normalizes model output truncation diagnostics and token counts', () => {
+    const diagnostics = normalizeBlockedErrorDiagnostics({
+      kind: 'model_output_truncated',
+      source: 'opencode',
+      summary: 'The model stopped because OpenCode reported finish reason "length".',
+      finishReason: 'length',
+      outputTokens: 2923,
+      reasoningTokens: 29077,
+      inputTokens: 13252,
+    })
+
+    expect(diagnostics).toMatchObject({
+      kind: 'model_output_truncated',
+      source: 'opencode',
+      finishReason: 'length',
+      outputTokens: 2923,
+      reasoningTokens: 29077,
+      inputTokens: 13252,
+    })
+  })
 })

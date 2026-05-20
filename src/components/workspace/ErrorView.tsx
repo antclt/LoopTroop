@@ -104,6 +104,10 @@ function buildDiagnosticRows(diagnostics: NonNullable<TicketErrorOccurrence['dia
   if (diagnostics.providerErrorMessage && diagnostics.providerErrorMessage !== diagnostics.summary) {
     rows.push({ label: 'Provider message', value: diagnostics.providerErrorMessage })
   }
+  if (diagnostics.finishReason) rows.push({ label: 'Finish reason', value: diagnostics.finishReason })
+  if (typeof diagnostics.outputTokens === 'number') rows.push({ label: 'Output tokens', value: diagnostics.outputTokens.toLocaleString() })
+  if (typeof diagnostics.reasoningTokens === 'number') rows.push({ label: 'Reasoning tokens', value: diagnostics.reasoningTokens.toLocaleString() })
+  if (typeof diagnostics.inputTokens === 'number') rows.push({ label: 'Input tokens', value: diagnostics.inputTokens.toLocaleString() })
 
   return rows
 }

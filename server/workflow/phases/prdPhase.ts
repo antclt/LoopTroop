@@ -47,6 +47,7 @@ import {
   upsertCouncilDraftArtifact,
   upsertCouncilVoteArtifact,
   emitCouncilDecisionLogs,
+  buildCouncilQuorumErrorWithDiagnostics,
   buildStructuredMetadata,
   mapCouncilStageToStatus,
 } from './helpers'
@@ -553,7 +554,10 @@ export async function handlePrdDraft(
   )
 
   if (!quorum.passed) {
-    throw new Error(`Council quorum not met for prd_draft: ${quorum.message}`)
+    throw buildCouncilQuorumErrorWithDiagnostics(
+      `Council quorum not met for prd_draft: ${quorum.message}`,
+      result.drafts,
+    )
   }
 
   const nextTicketState: TicketState = {
@@ -714,7 +718,10 @@ export async function handlePrdVote(
       undefined,
       true,
     )
-    throw new Error(`PRD voting quorum not met: ${voteQuorum.message}`)
+    throw buildCouncilQuorumErrorWithDiagnostics(
+      `PRD voting quorum not met: ${voteQuorum.message}`,
+      voteRun.voterDetails,
+    )
   }
 
   if (voteRun.votes.length === 0) {

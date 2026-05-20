@@ -49,7 +49,7 @@ import {
 type LocalTicketRow = typeof tickets.$inferSelect
 
 const BlockedErrorDiagnosticsSchema = z.object({
-  kind: z.enum(['opencode_provider', 'opencode_session', 'timeout', 'transport', 'runtime', 'unknown']).optional(),
+  kind: z.enum(['model_output_truncated', 'opencode_provider', 'opencode_session', 'timeout', 'transport', 'runtime', 'unknown']).optional(),
   source: z.enum(['opencode', 'provider', 'system', 'runtime']).optional(),
   summary: z.string().optional(),
   modelId: z.string().optional(),
@@ -61,6 +61,12 @@ const BlockedErrorDiagnosticsSchema = z.object({
   providerErrorTitle: z.string().optional(),
   providerErrorMessage: z.string().optional(),
   responseBodyPreview: z.string().optional(),
+  finishReason: z.string().optional(),
+  inputTokens: z.number().finite().optional(),
+  outputTokens: z.number().finite().optional(),
+  reasoningTokens: z.number().finite().optional(),
+  cacheReadTokens: z.number().finite().optional(),
+  cacheWriteTokens: z.number().finite().optional(),
 }).passthrough()
 
 const CreateTicketInputSchema = z.object({
