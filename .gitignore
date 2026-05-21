@@ -47,6 +47,7 @@ Thumbs.db
 # Agent/tool local state
 .agent/
 .agents/
+.antigravitycli/
 .claude/
 .cursor/
 .windsurfer/
@@ -85,4 +86,3 @@ test-results/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/.vitepress/.temp/
-

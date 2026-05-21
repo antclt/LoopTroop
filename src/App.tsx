@@ -1,12 +1,13 @@
-import { lazy, Suspense, useState, useEffect, useRef } from 'react'
+import { Suspense, useState, useEffect, useRef } from 'react'
 import { AppShell } from '@/components/layout/AppShell'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { TicketDashboard } from '@/components/ticket/TicketDashboard'
 import { CenteredModal } from '@/components/shared/CenteredModal'
+import { lazyWithChunkReload } from '@/lib/lazyWithChunkReload'
 
-const ProfileSetup = lazy(() => import('@/components/config/ProfileSetup').then(m => ({ default: m.ProfileSetup })))
-const ProjectsPanel = lazy(() => import('@/components/project/ProjectsPanel').then(m => ({ default: m.ProjectsPanel })))
-const TicketForm = lazy(() => import('@/components/ticket/TicketForm').then(m => ({ default: m.TicketForm })))
+const ProfileSetup = lazyWithChunkReload('ProfileSetup', () => import('@/components/config/ProfileSetup').then(m => ({ default: m.ProfileSetup })))
+const ProjectsPanel = lazyWithChunkReload('ProjectsPanel', () => import('@/components/project/ProjectsPanel').then(m => ({ default: m.ProjectsPanel })))
+const TicketForm = lazyWithChunkReload('TicketForm', () => import('@/components/ticket/TicketForm').then(m => ({ default: m.TicketForm })))
 import { KeyboardShortcuts } from '@/components/shared/KeyboardShortcuts'
 import { StartupRestorePopup } from '@/components/shared/StartupRestorePopup'
 import { ToastProvider } from '@/components/shared/Toast'

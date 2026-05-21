@@ -1,18 +1,19 @@
-import { lazy, Suspense, useMemo } from 'react'
+import { Suspense, useMemo } from 'react'
 import type { Ticket } from '@/hooks/useTickets'
 import { useWorkflowMeta } from '@/hooks/useWorkflowMeta'
 import { getActiveErrorOccurrence, getTicketErrorOccurrences } from '@/lib/errorOccurrences'
 import { isBeforeExecution } from '@shared/workflowMeta'
+import { lazyWithChunkReload } from '@/lib/lazyWithChunkReload'
 
-const DraftView = lazy(() => import('@/components/workspace/DraftView').then(m => ({ default: m.DraftView })))
-const CouncilView = lazy(() => import('@/components/workspace/CouncilView').then(m => ({ default: m.CouncilView })))
-const InterviewQAView = lazy(() => import('@/components/workspace/InterviewQAView').then(m => ({ default: m.InterviewQAView })))
-const ApprovalView = lazy(() => import('@/components/workspace/ApprovalView').then(m => ({ default: m.ApprovalView })))
-const CodingView = lazy(() => import('@/components/workspace/CodingView').then(m => ({ default: m.CodingView })))
-const ErrorView = lazy(() => import('@/components/workspace/ErrorView').then(m => ({ default: m.ErrorView })))
-const CanceledView = lazy(() => import('@/components/workspace/CanceledView').then(m => ({ default: m.CanceledView })))
-const PhaseReviewView = lazy(() => import('@/components/workspace/PhaseReviewView').then(m => ({ default: m.PhaseReviewView })))
-const FullLogView = lazy(() => import('@/components/workspace/FullLogView').then(m => ({ default: m.FullLogView })))
+const DraftView = lazyWithChunkReload('DraftView', () => import('@/components/workspace/DraftView').then(m => ({ default: m.DraftView })))
+const CouncilView = lazyWithChunkReload('CouncilView', () => import('@/components/workspace/CouncilView').then(m => ({ default: m.CouncilView })))
+const InterviewQAView = lazyWithChunkReload('InterviewQAView', () => import('@/components/workspace/InterviewQAView').then(m => ({ default: m.InterviewQAView })))
+const ApprovalView = lazyWithChunkReload('ApprovalView', () => import('@/components/workspace/ApprovalView').then(m => ({ default: m.ApprovalView })))
+const CodingView = lazyWithChunkReload('CodingView', () => import('@/components/workspace/CodingView').then(m => ({ default: m.CodingView })))
+const ErrorView = lazyWithChunkReload('ErrorView', () => import('@/components/workspace/ErrorView').then(m => ({ default: m.ErrorView })))
+const CanceledView = lazyWithChunkReload('CanceledView', () => import('@/components/workspace/CanceledView').then(m => ({ default: m.CanceledView })))
+const PhaseReviewView = lazyWithChunkReload('PhaseReviewView', () => import('@/components/workspace/PhaseReviewView').then(m => ({ default: m.PhaseReviewView })))
+const FullLogView = lazyWithChunkReload('FullLogView', () => import('@/components/workspace/FullLogView').then(m => ({ default: m.FullLogView })))
 
 interface ActiveWorkspaceProps {
   ticket: Ticket

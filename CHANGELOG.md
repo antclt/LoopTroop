@@ -5,6 +5,7 @@ All notable changes to LoopTroop will be documented in this file.
 ## [Unreleased]
 
 ### Summary
+- Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
 - Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
 
 ### Detailed Changes
@@ -12,6 +13,9 @@ All notable changes to LoopTroop will be documented in this file.
 ### Changed
 - `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.
 - Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
+
+### Fixed
+- Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
 
 ## [0.2.1] - 2026-05-20
 
