@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getFrontendPort } from '../shared/appConfig'
 import {
   formatAuditPackageUpdate,
+  formatDependencyReleasePolicySummary,
   formatDependencyUpdateReleaseDetail,
   formatHeldAuditPackageUpdate,
   formatHeldDependencyReleaseDetail,
@@ -193,6 +194,7 @@ printSummaryLine('Frontend', `http://localhost:${getFrontendPort()}`)
 printSummaryLine('Backend', `http://localhost:${getBackendPort()}`)
 printSummaryLine('Docs', getDocsOrigin())
 printSummaryLine('OpenCode', baseUrl)
+printSummaryLine('Package gate', formatDependencyReleasePolicySummary())
 
 if (preflightReport) {
   if (preflightReport.opencode.skipped) {

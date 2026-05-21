@@ -37,7 +37,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - previews `npm audit fix` lockfile changes and runs the fix only when every proposed npm package version has passed the same 7-day delay
 - upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
-- prints one concise startup summary by default, including updated package names, previous and new versions, held package names, and next eligible times
+- prints one concise startup summary by default, including the package gate policy, updated package names, previous and new versions, held package names, and next eligible times
 
 `npm run dev` also resolves the local OpenCode server endpoint before the dev services launch:
 

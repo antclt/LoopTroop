@@ -17,7 +17,7 @@ const requiredDevBins = ['tsx', 'vite', 'vitepress', 'concurrently']
 export const devPreflightReportPath = resolve(repoRoot, 'tmp', 'dev-preflight-report.json')
 export const devMaintenanceStatePath = resolve(repoRoot, 'tmp', 'dev-maintenance-state.json')
 const DAILY_MAINTENANCE_STATE_VERSION = 1
-const DEPENDENCY_RELEASE_DELAY_DAYS = 7
+export const DEPENDENCY_RELEASE_DELAY_DAYS = 7
 const MS_PER_DAY = 24 * 60 * 60 * 1000
 const OPENCODE_IMMEDIATE_NPM_PACKAGES = new Set(['@opencode-ai/sdk'])
 
@@ -240,6 +240,10 @@ export function getDependencyUpdateReleaseDetails(
 
 export function formatDependencyUpdateReleaseDetail(detail: DependencyReleaseUpdateDetail) {
   return `updated ${detail.dependencyType} dependency ${detail.name} ${detail.current} -> ${detail.target}`
+}
+
+export function formatDependencyReleasePolicySummary() {
+  return `Direct npm dependency and audit updates are held until releases are ${DEPENDENCY_RELEASE_DELAY_DAYS} days old; OpenCode updates immediately.`
 }
 
 export function formatHeldDependencyReleaseDetail(detail: HeldDependencyReleaseDetail) {

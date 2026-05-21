@@ -5,8 +5,12 @@ All notable changes to LoopTroop will be documented in this file.
 ## [Unreleased]
 
 ### Summary
+- Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
 
 ### Detailed Changes
+
+### Changed
+- `npm run dev` now prints the package gate policy in the startup summary, making it clear that direct npm dependency and audit updates wait until releases are 7 days old while OpenCode updates immediately.
 
 ## [0.2.1] - 2026-05-20
 
