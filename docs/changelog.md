@@ -6,6 +6,36 @@ description: Official release history and notable changes for LoopTroop.
 # Changelog
 
 All notable changes and official releases for LoopTroop are documented here.
+Unreleased changes appear first and represent commits that have not yet been included in a versioned release.
+
+---
+
+## Unreleased
+
+### Summary
+- Consolidated changelog maintenance into the docs changelog while keeping a root pointer for discoverability.
+- Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
+- Made versioned coverage reports keep version transitions in order while defaulting to the latest check and suppressing stale open-gap lists.
+- Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
+- Added a beautiful Changelog documentation page positioned above the Roadmap.
+- Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
+
+### Detailed Changes
+
+#### Added
+- Added a dedicated `Changelog` documentation page (`docs/changelog.md`) detailing LoopTroop's official release history starting from release `0.1.0`.
+- Integrated `/changelog` route into both VitePress sidebar and top navbar navigation.
+
+#### Changed
+- Made `docs/changelog.md` the canonical full changelog, including unreleased changes, and replaced the root `CHANGELOG.md` with a discoverability pointer.
+- `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.
+- Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
+
+#### Fixed
+- Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
+- Coverage reports now show the latest open-gap status by default after ordered version transitions, suppress stale open-gap lists when no gaps remain, and switch gap headings/lists to the selected `v1 > v2` or `v2 > v3` transition.
+- Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.
+- Full Answers normalization now restores canonical `follow_up_rounds` when a model emits malformed round metadata and repairs common multiline `free_text` YAML formatting without changing answer text.
 
 ---
 

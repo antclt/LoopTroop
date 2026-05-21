@@ -12,7 +12,8 @@ Instead of running one long fragile coding-agent chat, LoopTroop separates the w
 [Getting Started](https://www.looptroop.ovh/getting-started) |
 [Ticket Flow](https://www.looptroop.ovh/ticket-flow) |
 [LLM Council](https://www.looptroop.ovh/llm-council) |
-[Execution Loop](https://www.looptroop.ovh/execution-loop)
+[Execution Loop](https://www.looptroop.ovh/execution-loop) |
+[Changelog](https://www.looptroop.ovh/changelog)
 
 ---
 
