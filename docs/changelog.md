@@ -9,7 +9,7 @@ All notable changes and official releases for LoopTroop are documented here.
 
 ---
 
-## 0.2.1 <Badge type="tip" text="2026-05-20" />
+## 0.2.1 (2026-05-20)
 
 ### Summary
 - Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
@@ -73,7 +73,7 @@ All notable changes and official releases for LoopTroop are documented here.
 
 ---
 
-## 0.2.0 <Badge type="info" text="2026-05-12" />
+## 0.2.0 (2026-05-12)
 
 ### Summary
 - Added expanded runtime diagnostics, output-normalization documentation, operations guidance, configuration reference material, and refreshed onboarding docs.
@@ -143,7 +143,7 @@ All notable changes and official releases for LoopTroop are documented here.
 
 ---
 
-## 0.1.0 <Badge type="info" text="2026-04-27" />
+## 0.1.0 (2026-04-27)
 
 ### Summary
 - Clarified the README around local AI coding orchestration for repo-scale work, LLM Council planning, Ralph-loop recovery, OpenCode worktrees, and human-in-the-loop PR automation.
