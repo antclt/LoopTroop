@@ -442,6 +442,54 @@ describe('repairYamlFreeTextScalars', () => {
     expect(repairYamlFreeTextScalars(input)).toBe(input)
   })
 
+  it('converts unindented free_text block-scalar bodies without changing text', () => {
+    const input = [
+      'answer:',
+      '  skipped: false',
+      '  free_text: >-',
+      '  Hard privacy constraints: keep data local.',
+      '  Never store raw context across restarts.',
+      '    answered_by: ai_skip',
+      '    answered_at: "2026-05-21T09:15:00.000Z"',
+    ].join('\n')
+
+    const repaired = repairYamlFreeTextScalars(input)
+    expect(repaired).toBe([
+      'answer:',
+      '  skipped: false',
+      '  free_text: >-',
+      '    Hard privacy constraints: keep data local.',
+      '    Never store raw context across restarts.',
+      '  answered_by: ai_skip',
+      '  answered_at: "2026-05-21T09:15:00.000Z"',
+    ].join('\n'))
+
+    const parsed = jsYaml.load(repaired) as { answer: { free_text: string; answered_by: string } }
+    expect(parsed.answer.free_text).toBe('Hard privacy constraints: keep data local. Never store raw context across restarts.')
+    expect(parsed.answer.answered_by).toBe('ai_skip')
+  })
+
+  it('converts multiline plain free_text values into block scalars', () => {
+    const input = [
+      'answer:',
+      '  free_text: UI must fit current Settings modal, no pop-ups. Feature appears gated',
+      '    by a beta flag. Target milestone: beta first, stable later.',
+      '  answered_by: ai_skip',
+    ].join('\n')
+
+    const repaired = repairYamlFreeTextScalars(input)
+    expect(repaired).toBe([
+      'answer:',
+      '  free_text: |-',
+      '    UI must fit current Settings modal, no pop-ups. Feature appears gated',
+      '    by a beta flag. Target milestone: beta first, stable later.',
+      '  answered_by: ai_skip',
+    ].join('\n'))
+
+    const parsed = jsYaml.load(repaired) as { answer: { free_text: string } }
+    expect(parsed.answer.free_text).toBe('UI must fit current Settings modal, no pop-ups. Feature appears gated\nby a beta flag. Target milestone: beta first, stable later.')
+  })
+
   it('converts malformed multiline single-quoted free_text values into block scalars', () => {
     const input = [
       'answer:',
@@ -457,6 +505,8 @@ describe('repairYamlFreeTextScalars', () => {
     const parsed = jsYaml.load(repaired) as { answer: { free_text: string; answered_by: string } }
     expect(parsed.answer.free_text).toContain('No human approval checkpoint.')
     expect(parsed.answer.free_text).toContain('user\'s non-goal of "Add human approval step"')
+    expect(parsed.answer.free_text.startsWith("'")).toBe(false)
+    expect(parsed.answer.free_text.endsWith("'")).toBe(false)
     expect(parsed.answer.answered_by).toBe('ai_skip')
   })
 })
@@ -923,6 +973,20 @@ describe('repairYamlInlineKeys', () => {
         answered_at: '2026-04-30T15:29:00Z',
       },
     }])
+  })
+
+  it('splits same-line answer fields emitted by compact model YAML', () => {
+    const repaired = repairYamlInlineKeys([
+      'answered_by: ai_skip      answered_at: "2026-05-21T09:30:00.000Z"',
+      'answer_type: free_text    options: []',
+    ].join('\n'))
+
+    expect(jsYaml.load(repaired)).toEqual({
+      answered_by: 'ai_skip',
+      answered_at: '2026-05-21T09:30:00.000Z',
+      answer_type: 'free_text',
+      options: [],
+    })
   })
 
   it.each([

@@ -119,6 +119,7 @@ function buildDefaultRule(code: string): StructuredInterventionRule {
   const overrides: Record<string, string> = {
     parser_closing_fence: 'Closing Fence Trim',
     parser_double_quoted_scalar_escape: 'YAML Escape Repair',
+    parser_free_text_scalar: 'Free-Text Scalar Repair',
     parser_indentation: 'YAML Indentation Repair',
     parser_inline_yaml: 'Inline YAML Normalize',
     parser_list_dash: 'YAML List Dash Repair',
@@ -426,6 +427,12 @@ function buildExactInterventionDetails(
   if (code === 'parser_reserved_indicator_scalar') {
     return {
       exactCorrection: 'Quoted the plain YAML scalar that began with a reserved indicator character before reparsing the payload.',
+    }
+  }
+
+  if (code === 'parser_free_text_scalar') {
+    return {
+      exactCorrection: 'Converted existing free_text answer lines into valid YAML string syntax without inventing answer text.',
     }
   }
 
@@ -947,6 +954,18 @@ function deriveInterventionFromWarning(warning: string): StructuredIntervention 
       summary: 'A plain YAML scalar began with a reserved indicator character such as a backtick or `@`, which breaks strict parsing.',
       why: 'YAML does not allow plain one-line scalars to begin with reserved indicator characters, so the emitted value could not be parsed as structured data.',
       how: 'LoopTroop wrapped the existing scalar text in double quotes and reparsed the payload without changing the scalar content itself.',
+    })
+  }
+
+  if (/free_text.*scalar formatting|yaml free_text scalar/i.test(normalized)) {
+    return buildIntervention(warning, {
+      code: 'parser_free_text_scalar',
+      stage: 'parse',
+      category: 'parser_fix',
+      title: 'Repaired free_text YAML scalar formatting',
+      summary: 'A free_text answer used YAML scalar formatting that could not be parsed reliably.',
+      why: 'free_text fields are answer strings, but YAML can misread unquoted, malformed block, or split multi-line values as structure.',
+      how: 'LoopTroop converted the existing free_text lines to valid quoted or block-scalar YAML and corrected nearby answer metadata indentation without adding answer text.',
     })
   }
 

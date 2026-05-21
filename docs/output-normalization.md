@@ -168,11 +168,13 @@ questions:
 
 **Warning:** *Stripped XML-style tags `<tag>` from the payload before parsing.* (Lists the specific tags that were removed.)
 
-#### 8. Free-text scalar quoting
+#### 8. Free-text scalar repair
 
-**Trigger:** A `free_text:` field has an unquoted plain-scalar value. Such values are always strings in LoopTroop's schema but can start with backticks, look like booleans, or contain `: ` — all of which cause YAML to misinterpret them.
+**Trigger:** A `free_text:` field has fragile YAML scalar formatting. Common cases include unquoted one-line values, malformed block scalars whose body starts at the same indentation as `free_text: >-`, and plain multi-line values that spill onto following indented lines. Such values are always strings in LoopTroop's schema but can start with backticks, look like booleans, contain `: `, or otherwise be misread as structure.
 
-**Repair:** The value is wrapped in double quotes. Multi-line single-quoted values are converted to YAML block literals (`|-`).
+**Repair:** One-line values are wrapped in double quotes. Multi-line plain values, malformed block-scalar bodies, and multi-line single-quoted values are converted to YAML block literals while preserving the emitted text. If answer metadata such as `answered_by` or `answered_at` was accidentally indented under the malformed scalar, it is moved back to the answer mapping; no answer text is invented.
+
+**Warning:** *Repaired YAML free_text scalar formatting before parsing.*
 
 #### 9. Missing list-dash space
 
@@ -386,6 +388,14 @@ Full Answers uses the interview document parser plus one additional recovery pat
 - *Hoisted answered_at into answer for canonical question Q01.*
 
 This recovery is intentionally not shared by PRD, beads, or generic YAML parsers. Those artifacts do not have a safe canonical-question overlay source, so missing structural content remains a validation failure there.
+
+**Canonical follow-up-round recovery**
+
+**Trigger:** A Full Answers candidate contains malformed or missing `follow_up_rounds` while the approved Interview Results artifact is available.
+
+**Repair:** LoopTroop restores `follow_up_rounds` from the approved Interview Results artifact and ignores the candidate's malformed round metadata. This is safe for Full Answers because PRD Part 1 may fill skipped answers, but it must not invent or rewrite the approved interview's question metadata, follow-up structure, summary, or approval state.
+
+**Warning:** *Canonicalized follow_up_rounds to match the approved Interview Results artifact.*
 
 ---
 

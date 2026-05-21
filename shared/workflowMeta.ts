@@ -332,7 +332,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Part 2 — Generating PRD Drafts: LoopTroop loads the relevant files, ticket details, and that member\'s Full Answers artifact (including AI-filled responses). Each council model independently produces a complete PRD candidate rather than editing a shared draft. This independence ensures diverse specification approaches.',
       'Part 2 Gating: If Part 1 does not produce a valid Full Answers artifact for a member, that member\'s PRD draft is not started. The PRD draft row is recorded as skipped/invalid with a concise diagnostic instead of copying Full Answers raw output or retry warnings into the PRD draft artifact.',
       'PRD Content Structure: Each draft follows a consistent structure containing requirements (what the system should do), acceptance criteria (how to verify it works), edge cases (unusual situations to handle), test intent (what should be tested and how), and implementation guidance (suggested approach and constraints).',
-      'Output Normalization: LoopTroop normalizes draft output to ensure consistent structure, records draft metrics (requirement count, acceptance criteria count, edge case count), logs structured-output diagnostics, records raw accepted/rejected attempts, and persists only accepted draft bodies for the upcoming voting phase. Full Answers and PRD draft retry prompts use the configured structured retry count and run in fresh sessions by design.',
+      'Output Normalization: LoopTroop normalizes draft output to ensure consistent structure, records draft metrics (requirement count, acceptance criteria count, edge case count), logs structured-output diagnostics, records raw accepted/rejected attempts, and persists only accepted draft bodies for the upcoming voting phase. Full Answers parsing can repair safe YAML scalar formatting around existing free_text answer text and restores approved interview metadata such as follow_up_rounds from the canonical Interview Results artifact; unrecoverable or invented structure still fails validation. Full Answers and PRD draft retry prompts use the configured structured retry count and run in fresh sessions by design.',
     ],
     outputs: [
       'Per-model Full Answers artifacts — complete interview documents with AI-generated responses filling in skipped questions where needed (produced in Part 1). The winning model\'s Full Answers artifact is later available read-only from Approving Specs.',
@@ -345,7 +345,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'This phase has 2 internal parts with different context inputs: Part 1 receives Relevant Files + Ticket Details + Interview Results; Part 2 receives Relevant Files + Ticket Details + Full Answers.',
-      'Rejected or uncorrectable Full Answers and PRD draft text is not rendered as artifact body content. Raw responses remain available in Raw attempt views and execution logs for diagnosis.',
+      'Rejected or uncorrectable Full Answers and PRD draft text is not rendered as artifact body content. Safe parser repairs correct formatting only; malformed responses that would require inventing questions, metadata, or planning content remain diagnostic-only in Raw attempt views and execution logs.',
       'The PRD phase is the first stage that converts interview intent into a formal implementation specification — it bridges the gap between "what do you want" (interview) and "what should be built" (specification).',
       'Each council member drafts from its own Full Answers artifact, so the PRD vote selects both a specification approach and the assumptions behind it.',
     ],
@@ -1157,7 +1157,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'DRAFTING_PRD',
     label: 'Council Drafting Specs',
-    description: 'Models produce per-model Full Answers artifacts and competing PRD drafts. Invalid Full Answers skip that member\'s PRD draft and malformed bodies stay in Raw diagnostics only.',
+    description: 'Models produce per-model Full Answers artifacts and competing PRD drafts. Safe parser repairs preserve approved interview metadata; invalid Full Answers skip that member\'s PRD draft and malformed bodies stay in Raw diagnostics only.',
     details: WORKFLOW_PHASE_DETAILS.DRAFTING_PRD,
     kanbanPhase: 'in_progress',
     groupId: 'prd',

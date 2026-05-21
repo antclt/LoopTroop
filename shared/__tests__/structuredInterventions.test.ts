@@ -150,6 +150,12 @@ describe('parser fix interventions', () => {
     expectIntervention(i, { code: 'parser_reserved_indicator_scalar', stage: 'parse', category: 'parser_fix' })
   })
 
+  it('maps free_text scalar formatting repair', () => {
+    const i = deriveOne('Repaired YAML free_text scalar formatting before parsing.')
+    expectIntervention(i, { code: 'parser_free_text_scalar', stage: 'parse', category: 'parser_fix' })
+    expect(i.exactCorrection).toBe('Converted existing free_text answer lines into valid YAML string syntax without inventing answer text.')
+  })
+
   it('maps invalid double-quoted scalar backslash escape repairs', () => {
     const i = deriveOne('Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.')
     expectIntervention(i, { code: 'parser_double_quoted_scalar_escape', stage: 'parse', category: 'parser_fix' })

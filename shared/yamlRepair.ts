@@ -828,19 +828,20 @@ export function repairYamlDuplicateKeys(yaml: string): string {
 }
 
 /**
- * Quote one-line `free_text` scalar values.
+ * Repair fragile `free_text` scalar values.
  *
  * `free_text` fields are always string-typed in our structured artifacts, but
  * models often emit them as plain YAML scalars. Those are fragile: values that
  * start with backticks, look like booleans, or contain `: ` can all break YAML
- * parsing or coerce to the wrong type. This repair wraps any non-empty
- * one-line plain `free_text:` value in double quotes while preserving block
- * scalars and already-quoted values.
+ * parsing or coerce to the wrong type. This repair wraps non-empty one-line
+ * plain values in double quotes, converts malformed multi-line values into
+ * block scalars, and preserves valid block scalars and already-quoted values.
  */
 export function repairYamlFreeTextScalars(yaml: string): string {
   const lines = yaml.split('\n')
   const result: string[] = []
   const BLOCK_SCALAR_PATTERN = /:\s*[>|][+-]?\s*$/
+  const BLOCK_SCALAR_VALUE_PATTERN = /^\s*([>|][+-]?)\s*(?:#.*)?$/
   const SAFE_VALUE_START = /^["'|>&*!#]/
 
   let insideBlockScalar = false
@@ -865,14 +866,14 @@ export function repairYamlFreeTextScalars(yaml: string): string {
       blockScalarBaseIndent = -1
     }
 
-    if (BLOCK_SCALAR_PATTERN.test(trimmed)) {
+    const freeTextMatch = line.match(/^(\s*(?:-\s+)?free_text\s*:\s*)(.+)$/)
+    if (!freeTextMatch && BLOCK_SCALAR_PATTERN.test(trimmed)) {
       insideBlockScalar = true
       blockScalarBaseIndent = indent
       result.push(line)
       continue
     }
 
-    const freeTextMatch = line.match(/^(\s*(?:-\s+)?free_text\s*:\s*)(.+)$/)
     if (!freeTextMatch) {
       result.push(line)
       continue
@@ -880,6 +881,22 @@ export function repairYamlFreeTextScalars(yaml: string): string {
 
     const prefix = freeTextMatch[1]!
     const value = freeTextMatch[2]!
+    const blockScalarValueMatch = value.match(BLOCK_SCALAR_VALUE_PATTERN)
+    if (blockScalarValueMatch?.[1]) {
+      const malformedBlockScalar = collectMalformedFreeTextBlockScalar(lines, index, indent)
+      if (malformedBlockScalar) {
+        result.push(`${prefix}${blockScalarValueMatch[1]}`)
+        result.push(...malformedBlockScalar.lines)
+        index = malformedBlockScalar.endIndex
+        continue
+      }
+
+      result.push(line)
+      insideBlockScalar = true
+      blockScalarBaseIndent = indent
+      continue
+    }
+
     const multilineSingleQuoted = collectMultilineSingleQuotedFreeText(lines, index, indent)
     if (multilineSingleQuoted) {
       result.push(`${prefix}|-`)
@@ -888,6 +905,14 @@ export function repairYamlFreeTextScalars(yaml: string): string {
         result.push(`${contentIndent}${contentLine}`)
       }
       index = multilineSingleQuoted.endIndex
+      continue
+    }
+
+    const multilinePlainScalar = collectPlainMultilineFreeText(lines, index, indent, value)
+    if (multilinePlainScalar) {
+      result.push(`${prefix}|-`)
+      result.push(...multilinePlainScalar.lines)
+      index = multilinePlainScalar.endIndex
       continue
     }
 
@@ -900,6 +925,123 @@ export function repairYamlFreeTextScalars(yaml: string): string {
   }
 
   return result.join('\n')
+}
+
+const FREE_TEXT_ANSWER_SIBLING_KEYS = new Set([
+  'answered_at',
+  'answered_by',
+  'selected_option_ids',
+  'skipped',
+])
+
+function isFreeTextAnswerSibling(trimmed: string): boolean {
+  const match = trimmed.match(/^([A-Za-z_][\w-]*)\s*:/)
+  return Boolean(match?.[1] && FREE_TEXT_ANSWER_SIBLING_KEYS.has(match[1].toLowerCase()))
+}
+
+function isYamlStructuralBoundary(trimmed: string): boolean {
+  const normalized = trimmed.toLowerCase()
+  return /^-\s+[a-z_][\w-]*\s*:/.test(normalized)
+    || /^(approval|follow_up_rounds|questions|summary)\s*:/.test(normalized)
+}
+
+function collectMalformedFreeTextBlockScalar(
+  lines: string[],
+  startIndex: number,
+  parentIndent: number,
+): { endIndex: number; lines: string[] } | null {
+  const nextNonEmptyIndex = findNextNonEmptyLineIndex(lines, startIndex + 1)
+  if (nextNonEmptyIndex === null) return null
+
+  const nextLine = lines[nextNonEmptyIndex]!
+  const nextTrimmed = nextLine.trim()
+  if (!nextTrimmed || isFreeTextAnswerSibling(nextTrimmed)) return null
+
+  const nextIndent = getLineIndent(nextLine)
+  if (nextIndent > parentIndent) return null
+
+  const result: string[] = []
+  let endIndex = startIndex
+  let hasContentLine = false
+  const contentIndent = ' '.repeat(parentIndent + 2)
+  const siblingIndent = ' '.repeat(parentIndent)
+
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const trimmed = line.trim()
+    const lineIndent = getLineIndent(line)
+
+    if (!trimmed) {
+      result.push('')
+      endIndex = index
+      continue
+    }
+
+    if (isFreeTextAnswerSibling(trimmed)) {
+      result.push(`${siblingIndent}${trimmed}`)
+      endIndex = index
+      continue
+    }
+
+    if (lineIndent <= parentIndent && isYamlStructuralBoundary(trimmed)) {
+      break
+    }
+
+    result.push(`${contentIndent}${line.trimStart()}`)
+    hasContentLine = true
+    endIndex = index
+  }
+
+  return hasContentLine ? { endIndex, lines: result } : null
+}
+
+function collectPlainMultilineFreeText(
+  lines: string[],
+  startIndex: number,
+  parentIndent: number,
+  firstValue: string,
+): { endIndex: number; lines: string[] } | null {
+  const nextNonEmptyIndex = findNextNonEmptyLineIndex(lines, startIndex + 1)
+  if (nextNonEmptyIndex === null) return null
+
+  const nextLine = lines[nextNonEmptyIndex]!
+  const nextTrimmed = nextLine.trim()
+  const nextIndent = getLineIndent(nextLine)
+  if (!nextTrimmed || nextIndent <= parentIndent || isFreeTextAnswerSibling(nextTrimmed)) {
+    return null
+  }
+
+  const continuationLines: string[] = []
+  let endIndex = startIndex
+  for (let index = startIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const trimmed = line.trim()
+    const lineIndent = getLineIndent(line)
+
+    if (!trimmed) {
+      continuationLines.push('')
+      endIndex = index
+      continue
+    }
+
+    if (lineIndent <= parentIndent || isFreeTextAnswerSibling(trimmed) || isYamlStructuralBoundary(trimmed)) {
+      break
+    }
+
+    continuationLines.push(line.trimStart())
+    endIndex = index
+  }
+
+  if (continuationLines.length === 0 || endIndex === startIndex) return null
+
+  const contentIndent = ' '.repeat(parentIndent + 2)
+  return {
+    endIndex,
+    lines: [
+      `${contentIndent}${firstValue}`,
+      ...continuationLines.map(line => (line ? `${contentIndent}${line}` : '')),
+    ],
+  }
 }
 
 const YAML_UNION_TOKEN_PATTERN = `(?:"(?:[^"\\\\]|\\\\.)*"|'(?:[^'\\\\]|\\\\.)*'|[A-Za-z_][\\w.\\[\\]-]*)`

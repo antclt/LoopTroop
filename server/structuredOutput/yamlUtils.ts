@@ -136,6 +136,7 @@ const PLAIN_SCALAR_COLON_WARNING = 'Quoted YAML plain scalar values containing c
 const QUOTED_SCALAR_WARNING = 'Repaired improperly quoted YAML scalar value.'
 const RESERVED_INDICATOR_SCALAR_WARNING = 'Quoted plain YAML scalars that began with reserved indicator characters (` or @) before reparsing.'
 const DOUBLE_QUOTED_ESCAPE_WARNING = 'Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.'
+const FREE_TEXT_SCALAR_WARNING = 'Repaired YAML free_text scalar formatting before parsing.'
 
 function appendRepairWarningOnce(repairWarnings: string[] | undefined, warning: string) {
   if (!repairWarnings?.includes(warning)) {
@@ -517,6 +518,7 @@ export function parseYamlOrJsonCandidate(
         inlineYaml?: boolean
         mappingKeyColonSpace?: boolean
         plainScalarColon?: boolean
+        freeTextScalar?: boolean
         xmlStyleTags?: string[]
       },
     ): unknown => {
@@ -534,6 +536,9 @@ export function parseYamlOrJsonCandidate(
       }
       if (appliedRepairs?.plainScalarColon) {
         appendRepairWarningOnce(options?.repairWarnings, PLAIN_SCALAR_COLON_WARNING)
+      }
+      if (appliedRepairs?.freeTextScalar) {
+        appendRepairWarningOnce(options?.repairWarnings, FREE_TEXT_SCALAR_WARNING)
       }
       if (appliedRepairs?.xmlStyleTags && appliedRepairs.xmlStyleTags.length > 0) {
         appendRepairWarningOnce(options?.repairWarnings, buildXmlStyleTagsWarning(appliedRepairs.xmlStyleTags))
@@ -631,6 +636,7 @@ export function parseYamlOrJsonCandidate(
         const deduped = repairYamlDuplicateKeys(dashFixed)
         const base = applyNestedMappingRepair(deduped)
         const appliedPreParseRepairs = {
+          freeTextScalar: freeTextQuoted !== xmlStripped,
           xmlStyleTags: xmlTags,
         }
 

@@ -8,6 +8,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
 - Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
 - Added a beautiful Changelog documentation page positioned above the Roadmap.
+- Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
 
 ### Detailed Changes
 
@@ -22,6 +23,7 @@ All notable changes to LoopTroop will be documented in this file.
 ### Fixed
 - Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
 - Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.
+- Full Answers normalization now restores canonical `follow_up_rounds` when a model emits malformed round metadata and repairs common multiline `free_text` YAML formatting without changing answer text.
 
 ## [0.2.1] - 2026-05-20
 

@@ -5252,6 +5252,70 @@ describe.concurrent('structured output normalization', () => {
     })
   })
 
+  it('canonicalizes malformed Full Answers follow_up_rounds from the approved interview artifact', () => {
+    const result = normalizeResolvedInterviewDocumentOutput([
+      'schema_version: 1',
+      `ticket_id: "${TICKET_ID}"`,
+      'artifact: interview',
+      'status: draft',
+      'generated_by:',
+      '  winner_model: "nvidia/nemotron"',
+      '  generated_at: "2026-04-30T15:29:00Z"',
+      'questions:',
+      '  - id: "Q01"',
+      '    phase: "Foundation"',
+      '    prompt: "What primary problem should the new phase solve?"',
+      '    source: "compiled"',
+      '    follow_up_round: null',
+      '    answer_type: "free_text"',
+      '    options: []',
+      '    answer:',
+      '      skipped: false',
+      '      selected_option_ids: []',
+      '      free_text: "Introduce a deterministic, risk-first planning checkpoint."',
+      '      answered_by: "ai_skip"',
+      '      answered_at: "2026-04-30T15:29:01Z"',
+      '  - id: "Q02"',
+      '    phase: "Foundation"',
+      '    prompt: "Who should consume the strategy?"',
+      '    source: "compiled"',
+      '    follow_up_round: null',
+      '    answer_type: "single_choice"',
+      '    options:',
+      '      - id: "opt1"',
+      '        label: "Workflow engine"',
+      '      - id: "opt2"',
+      '        label: "Beads generation"',
+      '    answer:',
+      '      skipped: false',
+      '      selected_option_ids: ["opt1"]',
+      '      free_text: ""',
+      '      answered_by: "user"',
+      '      answered_at: "2026-03-25T18:19:00.000Z"',
+      'follow_up_rounds:',
+      '  - round_number: 1    source: prom4 | coverage',
+      '    question_ids: ["FU1"]',
+      'summary:',
+      '  goals: ["drifted"]',
+      '  constraints: []',
+      '  non_goals: []',
+      '  final_free_form_answer: ""',
+      'approval:',
+      '  approved_by: ""',
+      '  approved_at: ""',
+    ].join('\n'), {
+      ticketId: TICKET_ID,
+      canonicalInterviewContent: CANONICAL_RESOLVED_INTERVIEW,
+      memberId: 'nvidia/nemotron',
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.follow_up_rounds).toEqual([])
+    expect(result.repairWarnings).toContain('Canonicalized follow_up_rounds to match the approved Interview Results artifact.')
+    expect(result.repairWarnings).toContain('Canonicalized summary to match the approved Interview Results artifact.')
+  })
+
   it('keeps truncated resolved interview artifacts invalid', () => {
     const canonicalInterview = [
       'schema_version: 1',

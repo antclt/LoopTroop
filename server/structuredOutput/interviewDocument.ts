@@ -464,6 +464,26 @@ function normalizeFollowUpRound(value: unknown, index: number): InterviewDocumen
   }
 }
 
+function normalizeFollowUpRounds(
+  value: unknown,
+  warnings: string[],
+  options?: {
+    allowMalformedFollowUpRounds?: boolean
+  },
+): InterviewDocumentFollowUpRound[] {
+  if (!Array.isArray(value)) return []
+
+  try {
+    return value.map((round, index) => normalizeFollowUpRound(round, index))
+  } catch (error) {
+    if (!options?.allowMalformedFollowUpRounds) {
+      throw error
+    }
+    warnings.push('Canonicalized follow_up_rounds to match the approved Interview Results artifact.')
+    return []
+  }
+}
+
 function syncFinalFreeFormSummary(document: InterviewDocument): InterviewDocument {
   const finalFreeFormQuestion = document.questions.find((question) => question.source === 'final_free_form')
   if (!finalFreeFormQuestion) return document
@@ -662,6 +682,7 @@ export function normalizeInterviewDocumentOutput(
   options?: {
     ticketId?: string
     allowTrailingTerminalNoise?: boolean
+    allowMalformedFollowUpRounds?: boolean
   },
 ): StructuredOutputResult<InterviewDocument> {
   const candidates = collectStructuredCandidates(rawContent, {
@@ -746,10 +767,11 @@ export function normalizeInterviewDocumentOutput(
         seenQuestionIds.add(question.id)
       }
 
-      const rawFollowUpRounds = getValueByAliases(parsed, ['followuprounds', 'follow_up_rounds'])
-      const followUpRounds = Array.isArray(rawFollowUpRounds)
-        ? rawFollowUpRounds.map((round, index) => normalizeFollowUpRound(round, index))
-        : []
+      const followUpRounds = normalizeFollowUpRounds(
+        getValueByAliases(parsed, ['followuprounds', 'follow_up_rounds']),
+        warnings,
+        { allowMalformedFollowUpRounds: options?.allowMalformedFollowUpRounds },
+      )
 
       const summary = getNestedRecord(parsed, ['summary'])
       const approval = getNestedRecord(parsed, ['approval'])
@@ -847,6 +869,7 @@ export function normalizeResolvedInterviewDocumentOutput(
     let candidateResult = normalizeInterviewDocumentOutput(candidateContent, {
       ticketId: options.ticketId,
       allowTrailingTerminalNoise: true,
+      allowMalformedFollowUpRounds: true,
     })
     if (!candidateResult.ok) {
       const answerOnlyCandidate = buildAnswerOnlyResolvedInterviewCandidate(candidateContent, canonicalResult.value, {
@@ -869,7 +892,7 @@ export function normalizeResolvedInterviewDocumentOutput(
     if (!candidateResult.ok) continue
 
     try {
-      const repairWarnings = [...candidateResult.repairWarnings]
+      const repairWarnings = Array.from(new Set(candidateResult.repairWarnings))
       const canonical = canonicalResult.value
       const candidate = candidateResult.value
       const canonicalIds = canonical.questions.map((question) => question.id)
@@ -966,16 +989,19 @@ export function normalizeResolvedInterviewDocumentOutput(
         }
       })
 
+      const followUpRoundsWarning = 'Canonicalized follow_up_rounds to match the approved Interview Results artifact.'
       if (candidate.follow_up_rounds.length !== canonical.follow_up_rounds.length) {
-        repairWarnings.push('Canonicalized follow_up_rounds to match the approved Interview Results artifact.')
+        if (!repairWarnings.includes(followUpRoundsWarning)) {
+          repairWarnings.push(followUpRoundsWarning)
+        }
       } else {
         const followUpChanged = candidate.follow_up_rounds.some((round, index) => (
           round.round_number !== canonical.follow_up_rounds[index]?.round_number
           || round.source !== canonical.follow_up_rounds[index]?.source
           || !compareStringArrays(round.question_ids, canonical.follow_up_rounds[index]?.question_ids ?? [])
         ))
-        if (followUpChanged) {
-          repairWarnings.push('Canonicalized follow_up_rounds to match the approved Interview Results artifact.')
+        if (followUpChanged && !repairWarnings.includes(followUpRoundsWarning)) {
+          repairWarnings.push(followUpRoundsWarning)
         }
       }
 
