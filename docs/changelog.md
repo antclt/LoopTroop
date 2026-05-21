@@ -16,6 +16,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
 - Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
 - Kept missing execution tooling in workspace setup instead of letting coding beads commit or retry around temporary toolchains.
+- Made OpenCode session startup more resilient with bounded app-wide retries and health diagnostics.
 
 ### Detailed Changes
 
@@ -37,6 +38,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.
 - Full Answers normalization now restores canonical `follow_up_rounds` when a model emits malformed round metadata and repairs common multiline `free_text` YAML formatting without changing answer text.
 - Bead commits now exclude execution setup temp roots, reusable setup artifact roots, and legacy `.cache/project-tooling/**` files so temporary toolchains cannot be recorded as implementation work.
+- OpenCode session creation now retries the initial attempt up to three times with bounded backoff, collecting lightweight health diagnostics after failures while preserving cancellation and timeout behavior.
 
 ---
 

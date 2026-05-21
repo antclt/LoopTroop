@@ -20,6 +20,7 @@ import { OPENCODE_EXECUTION_YOLO_PERMISSIONS } from '../../opencode/permissions'
 import { resolveOpenCodeTools } from '../../opencode/toolPolicy'
 import { parseModelRef, type Session, type SessionErrorStreamEvent, type StreamEvent } from '../../opencode/types'
 import { summarizeModelErrorForLog } from '../../opencode/errorDetails'
+import { createOpenCodeSessionWithRetry } from '../../opencode/sessionCreation'
 
 export interface DoctorDeps {
   fileExists: (path: string) => boolean
@@ -73,7 +74,7 @@ async function runExecutionCapabilityProbe(
   }
 
   const session = await raceWithCancel(
-    adapter.createSession(worktreePath, signal, {
+    createOpenCodeSessionWithRetry(adapter, worktreePath, signal, {
       permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
     }),
     signal,

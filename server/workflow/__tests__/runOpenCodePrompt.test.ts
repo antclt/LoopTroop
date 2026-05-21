@@ -1,4 +1,4 @@
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it, vi } from 'vitest'
 import { patchTicket } from '../../storage/tickets'
 import { TEST } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
@@ -73,6 +73,7 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   }> = []
   public readonly abortCalls: string[] = []
   public listSessionsCalls = 0
+  public healthCalls = 0
   private readonly sessions: Session[] = []
   private sessionCounter = 0
 
@@ -88,6 +89,8 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
       }
   >, private readonly options: {
     listSessions?: () => Session[]
+    createFailures?: Error[]
+    healthStatus?: HealthStatus
   } = {}) {
     this.queuedResponses = [...responses]
   }
@@ -98,6 +101,8 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
     options?: OpenCodeSessionCreateOptions,
   ): Promise<Session> {
     this.sessionCreateCalls.push({ projectPath, signal, options })
+    const failure = this.options.createFailures?.shift()
+    if (failure) throw failure
     this.sessionCounter += 1
     const session = {
       id: `ses-${this.sessionCounter}`,
@@ -224,7 +229,8 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   }
 
   async checkHealth(): Promise<HealthStatus> {
-    return { available: true }
+    this.healthCalls += 1
+    return this.options.healthStatus ?? { available: true }
   }
 }
 
@@ -425,6 +431,89 @@ describe('runOpenCodePrompt', () => {
     expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_YOLO_PERMISSIONS)
   })
 
+  it('retries unowned session creation before prompting', async () => {
+    vi.useFakeTimers()
+    try {
+      const adapter = new TestOpenCodeAdapter(['assistant response'], {
+        createFailures: [
+          new Error('OpenCode returned no session payload'),
+          new Error('socket hang up'),
+        ],
+      })
+
+      const runPromise = runOpenCodePrompt({
+        adapter,
+        projectPath: '/tmp/project',
+        parts: [{ type: 'text', content: 'Prompt body' }],
+      })
+
+      await vi.runAllTimersAsync()
+      const result = await runPromise
+
+      expect(result.session.id).toBe('ses-1')
+      expect(adapter.sessionCreateCalls).toHaveLength(3)
+      expect(adapter.healthCalls).toBe(2)
+      expect(adapter.promptCalls.map((call) => call.sessionId)).toEqual(['ses-1'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('retries owned session creation before prompting and recording the session', async () => {
+    vi.useFakeTimers()
+    try {
+      resetTestDb()
+      const { ticket } = createInitializedTestTicket(repoManager, {
+        title: 'Owned session retry',
+      })
+      patchTicket(ticket.id, { status: 'CODING' })
+      const adapter = new TestOpenCodeAdapter(['assistant response'], {
+        createFailures: [
+          new Error('OpenCode returned no session payload'),
+        ],
+      })
+
+      const runPromise = runOpenCodePrompt({
+        adapter,
+        projectPath: '/tmp/project',
+        parts: [{ type: 'text', content: 'Prompt body' }],
+        sessionOwnership: {
+          ticketId: ticket.id,
+          phase: 'CODING',
+        },
+      })
+
+      await vi.runAllTimersAsync()
+      const result = await runPromise
+
+      expect(result.session.id).toBe('ses-1')
+      expect(adapter.sessionCreateCalls).toHaveLength(2)
+      expect(adapter.healthCalls).toBe(1)
+      expect(adapter.promptCalls.map((call) => call.sessionId)).toEqual(['ses-1'])
+      expect(listOpenCodeSessionsForTicket(ticket.id, ['completed']).map((session) => session.sessionId)).toEqual(['ses-1'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('preserves timeout behavior while waiting to retry session creation', async () => {
+    const adapter = new TestOpenCodeAdapter(['assistant response'], {
+      createFailures: [
+        new Error('OpenCode returned no session payload'),
+      ],
+    })
+
+    await expect(runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Prompt body' }],
+      timeoutMs: 1,
+    })).rejects.toThrow('Timeout')
+
+    expect(adapter.sessionCreateCalls).toHaveLength(1)
+    expect(adapter.promptCalls).toHaveLength(0)
+  })
+
   it('prompts a newly-created owned session without requiring it to appear in the remote session list first', async () => {
     resetTestDb()
     const { ticket } = createInitializedTestTicket(repoManager, {
@@ -611,32 +700,44 @@ describe('runOpenCodePrompt', () => {
     expect(adapter.promptCalls[1]?.parts).toEqual([{ type: 'text', content: 'continue please' }])
   })
 
-  it('fails fast with an upgrade error when execution-band session permissions are rejected', async () => {
-    resetTestDb()
-    const { ticket } = createInitializedTestTicket(repoManager, {
-      title: 'Execution permission rejection',
-    })
-    patchTicket(ticket.id, { status: 'CODING' })
-    const fakeClient = createFakeSdkClient({
-      create: async (...args: unknown[]) => {
-        expect(args[0]).toMatchObject({
-          directory: '/tmp/project',
-          permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
-        })
-        throw new Error('400 Bad Request: unknown field "permission"')
-      },
-    })
-    const adapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+  it('retains upgrade guidance after execution-band session creation retries are exhausted', async () => {
+    vi.useFakeTimers()
+    try {
+      resetTestDb()
+      const { ticket } = createInitializedTestTicket(repoManager, {
+        title: 'Execution permission rejection',
+      })
+      patchTicket(ticket.id, { status: 'CODING' })
+      let createCalls = 0
+      const fakeClient = createFakeSdkClient({
+        create: async (...args: unknown[]) => {
+          createCalls += 1
+          expect(args[0]).toMatchObject({
+            directory: '/tmp/project',
+            permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
+          })
+          throw new Error('400 Bad Request: unknown field "permission"')
+        },
+      })
+      const adapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
 
-    await expect(runOpenCodePrompt({
-      adapter,
-      projectPath: '/tmp/project',
-      parts: [{ type: 'text', content: 'Prompt body' }],
-      sessionOwnership: {
-        ticketId: ticket.id,
-        phase: 'CODING',
-      },
-    })).rejects.toThrow('Upgrade OpenCode and restart `opencode serve`')
+      const runPromise = runOpenCodePrompt({
+        adapter,
+        projectPath: '/tmp/project',
+        parts: [{ type: 'text', content: 'Prompt body' }],
+        sessionOwnership: {
+          ticketId: ticket.id,
+          phase: 'CODING',
+        },
+      })
+      const rejected = expect(runPromise).rejects.toThrow('Upgrade OpenCode and restart `opencode serve`')
+
+      await vi.runAllTimersAsync()
+      await rejected
+      expect(createCalls).toBe(4)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('increments prompt numbers across repeated prompts in the same session', async () => {

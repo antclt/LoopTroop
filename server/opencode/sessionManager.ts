@@ -5,6 +5,7 @@ import type { OpenCodeSessionCreateOptions, Session } from './types'
 import { getOpenCodeAdapter } from './factory'
 import { getProjectContextById, listProjects } from '../storage/projects'
 import { getTicketByRef, getTicketContext } from '../storage/tickets'
+import { createOpenCodeSessionWithRetry } from './sessionCreation'
 
 export interface SessionOwnership {
   ticketId?: string
@@ -60,7 +61,12 @@ export class SessionManager {
     const context = getTicketContext(ticketId)
     if (!context) throw new Error(`Ticket not found: ${ticketId}`)
 
-    const session = await this.adapter.createSession(projectPath ?? context.projectRoot, signal, createOptions)
+    const session = await createOpenCodeSessionWithRetry(
+      this.adapter,
+      projectPath ?? context.projectRoot,
+      signal,
+      createOptions,
+    )
 
     context.projectDb.insert(opencodeSessions)
       .values({

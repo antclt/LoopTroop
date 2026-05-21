@@ -111,6 +111,28 @@ describe('Pre-Flight Doctor', () => {
     expect(adapter.promptCalls[0]?.options?.variant).toBe('high')
   })
 
+  it('retries the execution capability probe session before prompting', async () => {
+    vi.useFakeTimers()
+    try {
+      const beads = [makeBead()]
+      adapter.mockSessionCreateFailures = [
+        new Error('OpenCode returned no session payload'),
+        new Error('socket hang up'),
+      ]
+
+      const reportPromise = runPreFlightChecks(adapter, TEST.ticketId, beads, defaultContext, undefined, deps)
+
+      await vi.runAllTimersAsync()
+      const report = await reportPromise
+
+      expect(report.passed).toBe(true)
+      expect(adapter.sessionCreateCalls).toHaveLength(3)
+      expect(adapter.promptCalls.map((call) => call.sessionId)).toEqual(['mock-session-1'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('detects circular dependencies', async () => {
     const b1 = makeBead({ id: 'b1', dependencies: { blocked_by: ['b2'], blocks: [] } })
     const b2 = makeBead({ id: 'b2', dependencies: { blocked_by: ['b1'], blocks: [] } })

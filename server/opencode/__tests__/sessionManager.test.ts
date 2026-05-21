@@ -1,4 +1,4 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { OpenCodeAdapter } from '../adapter'
 import type {
   HealthStatus,
@@ -14,7 +14,7 @@ import type {
 import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
-import { SessionManager } from '../sessionManager'
+import { listOpenCodeSessionsForTicket, SessionManager } from '../sessionManager'
 import { attachProject } from '../../storage/projects'
 import { createTicket, patchTicket } from '../../storage/tickets'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
@@ -23,6 +23,8 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   public sessions: Session[] = []
   public createSignals: Array<AbortSignal | undefined> = []
   public listSignals: Array<AbortSignal | undefined> = []
+  public createFailures: unknown[] = []
+  public healthCalls = 0
   private sessionCounter = 0
 
   async createSession(
@@ -31,6 +33,8 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
     _options?: OpenCodeSessionCreateOptions,
   ): Promise<Session> {
     this.createSignals.push(signal)
+    const failure = this.createFailures.shift()
+    if (failure) throw failure instanceof Error ? failure : new Error(String(failure))
     const session: Session = {
       id: `session-${++this.sessionCounter}`,
       projectPath,
@@ -87,6 +91,7 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   }
 
   async checkHealth(): Promise<HealthStatus> {
+    this.healthCalls += 1
     return { available: true }
   }
 }
@@ -184,5 +189,51 @@ describe('SessionManager', () => {
 
     expect(adapter.createSignals).toEqual([controller.signal])
     expect(adapter.listSignals).toEqual([controller.signal])
+  })
+
+  it('retries session creation and stores only the successful owned session', async () => {
+    vi.useFakeTimers()
+    try {
+      const repoDir = repoManager.createRepo()
+      const project = attachProject({
+        folderPath: repoDir,
+        name: 'LoopTroop',
+        shortname: 'LOOP',
+      })
+      const ticket = createTicket({
+        projectId: project.id,
+        title: 'Retry session creation',
+        description: 'Ensure failed create attempts do not insert session rows.',
+      })
+      patchTicket(ticket.id, { status: 'CODING' })
+
+      const adapter = new TestOpenCodeAdapter()
+      adapter.createFailures = [
+        new Error('OpenCode returned no session payload'),
+        new Error('socket hang up'),
+      ]
+      const sessionManager = new SessionManager(adapter)
+
+      const createPromise = sessionManager.createSessionForPhase(
+        ticket.id,
+        'CODING',
+        1,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        repoDir,
+      )
+
+      await vi.runAllTimersAsync()
+      const created = await createPromise
+
+      expect(created.id).toBe('session-1')
+      expect(adapter.createSignals).toHaveLength(3)
+      expect(adapter.healthCalls).toBe(2)
+      expect(listOpenCodeSessionsForTicket(ticket.id, ['active']).map((session) => session.sessionId)).toEqual(['session-1'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

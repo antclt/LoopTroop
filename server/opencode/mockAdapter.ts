@@ -18,6 +18,7 @@ export class MockOpenCodeAdapter implements OpenCodeAdapter {
   public mockResponses: Map<string, string> = new Map()
   public mockStreamEvents: Map<string, StreamEvent[]> = new Map()
   public mockAssistantInfos: Map<string, Partial<MessageInfo>> = new Map()
+  public mockSessionCreateFailures: unknown[] = []
   public mockQuestions: OpenCodeQuestionRequest[] = []
   public questionReplies: Array<{ requestId: string; answers: OpenCodeQuestionAnswer[]; projectPath?: string }> = []
   public questionRejections: Array<{ requestId: string; projectPath?: string }> = []
@@ -38,6 +39,8 @@ export class MockOpenCodeAdapter implements OpenCodeAdapter {
     options?: OpenCodeSessionCreateOptions,
   ): Promise<Session> {
     this.sessionCreateCalls.push({ projectPath, options })
+    const failure = this.mockSessionCreateFailures.shift()
+    if (failure) throw failure instanceof Error ? failure : new Error(String(failure))
     const session: Session = {
       id: `mock-session-${++this.sessionCounter}`,
       projectPath,

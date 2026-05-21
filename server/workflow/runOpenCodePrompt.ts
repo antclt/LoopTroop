@@ -25,6 +25,7 @@ import {
   consumeSessionContinuation,
   shouldPreserveSessionForContinuation,
 } from '../opencode/sessionContinuation'
+import { createOpenCodeSessionWithRetry } from '../opencode/sessionCreation'
 
 export interface OpenCodeRunCallbacks {
   onSessionCreated?: (session: Session) => void
@@ -306,7 +307,12 @@ export async function runOpenCodePrompt({
           sessionCreateOptions,
           acquisitionDeadline.signal,
         )
-      : await adapter.createSession(projectPath, acquisitionDeadline.signal, sessionCreateOptions)
+      : await createOpenCodeSessionWithRetry(
+        adapter,
+        projectPath,
+        acquisitionDeadline.signal,
+        sessionCreateOptions,
+      )
   } catch (error) {
     if (acquisitionDeadline.timedOut()) {
       throw new Error(TIMEOUT_ERROR_MESSAGE)

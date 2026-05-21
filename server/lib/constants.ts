@@ -4,6 +4,10 @@ export const COUNCIL_RESPONSE_TIMEOUT_MS = 1_200_000
 export const ADAPTER_RETRY_DELAY_MS = 2000
 /** Default SDK operation timeout */
 export const SDK_OPERATION_TIMEOUT_MS = 5000
+/** Delays between OpenCode session creation retries */
+export const OPENCODE_SESSION_CREATE_RETRY_DELAYS_MS = [1000, 3000, 7000] as const
+/** Max time spent collecting health diagnostics after a session creation failure */
+export const OPENCODE_SESSION_CREATE_HEALTH_DIAGNOSTIC_TIMEOUT_MS = 1000
 /** Force-kill process delay */
 export const FORCE_KILL_DELAY_MS = 5000
 /** SQLite busy timeout */

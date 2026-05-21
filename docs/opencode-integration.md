@@ -8,6 +8,7 @@ LoopTroop uses OpenCode as its model execution layer, but wraps it with its own 
 | --- | --- |
 | `server/opencode/adapter.ts` | Concrete OpenCode SDK adapter and interface |
 | `server/opencode/factory.ts` | Singleton adapter creation and mock-mode switching |
+| `server/opencode/sessionCreation.ts` | Bounded retry wrapper and health diagnostics for session creation |
 | `server/opencode/sessionManager.ts` | Session ownership, reconnect, completion, abandonment |
 | `server/opencode/contextBuilder.ts` | Phase-specific context assembly |
 | `server/workflow/runOpenCodePrompt.ts` | Prompt orchestration and stream handling |
@@ -31,7 +32,7 @@ The current `OpenCodeAdapter` interface exposes:
 | `assembleCouncilContext()` | Build council prompt parts |
 | `checkHealth()` | Health and availability check |
 
-Session creation, session listing, and message reads accept `AbortSignal`s and are wrapped with bounded SDK-operation timeouts. This prevents OpenCode startup, shutdown, or stalled HTTP calls from hanging the workflow indefinitely.
+Session creation, session listing, and message reads accept `AbortSignal`s and are wrapped with bounded SDK-operation timeouts. Session creation also runs through a shared retry wrapper: after the initial failure, LoopTroop waits 1s, 3s, and 7s before the three retry attempts. Each failed create attempt collects lightweight OpenCode health diagnostics, but health is diagnostic-only and does not replace the actual session creation result.
 
 ## Base URL And Modes
 
@@ -76,7 +77,7 @@ This is what lets the backend distinguish:
 
 It currently does the following:
 
-1. Resolve or create the session.
+1. Resolve or create the session, retrying session creation failures before the prompt is sent.
 2. If `sessionOwnership` is present, call `SessionManager.validateAndReconnect()` first.
 3. Dispatch the prompt with tool policy and model settings.
 4. Subscribe to stream events while the prompt is running.
@@ -106,7 +107,7 @@ Reconnect is intentionally conservative.
 - the owned active session record still exists in the project DB
 - the same session still exists remotely in OpenCode
 
-If any of those checks fail, LoopTroop falls back to creating a fresh session.
+If any of those checks fail, LoopTroop falls back to creating a fresh session through the same bounded session creation retry wrapper.
 
 That means LoopTroop can survive restart and resume safely, but it does not try to magically continue any random broken stream from the past.
 

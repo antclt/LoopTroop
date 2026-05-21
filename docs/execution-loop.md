@@ -28,7 +28,7 @@ For each bead:
 
 1. Load the active bead specification and the current execution profile.
 2. Recover any interrupted in-progress bead from a current `bead_execution` checkpoint when possible, or reset it from its recorded start snapshot before retry.
-3. Start or reattach to the owned OpenCode session for that bead iteration.
+3. Start or reattach to the owned OpenCode session for that bead iteration; new session creation uses the shared 1s/3s/7s retry wrapper before the bead attempt is considered blocked.
 4. Prompt the model with the coding template and the narrow execution context.
 5. Require structured completion markers so the system can tell whether the attempt really finished.
 6. Capture logs, diff artifacts, and status updates.
