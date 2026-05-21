@@ -242,8 +242,12 @@ export function formatDependencyUpdateReleaseDetail(detail: DependencyReleaseUpd
   return `updated ${detail.dependencyType} dependency ${detail.name} ${detail.current} -> ${detail.target}`
 }
 
-export function formatDependencyReleasePolicySummary() {
-  return `Direct npm dependency and audit updates are held until releases are ${DEPENDENCY_RELEASE_DELAY_DAYS} days old; OpenCode updates immediately.`
+export function formatDependencyReleasePolicySummaryLines() {
+  return [
+    `Direct npm dependency updates and npm audit fixes wait until a release has been published for ${DEPENDENCY_RELEASE_DELAY_DAYS} days.`,
+    'Newer releases are shown as held with their next eligible time.',
+    'OpenCode CLI and @opencode-ai/sdk updates are applied immediately.',
+  ]
 }
 
 export function formatHeldDependencyReleaseDetail(detail: HeldDependencyReleaseDetail) {

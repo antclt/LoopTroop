@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getFrontendPort } from '../shared/appConfig'
 import {
   formatAuditPackageUpdate,
-  formatDependencyReleasePolicySummary,
+  formatDependencyReleasePolicySummaryLines,
   formatDependencyUpdateReleaseDetail,
   formatHeldAuditPackageUpdate,
   formatHeldDependencyReleaseDetail,
@@ -62,6 +62,12 @@ if (!childEnv.LOOPTROOP_API_TOKEN?.trim()) {
 
 function printSummaryLine(label: string, value: string) {
   console.log(`[dev] ${label.padEnd(13)} ${value}`)
+}
+
+function printSummaryBlock(label: string, values: string[]) {
+  for (const [index, value] of values.entries()) {
+    printSummaryLine(index === 0 ? label : '', value)
+  }
 }
 
 function printDivider(title: string) {
@@ -194,7 +200,7 @@ printSummaryLine('Frontend', `http://localhost:${getFrontendPort()}`)
 printSummaryLine('Backend', `http://localhost:${getBackendPort()}`)
 printSummaryLine('Docs', getDocsOrigin())
 printSummaryLine('OpenCode', baseUrl)
-printSummaryLine('Package gate', formatDependencyReleasePolicySummary())
+printSummaryBlock('Package gate', formatDependencyReleasePolicySummaryLines())
 
 if (preflightReport) {
   if (preflightReport.opencode.skipped) {

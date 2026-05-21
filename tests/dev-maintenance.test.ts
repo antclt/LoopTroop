@@ -6,7 +6,7 @@ import {
   chooseAgedDependencyTarget,
   collectLockfilePackageUpdates,
   decideDailyMaintenanceTask,
-  formatDependencyReleasePolicySummary,
+  formatDependencyReleasePolicySummaryLines,
   evaluatePackageVersionReleaseAge,
   formatDependencyUpdateReleaseDetail,
   formatHeldAuditPackageUpdate,
@@ -233,9 +233,11 @@ describe('audit lockfile age gating', () => {
 
 describe('held dependency detail formatting', () => {
   it('describes the release-age policy used by dev startup messaging', () => {
-    expect(formatDependencyReleasePolicySummary()).toBe(
-      'Direct npm dependency and audit updates are held until releases are 7 days old; OpenCode updates immediately.',
-    )
+    expect(formatDependencyReleasePolicySummaryLines()).toEqual([
+      'Direct npm dependency updates and npm audit fixes wait until a release has been published for 7 days.',
+      'Newer releases are shown as held with their next eligible time.',
+      'OpenCode CLI and @opencode-ai/sdk updates are applied immediately.',
+    ])
   })
 
   it('lists updated direct dependencies with package type and version movement', () => {

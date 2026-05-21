@@ -175,7 +175,7 @@ cd LoopTroop
 npm run dev
 ```
 
-`npm run dev` starts the local LoopTroop stack and runs the startup preflight. The preflight can refresh the local OpenCode CLI, sync direct npm dependencies, and run safe audit remediation during local development. Routine startup now states the package gate up front: direct npm dependency and audit updates are held until releases are 7 days old, while OpenCode updates immediately. It also summarizes maintenance once, including each updated package with its previous and new version, plus held dependency and audit releases with their next eligibility time.
+`npm run dev` starts the local LoopTroop stack and runs the startup preflight. The preflight can refresh the local OpenCode CLI, sync direct npm dependencies, and run safe audit remediation during local development. Routine startup now explains the package gate up front: direct npm dependency updates and npm audit fixes wait until a release has been published for 7 days, newer releases are shown as held with their next eligible time, and OpenCode updates immediately. It also summarizes maintenance once, including each updated package with its previous and new version.
 
 The app starts:
 
