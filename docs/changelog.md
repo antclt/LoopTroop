@@ -19,7 +19,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
 - Added a beautiful Changelog documentation page positioned above the Roadmap.
 - Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
-- Kept the left-panel Errors header compact by removing long active bead identifiers.
+- Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
 
 ### Detailed Changes
 
@@ -34,6 +34,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Fixed
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.
+- Coding error occurrence labels now use the ticket's runtime bead counters, so left-panel rows and blocked-error headers show labels such as `Implementing (Bead 2/5)` instead of the generic `Bead ?/?` fallback.
 - Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
 - Coverage reports now show the latest open-gap status by default after ordered version transitions, suppress stale open-gap lists when no gaps remain, and switch gap headings/lists to the selected `v1 > v2` or `v2 > v3` transition.
 - Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.

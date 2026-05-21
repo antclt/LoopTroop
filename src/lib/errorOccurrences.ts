@@ -1,5 +1,5 @@
 import type { Ticket } from '@/hooks/useTickets'
-import { getStatusUserLabel } from '@/lib/workflowMeta'
+import { getStatusUserLabel, type StatusLabelOptions } from '@/lib/workflowMeta'
 import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 
 export interface TicketErrorOccurrence {
@@ -129,20 +129,27 @@ export function getActiveErrorOccurrence(ticket: TicketErrorSource): TicketError
   return openOccurrence ?? occurrences.at(-1) ?? null
 }
 
-export function formatErrorOccurrenceLabel(occurrence: TicketErrorOccurrence, fallbackIndex: number): string {
+export function formatErrorOccurrenceLabel(
+  occurrence: TicketErrorOccurrence,
+  fallbackIndex: number,
+  labelOptions: StatusLabelOptions = {},
+): string {
   const occurrenceLabel = Number.isInteger(occurrence.occurrenceNumber) && occurrence.occurrenceNumber > 0
     ? occurrence.occurrenceNumber
     : fallbackIndex
-  const phaseLabel = getStatusUserLabel(occurrence.blockedFromStatus)
+  const phaseLabel = getStatusUserLabel(occurrence.blockedFromStatus, labelOptions)
   return `Error ${occurrenceLabel} — ${phaseLabel}`
 }
 
-export function formatErrorOccurrenceStatus(occurrence: TicketErrorOccurrence): string {
+export function formatErrorOccurrenceStatus(
+  occurrence: TicketErrorOccurrence,
+  labelOptions: StatusLabelOptions = {},
+): string {
   if (occurrence.resolutionStatus === 'RETRIED') {
-    return occurrence.resumedToStatus ? `Retried to ${getStatusUserLabel(occurrence.resumedToStatus)}` : 'Retried'
+    return occurrence.resumedToStatus ? `Retried to ${getStatusUserLabel(occurrence.resumedToStatus, labelOptions)}` : 'Retried'
   }
   if (occurrence.resolutionStatus === 'CONTINUED') {
-    return occurrence.resumedToStatus ? `Continued to ${getStatusUserLabel(occurrence.resumedToStatus)}` : 'Continued'
+    return occurrence.resumedToStatus ? `Continued to ${getStatusUserLabel(occurrence.resumedToStatus, labelOptions)}` : 'Continued'
   }
   if (occurrence.resolutionStatus === 'CANCELED') return 'Canceled'
   if (occurrence.resolvedAt) return 'Resolved'

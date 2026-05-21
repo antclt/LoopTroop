@@ -172,6 +172,10 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const diagnostics = visibleOccurrence?.diagnostics ?? null
   const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
   const primaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
+  const statusLabelOptions = {
+    currentBead: ticket.runtime.currentBead ?? ticket.currentBead,
+    totalBeads: ticket.runtime.totalBeads ?? ticket.totalBeads,
+  }
   const diagnosticSummary = diagnostics?.summary?.trim() ?? ''
   const normalizedPrimaryError = normalizeErrorText(primaryErrorMessage)
   const normalizedDiagnosticSummary = normalizeErrorText(diagnosticSummary)
@@ -195,10 +199,10 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                 {visibleOccurrence ? (
                   <>
                     <Badge variant={isLiveError ? 'destructive' : 'secondary'} className="text-[10px]">
-                      {formatErrorOccurrenceStatus(visibleOccurrence)}
+                      {formatErrorOccurrenceStatus(visibleOccurrence, statusLabelOptions)}
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
-                      {formatErrorOccurrenceLabel(visibleOccurrence, visibleOccurrence.occurrenceNumber)}
+                      {formatErrorOccurrenceLabel(visibleOccurrence, visibleOccurrence.occurrenceNumber, statusLabelOptions)}
                     </Badge>
                   </>
                 ) : (
@@ -213,7 +217,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                                                 title={visibleOccurrence?.occurredAt ? formatTimestampString(visibleOccurrence.occurredAt, { includeMilliseconds: false }) : undefined}
                                               >
                                                 <Clock3 className="h-3.5 w-3.5" />
-                                                {visibleOccurrence ? `Blocked from ${getStatusUserLabel(visibleOccurrence.blockedFromStatus)}` : 'Blocked error'}
+                                                {visibleOccurrence ? `Blocked from ${getStatusUserLabel(visibleOccurrence.blockedFromStatus, statusLabelOptions)}` : 'Blocked error'}
                                               </span>
                                 </TooltipTrigger>
                                 <TooltipContent className="max-w-xs text-center text-balance">{visibleOccurrence?.occurredAt

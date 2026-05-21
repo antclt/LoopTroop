@@ -108,6 +108,8 @@ describe('ErrorOccurrencesPanel', () => {
       ],
       runtime: {
         ...makeTicket().runtime,
+        currentBead: 4,
+        totalBeads: 9,
         lastFailedBeadId: 'bead-with-a-very-long-generated-name-that-would-overflow-the-left-panel',
         activeBeadIteration: 4,
       },
@@ -127,6 +129,7 @@ describe('ErrorOccurrencesPanel', () => {
     expect(header).toHaveTextContent('Active')
     expect(header).not.toHaveTextContent('bead-with-a-very-long-generated-name')
     expect(header).not.toHaveTextContent('iter 4')
+    expect(screen.getByText('Error 1 — Implementing (Bead 4/9)')).toBeInTheDocument()
   })
 
   it('auto-expands when a resolved occurrence is selected', () => {

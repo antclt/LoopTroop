@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
 import { formatTimestampString } from '@/components/workspace/logFormat'
 import { StatusIndicator } from './StatusIndicator'
+import type { StatusLabelOptions } from '@/lib/workflowMeta'
 import {
   formatErrorOccurrenceLabel,
   formatErrorOccurrenceStatus,
@@ -30,14 +31,16 @@ function getOccurrenceSubtitle(occurrence: TicketErrorOccurrence) {
 function ErrorOccurrenceRow({
   occurrence,
   isSelected,
+  labelOptions,
   onSelect,
 }: {
   occurrence: TicketErrorOccurrence
   isSelected: boolean
+  labelOptions: StatusLabelOptions
   onSelect: () => void
 }) {
   const summary = getOccurrenceSubtitle(occurrence)
-  const status = formatErrorOccurrenceStatus(occurrence)
+  const status = formatErrorOccurrenceStatus(occurrence, labelOptions)
 
   return (
     <button
@@ -54,7 +57,7 @@ function ErrorOccurrenceRow({
         <StatusIndicator status={occurrence.resolvedAt ? 'completed' : 'error'} className="mt-0.5 shrink-0" />
         <div className="min-w-0 space-y-1">
           <span className="block text-xs font-semibold leading-tight break-words">
-            {formatErrorOccurrenceLabel(occurrence, occurrence.occurrenceNumber)}
+            {formatErrorOccurrenceLabel(occurrence, occurrence.occurrenceNumber, labelOptions)}
           </span>
           <div className="flex flex-wrap items-start gap-1.5">
             <Badge variant="outline" className="max-w-full text-[10px] leading-tight whitespace-normal break-words">
@@ -99,6 +102,10 @@ export function ErrorOccurrencesPanel({
   const shouldAutoExpand = currentStatusIsBlocked || Boolean(selectedOccurrence?.resolvedAt)
   const [isUserToggled, setIsUserToggled] = useState(false)
   const expanded = shouldAutoExpand || isUserToggled
+  const statusLabelOptions = useMemo(() => ({
+    currentBead: ticket.runtime.currentBead ?? ticket.currentBead,
+    totalBeads: ticket.runtime.totalBeads ?? ticket.totalBeads,
+  }), [ticket.currentBead, ticket.runtime.currentBead, ticket.runtime.totalBeads, ticket.totalBeads])
 
   if (!shouldShowPanel) return null
 
@@ -136,6 +143,7 @@ export function ErrorOccurrencesPanel({
                 key={occurrence.id}
                 occurrence={occurrence}
                 isSelected={selectedErrorOccurrenceId === occurrence.id}
+                labelOptions={statusLabelOptions}
                 onSelect={() => onSelectErrorOccurrence(occurrence.id)}
               />
             ))}

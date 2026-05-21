@@ -114,6 +114,37 @@ describe('ErrorView', () => {
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
+  it('shows real bead counters on coding error occurrence labels', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'CODING',
+      availableActions: ['retry', 'cancel'],
+      activeErrorOccurrenceId: 'bead-counts',
+      errorOccurrences: [{
+        id: 'bead-counts',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'CODING',
+        errorMessage: 'Bead execution failed.',
+        errorCodes: [],
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+      runtime: {
+        ...makeTicket().runtime,
+        currentBead: 2,
+        totalBeads: 5,
+      },
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('Error 1 — Implementing (Bead 2/5)')).toBeInTheDocument()
+    expect(screen.getByText('Blocked from Implementing (Bead 2/5)')).toBeInTheDocument()
+    expect(screen.queryByText(/Bead \?\/\?/)).not.toBeInTheDocument()
+  })
+
   it('shows Continue only when the live blocked ticket exposes the continue action', () => {
     const mutate = vi.fn()
     mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
