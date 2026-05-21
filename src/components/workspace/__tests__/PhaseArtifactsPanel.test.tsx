@@ -1789,6 +1789,12 @@ describe('PhaseArtifactsPanel', () => {
     expect(screen.getByRole('button', { name: /Latest Check/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /v1 > v2/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /v2 > v3/i })).toBeInTheDocument()
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((button) => button.textContent?.trim() ?? '')
+        .filter((label) => /^v\d+ > v\d+$/.test(label) || label === 'Latest Check'),
+    ).toEqual(['v1 > v2', 'v2 > v3', 'Latest Check'])
     expect(screen.getByText('No open coverage gaps remain for PRD Candidate v3')).toBeInTheDocument()
     expect(screen.queryByText('Coverage Gaps Found in PRD Candidate v1')).not.toBeInTheDocument()
 

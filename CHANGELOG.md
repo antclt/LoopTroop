@@ -6,7 +6,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Summary
 - Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
-- Made versioned coverage reports default to the latest check while keeping historical gap lists tied to the selected version transition.
+- Made versioned coverage reports keep version transitions in order while defaulting to the latest check and suppressing stale open-gap lists.
 - Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
 - Added a beautiful Changelog documentation page positioned above the Roadmap.
 - Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
@@ -23,7 +23,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Fixed
 - Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
-- Coverage reports now show latest open-gap status by default and switch gap headings/lists to the selected version transition, making historical `v1 > v2` and `v2 > v3` checks specific instead of reusing the final candidate gaps.
+- Coverage reports now show the latest open-gap status by default after ordered version transitions, suppress stale open-gap lists when no gaps remain, and switch gap headings/lists to the selected `v1 > v2` or `v2 > v3` transition.
 - Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.
 - Full Answers normalization now restores canonical `follow_up_rounds` when a model emits malformed round metadata and repairs common multiline `free_text` YAML formatting without changing answer text.
 

@@ -1436,6 +1436,15 @@ describe('ArtifactContentViewer', () => {
           finalCandidateVersion: 3,
           hasRemainingGaps: false,
           remainingGaps: [],
+          attempts: [
+            {
+              candidateVersion: 2,
+              status: 'gaps',
+              summary: 'Implementation Plan v2 still had 1 gap.',
+              gaps: ['Stale attempt gap that must not appear when no gaps remain.'],
+              auditNotes: 'status: gaps',
+            },
+          ],
           transitions: [
             {
               fromVersion: 2,
@@ -1454,6 +1463,8 @@ describe('ArtifactContentViewer', () => {
     )
 
     expect(screen.getByText('No open coverage gaps remain for Implementation Plan v3')).toBeInTheDocument()
+    expect(screen.queryByText(/Open Coverage Gaps in Implementation Plan v3/i)).not.toBeInTheDocument()
+    expect(screen.queryByText('Stale attempt gap that must not appear when no gaps remain.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /v2 > v3/i }))
 

@@ -2121,16 +2121,16 @@ function VersionedCoverageReportView({
   const finalCandidateVersion = coverageResult.finalCandidateVersion ?? coverageResult.attempts?.[coverageResult.attempts.length - 1]?.candidateVersion
   const finalCandidateLabel = getCoverageCandidateLabel(phase, finalCandidateVersion)
   const primaryTabs = [
-    {
-      key: 'latest',
-      label: 'Latest Check',
-      transition: null,
-    },
     ...transitions.map((transition, index) => ({
       key: `transition:${index}`,
       label: `v${transition.fromVersion} > v${transition.toVersion}`,
       transition,
     })),
+    {
+      key: 'latest',
+      label: 'Latest Check',
+      transition: null,
+    },
   ]
   const resolvedTab = primaryTabs.find((tab) => tab.key === activeReportTab)?.key ?? 'latest'
   const activeTransition = primaryTabs.find((tab) => tab.key === resolvedTab)?.transition ?? null
@@ -4164,8 +4164,11 @@ function normalizeCoverageGapList(gaps: string[] | undefined): string[] {
 }
 
 function getCoverageDisplayGaps(coverageResult: CoverageArtifactData): string[] {
+  if (Array.isArray(coverageResult.remainingGaps)) {
+    return normalizeCoverageGapList(coverageResult.remainingGaps)
+  }
+
   const directGaps = [
-    coverageResult.remainingGaps,
     coverageResult.gaps,
     coverageResult.parsed?.gaps,
   ]
