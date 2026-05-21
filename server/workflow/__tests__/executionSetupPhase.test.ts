@@ -180,4 +180,62 @@ describe('handleExecutionSetup', () => {
     )
     expect(sendEvent).toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
   })
+
+  it('rejects a schema-compatible setup result when tooling checks fail', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Execution setup tooling gate',
+    })
+    writeExecutionSetupPlan(ticket.id, ticket.externalId)
+
+    executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const callbacks = args[5] as {
+        evaluateGeneration: (entry: { attempt: number; generation: unknown }) => Promise<unknown>
+      }
+      return await callbacks.evaluateGeneration({
+        attempt: 1,
+        generation: {
+          session: { id: 'ses-setup-tooling-fail' },
+          output: '<EXECUTION_SETUP_RESULT>{"status":"ready"}</EXECUTION_SETUP_RESULT>',
+          result: {
+            status: 'ready',
+            summary: 'Required launcher is unavailable.',
+            profile: readyExecutionSetupReport(ticket.externalId).profile,
+            checks: {
+              workspace: 'pass',
+              tooling: 'fail',
+              tempScope: 'pass',
+              policy: 'pass',
+            },
+          },
+          parse: {
+            markerFound: true,
+            result: null,
+            errors: [],
+          },
+          structuredOutput: {
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 0,
+          },
+        },
+      })
+    })
+
+    const sendEvent = vi.fn()
+    await handleExecutionSetup(
+      ticket.id,
+      {
+        ...context,
+        lockedMainImplementer: TEST.implementer,
+      },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'EXECUTION_SETUP_FAILED',
+      errors: ['Execution setup checks must all pass before the setup profile can be accepted.'],
+    })
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
+  })
 })

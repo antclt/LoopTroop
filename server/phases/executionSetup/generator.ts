@@ -25,10 +25,11 @@ import { getErrorMessage } from '@shared/typeGuards'
 const EXECUTION_SETUP_SCHEMA_REMINDER = [
   'Return exactly one <EXECUTION_SETUP_RESULT>...</EXECUTION_SETUP_RESULT> block and nothing else.',
   'Inside the marker, return a single JSON or YAML object with top-level keys: status, summary, profile, checks.',
-  'status must be ready.',
+  'status and profile.status must be ready for schema compatibility.',
   'profile.artifact must be execution_setup_profile.',
-  'profile.temp_roots and profile.reusable_artifacts[].path may name any repository-local or tool-cache path used by setup.',
+  'profile.temp_roots and profile.reusable_artifacts[].path should prefer approved runtime-owned setup paths under .ticket/runtime/execution-setup/**.',
   'checks must contain exactly: workspace, tooling, temp_scope, policy.',
+  'If required command launchers or toolchains are missing and cannot be prepared safely under approved temp roots, set checks.tooling to fail and explain the blocker in summary/cautions.',
 ].join('\n')
 
 type ExecutionSetupPromptStage =

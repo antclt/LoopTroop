@@ -227,7 +227,7 @@ export function buildExecutionSetupPlanContent(summary = 'Prepare workspace runt
       evidence: ['Manifest and lockfile were detected.'],
       gaps: ['Workspace bootstrap outputs are still missing.'],
     },
-    temp_roots: [DEFAULT_EXECUTION_SETUP_ROOT, '.cache/project-tooling'],
+    temp_roots: [DEFAULT_EXECUTION_SETUP_ROOT, `${DEFAULT_EXECUTION_SETUP_ROOT}/tool-cache`],
     steps: [
       {
         id: 'bootstrap',

@@ -7,6 +7,7 @@ import {
   captureBeadDiff,
   commitBeadChanges,
   filterAllowedFiles,
+  getExecutionSetupCommitExcludedRoots,
   isAllowedFile,
   recordBeadStartCommit,
   resetToBeadStart,
@@ -43,6 +44,11 @@ describe('gitOps allowlist/denylist', () => {
     expect(isAllowedFile('dist/bundle.js')).toBe(false)
   })
 
+  it('blocks legacy execution setup cache paths without blocking similarly named cache paths', () => {
+    expect(isAllowedFile('.cache/project-tooling/go/src/runtime.go')).toBe(false)
+    expect(isAllowedFile('.cache/project-tooling-extra/go/src/runtime.go')).toBe(true)
+  })
+
   it('blocks unknown extensions', () => {
     expect(isAllowedFile('data.bin')).toBe(false)
     expect(isAllowedFile('image.png')).toBe(false)
@@ -51,6 +57,18 @@ describe('gitOps allowlist/denylist', () => {
   it('filterAllowedFiles returns only allowed files', () => {
     const files = ['src/app.ts', 'node_modules/foo.js', '.ticket/runtime/x.json', 'issues.jsonl']
     expect(filterAllowedFiles(files)).toEqual(['src/app.ts', 'issues.jsonl'])
+  })
+
+  it('filters caller-provided execution setup roots', () => {
+    const files = [
+      'src/app.ts',
+      '.ticket/runtime/execution-setup/tool-cache/go/src/runtime.go',
+      'issues.jsonl',
+    ]
+
+    expect(filterAllowedFiles(files, {
+      excludedRoots: ['.ticket/runtime/execution-setup/tool-cache'],
+    })).toEqual(['src/app.ts', 'issues.jsonl'])
   })
 })
 
@@ -376,5 +394,77 @@ describe('commitBeadChanges', () => {
 
     const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
     expect(status).toContain('secret.bin')
+  })
+
+  it('does not commit files under execution setup profile temp roots or reusable artifacts', () => {
+    const dir = makeFreshRepo()
+    mkdirSync(join(dir, '.ticket', 'runtime'), { recursive: true })
+    mkdirSync(join(dir, '.ticket', 'runtime', 'execution-setup', 'tool-cache', 'go', 'src'), { recursive: true })
+    mkdirSync(join(dir, '.repo-tool-cache', 'deps'), { recursive: true })
+    writeFileSync(join(dir, '.ticket', 'runtime', 'execution-setup-profile.json'), JSON.stringify({
+      schema_version: 1,
+      ticket_id: 'T-1',
+      artifact: 'execution_setup_profile',
+      status: 'ready',
+      summary: 'runtime roots',
+      temp_roots: ['.ticket/runtime/execution-setup/tool-cache'],
+      reusable_artifacts: [
+        { path: '.repo-tool-cache', kind: 'cache', purpose: 'repository-required cache' },
+      ],
+      project_commands: {
+        prepare: [],
+        test_full: [],
+        lint_full: [],
+        typecheck_full: [],
+      },
+      quality_gate_policy: {
+        tests: 'bead-test-commands-first',
+        lint: 'impacted-or-package',
+        typecheck: 'impacted-or-package',
+        full_project_fallback: 'never-block-on-unrelated-baseline',
+      },
+      cautions: [],
+    }))
+    writeFileSync(join(dir, 'app.ts'), 'export const app = 1\n')
+    writeFileSync(join(dir, '.ticket', 'runtime', 'execution-setup', 'tool-cache', 'go', 'src', 'runtime.go'), 'package runtime\n')
+    writeFileSync(join(dir, '.repo-tool-cache', 'deps', 'state.ts'), 'export const cache = true\n')
+
+    expect(getExecutionSetupCommitExcludedRoots(dir)).toEqual(expect.arrayContaining([
+      '.cache/project-tooling',
+      '.ticket/runtime/execution-setup/tool-cache',
+      '.repo-tool-cache',
+    ]))
+
+    const result = commitBeadChanges(dir, 'bead-setup-roots', 'Skip setup roots')
+
+    expect(result.committed).toBe(true)
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-only',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    expect(committedFiles).toEqual(['app.ts'])
+
+    const untrackedFiles = execFileSync('git', ['-C', dir, 'ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' })
+    expect(untrackedFiles).toContain('.repo-tool-cache/deps/state.ts')
+    expect(untrackedFiles).toContain('.ticket/runtime/execution-setup-profile.json')
+  })
+
+  it('does not commit legacy .cache/project-tooling files even without a setup profile', () => {
+    const dir = makeFreshRepo()
+    mkdirSync(join(dir, '.cache', 'project-tooling', 'go', 'src'), { recursive: true })
+    writeFileSync(join(dir, '.cache', 'project-tooling', 'go', 'src', 'runtime.go'), 'package runtime\n')
+
+    expect(commitBeadChanges(dir, 'bead-cache', 'Skip legacy cache')).toEqual({
+      committed: false,
+      pushed: false,
+    })
+
+    const untrackedFiles = execFileSync('git', ['-C', dir, 'ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' })
+    expect(untrackedFiles).toContain('.cache/project-tooling/go/src/runtime.go')
   })
 })

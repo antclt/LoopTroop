@@ -208,7 +208,7 @@ export function ExecutionSetupPlanEditor({ plan, disabled, onChange }: Execution
             items={plan.tempRoots}
             onChange={(tempRoots) => updatePlan({ tempRoots })}
             disabled={disabled}
-            placeholder=".ticket/runtime/execution-setup or .cache/project-tooling"
+            placeholder=".ticket/runtime/execution-setup or .ticket/runtime/execution-setup/tool-cache"
           />
         </div>
       </div>

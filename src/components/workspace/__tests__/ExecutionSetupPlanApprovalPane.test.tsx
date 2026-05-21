@@ -23,7 +23,7 @@ function buildPlan(summary = 'Prepare the workspace runtime.') {
       evidence: ['Manifest and lockfile were detected.'],
       gaps: ['Workspace setup outputs still need to be prepared.'],
     },
-    tempRoots: ['.ticket/runtime/execution-setup', '.cache/project-tooling'],
+    tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
     steps: [
       {
         id: 'bootstrap-workspace',
@@ -64,7 +64,7 @@ function buildRawPlan(summary = 'Prepare the workspace runtime.') {
       evidence: ['Manifest and lockfile were detected.'],
       gaps: ['Workspace setup outputs still need to be prepared.'],
     },
-    temp_roots: ['.ticket/runtime/execution-setup', '.cache/project-tooling'],
+    temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
     steps: [
       {
         id: 'bootstrap-workspace',

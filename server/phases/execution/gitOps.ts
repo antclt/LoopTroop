@@ -1,6 +1,8 @@
 // Git operations for bead execution — allowlist-based
 
 import { spawnSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
+import { isAbsolute, relative, resolve } from 'node:path'
 import { getCurrentBranch } from '../../git/repository'
 import { pushBranchRef } from '../../git/push'
 
@@ -62,6 +64,11 @@ const BLOCKED_PATTERNS = [
   /build\//,
 ]
 
+const EXECUTION_SETUP_PROFILE_PATH = '.ticket/runtime/execution-setup-profile.json'
+const LEGACY_EXECUTION_SETUP_CACHE_ROOTS = [
+  '.cache/project-tooling',
+] as const
+
 // Stable ticket artifacts that should always be committed regardless of extension
 const ALWAYS_ALLOW_PATHS = [
   'issues.jsonl',
@@ -76,11 +83,97 @@ interface ResetWorktreeOptions {
   preservePaths?: string[]
 }
 
+interface FileAllowOptions {
+  excludedRoots?: string[]
+}
+
 export const WORKTREE_RESET_PRESERVE_PATHS = [
   '.ticket',
 ] as const
 
-export function isAllowedFile(path: string): boolean {
+function normalizeRepoPath(path: string): string {
+  return path
+    .replace(/\\/g, '/')
+    .replace(/^\.\//, '')
+    .replace(/\/+$/, '')
+    .trim()
+}
+
+function normalizeSetupRoot(worktreePath: string, input: unknown): string | null {
+  if (typeof input !== 'string' || !input.trim()) return null
+  const trimmed = input.trim()
+  const repoRelative = isAbsolute(trimmed)
+    ? relative(resolve(worktreePath), trimmed)
+    : trimmed
+  const normalized = normalizeRepoPath(repoRelative)
+  if (
+    !normalized
+    || normalized === '.'
+    || normalized === '..'
+    || normalized === '/'
+    || normalized.startsWith('../')
+  ) {
+    return null
+  }
+  return normalized
+}
+
+function isWithinRoot(path: string, root: string): boolean {
+  const normalizedPath = normalizeRepoPath(path)
+  const normalizedRoot = normalizeRepoPath(root)
+  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`)
+}
+
+function collectPathStrings(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string')
+    : []
+}
+
+function getRecordValue(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (key in record) return record[key]
+  }
+  return undefined
+}
+
+export function getExecutionSetupCommitExcludedRoots(worktreePath: string): string[] {
+  const roots = new Set<string>(LEGACY_EXECUTION_SETUP_CACHE_ROOTS)
+  const profilePath = resolve(worktreePath, EXECUTION_SETUP_PROFILE_PATH)
+  if (!existsSync(profilePath)) return [...roots]
+
+  try {
+    const parsed = JSON.parse(readFileSync(profilePath, 'utf8')) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [...roots]
+    const profile = parsed as Record<string, unknown>
+    for (const entry of collectPathStrings(getRecordValue(profile, ['temp_roots', 'tempRoots']))) {
+      const normalized = normalizeSetupRoot(worktreePath, entry)
+      if (normalized) roots.add(normalized)
+    }
+    const artifacts = getRecordValue(profile, ['reusable_artifacts', 'reusableArtifacts'])
+    if (Array.isArray(artifacts)) {
+      for (const artifact of artifacts) {
+        if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) continue
+        const normalized = normalizeSetupRoot(worktreePath, (artifact as Record<string, unknown>).path)
+        if (normalized) roots.add(normalized)
+      }
+    }
+  } catch {
+    return [...roots]
+  }
+
+  return [...roots]
+}
+
+export function isAllowedFile(path: string, options: FileAllowOptions = {}): boolean {
+  const excludedRoots = [
+    ...LEGACY_EXECUTION_SETUP_CACHE_ROOTS,
+    ...(options.excludedRoots ?? []),
+  ]
+  for (const root of excludedRoots) {
+    if (isWithinRoot(path, root)) return false
+  }
+
   // Check blocked patterns first
   for (const pattern of BLOCKED_PATTERNS) {
     if (pattern.test(path)) return false
@@ -96,8 +189,8 @@ export function isAllowedFile(path: string): boolean {
   return ALLOWED_EXTENSIONS.has(ext)
 }
 
-export function filterAllowedFiles(files: string[]): string[] {
-  return files.filter(isAllowedFile)
+export function filterAllowedFiles(files: string[], options: FileAllowOptions = {}): string[] {
+  return files.filter((file) => isAllowedFile(file, options))
 }
 
 function runGitOp(worktreePath: string, args: string[]): string {
@@ -208,7 +301,9 @@ export function commitBeadChanges(
     ...(untrackedResult.ok ? untrackedResult.stdout.split('\n').filter(Boolean) : []),
   ]
 
-  const allowedFiles = filterAllowedFiles(changedFiles)
+  const allowedFiles = filterAllowedFiles(changedFiles, {
+    excludedRoots: getExecutionSetupCommitExcludedRoots(worktreePath),
+  })
   if (allowedFiles.length === 0) {
     return { committed: false, pushed: false }
   }

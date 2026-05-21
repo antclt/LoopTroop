@@ -16,10 +16,10 @@ describe('parseExecutionSetupResult', () => {
         artifact: 'execution_setup_profile',
         status: 'ready',
         summary: 'environment initialized and reusable',
-        temp_roots: ['.ticket/runtime/execution-setup', '.cache/project-tooling'],
+        temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
         bootstrap_commands: ['project bootstrap'],
         reusable_artifacts: [
-          { path: '.cache/project-tooling/dependencies', kind: 'cache', purpose: 'project dependency cache' },
+          { path: '.ticket/runtime/execution-setup/tool-cache/dependencies', kind: 'cache', purpose: 'project dependency cache' },
         ],
         project_commands: {
           prepare: ['project bootstrap'],
@@ -46,8 +46,8 @@ describe('parseExecutionSetupResult', () => {
     expect(parsed.markerFound).toBe(true)
     expect(parsed.errors).toEqual([])
     expect(parsed.result?.profile.artifact).toBe('execution_setup_profile')
-    expect(parsed.result?.profile.tempRoots).toEqual(['.ticket/runtime/execution-setup', '.cache/project-tooling'])
-    expect(parsed.result?.profile.reusableArtifacts[0]?.path).toBe('.cache/project-tooling/dependencies')
+    expect(parsed.result?.profile.tempRoots).toEqual(['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'])
+    expect(parsed.result?.profile.reusableArtifacts[0]?.path).toBe('.ticket/runtime/execution-setup/tool-cache/dependencies')
   })
 
   it('repairs fenced YAML payloads inside the execution setup marker', () => {
@@ -130,6 +130,46 @@ describe('parseExecutionSetupResult', () => {
     expect(parsed.result?.summary).toBe('environment initialized')
     expect(parsed.repairApplied).toBe(true)
     expect(parsed.repairWarnings?.some((warning) => warning.includes('Removed wrapper key'))).toBe(true)
+  })
+
+  it('parses tooling check failures without requiring a new setup status', () => {
+    const parsed = parseExecutionSetupResult(buildExecutionSetupPayload(JSON.stringify({
+      status: 'ready',
+      summary: 'tooling is missing',
+      profile: {
+        schema_version: 1,
+        ticket_id: 'T-1',
+        artifact: 'execution_setup_profile',
+        status: 'ready',
+        summary: 'required launcher is unavailable',
+        temp_roots: ['.ticket/runtime/execution-setup'],
+        bootstrap_commands: ['command -v project-tool || true'],
+        reusable_artifacts: [],
+        project_commands: {
+          prepare: [],
+          test_full: ['project-tool test'],
+          lint_full: [],
+          typecheck_full: [],
+        },
+        quality_gate_policy: {
+          tests: 'bead-test-commands-first',
+          lint: 'impacted-or-package',
+          typecheck: 'impacted-or-package',
+          full_project_fallback: 'never-block-on-unrelated-baseline',
+        },
+        cautions: ['project-tool is missing'],
+      },
+      checks: {
+        workspace: 'pass',
+        tooling: 'fail',
+        temp_scope: 'pass',
+        policy: 'pass',
+      },
+    })))
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.result?.status).toBe('ready')
+    expect(parsed.result?.checks.tooling).toBe('fail')
   })
 
   it('rejects prompt echoes clearly', () => {

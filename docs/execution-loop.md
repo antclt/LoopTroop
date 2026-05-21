@@ -161,6 +161,8 @@ Execution recovery is intentionally stricter after process or OpenCode interrupt
 
 Execution setup timeout is the maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` step after the setup plan is approved. It bounds setup work such as installing toolchains, warming caches, and preparing repository-local runtime artifacts.
 
+Execution setup now treats missing command launchers or toolchains for required checks as readiness blockers, not as successful setup cautions. Execution-only toolchains and caches should live under LoopTroop-owned runtime roots such as `.ticket/runtime/execution-setup/tool-cache`, and later bead commits exclude setup roots recorded in the execution setup profile.
+
 ### Per-Iteration Timeout
 
 Per-iteration timeout is the maximum allowed runtime for one bead attempt in `CODING`. If an attempt exceeds this budget, LoopTroop treats it as a failed iteration and routes it through the normal retry path.

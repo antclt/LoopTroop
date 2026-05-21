@@ -28,7 +28,7 @@ function buildPlan(ticketId: string, summary = 'Prepare the workspace runtime.')
       evidence: ['Repository manifest files are present.'],
       gaps: ['Reusable workspace setup outputs have not been prepared yet.'],
     },
-    temp_roots: ['.ticket/runtime/execution-setup', '.cache/project-tooling'],
+    temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
     steps: [
       {
         id: 'bootstrap-workspace',
@@ -102,7 +102,7 @@ vi.mock('../../workflow/phases/executionSetupPlanPhase', async () => {
             evidence: ['Repository manifest files are present.'],
             gaps: ['Reusable workspace setup outputs have not been prepared yet.'],
           },
-          tempRoots: ['.ticket/runtime/execution-setup', '.cache/project-tooling'],
+          tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
           steps: [
             {
               id: 'bootstrap-workspace',
@@ -275,7 +275,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
             evidence: ['Manifest files were found.'],
             gaps: ['Workspace setup outputs still need a bootstrap step.'],
           },
-          tempRoots: ['.ticket/runtime/execution-setup', '.cache/project-tooling'],
+          tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
           steps: [
             {
               id: 'bootstrap-workspace',

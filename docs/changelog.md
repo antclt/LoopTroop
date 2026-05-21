@@ -15,6 +15,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a beautiful Changelog documentation page positioned above the Roadmap.
 - Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
 - Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
+- Kept missing execution tooling in workspace setup instead of letting coding beads commit or retry around temporary toolchains.
 
 ### Detailed Changes
 
@@ -26,6 +27,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made `docs/changelog.md` the canonical full changelog, including unreleased changes, and replaced the root `CHANGELOG.md` with a discoverability pointer.
 - `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.
 - Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
+- Workspace setup prompts now treat missing required command launchers as setup gaps, prefer LoopTroop-owned runtime tool-cache roots, and tell coding agents to keep any missed execution-only tooling inside approved setup roots.
 
 #### Fixed
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.
@@ -34,6 +36,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Coverage reports now show the latest open-gap status by default after ordered version transitions, suppress stale open-gap lists when no gaps remain, and switch gap headings/lists to the selected `v1 > v2` or `v2 > v3` transition.
 - Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.
 - Full Answers normalization now restores canonical `follow_up_rounds` when a model emits malformed round metadata and repairs common multiline `free_text` YAML formatting without changing answer text.
+- Bead commits now exclude execution setup temp roots, reusable setup artifact roots, and legacy `.cache/project-tooling/**` files so temporary toolchains cannot be recorded as implementation work.
 
 ---
 
