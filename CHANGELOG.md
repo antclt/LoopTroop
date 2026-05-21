@@ -21,6 +21,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Fixed
 - Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
+- Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.
 
 ## [0.2.1] - 2026-05-20
 
