@@ -1,28 +1,15 @@
+---
+title: Changelog
+description: Official release history and notable changes for LoopTroop.
+---
+
 # Changelog
 
-All notable changes to LoopTroop will be documented in this file.
+All notable changes and official releases for LoopTroop are documented here.
 
-## [Unreleased]
+---
 
-### Summary
-- Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
-- Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
-- Added a beautiful Changelog documentation page positioned above the Roadmap.
-
-### Detailed Changes
-
-### Added
-- Added a dedicated `Changelog` documentation page (`docs/changelog.md`) detailing LoopTroop's official release history starting from release `0.1.0`.
-- Integrated `/changelog` route into both Vitepress sidebar and top navbar navigation.
-
-### Changed
-- `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.
-- Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
-
-### Fixed
-- Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
-
-## [0.2.1] - 2026-05-20
+## 0.2.1 <Badge type="tip" text="2026-05-20" />
 
 ### Summary
 - Added a profile-level Structured Output Retries setting that is locked per ticket and now covers PR draft parsing before GitHub side effects.
@@ -48,7 +35,7 @@ All notable changes to LoopTroop will be documented in this file.
 
 ### Detailed Changes
 
-### Added
+#### Added
 - Added configurable structured-output retry counts with profile/API/UI validation, ticket-start locking, and documented continued-session versus fresh-session retry classes.
 - Added structured retry for pull request title/body drafting before branch push or PR create/update, with diagnostics and deterministic fallback text when parsing remains invalid.
 - Added raw attempt persistence for PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime generation, and final-test generation.
@@ -56,7 +43,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Added a global backend reconnecting banner in the app header that polls `/api/health` every 3 seconds and shows an amber "Reconnecting to server…" badge whenever the backend is unreachable, covering all views including the Kanban board.
 - Added a conditional `Continue` action for `BLOCKED_ERROR` tickets with resumable OpenCode/provider diagnostics and a matching active preserved session; it dispatches `CONTINUE` and sends exactly `continue please` to the same OpenCode session.
 
-### Changed
+#### Changed
 - Replaced hardcoded one-shot structured retries across scanning, interview/PROM4 parsing, PRD/beads planning, coverage repair, execution setup, coding marker repair, and final-test generation with the locked ticket retry count while keeping broader workflow attempt budgets separate.
 - Documented the four retry classes and standardized status/details wording around **continued session**, **fresh session**, and broader **new attempt** loops.
 - Manual Retry from `BLOCKED_ERROR` now archives the failed tracked phase attempt and creates a fresh active attempt before rerunning, so rerun artifacts and logs are versioned separately.
@@ -71,7 +58,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Removed the separate verbose dev-startup mode so dependency maintenance details appear in normal `npm run dev` output.
 - The `npm run dev` startup summary now prints the docs URL once instead of repeating its port as a suffix.
 
-### Fixed
+#### Fixed
 - ApprovalView tests now mock the async UI-state save mutation used by debounced approval draft persistence, preventing timer-driven false failures during full-suite runs.
 - Selecting an error from the navigator while Full Log is open now exits full-log mode and opens the error review.
 - Blocked coverage errors now preserve underlying OpenCode retry/provider diagnostics, such as usage limits, and avoid repeating an identical parser-wrapper message in the error details.
@@ -84,19 +71,31 @@ All notable changes to LoopTroop will be documented in this file.
 - Needs-input phases now use static waiting indicators in the left timeline, and workspace setup approval now follows the same side-navigation styling as the other approval gates.
 - Execution setup, coding, and final-test retry resets now preserve LoopTroop-owned `.ticket` artifacts while still rolling back project file changes.
 
-## [0.2.0] - 2026-05-12
+---
 
-### Added
+## 0.2.0 <Badge type="info" text="2026-05-12" />
+
+### Summary
 - Added expanded runtime diagnostics, output-normalization documentation, operations guidance, configuration reference material, and refreshed onboarding docs.
 - Added richer ticket/workspace surfaces for setup-plan review, regenerated approval versions, raw/rejected artifact inspection, live phase logs, GitHub links, and completed-ticket worktree cleanup.
 - Added broader test coverage across middleware, routes, workflow phases, logs, structured output repair, UI components, dev maintenance, and diagnostics.
-
-### Changed
 - Refined the planning flow around interview/PRD approval edits, member-specific council artifacts, winner-model context, coverage warnings, and beads planning.
 - Improved dashboard and workspace ergonomics with tighter status chrome, clearer phase summaries, better artifact rendering, keyboard/menu fixes, and more resilient ticket normalization.
 - Updated development maintenance behavior so dependency sync, npm audit remediation, and OpenCode maintenance are coordinated through the startup preflight.
 
-### Security & Reliability
+### Detailed Changes
+
+#### Added
+- Added expanded runtime diagnostics, output-normalization documentation, operations guidance, configuration reference material, and refreshed onboarding docs.
+- Added richer ticket/workspace surfaces for setup-plan review, regenerated approval versions, raw/rejected artifact inspection, live phase logs, GitHub links, and completed-ticket worktree cleanup.
+- Added broader test coverage across middleware, routes, workflow phases, logs, structured output repair, UI components, dev maintenance, and diagnostics.
+
+#### Changed
+- Refined the planning flow around interview/PRD approval edits, member-specific council artifacts, winner-model context, coverage warnings, and beads planning.
+- Improved dashboard and workspace ergonomics with tighter status chrome, clearer phase summaries, better artifact rendering, keyboard/menu fixes, and more resilient ticket normalization.
+- Updated development maintenance behavior so dependency sync, npm audit remediation, and OpenCode maintenance are coordinated through the startup preflight.
+
+#### Security & Reliability
 - `npm run dev` now restores daily startup dependency/audit/OpenCode maintenance while gating npm dependency updates to releases that are at least 7 days old; if `latest` is too fresh, dependency sync installs the newest eligible older version instead, and audit remediation holds the whole fix when any proposed package version is too fresh. OpenCode CLI and `@opencode-ai/sdk` updates remain immediate.
 - Fixed timing side-channel in API token comparison: `constantTimeEquals` now always runs `timingSafeEqual` even when token lengths differ, preventing length-leak via response timing.
 - SSE authentication: `apiToken` query parameter now accepted exclusively on `/api/stream` (the only endpoint where browser `EventSource` clients cannot set custom headers); all other endpoints reject query-param tokens.
@@ -111,7 +110,7 @@ All notable changes to LoopTroop will be documented in this file.
 - `isLoopbackHost` and `isLocalhostRequest` now recognise IPv4-mapped IPv6 loopback addresses (`::ffff:127.0.0.1`, `::ffff:7f00:1`).
 - Basic auth header builder now validates that the username does not contain `:` (RFC 7617 compliance).
 
-### Performance
+#### Performance
 - OpenCode text/reasoning live AI detail updates now use a 10ms live cadence with no large-growth bypass, making thinking/model output feel closer to tool-call responsiveness while keeping streaming upserts out of persisted log files until a final row is emitted.
 - `npm run dev` startup logs are quieter by default while preserving dependency/audit summaries in the normal startup output.
 - Dev port inspection now avoids `netstat` unless earlier inspectors cannot identify the listener, removing noisy platform warnings during normal startup while preserving fallback diagnostics in verbose mode.
@@ -120,7 +119,7 @@ All notable changes to LoopTroop will be documented in this file.
 - Pre-compiled credential-redaction regex in `errorDiagnostics.ts` (was re-created on every call).
 - `errorDiagnostics` `modelId` and similar fields now computed once and reused instead of double-sanitising.
 
-### Bug Fixes
+#### Bug Fixes
 - OpenCode live AI detail streaming now reads the SDK global event feed and filters it back to the active session, restoring real-time thinking/tool/output rows after the `@opencode-ai/sdk` 1.14.48 event behavior change while keeping the existing streaming throttle.
 - AI detail logs now backfill finalized thinking, tool, and step rows from all OpenCode assistant message parts for the completed prompt, so AI/model tabs can restore extended tool-use histories even when the browser was not open during the phase or the live event stream closed early.
 - Ticket dashboards now normalize partially cached ticket runtime/action/model data before rendering, preventing a full-page crash during fast start and workflow phase transitions.
@@ -138,12 +137,15 @@ All notable changes to LoopTroop will be documented in this file.
 - `dev-preflight.mjs` deduplicated: now delegates to `tsx scripts/dev-preflight.ts` instead of duplicating utility functions.
 - Completed log entries are no longer entry-count capped in the log API or browser cache; server log files remain the durable source of truth, while streaming partials are still folded to avoid repeated in-progress snapshots.
 
-### Configuration
+#### Configuration
 - `vitest.config.ts`: all test projects now use `isolate: true` to prevent test state leakage.
 - `tsconfig.json`: `scripts/` directory added to `include` so dev scripts are fully type-checked.
 
-## [0.1.0] - 2026-04-27
+---
 
+## 0.1.0 <Badge type="info" text="2026-04-27" />
+
+### Summary
 - Clarified the README around local AI coding orchestration for repo-scale work, LLM Council planning, Ralph-loop recovery, OpenCode worktrees, and human-in-the-loop PR automation.
 - Added repository trust files for licensing, security reporting, contribution flow, conduct expectations, citation metadata, issue templates, and pull request review.
 - Added a GitHub social preview asset for shared repository links.
