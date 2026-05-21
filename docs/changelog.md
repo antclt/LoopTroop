@@ -19,6 +19,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Clarified the `npm run dev` startup summary with an explicit package release-age gate note.
 - Added a beautiful Changelog documentation page positioned above the Roadmap.
 - Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
+- Kept the left-panel Errors header compact by removing long active bead identifiers.
 
 ### Detailed Changes
 
@@ -32,6 +33,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
 
 #### Fixed
+- Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.
 - Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
 - Coverage reports now show the latest open-gap status by default after ordered version transitions, suppress stale open-gap lists when no gaps remain, and switch gap headings/lists to the selected `v1 > v2` or `v2 > v3` transition.
 - Fixed date rendering on the Changelog documentation page by formatting version dates as clean, standard parentheses text, avoiding raw unparsed HTML badge tags.

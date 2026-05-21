@@ -99,9 +99,6 @@ export function ErrorOccurrencesPanel({
   const shouldAutoExpand = currentStatusIsBlocked || Boolean(selectedOccurrence?.resolvedAt)
   const [isUserToggled, setIsUserToggled] = useState(false)
   const expanded = shouldAutoExpand || isUserToggled
-  const activeFailureSummary = currentStatusIsBlocked && ticket.runtime.lastFailedBeadId
-    ? `${ticket.runtime.lastFailedBeadId}${ticket.runtime.activeBeadIteration ? ` · iter ${ticket.runtime.activeBeadIteration}` : ''}`
-    : null
 
   if (!shouldShowPanel) return null
 
@@ -122,11 +119,6 @@ export function ErrorOccurrencesPanel({
         {currentStatusIsBlocked && (
           <Badge variant="destructive" className="text-[10px] shrink-0">
             Active
-          </Badge>
-        )}
-        {activeFailureSummary && (
-          <Badge variant="outline" className="text-[10px] shrink-0 font-mono">
-            {activeFailureSummary}
           </Badge>
         )}
         {!currentStatusIsBlocked && selectedOccurrence?.resolvedAt && (

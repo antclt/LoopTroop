@@ -88,6 +88,47 @@ describe('ErrorOccurrencesPanel', () => {
     expect(onSelect).toHaveBeenCalledWith('error-1')
   })
 
+  it('keeps active coding bead identifiers out of the compact errors header', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      hasPastErrors: true,
+      activeErrorOccurrenceId: 'error-1',
+      errorOccurrences: [
+        {
+          id: 'error-1',
+          occurrenceNumber: 1,
+          blockedFromStatus: 'CODING',
+          errorMessage: 'Coding failed on a bead with a verbose identifier.',
+          errorCodes: [],
+          occurredAt: '2026-03-11T10:10:00.000Z',
+          resolvedAt: null,
+          resolutionStatus: null,
+          resumedToStatus: null,
+        },
+      ],
+      runtime: {
+        ...makeTicket().runtime,
+        lastFailedBeadId: 'bead-with-a-very-long-generated-name-that-would-overflow-the-left-panel',
+        activeBeadIteration: 4,
+      },
+    })
+
+    render(
+      <ErrorOccurrencesPanel
+        ticket={ticket}
+        selectedErrorOccurrenceId={null}
+        onSelectErrorOccurrence={vi.fn()}
+      />,
+    )
+
+    const header = screen.getByRole('button', { name: /errors/i })
+    expect(header).toHaveTextContent('Errors')
+    expect(header).toHaveTextContent('1')
+    expect(header).toHaveTextContent('Active')
+    expect(header).not.toHaveTextContent('bead-with-a-very-long-generated-name')
+    expect(header).not.toHaveTextContent('iter 4')
+  })
+
   it('auto-expands when a resolved occurrence is selected', () => {
     const ticket = makeTicket({
       status: 'CANCELED',
