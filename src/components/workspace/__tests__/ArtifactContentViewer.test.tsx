@@ -1395,16 +1395,70 @@ describe('ArtifactContentViewer', () => {
               auditNotes: 'status: gaps',
             },
           ],
+          transitions: [
+            {
+              fromVersion: 4,
+              toVersion: 5,
+              summary: 'Coverage found 1 gap in Implementation Plan v4 and created Implementation Plan v5.',
+              gaps: [
+                'Historical transition gap that should not win over remainingGaps.',
+              ],
+              auditNotes: 'status: gaps',
+              fromContent: buildBeadsDraftContent({ title: 'Previous implementation plan' }),
+              toContent: buildBeadsDraftContent({ title: 'Latest implementation plan' }),
+              gapResolutions: [],
+              resolutionNotes: [],
+            },
+          ],
         })}
       />,
     )
 
+    expect(screen.getByRole('button', { name: /Latest Check/i })).toBeInTheDocument()
     expect(screen.getByText('Coverage review found gaps')).toBeInTheDocument()
     expect(screen.getByText('Implementation Plan v5 still has 2 gaps.')).toBeInTheDocument()
-    expect(screen.getByText('Open Coverage Gaps')).toBeInTheDocument()
+    expect(screen.getByText('Open Coverage Gaps in Implementation Plan v5')).toBeInTheDocument()
     expect(screen.getByText('Stable-channel feature-flag rollout behavior is still missing from the implementation plan.')).toBeInTheDocument()
     expect(screen.getByText('GUI verification needs a concrete repo-standard test path before approval.')).toBeInTheDocument()
     expect(screen.queryByText('Stale attempt gap that should not win over remainingGaps.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Historical transition gap that should not win over remainingGaps.')).not.toBeInTheDocument()
+  })
+
+  it('uses implementation plan wording for versioned beads coverage reports', () => {
+    render(
+      <ArtifactContent
+        artifactId="coverage-report"
+        phase="WAITING_BEADS_APPROVAL"
+        content={JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          status: 'clean',
+          summary: 'No remaining coverage gaps found in Implementation Plan v3.',
+          finalCandidateVersion: 3,
+          hasRemainingGaps: false,
+          remainingGaps: [],
+          transitions: [
+            {
+              fromVersion: 2,
+              toVersion: 3,
+              summary: 'Coverage found 1 gap in Implementation Plan v2 and created Implementation Plan v3.',
+              gaps: ['Implementation plan v2 still omitted explicit rollout validation.'],
+              auditNotes: 'status: gaps',
+              fromContent: buildBeadsDraftContent({ title: 'Implementation Plan v2' }),
+              toContent: buildBeadsDraftContent({ title: 'Implementation Plan v3' }),
+              gapResolutions: [],
+              resolutionNotes: [],
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getByText('No open coverage gaps remain for Implementation Plan v3')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /v2 > v3/i }))
+
+    expect(screen.getByText('Coverage Gaps Found in Implementation Plan v2')).toBeInTheDocument()
+    expect(screen.getByText('Implementation plan v2 still omitted explicit rollout validation.')).toBeInTheDocument()
   })
 
   it('shows a friendly clean summary for PRD coverage results', () => {

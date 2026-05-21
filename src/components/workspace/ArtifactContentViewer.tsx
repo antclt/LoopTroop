@@ -1964,10 +1964,9 @@ function CoverageTransitionDetailsView({
   phase?: string
 }) {
   const isBeads = phase === 'VERIFYING_BEADS_COVERAGE' || phase === 'EXPANDING_BEADS' || phase === 'WAITING_BEADS_APPROVAL'
-  const [activeTab, setActiveTab] = useState<'gaps' | 'notes' | 'diff'>(
-    transition.gapResolutions.length > 0 ? 'notes' : 'gaps',
-  )
+  const [activeTab, setActiveTab] = useState<'gaps' | 'notes' | 'diff'>('gaps')
   const artifactContent = buildCoverageTransitionArtifactContent(transition)
+  const gapsHeading = `Coverage Gaps Found in ${getCoverageCandidateLabel(phase, transition.fromVersion)}`
   const tabs: Array<{ key: 'gaps' | 'notes' | 'diff'; label: string }> = [
     { key: 'gaps', label: 'Gaps Found' },
     ...(transition.gapResolutions.length > 0 || transition.resolutionNotes.length > 0
@@ -2003,7 +2002,7 @@ function CoverageTransitionDetailsView({
           </div>
           {transition.gaps.length > 0 && (
             <div className="space-y-2">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Gaps Found</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{gapsHeading}</div>
               <div className="space-y-2">
                 {transition.gaps.map((gap, index) => (
                   <div key={`${gap}:${index}`} className="rounded-md border border-border bg-background px-3 py-2 text-xs">
@@ -2114,29 +2113,36 @@ function VersionedCoverageReportView({
   phase?: string
 }) {
   const transitions = coverageResult.transitions ?? []
-  const [activeTransitionKey, setActiveTransitionKey] = useState(`transition:0`)
+  const [activeReportTab, setActiveReportTab] = useState('latest')
   if (transitions.length === 0) {
     return <CoverageResultView content={content} phase={phase} />
   }
 
-  const primaryTabs = transitions.map((transition, index) => ({
-    key: `transition:${index}`,
-    label: `v${transition.fromVersion} > v${transition.toVersion}`,
-    transition,
-  }))
-  const resolvedTab = primaryTabs.find((tab) => tab.key === activeTransitionKey)?.key ?? primaryTabs[0]!.key
-  const activeTransition = primaryTabs.find((tab) => tab.key === resolvedTab)?.transition ?? primaryTabs[0]!.transition
+  const finalCandidateVersion = coverageResult.finalCandidateVersion ?? coverageResult.attempts?.[coverageResult.attempts.length - 1]?.candidateVersion
+  const finalCandidateLabel = getCoverageCandidateLabel(phase, finalCandidateVersion)
+  const primaryTabs = [
+    {
+      key: 'latest',
+      label: 'Latest Check',
+      transition: null,
+    },
+    ...transitions.map((transition, index) => ({
+      key: `transition:${index}`,
+      label: `v${transition.fromVersion} > v${transition.toVersion}`,
+      transition,
+    })),
+  ]
+  const resolvedTab = primaryTabs.find((tab) => tab.key === activeReportTab)?.key ?? 'latest'
+  const activeTransition = primaryTabs.find((tab) => tab.key === resolvedTab)?.transition ?? null
 
   return (
     <div className="space-y-4">
-      <CoverageResultView content={content} phase={phase} />
-
       <div className="space-y-3">
         <div className="flex gap-2 border-b border-border">
           {primaryTabs.map((tab) => (
             <button
               key={tab.key}
-              onClick={() => setActiveTransitionKey(tab.key)}
+              onClick={() => setActiveReportTab(tab.key)}
               className={cn(
                 'px-4 py-2 text-sm font-semibold transition-colors border-b-2 -mb-px',
                 resolvedTab === tab.key
@@ -2149,7 +2155,16 @@ function VersionedCoverageReportView({
           ))}
         </div>
 
-        <CoverageTransitionDetailsView transition={activeTransition} phase={phase} />
+        {activeTransition ? (
+          <CoverageTransitionDetailsView key={resolvedTab} transition={activeTransition} phase={phase} />
+        ) : (
+          <CoverageResultView
+            content={content}
+            phase={phase}
+            cleanStatusLabel={`No open coverage gaps remain for ${finalCandidateLabel}`}
+            openGapsTitle={`Open Coverage Gaps in ${finalCandidateLabel}`}
+          />
+        )}
       </div>
     </div>
   )
@@ -4195,7 +4210,19 @@ function CleanCoverageCallout({
   )
 }
 
-function CoverageResultView({ content, header, phase }: { content: string; header?: React.ReactNode; phase?: string }) {
+function CoverageResultView({
+  content,
+  header,
+  phase,
+  cleanStatusLabel,
+  openGapsTitle,
+}: {
+  content: string
+  header?: React.ReactNode
+  phase?: string
+  cleanStatusLabel?: string
+  openGapsTitle?: string
+}) {
   const coverageResult = parseCoverageArtifact(content)
   if (!coverageResult) {
     return (
@@ -4240,7 +4267,7 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
         {hasOpenCoverageGaps
           ? 'Coverage review found gaps'
           : finalCandidateVersion && finalCandidateVersion > 1
-            ? 'No remaining coverage gaps found'
+            ? cleanStatusLabel ?? 'No remaining coverage gaps found'
             : 'No coverage gaps found'}
       </div>
 
@@ -4258,7 +4285,7 @@ function CoverageResultView({ content, header, phase }: { content: string; heade
         <CollapsibleSection
           title={(
             <span className="flex items-center gap-2">
-              <span>Open Coverage Gaps</span>
+              <span>{openGapsTitle ?? 'Open Coverage Gaps'}</span>
               <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
                 {openGaps.length}
               </span>

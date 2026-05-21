@@ -1786,9 +1786,21 @@ describe('PhaseArtifactsPanel', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: /Coverage Report/i }))
+    expect(screen.getByRole('button', { name: /Latest Check/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /v1 > v2/i })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /v2 > v3/i })).toBeInTheDocument()
+    expect(screen.getByText('No open coverage gaps remain for PRD Candidate v3')).toBeInTheDocument()
+    expect(screen.queryByText('Coverage Gaps Found in PRD Candidate v1')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /v1 > v2/i }))
+    expect(screen.getByText('Coverage Gaps Found in PRD Candidate v1')).toBeInTheDocument()
+    expect(screen.getByText('Gap A')).toBeInTheDocument()
+    expect(screen.getByText('Gap B')).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('button', { name: /v2 > v3/i }))
+    expect(screen.getByText('Coverage Gaps Found in PRD Candidate v2')).toBeInTheDocument()
+    expect(screen.getByText('Gap C')).toBeInTheDocument()
+    expect(screen.queryByText('Gap A')).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /^Diff$/i }))
 
     await waitFor(() => {
