@@ -17,6 +17,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
 - Made OpenCode runtime setup permissive and self-healing while keeping missing execution tooling as a hard setup blocker.
 - Made OpenCode session startup more resilient with bounded app-wide retries and health diagnostics.
+- Audited and corrected all user-facing status descriptions, Details content, and documentation for accuracy and consistency.
 
 ### Detailed Changes
 
@@ -31,6 +32,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - `npm run dev` now starts managed OpenCode servers with `OPENCODE_PERMISSION='"allow"'` by default, while `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` lets external permission policy pass through unchanged.
 - Workspace setup prompts now treat missing required command launchers as setup gaps, attempt user-space provisioning under `.ticket/runtime/execution-setup/tool-cache`, record reusable `env.sh`/`run` wrapper artifacts, and tell coding/final-test agents to run setup-dependent commands through the wrapper.
 - Execution setup retries now preserve the ticket-owned `tool-cache` while clearing stale profile and wrapper state, and stop early when the same tooling blocker repeats after provisioning fails.
+- Updated `BLOCKED_ERROR` status description to include the `Continue` action alongside `Retry`, with accurate detail on eligibility and session behavior; aligned `DRAFTING_PRD` description to note that structured retries are exhausted before a PRD draft is skipped.
+- Replaced all opaque internal prompt IDs (`PROM4`, `PROM_CODING`, `PROM51`, `PROM25`) with plain English descriptions in `shared/workflowMeta.ts`, `docs/execution-loop.md`, `docs/ticket-flow.md`, and `docs/configuration.md`; replaced internal constant names (`BEAD_STATUS_SCHEMA_REMINDER`, `CONTINUE_CODING_SCHEMA_REMINDER`, `shouldUseStructuredRetry`, `buildContinuationPrompt`, `perIterationTimeoutMs`) with conceptual descriptions in the CODING Details steps.
+- Removed stale `COMPLETED` note that incorrectly implied the candidate branch had not yet been merged (the merge decision is finalized in `WAITING_PR_REVIEW` before `COMPLETED` is reached).
+- Synced all eight out-of-date rows in the `docs/state-machine.md` Phase Descriptions table with their canonical `description` fields in `shared/workflowMeta.ts`.
 
 #### Fixed
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.

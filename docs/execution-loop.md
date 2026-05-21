@@ -40,8 +40,8 @@ Execution does not trust plain "I think I'm done" prose.
 
 The executor uses two structured reminders:
 
-- `BEAD_STATUS_SCHEMA_REMINDER`
-- `CONTINUE_CODING_SCHEMA_REMINDER`
+- A **completion-marker reminder**: sent when a response is missing or has a malformed `<BEAD_STATUS>` marker, prompting the model to re-emit machine-checkable state
+- A **continuation reminder**: sent when the marker is valid but not all gates are passing, instructing the agent to keep working and re-emit the marker when done
 
 These reminders force the model to emit machine-checkable progress state. If the marker is missing or malformed, LoopTroop can retry with a specific corrective prompt instead of guessing what happened.
 
@@ -68,7 +68,7 @@ This is the execution discipline that most closely matches the Ralph-loop idea: 
 
 ## Context Wipe Notes
 
-`generateContextWipeNote()` uses `PROM51` to summarize the failed attempt in the same session before abandonment.
+`generateContextWipeNote()` sends a context-capture prompt to the still-open failing session to summarize the attempt before abandonment.
 
 The note is intentionally compact. It exists to answer:
 

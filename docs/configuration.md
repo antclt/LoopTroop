@@ -204,7 +204,7 @@ After `COMPILING_INTERVIEW` finishes, the interview document can have up to this
 
 Controls how many automatic retry prompts LoopTroop may send after the first model response fails structured-output validation. The value is locked onto each ticket when it starts, so profile changes affect future tickets and unstarted tickets only.
 
-This setting applies to structured-output repair paths such as council drafts/votes/refinements, relevant-files scan, PROM4 interview batches, PRD/beads coverage, execution setup reports, final-test generation, PR drafting, and the BEAD_STATUS parser repair inside one coding iteration. It does not change coverage pass limits, coding bead iteration count, execution setup/final-test attempt budgets, or manual Retry from `BLOCKED_ERROR`.
+This setting applies to structured-output repair paths such as council drafts/votes/refinements, relevant-files scan, interview batch generation, PRD/beads coverage, execution setup reports, final-test generation, PR drafting, and the completion-marker structured retry inside one coding iteration. It does not change coverage pass limits, coding bead iteration count, execution setup/final-test attempt budgets, or manual Retry from `BLOCKED_ERROR`.
 
 **Session behavior:**
 
