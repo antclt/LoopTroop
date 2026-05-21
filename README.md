@@ -67,19 +67,22 @@ LoopTroop keeps workflow state outside the model, stores durable artifacts, and 
 ## Screenshots
 
 ![Projects dialog](docs/media/projects.png)
-<small>Manage attached repositories, review ticket counts, and create new projects from the dashboard.</small>
+*Manage attached repositories, review ticket counts, and create new projects from the dashboard.*
 
 ![Configuration dialog](docs/media/configuration.png)
-<small>Choose the main implementer model, council members, and effort levels for local orchestration.</small>
+*Choose the main implementer model, council members, and effort levels for local orchestration.*
 
 ![Interview workspace](docs/media/interview.png)
-<small>Answer focused planning questions before specs and implementation plans are approved.</small>
+*Answer focused planning questions before specs and implementation plans are approved.*
 
 ![Ticket workflow detail](docs/media/ticket.png)
-<small>Track council progress, generated artifacts, and live execution logs inside a ticket.</small>
+*Track council progress, generated artifacts, and live execution logs inside a ticket.*
 
 ![Implementation review](docs/media/implementing.png)
-<small>Review bead completion, commits, changes, and final implementation details before closing the workflow.</small>
+*Review bead completion, commits, changes, and final implementation details before closing the workflow.*
+
+![Bead execution detail](docs/media/bead.png)
+*Inspect bead-level progress, task status, and live execution logs while an implementation bead runs.*
 
 ## Why not just use a coding agent directly?
 

@@ -25,19 +25,22 @@ If you are new to LoopTroop, use this order:
 ## Screenshots
 
 ![Projects dialog](media/projects.png)
-<small>Manage attached repositories, review ticket counts, and create new projects from the dashboard.</small>
+*Manage attached repositories, review ticket counts, and create new projects from the dashboard.*
 
 ![Configuration dialog](media/configuration.png)
-<small>Choose the main implementer model, council members, and effort levels for local orchestration.</small>
+*Choose the main implementer model, council members, and effort levels for local orchestration.*
 
 ![Interview workspace](media/interview.png)
-<small>Answer focused planning questions before specs and implementation plans are approved.</small>
+*Answer focused planning questions before specs and implementation plans are approved.*
 
 ![Ticket workflow detail](media/ticket.png)
-<small>Track council progress, generated artifacts, and live execution logs inside a ticket.</small>
+*Track council progress, generated artifacts, and live execution logs inside a ticket.*
 
 ![Implementation review](media/implementing.png)
-<small>Review bead completion, commits, changes, and final implementation details before closing the workflow.</small>
+*Review bead completion, commits, changes, and final implementation details before closing the workflow.*
+
+![Bead execution detail](media/bead.png)
+*Inspect bead-level progress, task status, and live execution logs while an implementation bead runs.*
 
 ## Documentation Map
 
