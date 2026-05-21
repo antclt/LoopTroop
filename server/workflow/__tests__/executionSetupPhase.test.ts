@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { writeFileSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import { makeBeadsYaml, TEST } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
 import { upsertLatestPhaseArtifact } from '../../storage/tickets'
@@ -137,6 +138,11 @@ describe('handleExecutionSetup', () => {
     })
     writeExecutionSetupPlan(ticket.id, ticket.externalId)
     writeFileSync(paths.beadsPath, makeBeadsYaml({ beadCount: 1 }))
+    mkdirSync(join(paths.executionSetupDir, 'tool-cache', 'go'), { recursive: true })
+    writeFileSync(join(paths.executionSetupDir, 'tool-cache', 'go', 'VERSION'), 'go1.25.0\n')
+    writeFileSync(join(paths.executionSetupDir, 'env.sh'), 'export PATH=tool-cache/go/bin:$PATH\n')
+    writeFileSync(join(paths.executionSetupDir, 'run'), '#!/usr/bin/env sh\n. .ticket/runtime/execution-setup/env.sh\nexec "$@"\n')
+    writeFileSync(paths.executionSetupProfilePath, '{"status":"stale"}\n')
 
     executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
       const callbacks = args[5] as {
@@ -178,6 +184,10 @@ describe('handleExecutionSetup', () => {
         preservePaths: expect.arrayContaining(['.ticket']),
       }),
     )
+    expect(existsSync(join(paths.executionSetupDir, 'tool-cache', 'go', 'VERSION'))).toBe(true)
+    expect(existsSync(join(paths.executionSetupDir, 'env.sh'))).toBe(false)
+    expect(existsSync(join(paths.executionSetupDir, 'run'))).toBe(false)
+    expect(existsSync(paths.executionSetupProfilePath)).toBe(true)
     expect(sendEvent).toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
   })
 

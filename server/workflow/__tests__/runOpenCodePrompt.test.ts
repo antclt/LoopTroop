@@ -4,7 +4,7 @@ import { TEST } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
 import { buildFormattedBatchAnswers } from '../phases/interviewPhase'
 import { OpenCodeSDKAdapter, type OpenCodeAdapter } from '../../opencode/adapter'
-import { OPENCODE_EXECUTION_YOLO_PERMISSIONS } from '../../opencode/permissions'
+import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../opencode/permissions'
 import type {
   HealthStatus,
   Message,
@@ -282,12 +282,12 @@ describe('runOpenCodePrompt', () => {
     }
   }
 
-  it('passes session-scoped YOLO permissions to the SDK when requested', async () => {
+  it('passes session-scoped allow-all permissions to the SDK when requested', async () => {
     const sessionCreate = createFakeSdkClient({
       create: async (...args: unknown[]) => {
         expect(args[0]).toMatchObject({
           directory: '/tmp/project',
-          permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
+          permission: OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS,
         })
         return { data: { id: 'ses-1', directory: '/tmp/project' } }
       },
@@ -295,7 +295,7 @@ describe('runOpenCodePrompt', () => {
     const adapter = new OpenCodeSDKAdapter('http://localhost:4096', sessionCreate as unknown as OpenCodeSDKClient)
 
     await adapter.createSession('/tmp/project', undefined, {
-      permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
+      permission: OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS,
     })
   })
 
@@ -387,7 +387,7 @@ describe('runOpenCodePrompt', () => {
     })
   })
 
-  it('creates YOLO sessions for workflow phases', async () => {
+  it('creates allow-all sessions for workflow phases', async () => {
     resetTestDb()
     const { ticket } = createInitializedTestTicket(repoManager, {
       title: 'Execution-band session permissions',
@@ -406,10 +406,10 @@ describe('runOpenCodePrompt', () => {
     })
 
     expect(adapter.sessionCreateCalls).toHaveLength(1)
-    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_YOLO_PERMISSIONS)
+    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
   })
 
-  it('also creates YOLO sessions for non-execution workflow phases', async () => {
+  it('also creates allow-all sessions for non-execution workflow phases', async () => {
     resetTestDb()
     const { ticket } = createInitializedTestTicket(repoManager, {
       title: 'Non execution session permissions',
@@ -428,7 +428,7 @@ describe('runOpenCodePrompt', () => {
     })
 
     expect(adapter.sessionCreateCalls).toHaveLength(1)
-    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_YOLO_PERMISSIONS)
+    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
   })
 
   it('retries unowned session creation before prompting', async () => {
@@ -714,7 +714,7 @@ describe('runOpenCodePrompt', () => {
           createCalls += 1
           expect(args[0]).toMatchObject({
             directory: '/tmp/project',
-            permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
+            permission: OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS,
           })
           throw new Error('400 Bad Request: unknown field "permission"')
         },

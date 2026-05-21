@@ -159,9 +159,11 @@ Execution recovery is intentionally stricter after process or OpenCode interrupt
 
 ### Execution Setup Timeout
 
-Execution setup timeout is the maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` step after the setup plan is approved. It bounds setup work such as installing toolchains, warming caches, and preparing repository-local runtime artifacts.
+Execution setup timeout is the maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` step after the setup plan is approved. It bounds setup work such as installing user-space toolchains, warming caches, and preparing repository-local runtime artifacts.
 
-Execution setup now treats missing command launchers or toolchains for required checks as readiness blockers, not as successful setup cautions. Execution-only toolchains and caches should live under LoopTroop-owned runtime roots such as `.ticket/runtime/execution-setup/tool-cache`, and later bead commits exclude setup roots recorded in the execution setup profile.
+Execution setup treats missing command launchers or toolchains for required checks as readiness blockers, not as successful setup cautions. Before blocking, the setup agent must first try safe user-space provisioning under approved temp roots, preferably `.ticket/runtime/execution-setup/tool-cache`. For Go projects, that means reading `go.mod` and any `toolchain` directive, installing the matching official OS/architecture toolchain into the ticket-owned cache, prepending its `bin` directory, and verifying `go version` before running required checks.
+
+When setup provisions tooling, it writes `.ticket/runtime/execution-setup/env.sh` and `.ticket/runtime/execution-setup/run`. Later coding and final-test prompts prefer commands through the wrapper, such as `./.ticket/runtime/execution-setup/run go test ./...`, so the prepared PATH and cache variables are reused. Execution setup retries clear stale profile and wrapper files but preserve `tool-cache`; if the same tooling blocker repeats after provisioning fails, LoopTroop stops with one blocked error instead of spending the rest of the retry budget on identical failures.
 
 ### Per-Iteration Timeout
 

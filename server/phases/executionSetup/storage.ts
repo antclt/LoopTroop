@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, rmSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, readdirSync, rmSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import { eq } from 'drizzle-orm'
 import { phaseArtifacts } from '../../db/schema'
 import { safeAtomicWrite } from '../../io/atomicWrite'
@@ -26,6 +26,7 @@ const EXECUTION_SETUP_PLAN_UI_COMPANION_ARTIFACT_TYPE = `ui_artifact_companion:$
 const EXECUTION_SETUP_UI_STATE_ARTIFACT_TYPES = new Set([
   'ui_state:approval_execution_setup',
 ])
+const EXECUTION_SETUP_TOOL_CACHE_DIR = 'tool-cache'
 
 export const EXECUTION_SETUP_ALLOWED_RUNTIME_PATHS = [
   EXECUTION_SETUP_RUNTIME_DIR,
@@ -106,13 +107,29 @@ export function writeExecutionSetupProfileMirror(ticketId: string, profile: Exec
   return paths.executionSetupProfilePath
 }
 
-export function clearExecutionSetupRuntimeArtifacts(ticketId: string): string[] {
+export function clearExecutionSetupRuntimeArtifacts(ticketId: string, options: { preserveToolCache?: boolean } = {}): string[] {
   const paths = getTicketPaths(ticketId)
   if (!paths) return []
 
   const removed: string[] = []
-  for (const targetPath of [paths.executionSetupDir, paths.executionSetupProfilePath]) {
-    if (!existsSync(targetPath)) continue
+  if (existsSync(paths.executionSetupProfilePath)) {
+    rmSync(paths.executionSetupProfilePath, { recursive: true, force: true })
+    removed.push(paths.executionSetupProfilePath)
+  }
+
+  if (!existsSync(paths.executionSetupDir)) {
+    return removed
+  }
+
+  if (!options.preserveToolCache) {
+    rmSync(paths.executionSetupDir, { recursive: true, force: true })
+    removed.push(paths.executionSetupDir)
+    return removed
+  }
+
+  for (const entry of readdirSync(paths.executionSetupDir, { withFileTypes: true })) {
+    if (entry.name === EXECUTION_SETUP_TOOL_CACHE_DIR) continue
+    const targetPath = join(paths.executionSetupDir, entry.name)
     rmSync(targetPath, { recursive: true, force: true })
     removed.push(targetPath)
   }

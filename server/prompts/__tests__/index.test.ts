@@ -304,9 +304,18 @@ describe.concurrent('structured prompt hardening', () => {
     expect(setupPrompt).toContain('Audited Augmentations')
     expect(setupPrompt).toContain('.ticket/runtime/execution-setup')
     expect(setupPrompt).toContain('.ticket/runtime/execution-setup/tool-cache')
+    expect(setupPrompt).toContain('Missing Tool Self-Healing')
+    expect(setupPrompt).toContain('safe user-space provisioning attempt')
+    expect(setupPrompt).toContain('Do not use `sudo`, global OS package-manager installs, or arbitrary source-tree install paths')
+    expect(setupPrompt).toContain('Go Toolchain Provisioning')
+    expect(setupPrompt).toContain('official OS/architecture Go archive')
+    expect(setupPrompt).toContain('.ticket/runtime/execution-setup/env.sh')
+    expect(setupPrompt).toContain('.ticket/runtime/execution-setup/run')
+    expect(setupPrompt).toContain('./.ticket/runtime/execution-setup/run go test ./...')
     expect(setupPrompt).toContain('Workspace Writes')
     expect(setupPrompt).toContain('Feature-Work Ban')
     expect(setupPrompt).toContain('set `checks.tooling` to `fail`')
+    expect(setupPrompt).toContain('only after a safe user-space provisioning attempt under approved temp roots fails')
     expect(setupPrompt).toContain('execution_setup_profile')
     expect(PROM_EXECUTION_SETUP.contextInputs).toEqual(['ticket_details', 'beads', 'execution_setup_plan', 'execution_setup_notes'])
     expect(setupNotePrompt).toContain('append-only retry note')
@@ -319,6 +328,8 @@ describe.concurrent('structured prompt hardening', () => {
     expect(prompt).toContain('bead notes')
     expect(prompt).toContain('.ticket/runtime/execution-setup-profile.json')
     expect(prompt).toContain('Execution Setup Reference')
+    expect(prompt).toContain('Prepared Runtime Wrapper')
+    expect(prompt).toContain('./.ticket/runtime/execution-setup/run ...')
     expect(prompt).not.toContain('active_bead')
     expect(prompt).not.toContain('execution_setup_profile context')
     expect(prompt).toContain('Do not rediscover or rebuild the full environment unless the existing setup is missing or invalid')
@@ -329,6 +340,15 @@ describe.concurrent('structured prompt hardening', () => {
     expect(prompt).toContain('Final Self-Check')
     expect(prompt).toContain('quality gates')
     expect(PROM_CODING.contextInputs).toEqual(['bead_data', 'bead_notes'])
+  })
+
+  it('tells final-test generation to reuse prepared runtime wrappers', () => {
+    const prompt = buildPromptFromTemplate(PROM52, [])
+
+    expect(prompt).toContain('Execution Setup Reference')
+    expect(prompt).toContain('.ticket/runtime/execution-setup-profile.json')
+    expect(prompt).toContain('./.ticket/runtime/execution-setup/run ...')
+    expect(prompt).toContain('prepared PATH and cache variables')
   })
 
   it('keeps PROM25 explicit about expansion-only ownership, preserved order, and tool-assisted target files', () => {

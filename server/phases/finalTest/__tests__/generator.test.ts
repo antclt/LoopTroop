@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from 'vitest'
 import { MockOpenCodeAdapter } from '../../../opencode/adapter'
-import { OPENCODE_EXECUTION_YOLO_PERMISSIONS } from '../../../opencode/permissions'
+import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../../opencode/permissions'
 import { patchTicket } from '../../../storage/tickets'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../../test/integration'
 import { generateFinalTests } from '../generator'
@@ -203,7 +203,7 @@ describe('generateFinalTests', () => {
     expect(adapter.messages.get('mock-session-1')?.some((message) => typeof message.content === 'string' && message.content.includes('Structured Output Retry'))).toBe(false)
   })
 
-  it('creates YOLO sessions for owned final-test attempts and fresh retries', async () => {
+  it('creates allow-all sessions for owned final-test attempts and fresh retries', async () => {
     resetTestDb()
     const { ticket, paths } = createInitializedTestTicket(repoManager, {
       title: 'Owned final test session permissions',
@@ -234,7 +234,7 @@ describe('generateFinalTests', () => {
     expect(result.commandPlan.commands).toEqual(['npm run test:server'])
     expect(adapter.sessionCreateCalls).toHaveLength(2)
     expect(adapter.sessionCreateCalls.every((call) => (
-      JSON.stringify(call.options?.permission) === JSON.stringify(OPENCODE_EXECUTION_YOLO_PERMISSIONS)
+      JSON.stringify(call.options?.permission) === JSON.stringify(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
     ))).toBe(true)
   })
 })

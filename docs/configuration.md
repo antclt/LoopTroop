@@ -369,7 +369,7 @@ The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` phase, wh
 
 **What execution setup does:**
 
-The setup phase can install toolchains, warm caches, build native dependencies, or prepare repository-local runtime artifacts — anything the approved setup plan requires. It runs in the ticket's worktree exactly once per execution attempt.
+The setup phase can install user-space toolchains under `.ticket/runtime/execution-setup/tool-cache`, warm caches, build native dependencies, or prepare repository-local runtime artifacts — anything the approved setup plan requires. It runs in the ticket's worktree before coding and records reusable wrapper commands when prepared runtime environment variables are needed.
 
 **Trade-offs:**
 

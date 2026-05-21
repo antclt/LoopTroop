@@ -710,25 +710,25 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   PREPARING_EXECUTION_ENV: {
-    overview: 'LoopTroop runs a dedicated execution setup phase after the setup-plan approval gate and before coding. This is an AI-driven, retryable, temporary-only phase whose job is to verify the approved readiness assessment, perform only the missing temporary setup under LoopTroop-owned runtime paths, and persist a setup profile that later beads can read by reference when needed. When the approved plan says the environment is already ready, this phase should stay effectively no-op aside from verification and profile emission.',
+    overview: 'LoopTroop runs a dedicated execution setup phase after the setup-plan approval gate and before coding. This is an AI-driven, retryable, temporary-only phase whose job is to verify the approved readiness assessment, provision any missing required runtime tooling under LoopTroop-owned runtime paths, and persist a setup profile that later beads can read by reference when needed. When the approved plan says the environment is already ready, this phase should stay effectively no-op aside from verification and profile emission.',
     steps: [
       'Approved Plan First: The locked main implementer reads the approved setup-plan artifact first, then loads only the focused runtime context — ticket details, beads plan, and any prior setup retry notes. User edits in the approved plan take precedence over the model\'s original draft.',
       'Readiness Verification Before Action: The setup agent must verify the approved readiness assessment first. If the approved plan says no actions are required and that remains true, it should avoid running bootstrap commands and simply emit a reusable profile describing the ready environment.',
-      'Temporary-Only Initialization: When setup is still missing, the agent executes only the approved temporary steps, may inspect the repository, run repo-native bootstrap commands, warm caches, or prepare generated runtime artifacts, but execution-only toolchains and caches should live inside LoopTroop-owned runtime paths under `.ticket/runtime/execution-setup/**` plus the profile mirror file `.ticket/runtime/execution-setup-profile.json`.',
-      'Reusable Profile Generation: The agent finishes by returning a structured execution setup result that records the temp roots it prepared, bootstrap commands it used, reusable artifacts it created, discovered project command families, and the quality-gate policy later coding beads should follow.',
+      'Temporary-Only Initialization: When setup is still missing, the agent executes only the approved temporary steps, may inspect the repository, run repo-native bootstrap commands, warm caches, or prepare generated runtime artifacts. If required command launchers or toolchains are missing, it must first try user-space provisioning under approved temp roots, preferably `.ticket/runtime/execution-setup/tool-cache/**`, before reporting tooling failure.',
+      'Reusable Profile Generation: The agent finishes by returning a structured execution setup result that records the temp roots it prepared, bootstrap commands it used, reusable artifacts it created, discovered project command families, and the quality-gate policy later coding beads should follow. When setup provisions tooling, the profile also records `.ticket/runtime/execution-setup/env.sh` and `.ticket/runtime/execution-setup/run` so later commands can reuse the prepared PATH and cache variables.',
       'Audited Augmentations: If the approved plan is insufficient and the setup agent must run extra temporary-only commands, those additions are recorded in the setup report so you can see exactly how execution diverged from the approved draft.',
       'Structured Validation: LoopTroop parses the result via a strict marker/schema contract. If the marker or schema is wrong, it may use the ticket\'s configured Structured Output Retries count with a continued session repair prompt instead of treating the attempt as an implementation failure, and records rejected/accepted raw attempts on the setup report. Schema-compatible profiles are still rejected when any setup check, including tooling availability, reports `fail`.',
       'Filesystem Policy Enforcement: After each attempt, LoopTroop verifies in code that setup touched only the allowed runtime paths. Any tracked file changes or off-policy untracked output immediately fail the attempt and produce a retry note describing the violation.',
-      'Retry and Reset: If an attempt fails, LoopTroop records retry notes, resets tracked repository files back to the setup phase start commit, preserves LoopTroop-owned ticket artifacts under `.ticket`, clears the setup temp roots/profile mirror, and retries until the normal iteration budget is exhausted.',
+      'Retry and Reset: If an attempt fails, LoopTroop records retry notes, resets tracked repository files back to the setup phase start commit, preserves LoopTroop-owned ticket artifacts under `.ticket`, clears stale setup profile/env-wrapper state while preserving `.ticket/runtime/execution-setup/tool-cache`, and retries until the normal iteration budget is exhausted or the same tooling blocker repeats.',
     ],
     outputs: [
-      'Canonical execution setup profile artifact describing reusable temp roots, discovered command families, and quality-gate policy for later coding beads.',
+      'Canonical execution setup profile artifact describing reusable temp roots, prepared runtime wrappers, discovered command families, and quality-gate policy for later coding beads.',
       'Execution setup report artifact with attempt history, final status, retry notes, structured-output diagnostics, and Raw attempt variants for setup-generation retries.',
-      'Temporary runtime artifacts stored under `.ticket/runtime/execution-setup/**` plus the profile mirror file `.ticket/runtime/execution-setup-profile.json`; profile-declared setup/cache roots are excluded from later bead commits.',
+      'Temporary runtime artifacts stored under `.ticket/runtime/execution-setup/**`, including `tool-cache`, optional `env.sh`/`run` wrapper files, and the profile mirror file `.ticket/runtime/execution-setup-profile.json`; profile-declared setup/cache roots are excluded from later bead commits.',
     ],
     transitions: [
       'Setup Ready → Implementing: A valid setup profile advances the workflow into coding, where the first real bead starts at 1/N.',
-      'Setup Failure → Blocked Error: Retry exhaustion, provider/session failures, or temp-only policy violations route the ticket to Blocked Error with the setup report preserved for diagnosis.',
+      'Setup Failure → Blocked Error: Retry exhaustion, repeated tooling blockers after provisioning attempts, provider/session failures, or temp-only policy violations route the ticket to Blocked Error with the setup report preserved for diagnosis.',
     ],
     notes: [
       'This phase is not a real bead. It does not change bead counts, does not participate in final testing scope, and never produces commits or pushes.',
@@ -1319,7 +1319,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'PREPARING_EXECUTION_ENV',
     label: 'Preparing Workspace Runtime',
-    description: 'Verifying readiness and performing only the missing temporary execution setup before coding begins. Missing required tooling blocks this phase, setup-generation retries are captured in Raw attempts, and internal setup commands are audited as concise completion summaries.',
+    description: 'Verifying readiness and provisioning missing required runtime tooling under ticket-owned temp roots before coding begins. Missing tooling still blocks this phase after provisioning fails, setup-generation retries are captured in Raw attempts, and internal setup commands are audited as concise completion summaries.',
     details: WORKFLOW_PHASE_DETAILS.PREPARING_EXECUTION_ENV,
     kanbanPhase: 'in_progress',
     groupId: 'pre_implementation',

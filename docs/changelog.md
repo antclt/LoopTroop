@@ -15,7 +15,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a beautiful Changelog documentation page positioned above the Roadmap.
 - Made Full Answers parsing more resilient to malformed YAML formatting while preserving approved interview metadata.
 - Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
-- Kept missing execution tooling in workspace setup instead of letting coding beads commit or retry around temporary toolchains.
+- Made OpenCode runtime setup permissive and self-healing while keeping missing execution tooling as a hard setup blocker.
 - Made OpenCode session startup more resilient with bounded app-wide retries and health diagnostics.
 
 ### Detailed Changes
@@ -28,7 +28,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made `docs/changelog.md` the canonical full changelog, including unreleased changes, and replaced the root `CHANGELOG.md` with a discoverability pointer.
 - `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.
 - Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
-- Workspace setup prompts now treat missing required command launchers as setup gaps, prefer LoopTroop-owned runtime tool-cache roots, and tell coding agents to keep any missed execution-only tooling inside approved setup roots.
+- `npm run dev` now starts managed OpenCode servers with `OPENCODE_PERMISSION='"allow"'` by default, while `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` lets external permission policy pass through unchanged.
+- Workspace setup prompts now treat missing required command launchers as setup gaps, attempt user-space provisioning under `.ticket/runtime/execution-setup/tool-cache`, record reusable `env.sh`/`run` wrapper artifacts, and tell coding/final-test agents to run setup-dependent commands through the wrapper.
+- Execution setup retries now preserve the ticket-owned `tool-cache` while clearing stale profile and wrapper state, and stop early when the same tooling blocker repeats after provisioning fails.
 
 #### Fixed
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.

@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { MockOpenCodeAdapter } from '../../../opencode/adapter'
-import { OPENCODE_EXECUTION_YOLO_PERMISSIONS } from '../../../opencode/permissions'
+import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../../opencode/permissions'
 import { executeBead } from '../executor'
 import type { Bead } from '../../beads/types'
 import { PROFILE_DEFAULTS } from '../../../db/defaults'
@@ -253,7 +253,7 @@ describe('executeBead', () => {
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
   })
 
-  it('creates YOLO sessions for owned coding attempts', async () => {
+  it('creates allow-all sessions for owned coding attempts', async () => {
     resetTestDb()
     const { ticket, paths } = createInitializedTestTicket(repoManager, {
       title: 'Owned coding session permissions',
@@ -283,10 +283,10 @@ describe('executeBead', () => {
 
     expect(result.success).toBe(true)
     expect(adapter.sessionCreateCalls).toHaveLength(1)
-    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_YOLO_PERMISSIONS)
+    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
   })
 
-  it('recreates YOLO sessions on fresh owned coding retries', async () => {
+  it('recreates allow-all sessions on fresh owned coding retries', async () => {
     resetTestDb()
     const { ticket, paths } = createInitializedTestTicket(repoManager, {
       title: 'Owned coding session retries',
@@ -318,7 +318,7 @@ describe('executeBead', () => {
     expect(result.success).toBe(true)
     expect(adapter.sessionCreateCalls).toHaveLength(2)
     expect(adapter.sessionCreateCalls.every((call) => (
-      JSON.stringify(call.options?.permission) === JSON.stringify(OPENCODE_EXECUTION_YOLO_PERMISSIONS)
+      JSON.stringify(call.options?.permission) === JSON.stringify(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
     ))).toBe(true)
   })
 

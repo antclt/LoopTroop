@@ -344,7 +344,7 @@ export async function handleExecutionSetup(
             resetWorktreeToCommit(paths.worktreePath, phaseStartCommit, {
               preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
             })
-            clearExecutionSetupRuntimeArtifacts(ticketId)
+            clearExecutionSetupRuntimeArtifacts(ticketId, { preserveToolCache: true })
             emitPhaseLog(
               ticketId,
               context.externalId,
@@ -357,13 +357,15 @@ export async function handleExecutionSetup(
               },
             )
           },
-          onRetriesExhausted: ({ attempt }) => {
+          onRetriesExhausted: ({ attempt, reason }) => {
             emitPhaseLog(
               ticketId,
               context.externalId,
               'PREPARING_EXECUTION_ENV',
               'error',
-              `Execution setup retries exhausted after ${attempt} attempt${attempt === 1 ? '' : 's'}.`,
+              reason === 'repeated_tooling_failure'
+                ? `Execution setup stopped after ${attempt} attempts because the same tooling blocker repeated after provisioning failed.`
+                : `Execution setup retries exhausted after ${attempt} attempt${attempt === 1 ? '' : 's'}.`,
             )
           },
         },

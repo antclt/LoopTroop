@@ -775,6 +775,9 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
     'Prefer Native Bootstrap: Prefer repository-native manifests, lockfiles, scripts, and codegen commands when discovering how to initialize the environment.',
     'Language Agnosticism: Do not assume a language or package manager. Use only the repository-native tooling that is actually present.',
     'Workspace Writes: You may run repository-native setup commands from the approved plan. Execution-only toolchains, dependency caches, build caches, generated outputs, tool caches, setup logs, and reusable notes should be created under the approved temp roots, preferably `.ticket/runtime/execution-setup/**` and especially `.ticket/runtime/execution-setup/tool-cache/**` for toolchains.',
+    'Missing Tool Self-Healing: If a required command launcher, language runtime, package manager, or toolchain is missing, first attempt a user-space provision under the approved temp roots before declaring tooling failed. Prefer official project/language distribution archives, repository-native version managers, or lockfile-directed installers that can live under `.ticket/runtime/execution-setup/tool-cache/**`. Do not use `sudo`, global OS package-manager installs, or arbitrary source-tree install paths as the default path.',
+    'Go Toolchain Provisioning: For Go repositories, read `go.mod` and any `toolchain` directive to choose the required Go version. If `go` is missing or too old, download the official OS/architecture Go archive into `.ticket/runtime/execution-setup/tool-cache`, unpack it there, prepend its `bin` directory to PATH, verify with `go version`, then run the required Go probes/tests through that prepared PATH.',
+    'Reusable Runtime Wrapper: When you provision or need prepared runtime environment variables, create `.ticket/runtime/execution-setup/env.sh` and `.ticket/runtime/execution-setup/run`. The `run` wrapper must source `env.sh` and execute the command arguments. Record both files in `reusable_artifacts`, and list later project commands through the wrapper when needed, for example `./.ticket/runtime/execution-setup/run go test ./...`.',
     'Feature-Work Ban: Do not implement ticket feature code, broad source edits, or unrelated refactors during setup. If a repository-native bootstrap command changes tracked manifests, lockfiles, generated assets, or configuration, record that in `cautions` and keep going when the change is necessary for readiness.',
     'Approved Plan Execution: Start from the approved setup-plan steps and commands. Reuse them directly when they are still correct for the repository state.',
     'Minimum Necessary Work: If the environment is already ready or only partially missing one prerequisite, do only the missing temporary work. Do not rebuild or re-bootstrap the environment from scratch without evidence.',
@@ -782,7 +785,7 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
     'Reusable Outputs: Record any reusable dependency directory, build cache, generated temp artifact, tool cache, or setup note path in `temp_roots` or `reusable_artifacts`. Prefer runtime-owned paths under `.ticket/runtime/execution-setup/**`; use another setup-created location only when the repository itself requires it.',
     'Discovery Goal: Discover project-level command families for prepare/bootstrap, full test, full lint, and full typecheck when possible. If a command family is unavailable, return an empty list for that field instead of inventing a fake command.',
     'Quality Gate Policy: Default to bead test commands first, then impacted-or-package scoped lint/typecheck, and never block later phases on unrelated baseline debt.',
-    'Tooling Gate: If a required command launcher or toolchain is missing and you cannot prepare it safely under the approved temp roots, keep the top-level `status` and `profile.status` as `ready` for schema compatibility but set `checks.tooling` to `fail` and explain the blocker in `summary` and `cautions`. LoopTroop will block coding until every setup check passes.',
+    'Tooling Gate: If a required command launcher or toolchain is missing, set `checks.tooling` to `fail` only after a safe user-space provisioning attempt under approved temp roots fails, or when no safe temp-root provisioning path exists. Keep the top-level `status` and `profile.status` as `ready` for schema compatibility, and explain the attempted provisioning and blocker in `summary` and `cautions`. LoopTroop will block coding until every setup check passes.',
     'Do Not Stop Early: Continue working until the environment is ready, you hit a hard blocker, or the app interrupts you.',
     'No Progress Prose: Do not return conversational status updates. Use tools until you can return the final structured result.',
     'Output Discipline: End with exactly one `<EXECUTION_SETUP_RESULT>...</EXECUTION_SETUP_RESULT>` block and nothing else.',
@@ -804,6 +807,16 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
         "path": ".ticket/runtime/execution-setup/tool-cache",
         "kind": "cache",
         "purpose": "why this exists"
+      },
+      {
+        "path": ".ticket/runtime/execution-setup/env.sh",
+        "kind": "environment",
+        "purpose": "exports PATH and cache variables for prepared runtime tooling"
+      },
+      {
+        "path": ".ticket/runtime/execution-setup/run",
+        "kind": "command-wrapper",
+        "purpose": "sources env.sh before executing project commands"
       }
     ],
     "project_commands": {
@@ -856,6 +869,7 @@ export const PROM_CODING: PromptTemplate = {
     'Read and Understand: Read the bead specification from the `bead_data` context — including bead id, description, acceptance criteria, target files, and test commands. `bead_data` identifies which bead you are implementing.',
     'Check Prior Notes: If bead notes exist from prior iteration failures, carefully read them and avoid repeating the same mistakes. These notes describe what went wrong previously and what to do differently.',
     'Execution Setup Reference: The full setup profile is available at `.ticket/runtime/execution-setup-profile.json`. Treat it as read-only runtime context; read it only when setup, tooling, prepared-artifact, or project-command details are needed, and prefer it over rediscovering those details from scratch.',
+    'Prepared Runtime Wrapper: If the setup profile records `.ticket/runtime/execution-setup/run` or project commands already use that wrapper, run setup-dependent commands through `./.ticket/runtime/execution-setup/run ...` so the prepared PATH and cache variables from `env.sh` are applied.',
     'Implement Changes: Make the necessary code changes in the worktree to fulfill the bead requirements. Follow existing code patterns and conventions in the project.',
     'Environment Readiness: If the setup profile file is missing, unreadable, or invalid, do only the minimum safe discovery needed to proceed. Do not rediscover or rebuild the full environment unless the existing setup is missing or invalid. If a required command launcher or toolchain is missing and no approved temp root from the setup profile can hold execution-only tooling, report an environment failure instead of installing into arbitrary repository paths.',
     'Execution-Only Tooling: If you must prepare a missed execution-only toolchain or cache during coding, create it only under an existing approved temp root from `.ticket/runtime/execution-setup-profile.json`, preferably `.ticket/runtime/execution-setup/**`. Never download or install toolchains, SDKs, package managers, or large caches into arbitrary project paths.',
@@ -908,6 +922,7 @@ export const PROM52: PromptTemplate = {
     'Modified Files Contract: Record in `modified_files` every permanent repository file that you created or modified during this final-test phase and that should remain in the final candidate. Include all paths from `test_files`, plus any production files you intentionally changed. Exclude ephemeral runtime data, logs, caches, databases, build output, temp files, or other scratch artifacts.',
     'Ephemeral Runtime Exclusion: `.ticket/runtime/execution-setup/**` and `.ticket/runtime/execution-setup-profile.json` are temporary runtime state and must never appear in `modified_files`.',
     'Mandatory Self-Execution: Before returning `<FINAL_TEST_COMMANDS>`, you MUST run the exact command(s) you plan to return in this same worktree.',
+    'Execution Setup Reference: If `.ticket/runtime/execution-setup-profile.json` records `.ticket/runtime/execution-setup/run` or project commands already use that wrapper, run setup-dependent final-test commands through `./.ticket/runtime/execution-setup/run ...` so the prepared PATH and cache variables from `env.sh` are applied.',
     'Repair Loop: If any planned command fails, inspect the real failure output, fix the underlying implementation and/or the final test files, and rerun the same command(s). Repeat until the exact planned command(s) pass or you run out of time.',
     'Scope Discipline: You may modify production code and test files during this phase, but keep changes minimal and strictly within the approved ticket, PRD, and Beads scope.',
     'Do Not Game The Tests: Do not weaken assertions, delete coverage, lower thresholds, or narrow test scope just to get a pass. Only change a failing test if it is demonstrably broader than the approved requirements.',

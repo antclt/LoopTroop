@@ -4,6 +4,7 @@ import type { PreFlightContext } from '../types'
 import type { DoctorDeps } from '../doctor'
 import { runPreFlightChecks } from '../doctor'
 import { MockOpenCodeAdapter } from '../../../opencode/adapter'
+import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../../opencode/permissions'
 import { TEST } from '../../../test/factories'
 
 function makeBead(overrides: Partial<Bead> = {}): Bead {
@@ -108,6 +109,7 @@ describe('Pre-Flight Doctor', () => {
     const capabilityCheck = report.checks.find((check) => check.name === 'OpenCode Execution Capability')
     expect(capabilityCheck?.result).toBe('pass')
     expect(adapter.sessionCreateCalls).toHaveLength(1)
+    expect(adapter.sessionCreateCalls[0]?.options?.permission).toEqual(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
     expect(adapter.promptCalls[0]?.options?.variant).toBe('high')
   })
 

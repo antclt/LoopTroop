@@ -153,8 +153,8 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       const errorMessage = getErrorMessage(err)
       if (options?.permission) {
         throw new Error(
-          `Failed to create OpenCode session with YOLO permissions: ${errorMessage}. ` +
-          'YOLO sessions require an OpenCode server that supports session-scoped permissions. ' +
+          `Failed to create OpenCode session with allow-all permissions: ${errorMessage}. ` +
+          'Allow-all sessions require an OpenCode server that supports session-scoped permissions. ' +
           'Upgrade OpenCode and restart `opencode serve`.',
         )
       }

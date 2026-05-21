@@ -16,7 +16,7 @@ import {
 } from '../../git/github'
 import { fetchConnectedModelIds } from '../../opencode/providerCatalog'
 import { buildPromptFromTemplate, PROM_EXECUTION_CAPABILITY_PROBE } from '../../prompts/index'
-import { OPENCODE_EXECUTION_YOLO_PERMISSIONS } from '../../opencode/permissions'
+import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../opencode/permissions'
 import { resolveOpenCodeTools } from '../../opencode/toolPolicy'
 import { parseModelRef, type Session, type SessionErrorStreamEvent, type StreamEvent } from '../../opencode/types'
 import { summarizeModelErrorForLog } from '../../opencode/errorDetails'
@@ -75,7 +75,7 @@ async function runExecutionCapabilityProbe(
 
   const session = await raceWithCancel(
     createOpenCodeSessionWithRetry(adapter, worktreePath, signal, {
-      permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
+      permission: OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS,
     }),
     signal,
   )

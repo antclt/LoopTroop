@@ -40,12 +40,15 @@ Session creation, session listing, and message reads accept `AbortSignal`s and a
 | --- | --- |
 | `LOOPTROOP_OPENCODE_BASE_URL` | Base URL for the OpenCode server; defaults to `http://127.0.0.1:4096` |
 | `LOOPTROOP_OPENCODE_MODE=mock` | Use the mock adapter instead of the SDK adapter |
+| `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` | Do not override the OpenCode server permission mode during `npm run dev`; by default LoopTroop starts its managed OpenCode server with `OPENCODE_PERMISSION='"allow"'` |
 | `OPENCODE_SERVER_USERNAME` | Basic auth username for requests to the local OpenCode server; defaults to `opencode` |
 | `OPENCODE_SERVER_PASSWORD` | Basic auth password for requests to the local OpenCode server; `npm run dev` auto-generates an ephemeral credential if not set |
 
 Both the LoopTroop backend and the OpenCode process must share the same credentials. `npm run dev` handles this automatically by propagating the generated credential to all child processes. To use a persistent credential, set `OPENCODE_SERVER_PASSWORD` (and optionally `OPENCODE_SERVER_USERNAME`) before running `npm run dev`.
 
 When running `npm run dev`, the launcher probes the configured address first. If OpenCode is already responding there, it reuses that instance. If the default port is occupied by a non-OpenCode process, the launcher finds the next available port and starts OpenCode there instead.
+
+For trusted local LoopTroop sessions, the managed OpenCode server is permissive by default: `scripts/dev-opencode.ts` sets `OPENCODE_PERMISSION='"allow"'` when it starts `opencode serve`, unless `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` is set. LoopTroop also creates execution sessions with the SDK permission rule `{ permission: "*", pattern: "*", action: "allow" }`, so server-level permission policy and session-scoped permissions both allow required tool use. This removes OpenCode approval prompts from trusted automation, but it does not bypass normal OS privileges or make passworded `sudo` a dependency of setup.
 
 ## Session Ownership
 

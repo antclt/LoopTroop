@@ -1,6 +1,6 @@
 import type { OpenCodePermissionRule } from './types'
 
-export const OPENCODE_EXECUTION_YOLO_PERMISSIONS: ReadonlyArray<OpenCodePermissionRule> = Object.freeze([
+export const OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS: ReadonlyArray<OpenCodePermissionRule> = Object.freeze([
   {
     permission: '*',
     pattern: '*',

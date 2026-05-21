@@ -14,9 +14,38 @@ import type {
 
 type ContextPartsInput = PromptPart[] | (() => Promise<PromptPart[]>)
 
+const REPEATED_TOOLING_FAILURE_MESSAGE = 'Repeated tooling setup failure detected; stopping early because the same tooling blocker repeated after a provisioning attempt.'
+
 async function resolveContextParts(input: ContextPartsInput): Promise<PromptPart[]> {
   if (typeof input === 'function') return await input()
   return input
+}
+
+function normalizeToolingFailureText(value: string | undefined): string {
+  return (value ?? '').replace(/\s+/g, ' ').trim().toLowerCase()
+}
+
+function buildToolingFailureSignature(report: ExecutionSetupReport): string | null {
+  if (report.checks?.tooling !== 'fail') return null
+  const parts = [
+    report.summary,
+    ...(report.errors ?? []),
+    report.profile?.summary,
+    ...(report.profile?.cautions ?? []),
+  ]
+    .map(normalizeToolingFailureText)
+    .filter(Boolean)
+  return parts.length > 0 ? parts.join('|') : null
+}
+
+function withRepeatedToolingFailureError(report: ExecutionSetupReport): ExecutionSetupReport {
+  if (report.errors.includes(REPEATED_TOOLING_FAILURE_MESSAGE)) return report
+  return {
+    ...report,
+    status: 'failed',
+    ready: false,
+    errors: [...report.errors, REPEATED_TOOLING_FAILURE_MESSAGE],
+  }
 }
 
 function buildAttemptHistoryEntry(
@@ -130,11 +159,13 @@ export async function executeExecutionSetupWithRetries(
       maxIterations: number
       report: ExecutionSetupReport
       notes: string[]
+      reason?: 'exhausted' | 'repeated_tooling_failure'
     }) => void | Promise<void>
   },
 ): Promise<ExecutionSetupReport> {
   const notes: string[] = [...(options.initialRetryNotes ?? [])]
   const attemptHistory: ExecutionSetupAttemptHistoryEntry[] = []
+  const toolingFailureSignatures: string[] = []
   let attempt = 0
 
   while (options.maxIterations <= 0 || attempt < options.maxIterations) {
@@ -171,12 +202,21 @@ export async function executeExecutionSetupWithRetries(
     throwIfAborted(signal)
 
     const report = await callbacks.evaluateGeneration({ attempt, generation })
-    const attemptEntry = buildAttemptHistoryEntry(attempt, report)
+    const toolingFailureSignature = buildToolingFailureSignature(report)
+    const repeatedToolingFailure = toolingFailureSignature !== null
+      && toolingFailureSignatures[toolingFailureSignatures.length - 1] === toolingFailureSignature
+    if (toolingFailureSignature) {
+      toolingFailureSignatures.push(toolingFailureSignature)
+    }
+    const finalReport = repeatedToolingFailure
+      ? withRepeatedToolingFailureError(report)
+      : report
+    const attemptEntry = buildAttemptHistoryEntry(attempt, finalReport)
     attemptHistory.push(attemptEntry)
-    await callbacks.onAttemptComplete?.({ attempt, report, generation })
+    await callbacks.onAttemptComplete?.({ attempt, report: finalReport, generation })
 
-    if (report.ready) {
-      return withRetryMetadata(report, {
+    if (finalReport.ready) {
+      return withRetryMetadata(finalReport, {
         attempt,
         maxIterations: options.maxIterations,
         attemptHistory,
@@ -188,7 +228,7 @@ export async function executeExecutionSetupWithRetries(
     try {
       note = await callbacks.generateRetryNote?.({
         attempt,
-        report,
+        report: finalReport,
         generation,
         notes: [...notes],
       })
@@ -198,16 +238,16 @@ export async function executeExecutionSetupWithRetries(
 
     const resolvedNote = note?.trim() || buildDeterministicExecutionSetupRetryNote({
       attempt,
-      report,
+      report: finalReport,
       generation,
     })
     notes.push(resolvedNote)
     attemptEntry.noteAppended = resolvedNote
 
-    const canRetry = options.maxIterations <= 0 || attempt < options.maxIterations
+    const canRetry = !repeatedToolingFailure && (options.maxIterations <= 0 || attempt < options.maxIterations)
     await callbacks.onFailedAttempt?.({
       attempt,
-      report,
+      report: finalReport,
       generation,
       note: resolvedNote,
       notes: [...notes],
@@ -218,10 +258,11 @@ export async function executeExecutionSetupWithRetries(
       await callbacks.onRetriesExhausted?.({
         attempt,
         maxIterations: options.maxIterations,
-        report,
+        report: finalReport,
         notes: [...notes],
+        reason: repeatedToolingFailure ? 'repeated_tooling_failure' : 'exhausted',
       })
-      return withRetryMetadata(report, {
+      return withRetryMetadata(finalReport, {
         attempt,
         maxIterations: options.maxIterations,
         attemptHistory,
@@ -232,7 +273,7 @@ export async function executeExecutionSetupWithRetries(
     await callbacks.beforeRetry?.({
       attempt,
       nextAttempt: attempt + 1,
-      report,
+      report: finalReport,
       generation,
       note: resolvedNote,
       notes: [...notes],

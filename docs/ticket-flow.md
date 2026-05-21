@@ -337,7 +337,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 | --- | --- | --- | --- | --- |
 | `PRE_FLIGHT_CHECK` | LoopTroop runs deterministic readiness checks: workspace health, OpenCode reachability, execution-mode probe, bead availability, and dependency-graph sanity. | Pre-flight report. | `cancel` | Passing checks move to setup-plan approval. |
 | `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. Regenerating archives the current draft as a prior version, starts background generation, and returns you to the ticket overview immediately; all prior versions are accessible via the VERSION dropdown at the top of the approval pane. Failed setup-plan model output is diagnostic-only and is not shown as structured setup content. | `execution_setup_plan`, generation report, raw setup diagnostics, approval receipt on approval. | `approve`, `cancel` | Approved plan advances to execution setup. |
-| `PREPARING_EXECUTION_ENV` | The approved setup plan is executed in a constrained way. The goal is a reusable runtime profile, not general project mutation. | Execution setup profile, setup logs, setup diagnostics. | `cancel` | Success enters `CODING`. |
+| `PREPARING_EXECUTION_ENV` | The approved setup plan is executed in a constrained way. Missing required tooling is provisioned under ticket-owned temp roots before blocking, and the goal is a reusable runtime profile rather than general project mutation. | Execution setup profile, runtime wrapper artifacts, setup logs, setup diagnostics. | `cancel` | Success enters `CODING`. |
 
 ### Implementation
 

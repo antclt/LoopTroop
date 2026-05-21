@@ -12,7 +12,7 @@ import type {
   Session,
   StreamEvent,
 } from '../opencode/types'
-import { OPENCODE_EXECUTION_YOLO_PERMISSIONS } from '../opencode/permissions'
+import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../opencode/permissions'
 import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
 import { parseModelRef } from '../opencode/types'
 import { SessionManager, type SessionOwnership } from '../opencode/sessionManager'
@@ -202,7 +202,7 @@ function buildAttemptMeta(
 
 function resolveSessionCreateOptions(): OpenCodeSessionCreateOptions {
   return {
-    permission: OPENCODE_EXECUTION_YOLO_PERMISSIONS,
+    permission: OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS,
   }
 }
 

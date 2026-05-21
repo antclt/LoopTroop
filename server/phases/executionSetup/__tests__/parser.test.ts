@@ -20,10 +20,12 @@ describe('parseExecutionSetupResult', () => {
         bootstrap_commands: ['project bootstrap'],
         reusable_artifacts: [
           { path: '.ticket/runtime/execution-setup/tool-cache/dependencies', kind: 'cache', purpose: 'project dependency cache' },
+          { path: '.ticket/runtime/execution-setup/env.sh', kind: 'environment', purpose: 'prepared runtime environment' },
+          { path: '.ticket/runtime/execution-setup/run', kind: 'command-wrapper', purpose: 'sources env before commands' },
         ],
         project_commands: {
           prepare: ['project bootstrap'],
-          test_full: ['project test'],
+          test_full: ['./.ticket/runtime/execution-setup/run go test ./...'],
           lint_full: [],
           typecheck_full: [],
         },
@@ -48,6 +50,12 @@ describe('parseExecutionSetupResult', () => {
     expect(parsed.result?.profile.artifact).toBe('execution_setup_profile')
     expect(parsed.result?.profile.tempRoots).toEqual(['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'])
     expect(parsed.result?.profile.reusableArtifacts[0]?.path).toBe('.ticket/runtime/execution-setup/tool-cache/dependencies')
+    expect(parsed.result?.profile.reusableArtifacts.map((artifact) => artifact.path)).toEqual([
+      '.ticket/runtime/execution-setup/tool-cache/dependencies',
+      '.ticket/runtime/execution-setup/env.sh',
+      '.ticket/runtime/execution-setup/run',
+    ])
+    expect(parsed.result?.profile.projectCommands.testFull).toEqual(['./.ticket/runtime/execution-setup/run go test ./...'])
   })
 
   it('repairs fenced YAML payloads inside the execution setup marker', () => {
