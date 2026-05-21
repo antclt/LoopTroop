@@ -1,8 +1,3 @@
----
-title: Changelog
-description: Official release history and notable changes for LoopTroop.
----
-
 # Changelog
 
 All notable changes and official releases for LoopTroop are documented here.
