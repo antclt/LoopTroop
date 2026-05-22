@@ -470,7 +470,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                 <div className="bg-muted/30 border border-border/50 rounded-lg p-3 mt-1 shadow-inner relative overflow-hidden group">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <HardDrive className="h-3.5 w-3.5 text-indigo-500" />
+                      <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
                       Ticket Disk Space
                     </span>
                     {ticketSize !== null && (
@@ -478,7 +478,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                         type="button"
                         onClick={handleCalculateSize}
                         disabled={isCalculatingSize}
-                        className="text-xs text-indigo-500 hover:text-indigo-400 font-medium transition-colors flex items-center gap-1.5 focus:outline-none"
+                        className="text-xs text-muted-foreground hover:text-foreground font-medium transition-colors flex items-center gap-1.5 focus:outline-none"
                       >
                         <RotateCw className={`h-3 w-3 ${isCalculatingSize ? 'animate-spin' : ''}`} />
                         Recalculate
@@ -496,7 +496,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                         size="sm"
                         disabled={isCalculatingSize}
                         onClick={handleCalculateSize}
-                        className="bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-medium shadow-md shadow-indigo-500/10 hover:shadow-indigo-500/20 active:scale-[0.98] transition-all flex items-center gap-1.5 h-8 px-3.5 rounded-md text-xs shrink-0"
+                        className="bg-primary text-primary-foreground hover:bg-primary/90 font-medium active:scale-[0.98] transition-all flex items-center gap-1.5 h-8 px-3.5 rounded-md text-xs shrink-0"
                       >
                         {isCalculatingSize ? (
                           <>
@@ -513,15 +513,15 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                     </div>
                   ) : (
                     <div className="flex items-center gap-4 py-0.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-lg shrink-0 flex items-center justify-center shadow-sm">
-                        <HardDrive className="h-5 w-5 text-indigo-500 animate-pulse" />
+                      <div className="p-2.5 bg-muted border border-border/80 rounded-lg shrink-0 flex items-center justify-center shadow-sm">
+                        <HardDrive className="h-5 w-5 text-foreground animate-pulse" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-baseline gap-1.5">
                           <span className="text-xl font-extrabold text-foreground font-mono leading-none tracking-tight">
                             {formatBytes(ticketSize)}
                           </span>
-                          <span className="text-[9px] text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider leading-none">
+                          <span className="text-[9px] text-foreground bg-primary/10 border border-border px-1.5 py-0.5 rounded uppercase font-bold tracking-wider leading-none">
                             Occupied
                           </span>
                         </div>

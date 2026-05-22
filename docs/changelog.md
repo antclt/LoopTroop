@@ -25,7 +25,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added a ticket disk space calculation card under the Artifacts Location in details view with a premium gradient button, interactive hover effects, live loading state, error alert banner, and on-demand recursive disk size computation.
+- Added a ticket disk space calculation card under the Artifacts Location in details view with a premium themed button, interactive hover effects, live loading state, error alert banner, and on-demand recursive disk size computation.
 - Added a `GET /tickets/:id/size` route to Hono backend for recursively measuring ticket worktree folders using safe non-symlink-following `lstat` concurrency.
 - Added a robust integration test `server/routes/__tests__/tickets.size.test.ts` verifying exact and recursive file size aggregation.
 - Added two bead error screenshots to the docs home page and a docs-wide image lightbox so screenshots can be opened nearly full screen with a top-right close button.
