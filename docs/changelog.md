@@ -53,6 +53,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
+- Clarified that the workspace phase header's `(details)` button opens the canonical workflow metadata from `shared/workflowMeta.ts`, and aligned the state-machine and ticket-flow wording for approval and execution-setup statuses with the current UI copy.
 - Bead completion now means OpenCode success plus local finalization success: local commits are required when code changes exist, true no-op completions are allowed, push failures are warnings, and fatal finalization failures route through `BEAD_FINALIZATION_FAILED` instead of broadcasting `bead_complete`.
 - Archived phase-attempt artifacts are explicitly read-only, while current approval-edit routes continue to write only the active version.
 - Added "Context Slimming Pipeline" as a high-priority roadmap item in `docs/roadmap.md` for per-phase input/output field auditing, deterministic strip-and-store, and retry-path field classification.

@@ -36,6 +36,8 @@ WAITING_PR_REVIEW -> merge or close-unmerged -> CLEANING_ENV
 
 Browser, frontend, backend, OpenCode, and model interruptions do not create new workflow states. They are recovered through persisted ticket state, SSE replay/refetch, OpenCode ownership checks, and phase-specific retry rules. If the app cannot prove a safe resume point, it blocks the ticket instead of guessing.
 
+The workspace header's `(details)` button opens the same canonical workflow metadata that `shared/workflowMeta.ts` provides, including the longer overview, steps, outputs, transitions, notes, equivalents, context, and workflow info for each status.
+
 When a ticket enters `BLOCKED_ERROR`, the error panel shows the normal error details and logs. If OpenCode or the provider exposed underlying diagnostics, LoopTroop persists and displays those structured details too, including provider, model, session, timeout, retry, and rate-limit-style failure context. When structured-output validation fails because OpenCode returned no usable content, the error panel keeps the latest underlying OpenCode retry/provider message instead of showing only the parser wrapper.
 
 ## Detailed Flow Diagram
@@ -339,7 +341,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
 | `PRE_FLIGHT_CHECK` | LoopTroop runs deterministic readiness checks: workspace health, OpenCode reachability, execution-mode probe, bead availability, and dependency-graph sanity. | Pre-flight report. | `cancel` | Passing checks move to setup-plan approval. |
-| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. Regenerating archives the current draft as a prior version; archived versions are read-only. Approval includes the reviewed plan hash and stale hashes return `409`. | `execution_setup_plan` with `contentSha256`, generation report, raw setup diagnostics, approval receipt, and user-edit receipts. | `approve`, `cancel` | Approved plan advances to execution setup. |
+| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. The plan includes an explicit readiness assessment, no-action cases are valid, regenerated drafts archive the current version, archived versions are read-only, and approval includes the reviewed plan hash with stale hashes returning `409`. | `execution_setup_plan` with `contentSha256`, generation report, raw setup diagnostics, approval receipt, and user-edit receipts. | `approve`, `cancel` | Approved plan advances to execution setup. |
 | `PREPARING_EXECUTION_ENV` | The approved setup plan is executed in a constrained way. Missing required tooling is provisioned under ticket-owned temp roots before blocking, and the goal is a reusable runtime profile rather than general project mutation. | Execution setup profile, runtime wrapper artifacts, setup logs, setup diagnostics. | `cancel` | Success enters `CODING`. |
 
 ### Implementation
