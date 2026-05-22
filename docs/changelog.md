@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Made documentation screenshots collapsible and clickable, with expanded bead error screenshots on the docs home page.
 - Consolidated changelog maintenance into the docs changelog while keeping a root pointer for discoverability.
 - Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
 - Made versioned coverage reports keep version transitions in order while defaulting to the latest check and suppressing stale open-gap lists.
@@ -22,10 +23,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added two bead error screenshots to the docs home page and a docs-wide image lightbox so screenshots can be opened nearly full screen with a top-right close button.
 - Added a dedicated `Changelog` documentation page (`docs/changelog.md`) detailing LoopTroop's official release history starting from release `0.1.0`.
 - Integrated `/changelog` route into both VitePress sidebar and top navbar navigation.
 
 #### Changed
+- Wrapped the docs home-page screenshots in collapsed-by-default details sections so only each screenshot title is visible until expanded.
 - Made `docs/changelog.md` the canonical full changelog, including unreleased changes, and replaced the root `CHANGELOG.md` with a discoverability pointer.
 - `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.
 - Updated `@opencode-ai/sdk` from `1.15.5` to `1.15.6`.
