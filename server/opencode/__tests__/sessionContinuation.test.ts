@@ -16,9 +16,24 @@ function diagnostics(input: Partial<BlockedErrorDiagnostics>): BlockedErrorDiagn
 describe('session continuation eligibility', () => {
   it.each([
     ['usage limit retryable signal', diagnostics({ summary: 'usage limit has been reached', isRetryable: true })],
+    ['HTTP 402 Payment Required', diagnostics({ summary: 'Payment Required', statusCode: 402, isRetryable: false })],
+    ['HTTP 402 deactivated workspace', diagnostics({
+      summary: 'Payment Required: {"detail":{"code":"deactivated_workspace"}} (HTTP 402)',
+      statusCode: 402,
+      isRetryable: false,
+      responseBodyPreview: '{"detail":{"code":"deactivated_workspace"}}',
+    })],
+    ['HTTP 402 billing error', diagnostics({
+      summary: 'billing_error: payment method needs attention',
+      statusCode: 402,
+      isRetryable: false,
+      providerErrorType: 'billing_error',
+      providerErrorMessage: 'There is an issue with your billing or payment information.',
+    })],
     ['HTTP 429 rate limit', diagnostics({ summary: 'rate limit exceeded', statusCode: 429 })],
     ['HTTP 503 overload', diagnostics({ summary: 'service overloaded', statusCode: 503 })],
     ['HTTP 529 capacity', diagnostics({ summary: 'model is overloaded', statusCode: 529 })],
+    ['retryable uncommon 4xx', diagnostics({ summary: 'provider marked this client error retryable', statusCode: 409, isRetryable: true })],
     ['timeout', diagnostics({ kind: 'timeout', source: 'opencode', summary: 'Timeout' })],
     ['transport failure', diagnostics({ kind: 'transport', source: 'opencode', summary: 'fetch failed: connection reset' })],
   ])('accepts %s', (_label, candidate) => {
@@ -27,7 +42,13 @@ describe('session continuation eligibility', () => {
 
   it.each([
     ['auth code', diagnostics({ summary: 'rate limit text but auth failed' }), [OPENCODE_PROVIDER_AUTH_FAILED]],
+    ['HTTP 400', diagnostics({ summary: 'bad request', statusCode: 400, isRetryable: true }), []],
     ['HTTP 401', diagnostics({ summary: 'rate limit text but HTTP 401', statusCode: 401 }), []],
+    ['HTTP 403', diagnostics({ summary: 'permission_error: forbidden', statusCode: 403, isRetryable: true }), []],
+    ['HTTP 404', diagnostics({ summary: 'model_not_found: resource is missing', statusCode: 404, isRetryable: true }), []],
+    ['HTTP 413', diagnostics({ summary: 'request_too_large: payload exceeds context window', statusCode: 413, isRetryable: true }), []],
+    ['HTTP 422', diagnostics({ summary: 'unprocessable entity', statusCode: 422, isRetryable: true }), []],
+    ['uncommon 4xx with transient-looking text but no retryable flag', diagnostics({ summary: 'rate limit text on unsupported client error', statusCode: 418, isRetryable: false }), []],
     ['invalid request', diagnostics({ summary: 'invalid_request: payload is invalid', statusCode: 400 }), []],
     ['billing', diagnostics({ summary: 'billing account disabled', isRetryable: true }), []],
     ['insufficient quota', diagnostics({ summary: 'insufficient_quota: quota exhausted', isRetryable: true }), []],

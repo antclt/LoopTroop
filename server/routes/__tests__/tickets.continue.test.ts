@@ -157,6 +157,40 @@ describe('ticketRouter POST /tickets/:id/continue', () => {
     ])
   })
 
+  it('allows continue for HTTP 402 provider blocks with a preserved active session', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    const previousStatus = 'VERIFYING_PRD_COVERAGE'
+    ensureActivePhaseAttempt(ticket.id, previousStatus)
+    recordTicketErrorOccurrence(ticket.id, {
+      blockedFromStatus: previousStatus,
+      errorMessage: 'Payment Required: {"detail":{"code":"deactivated_workspace"}} (HTTP 402)',
+      errorCodes: ['OPENCODE_PROVIDER_ERROR'],
+      diagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'Payment Required: {"detail":{"code":"deactivated_workspace"}} (HTTP 402)',
+        sessionId: 'ses-continue',
+        statusCode: 402,
+        isRetryable: false,
+        responseBodyPreview: '{"detail":{"code":"deactivated_workspace"}}',
+      },
+    })
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus } }),
+      errorMessage: 'Payment Required: {"detail":{"code":"deactivated_workspace"}} (HTTP 402)',
+    })
+    insertActiveOpenCodeSession(ticket.id, previousStatus)
+    expect(getTicketByRef(ticket.id)?.availableActions).toContain('continue')
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'CONTINUE' })
+    expect(hasPendingSessionContinuationForTicketPhase(ticket.id, previousStatus)).toBe(true)
+    expect(getTicketByRef(ticket.id)?.status).toBe(previousStatus)
+  })
+
   it('rejects continue when no matching active OpenCode session row is preserved', async () => {
     const { app, ticket } = setupContinueTicketApp()
     const previousStatus = 'PREPARING_EXECUTION_ENV'

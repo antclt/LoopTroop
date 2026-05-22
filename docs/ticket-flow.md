@@ -211,7 +211,7 @@ Two extra guards matter at the user-action layer:
 - `BLOCKED_ERROR` retry from `CODING` first tries to restore the failed bead into a retryable state before it re-enters `CODING`.
 - `BLOCKED_ERROR` retry from a non-implementation phase archives the failed version with `manual_retry_after_blocked_error` and writes the rerun into the next phase attempt.
 - `BLOCKED_ERROR` retry is rejected when no preserved `previousStatus` exists.
-- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look transient (rate/usage limit, retry-budget exhaustion, overload/capacity, timeout, selected 5xx/529, or transport failure) rather than auth, billing, quota, invalid-request, configuration, or request-size failures.
+- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look continuable (HTTP 402 Payment Required, rate/usage limit, retry-budget exhaustion, overload/capacity, timeout, selected 5xx/529, or transport failure) rather than auth, non-402 quota, invalid-request, configuration, model-not-found, or request-size failures.
 - `CODING` retry is rejected when the failed bead cannot be reset to a recorded bead-start commit.
 
 ## Artifact Checkpoints

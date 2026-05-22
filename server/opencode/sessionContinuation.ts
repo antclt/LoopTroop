@@ -8,7 +8,7 @@ import {
 import type { OpenCodeResponseMeta } from './assistantMessageAnalysis'
 import type { SessionOwnership } from './sessionManager'
 
-const RETRYABLE_STATUS_CODES = new Set([408, 429, 500, 502, 503, 504, 529])
+const CONTINUABLE_STATUS_CODES = new Set([402, 408, 429, 500, 502, 503, 504, 529])
 const NON_CONTINUABLE_STATUS_CODES = new Set([400, 401, 403, 404, 413, 422])
 const PENDING_CONTINUATION_TTL_MS = 30 * 60 * 1000
 
@@ -65,19 +65,30 @@ function buildDiagnosticHaystack(diagnostics: BlockedErrorDiagnostics | null | u
     .join('\n')
 }
 
+function isOtherClientError(statusCode: number | undefined): boolean {
+  return typeof statusCode === 'number'
+    && statusCode >= 400
+    && statusCode < 500
+    && !CONTINUABLE_STATUS_CODES.has(statusCode)
+    && !NON_CONTINUABLE_STATUS_CODES.has(statusCode)
+}
+
 function hasNonContinuableSignal(input: ContinuableBlockedErrorInput): boolean {
   const diagnostics = input.diagnostics ?? null
   const errorCodes = input.errorCodes ?? []
   const haystack = buildDiagnosticHaystack(diagnostics)
+  const statusCode = diagnostics?.statusCode
 
   return errorCodes.includes(OPENCODE_PROVIDER_AUTH_FAILED)
-    || (typeof diagnostics?.statusCode === 'number' && NON_CONTINUABLE_STATUS_CODES.has(diagnostics.statusCode))
-    || /\b(invalid[_ -]?request|permission|auth|authentication|authenticated|unauthorized|forbidden|credential|api key|token|billing|insufficient[_ -]?quota)\b/.test(haystack)
+    || (typeof statusCode === 'number' && NON_CONTINUABLE_STATUS_CODES.has(statusCode))
+    || /\b(invalid[_ -]?request|permission|auth|authentication|authenticated|unauthorized|forbidden|credential|api key|token|request[_ -]?too[_ -]?large|payload[_ -]?too[_ -]?large|model[_ -]?not[_ -]?found|provider[_ -]?model[_ -]?not[_ -]?found)\b/.test(haystack)
+    || (statusCode !== 402 && /\b(billing|insufficient[_ -]?quota)\b/.test(haystack))
 }
 
 function hasContinuableSignal(diagnostics: BlockedErrorDiagnostics): boolean {
   if (diagnostics.isRetryable === true) return true
-  if (typeof diagnostics.statusCode === 'number' && RETRYABLE_STATUS_CODES.has(diagnostics.statusCode)) return true
+  if (typeof diagnostics.statusCode === 'number' && CONTINUABLE_STATUS_CODES.has(diagnostics.statusCode)) return true
+  if (isOtherClientError(diagnostics.statusCode)) return false
   if (diagnostics.kind === 'timeout' || diagnostics.kind === 'transport') return true
 
   const haystack = buildDiagnosticHaystack(diagnostics)

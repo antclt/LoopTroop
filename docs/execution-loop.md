@@ -102,7 +102,7 @@ The profile controls two limits:
 - `OpenCode Retry Limit`: the number of matching retry events allowed before blocking; default 10
 - `OpenCode Retry Grace Window`: how long a prompt may remain in a matching retry state without progress before blocking; default 60 seconds
 
-Matching messages include rate limits, usage limits, resource exhaustion, overloaded/capacity responses, temporary unavailability, timeout/deadline errors, fetch failures, and network/socket resets. Auth, billing, invalid-request, permission, missing-key, and insufficient-quota style errors remain non-continuable.
+Matching messages include rate limits, usage limits, resource exhaustion, overloaded/capacity responses, temporary unavailability, timeout/deadline errors, fetch failures, and network/socket resets. Persisted `HTTP 402 Payment Required` provider diagnostics are also eligible for Continue once the payment or workspace condition clears. Auth, invalid-request, permission, missing-key, request-size, model-not-found, and non-402 quota errors remain non-continuable.
 
 In any owned phase, retry-budget exhaustion can preserve the active OpenCode session when possible and route the ticket to `BLOCKED_ERROR` with diagnostics. Continue sends exactly `continue please` into that same session. During `CODING`, this also prevents provider stalls from consuming the bead iteration timeout or bead retry budget; Retry still keeps the normal bead reset/retry behavior. Generic OpenCode provider errors are best-effort enriched from matching local OpenCode logs before they are shown in the ticket.
 

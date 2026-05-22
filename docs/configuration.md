@@ -120,7 +120,7 @@ How many continuable OpenCode `session.status` retry events LoopTroop allows bef
 
 This is separate from `Max Bead Retries` and `Structured Output Retries`. It applies to provider or transport interruptions inside a single OpenCode prompt, such as rate limits, usage limits, resource exhaustion, overload/capacity, temporary unavailability, timeouts/deadlines, fetch failures, and network/socket resets.
 
-When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` with provider diagnostics so you can Continue when the owned session is preserved, Retry, or Cancel. CODING has one extra protection: these provider stalls do not consume the bead retry budget or wait for the bead iteration timeout. Ordinary implementation failures, malformed completion markers, failed tests, and non-continuable auth/billing/configuration errors keep their existing behavior.
+When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` with provider diagnostics so you can Continue when the owned session is preserved, Retry, or Cancel. CODING has one extra protection: these provider stalls do not consume the bead retry budget or wait for the bead iteration timeout. `HTTP 402 Payment Required` provider blocks can also use Continue after the payment or workspace condition clears, while ordinary implementation failures, malformed completion markers, failed tests, and non-continuable auth/configuration/request errors keep their existing behavior.
 
 **Trade-offs:**
 
