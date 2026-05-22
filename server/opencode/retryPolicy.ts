@@ -1,0 +1,49 @@
+import { db as appDb } from '../db/index'
+import { profiles } from '../db/schema'
+import { PROFILE_DEFAULTS } from '../db/defaults'
+
+export interface OpenCodeRetryPolicy {
+  limit: number
+  delayMs: number
+}
+
+const MAX_OPENCODE_RETRY_LIMIT = 50
+const MAX_OPENCODE_RETRY_DELAY_MS = 3_600_000
+
+function clampInteger(value: unknown, fallback: number, min: number, max: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback
+  const normalized = Math.trunc(value)
+  if (normalized < min) return min
+  if (normalized > max) return max
+  return normalized
+}
+
+export function normalizeOpenCodeRetryPolicy(input?: Partial<OpenCodeRetryPolicy> | null): OpenCodeRetryPolicy {
+  return {
+    limit: clampInteger(input?.limit, PROFILE_DEFAULTS.opencodeRetryLimit, 0, MAX_OPENCODE_RETRY_LIMIT),
+    delayMs: clampInteger(input?.delayMs, PROFILE_DEFAULTS.opencodeRetryDelay, 0, MAX_OPENCODE_RETRY_DELAY_MS),
+  }
+}
+
+export function resolveOpenCodeRetryPolicy(input?: Partial<OpenCodeRetryPolicy> | null): OpenCodeRetryPolicy {
+  if (input) return normalizeOpenCodeRetryPolicy(input)
+
+  try {
+    const profile = appDb.select().from(profiles).get()
+    return normalizeOpenCodeRetryPolicy({
+      limit: profile?.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit,
+      delayMs: profile?.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay,
+    })
+  } catch {
+    return normalizeOpenCodeRetryPolicy()
+  }
+}
+
+export function isContinuableOpenCodeRetryMessage(message: string | undefined | null): boolean {
+  const normalized = message?.trim().toLowerCase() ?? ''
+  if (!normalized) return false
+  if (/\b(auth|authentication|authenticated|unauthorized|forbidden|credential|api key|token|billing|insufficient[_ -]?quota|invalid[_ -]?request|permission)\b/.test(normalized)) {
+    return false
+  }
+  return /\b(rate[_ -]?(?:limit|limited)|too many requests|usage limit|limit (?:has been )?reached|resource exhausted|overloaded|overload|capacity|service unavailable|temporarily unavailable|timeout|timed out|deadline(?: exceeded)?|fetch failed|connection reset|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network)\b/.test(normalized)
+}

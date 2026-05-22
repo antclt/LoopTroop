@@ -24,7 +24,7 @@ describe('profileRouter numeric validation', () => {
     vi.restoreAllMocks()
   })
 
-  it('accepts PRD, beads, and structured retry values at the configured bounds', async () => {
+  it('accepts PRD, beads, structured retry, and OpenCode retry values at the configured bounds', async () => {
     vi.mocked(validateModelSelection).mockResolvedValue({
       mainImplementer: 'openai/gpt-5.4',
       councilMembers: ['openai/gpt-5.4', 'anthropic/claude-sonnet-4'],
@@ -40,6 +40,8 @@ describe('profileRouter numeric validation', () => {
         maxPrdCoveragePasses: 2,
         maxBeadsCoveragePasses: 20,
         structuredRetryCount: 5,
+        opencodeRetryLimit: 50,
+        opencodeRetryDelay: 3_600_000,
       }),
     })
 
@@ -48,10 +50,12 @@ describe('profileRouter numeric validation', () => {
       maxPrdCoveragePasses: 2,
       maxBeadsCoveragePasses: 20,
       structuredRetryCount: 5,
+      opencodeRetryLimit: 50,
+      opencodeRetryDelay: 3_600_000,
     })
   })
 
-  it('initializes and returns the structured retry default when omitted', async () => {
+  it('initializes and returns structured and OpenCode retry defaults when omitted', async () => {
     vi.mocked(validateModelSelection).mockResolvedValue({
       mainImplementer: 'openai/gpt-5.4',
       councilMembers: ['openai/gpt-5.4', 'anthropic/claude-sonnet-4'],
@@ -70,13 +74,17 @@ describe('profileRouter numeric validation', () => {
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toMatchObject({
       structuredRetryCount: 1,
+      opencodeRetryLimit: 10,
+      opencodeRetryDelay: 60_000,
     })
 
     const stored = db.select().from(profiles).get()
     expect(stored?.structuredRetryCount).toBe(1)
+    expect(stored?.opencodeRetryLimit).toBe(10)
+    expect(stored?.opencodeRetryDelay).toBe(60_000)
   })
 
-  it('updates and reads structured retry count through the profile API', async () => {
+  it('updates and reads retry settings through the profile API', async () => {
     db.insert(profiles).values({
       mainImplementer: 'openai/gpt-5.4',
       councilMembers: '["openai/gpt-5.4","anthropic/claude-sonnet-4"]',
@@ -89,22 +97,28 @@ describe('profileRouter numeric validation', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         structuredRetryCount: 0,
+        opencodeRetryLimit: 0,
+        opencodeRetryDelay: 0,
       }),
     })
 
     expect(patchResponse.status).toBe(200)
     await expect(patchResponse.json()).resolves.toMatchObject({
       structuredRetryCount: 0,
+      opencodeRetryLimit: 0,
+      opencodeRetryDelay: 0,
     })
 
     const getResponse = await app.request('/api/profile')
     expect(getResponse.status).toBe(200)
     await expect(getResponse.json()).resolves.toMatchObject({
       structuredRetryCount: 0,
+      opencodeRetryLimit: 0,
+      opencodeRetryDelay: 0,
     })
   })
 
-  it('rejects out-of-range PRD, beads coverage, and structured retry values', async () => {
+  it('rejects out-of-range PRD, beads coverage, structured retry, and OpenCode retry values', async () => {
     db.insert(profiles).values({
       mainImplementer: 'openai/gpt-5.4',
       councilMembers: '["openai/gpt-5.4","anthropic/claude-sonnet-4"]',
@@ -118,6 +132,8 @@ describe('profileRouter numeric validation', () => {
         maxPrdCoveragePasses: 1,
         maxBeadsCoveragePasses: 21,
         structuredRetryCount: 6,
+        opencodeRetryLimit: 51,
+        opencodeRetryDelay: 3_600_001,
       }),
     })
 

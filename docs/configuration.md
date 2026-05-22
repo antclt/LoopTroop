@@ -19,6 +19,8 @@ All configuration lives in your profile, accessible via the **Configuration** bu
 | [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Execution Phase |
 | [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Execution Phase |
 | [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Execution Phase |
+| [OpenCode Retry Limit](#opencode-retry-limit) | 10 | 0–50 | Execution Phase |
+| [OpenCode Retry Grace Window](#opencode-retry-grace-window) | 60 s | 0–3600 s | Execution Phase |
 | [Tool Input Max Chars](#tool-input-max-chars) | 4,000 | 500–50,000 | Logging |
 | [Tool Output Max Chars](#tool-output-max-chars) | 12,000 | 1,000–100,000 | Logging |
 | [Tool Error Max Chars](#tool-error-max-chars) | 6,000 | 500–50,000 | Logging |
@@ -417,6 +419,52 @@ Startup and manual-retry recovery can avoid a fresh attempt when the interrupted
 - Setting to 0 effectively disables retry: any iteration failure immediately blocks the bead.
 
 **See also:** [Execution Loop → Max Bead Retries](/execution-loop#max-bead-retries)
+
+---
+
+### OpenCode Retry Limit
+
+**Type:** integer
+**Default:** 10
+**Range:** 0–50
+
+How many continuable OpenCode `session.status` retry events LoopTroop allows before it blocks the active prompt for human decision.
+
+This is separate from `Max Bead Retries`. It applies to provider or transport interruptions inside a single OpenCode prompt, such as rate limits, usage limits, resource exhaustion, overload/capacity, temporary unavailability, timeouts/deadlines, fetch failures, and network/socket resets.
+
+When the limit is reached during `CODING`, LoopTroop preserves the active OpenCode session when possible and routes the ticket to `BLOCKED_ERROR` with provider diagnostics so you can Continue, Retry, or Cancel. Ordinary implementation failures, malformed completion markers, failed tests, and non-continuable auth/billing/configuration errors keep their existing retry behavior.
+
+**Trade-offs:**
+
+| Lower (0–2) | Higher (10–50) |
+| --- | --- |
+| Blocks quickly when a provider is unavailable | Gives OpenCode more room to recover internally |
+| Saves time and tokens during hard rate limits | May wait longer before manual recovery is offered |
+| 0 blocks on the first matching retry event | Useful for bursty providers with short retry windows |
+
+**See also:** [Execution Loop → OpenCode Retry Budget](/execution-loop#opencode-retry-budget)
+
+---
+
+### OpenCode Retry Grace Window
+
+**Type:** integer (seconds)
+**Default:** 60 s
+**Range:** 0–3600 s
+
+How long LoopTroop lets a prompt remain in a continuable OpenCode retry state without progress before it blocks, even if the retry count has not reached `OpenCode Retry Limit`.
+
+The timer starts when OpenCode reports a matching retry status and is cleared by non-retry progress events. Set it to 0 to disable the grace timer and rely only on the retry count.
+
+**Trade-offs:**
+
+| Lower (0–10 s) | Higher (60–3600 s) |
+| --- | --- |
+| Surfaces stuck retry loops quickly | Allows longer provider backoff windows |
+| Better for interactive supervision | Better for unattended runs with temporary provider load |
+| 0 disables the timer | Long windows can delay manual intervention |
+
+**See also:** [OpenCode Integration → Prompt Runner](/opencode-integration#prompt-runner)
 
 ---
 

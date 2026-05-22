@@ -26,6 +26,11 @@ import {
   shouldPreserveSessionForContinuation,
 } from '../opencode/sessionContinuation'
 import { createOpenCodeSessionWithRetry } from '../opencode/sessionCreation'
+import {
+  isContinuableOpenCodeRetryMessage,
+  resolveOpenCodeRetryPolicy,
+  type OpenCodeRetryPolicy,
+} from '../opencode/retryPolicy'
 
 export interface OpenCodeRunCallbacks {
   onSessionCreated?: (session: Session) => void
@@ -76,6 +81,7 @@ export interface OpenCodeRunOptions extends OpenCodeRunCallbacks {
   sessionOwnership?: OpenCodeSessionOwnership
   skipSessionValidation?: boolean
   erroredSessionPolicy?: OpenCodeErroredSessionPolicy
+  opencodeRetryPolicy?: Partial<OpenCodeRetryPolicy>
 }
 
 export interface OpenCodeRunResult {
@@ -249,6 +255,31 @@ function isPromptTransportFailure(error: unknown): boolean {
     error.message.startsWith('Failed to prompt OpenCode session')
 }
 
+function isOpenCodeRetryProgressEvent(event: StreamEvent): boolean {
+  switch (event.type) {
+    case 'session_status':
+      return event.status !== 'retry'
+    case 'text':
+    case 'reasoning':
+      return Boolean(event.complete || event.delta?.trim() || event.text?.trim())
+    case 'part_summary':
+      return event.partType !== 'retry'
+    case 'tool':
+    case 'step':
+    case 'session_error':
+    case 'permission':
+    case 'question':
+    case 'todo':
+    case 'file_edited':
+    case 'debug_event':
+    case 'part_removed':
+    case 'done':
+      return true
+    default:
+      return false
+  }
+}
+
 export async function runOpenCodePrompt({
   adapter,
   projectPath,
@@ -261,6 +292,7 @@ export async function runOpenCodePrompt({
   toolPolicy,
   sessionOwnership,
   erroredSessionPolicy,
+  opencodeRetryPolicy,
   onSessionCreated,
   onPromptDispatched,
   onStreamEvent,
@@ -346,6 +378,7 @@ export async function runOpenCodePrompt({
       sessionOwnership,
       skipSessionValidation: true,
       erroredSessionPolicy,
+      opencodeRetryPolicy,
       onPromptDispatched,
       onStreamEvent,
       onPromptCompleted,
@@ -391,6 +424,7 @@ export async function runOpenCodeSessionPrompt({
   sessionOwnership,
   skipSessionValidation,
   erroredSessionPolicy,
+  opencodeRetryPolicy,
   onPromptDispatched,
   onStreamEvent,
   onStreamError,
@@ -428,12 +462,21 @@ export async function runOpenCodeSessionPrompt({
   let response = ''
   const promptTimeoutMs = getRemainingTimeoutMs(resolvedTimeoutDeadline)
   const deadlineController = promptTimeoutMs === undefined ? undefined : new AbortController()
-  const combinedSignal = deadlineController
-    ? signal
-      ? AbortSignal.any([signal, deadlineController.signal])
-      : deadlineController.signal
-    : signal
+  const retryController = new AbortController()
+  const combinedSignal = signal
+    ? deadlineController
+      ? AbortSignal.any([signal, deadlineController.signal, retryController.signal])
+      : AbortSignal.any([signal, retryController.signal])
+    : deadlineController
+      ? AbortSignal.any([deadlineController.signal, retryController.signal])
+      : retryController.signal
   let deadlineTimer: ReturnType<typeof setTimeout> | undefined
+  let openCodeRetryTimer: ReturnType<typeof setTimeout> | undefined
+  let openCodeRetryError: Error | null = null
+  let continuableRetryCount = 0
+  let latestContinuableRetryMessage = ''
+  let latestContinuableRetryAttempt: number | undefined
+  const resolvedRetryPolicy = resolveOpenCodeRetryPolicy(opencodeRetryPolicy)
   const parsedModel = model ? parseModelRef(model) : undefined
   const tools = resolveOpenCodeTools(toolPolicy)
   const stepFinishSafetyMs = promptTimeoutMs === undefined || promptTimeoutMs <= 0
@@ -450,6 +493,29 @@ export async function runOpenCodeSessionPrompt({
   let sessionErrorEvent: SessionErrorStreamEvent | undefined
   let latestStepFinishReason: string | undefined
   let latestStepFinishTokens: OpenCodeResponseMeta['latestStepFinishTokens'] | undefined
+  const clearOpenCodeRetryTimer = () => {
+    if (openCodeRetryTimer) {
+      clearTimeout(openCodeRetryTimer)
+      openCodeRetryTimer = undefined
+    }
+  }
+  const buildOpenCodeRetryError = (reason: 'limit' | 'delay'): Error => {
+    const retryMessage = latestContinuableRetryMessage || 'OpenCode reported a retryable provider interruption.'
+    const retryLabel = typeof latestContinuableRetryAttempt === 'number'
+      ? `retry attempt ${latestContinuableRetryAttempt}`
+      : `${continuableRetryCount} retry event(s)`
+    const summary = reason === 'limit'
+      ? `OpenCode retry budget exhausted after ${continuableRetryCount} retry event(s)`
+      : `OpenCode retry grace window expired after ${resolvedRetryPolicy.delayMs}ms`
+    const error = new Error(`${summary} (${retryLabel}): ${retryMessage}`)
+    error.name = 'OpenCodeRetryLimitError'
+    return error
+  }
+  const blockForOpenCodeRetry = (reason: 'limit' | 'delay') => {
+    if (openCodeRetryError) return
+    openCodeRetryError = buildOpenCodeRetryError(reason)
+    retryController.abort()
+  }
   promptOptions.onEvent = (event) => {
     if (event.type === 'session_error') {
       sessionErrorEvent = event
@@ -459,6 +525,24 @@ export async function runOpenCodeSessionPrompt({
         ? event.reason.trim()
         : latestStepFinishReason
       latestStepFinishTokens = event.tokens ?? latestStepFinishTokens
+    }
+    if (event.type === 'session_status' && event.status === 'retry') {
+      if (isContinuableOpenCodeRetryMessage(event.message)) {
+        continuableRetryCount += 1
+        latestContinuableRetryMessage = event.message?.trim() || latestContinuableRetryMessage
+        latestContinuableRetryAttempt = event.attempt
+
+        if (!openCodeRetryTimer && resolvedRetryPolicy.delayMs > 0) {
+          openCodeRetryTimer = setTimeout(() => blockForOpenCodeRetry('delay'), resolvedRetryPolicy.delayMs)
+        }
+        if (resolvedRetryPolicy.limit === 0 || continuableRetryCount >= resolvedRetryPolicy.limit) {
+          blockForOpenCodeRetry('limit')
+        }
+      } else {
+        clearOpenCodeRetryTimer()
+      }
+    } else if (isOpenCodeRetryProgressEvent(event)) {
+      clearOpenCodeRetryTimer()
     }
     onStreamEvent?.(event)
   }
@@ -487,12 +571,33 @@ export async function runOpenCodeSessionPrompt({
       throw new Error(TIMEOUT_ERROR_MESSAGE)
     }
     response = await adapter.promptSession(resolvedSession.id, parts, combinedSignal, promptOptions)
+    if (openCodeRetryError) {
+      throw openCodeRetryError
+    }
     // Adapter completed but deadline may have fired during execution;
     // enforce the timeout even if the adapter didn't respect the signal.
     if (deadlineController?.signal.aborted) {
       throw new Error(TIMEOUT_ERROR_MESSAGE)
     }
   } catch (error) {
+    if (openCodeRetryError) {
+      const preserveForContinuation = shouldPreserveSessionForContinuation({
+        error: openCodeRetryError,
+        sessionId: resolvedSession.id,
+        modelId: model,
+        sessionOwnership,
+        signal,
+      })
+      const enrichedError = preserveForContinuation
+        ? attachContinuationDiagnostics(openCodeRetryError, {
+            error: openCodeRetryError,
+            sessionId: resolvedSession.id,
+            modelId: model,
+          })
+        : openCodeRetryError
+      onStreamError?.(enrichedError)
+      throw enrichedError
+    }
     if (deadlineController?.signal.aborted) {
       const timeoutError = error instanceof Error && error.message === TIMEOUT_ERROR_MESSAGE
         ? error
@@ -549,6 +654,7 @@ export async function runOpenCodeSessionPrompt({
     if (deadlineTimer) {
       clearTimeout(deadlineTimer)
     }
+    clearOpenCodeRetryTimer()
   }
 
   let messages: Message[] = []

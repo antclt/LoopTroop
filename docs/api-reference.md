@@ -66,7 +66,7 @@ LoopTroop uses a singleton profile, not a collection.
 Example profile update payload:
 
 > [!NOTE]
-> Timeout fields (`perIterationTimeout`, `executionSetupTimeout`, `councilResponseTimeout`) are stored and used in **milliseconds**. The values shown below are the current defaults.
+> Timeout and delay fields (`perIterationTimeout`, `executionSetupTimeout`, `councilResponseTimeout`, `opencodeRetryDelay`) are stored and used in **milliseconds**. The values shown below are the current defaults.
 
 ```json
 {
@@ -85,6 +85,8 @@ Example profile update payload:
   "maxBeadsCoveragePasses": 5,
   "structuredRetryCount": 1,
   "maxIterations": 5,
+  "opencodeRetryLimit": 10,
+  "opencodeRetryDelay": 60000,
   "toolInputMaxChars": 4000,
   "toolOutputMaxChars": 12000,
   "toolErrorMaxChars": 6000
@@ -94,6 +96,8 @@ Example profile update payload:
 `councilMemberVariants` is a JSON-encoded map of model ID → variant string (e.g. `"high"` or `"low"`) that pins specific effort levels per council member.
 
 `structuredRetryCount` controls automatic structured-output retry prompts after the first invalid or missing structured response. It defaults to `1`, accepts `0` through `5`, and is locked onto each ticket at start; missing locked values on older tickets fall back to the current profile value and then the default.
+
+`opencodeRetryLimit` and `opencodeRetryDelay` control prompt-level OpenCode retry handling for continuable provider interruptions. The limit defaults to `10` retry status events and accepts `0` through `50`; the delay defaults to `60000` ms and accepts `0` through `3600000`. During `CODING`, exhaustion of either budget blocks with diagnostics and preserves the active session for Continue when the interruption is resumable.
 
 ## Project Routes
 

@@ -87,10 +87,13 @@ It currently does the following:
 2. If `sessionOwnership` is present, call `SessionManager.validateAndReconnect()` first.
 3. Dispatch the prompt with tool policy and model settings.
 4. Subscribe to stream events while the prompt is running.
-5. Reconcile the final response with assistant messages and stream status.
-6. Mark the session completed or abandoned depending on the outcome.
+5. Track OpenCode `session.status` retry events against the profile retry budget and grace window.
+6. Reconcile the final response with assistant messages and stream status.
+7. Mark the session completed or abandoned depending on the outcome.
 
 `runOpenCodeSessionPrompt()` is the lower-level helper for prompting a known session.
+
+Retry-status handling is driven by OpenCode stream events, not only by log text. The runner watches `session.status` retry events and treats matching rate-limit, usage-limit, resource-exhaustion, overload/capacity, temporary-unavailability, timeout/deadline, fetch, network, and socket-reset messages as continuable provider interruptions. The profile's `OpenCode Retry Limit` blocks after a configured number of matching retry events, and `OpenCode Retry Grace Window` blocks when a matching retry state produces no progress for the configured window. A zero retry limit blocks on the first matching retry event; a zero grace window disables the timer.
 
 When a ticket is blocked by a resumable OpenCode/provider interruption, the prompt runner can preserve the active owned session instead of abandoning it. Eligible interruptions include retryable diagnostics, HTTP 408/429/500/502/503/504/529, rate or usage limits, overload/capacity messages, timeouts, and transport failures. Auth, billing, invalid request, request-size, permission, missing API key, and insufficient-quota signals remain non-continuable.
 
@@ -135,7 +138,7 @@ The prompt runner tracks:
 - reasoning events
 - tool events
 - step start and finish events
-- session status events
+- session status events, including retry budget/grace-window detection
 - session error events
 
 Step finish metadata is also used for blocked-error diagnostics. If OpenCode reports a finish reason such as `length`, LoopTroop records the failure as model output truncation, carries through token counts when available, and explains that subsequent structured-output validation errors may be secondary symptoms of an incomplete response.

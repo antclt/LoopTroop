@@ -23,6 +23,7 @@ import {
   attachContinuationDiagnostics,
   shouldPreserveSessionForContinuation,
 } from '../../opencode/sessionContinuation'
+import type { OpenCodeRetryPolicy } from '../../opencode/retryPolicy'
 
 const BEAD_STATUS_SCHEMA_REMINDER = [
   'Return exactly one <BEAD_STATUS>...</BEAD_STATUS> block and nothing else.',
@@ -257,6 +258,7 @@ export async function executeBead(
     onPromptCompleted?: (entry: { iteration: number; stage: CodingPromptStage; event: OpenCodePromptCompletedEvent }) => void
     onContextWipe?: (entry: { beadId: string; notes: string; iteration: number }) => Promise<void>
     structuredRetryCount?: number
+    opencodeRetryPolicy?: Partial<OpenCodeRetryPolicy>
   },
 ): Promise<ExecutionResult> {
   const startingIteration = Number.isInteger(bead.iteration) && bead.iteration > 0
@@ -299,6 +301,7 @@ export async function executeBead(
         timeoutMs: getRemainingTimeoutMs(deadlineAt),
         model: callbacks?.model,
         variant: callbacks?.variant,
+        opencodeRetryPolicy: callbacks?.opencodeRetryPolicy,
         erroredSessionPolicy: 'discard_errored_session_output',
         toolPolicy: PROM_CODING.toolPolicy,
         ...(callbacks?.ticketId
@@ -404,6 +407,7 @@ export async function executeBead(
               timeoutMs: remainingMs,
               model: callbacks?.model,
               sessionOwnership: codingSessionOwnership,
+              opencodeRetryPolicy: callbacks?.opencodeRetryPolicy,
               erroredSessionPolicy: 'discard_errored_session_output',
               onStreamEvent: (event) => {
                 callbacks?.onOpenCodeStreamEvent?.({
@@ -449,6 +453,7 @@ export async function executeBead(
           model: callbacks?.model,
           variant: callbacks?.variant,
           sessionOwnership: codingSessionOwnership,
+          opencodeRetryPolicy: callbacks?.opencodeRetryPolicy,
           erroredSessionPolicy: 'discard_errored_session_output',
           toolPolicy: PROM_CODING.toolPolicy,
           onStreamEvent: (event) => {

@@ -17,6 +17,8 @@ interface Profile {
   maxBeadsCoveragePasses: number
   structuredRetryCount: number
   maxIterations: number
+  opencodeRetryLimit: number
+  opencodeRetryDelay: number
   toolInputMaxChars: number
   toolOutputMaxChars: number
   toolErrorMaxChars: number
@@ -40,6 +42,8 @@ interface CreateProfileInput {
   maxBeadsCoveragePasses?: number
   structuredRetryCount?: number
   maxIterations?: number
+  opencodeRetryLimit?: number
+  opencodeRetryDelay?: number
   toolInputMaxChars?: number
   toolOutputMaxChars?: number
   toolErrorMaxChars?: number

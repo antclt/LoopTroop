@@ -12,6 +12,8 @@ export const PROFILE_DEFAULTS = {
   maxBeadsCoveragePasses: 5,
   structuredRetryCount: 1,
   maxIterations: 5,
+  opencodeRetryLimit: 10,
+  opencodeRetryDelay: 60_000,
   toolInputMaxChars: 4000,
   toolOutputMaxChars: 12_000,
   toolErrorMaxChars: 6_000,

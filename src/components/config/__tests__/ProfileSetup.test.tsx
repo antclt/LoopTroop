@@ -25,6 +25,8 @@ const existingProfile = {
   maxBeadsCoveragePasses: 5,
   structuredRetryCount: 1,
   maxIterations: 5,
+  opencodeRetryLimit: 7,
+  opencodeRetryDelay: 45_000,
   toolInputMaxChars: 4000,
   toolOutputMaxChars: 12000,
   toolErrorMaxChars: 6000,
@@ -129,6 +131,10 @@ describe('ProfileSetup', () => {
     expect(screen.getByText('Structured Output Retries')).toBeInTheDocument()
     expect(screen.getByText('PRD Coverage Passes')).toBeInTheDocument()
     expect(screen.getByText('Beads Coverage Passes')).toBeInTheDocument()
+    expect(screen.getByText('OpenCode Retry Limit')).toBeInTheDocument()
+    expect(screen.getByText('OpenCode Retry Grace Window (s)')).toBeInTheDocument()
+    expect(screen.getByLabelText('OpenCode Retry Limit')).toHaveValue(7)
+    expect(screen.getByLabelText('OpenCode Retry Grace Window')).toHaveValue(45)
     expect(screen.getByText('Execution Setup Timeout (s)')).toBeInTheDocument()
     expect(screen.queryByText('Profile')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
@@ -149,7 +155,7 @@ describe('ProfileSetup', () => {
     await renderProfileSetup()
 
     const docsLinks = screen.getAllByRole('link', { name: /Open documentation for / })
-    expect(docsLinks).toHaveLength(16)
+    expect(docsLinks).toHaveLength(18)
 
     const mainImplementerLink = screen.getByRole('link', { name: 'Open documentation for Main Implementer Model' })
     expect(mainImplementerLink).toHaveAttribute('href', `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#main-implementer-model`)
@@ -180,25 +186,39 @@ describe('ProfileSetup', () => {
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#max-bead-retries`,
     )
+    expect(screen.getByRole('link', { name: 'Open documentation for OpenCode Retry Limit' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#opencode-retry-limit`,
+    )
+    expect(screen.getByRole('link', { name: 'Open documentation for OpenCode Retry Grace Window' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#opencode-retry-grace-window`,
+    )
 
     fireEvent.focus(mainImplementerLink)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Open detailed documentation')
   })
 
-  it('validates PRD, beads, and structured retry numeric inputs', async () => {
+  it('validates PRD, beads, structured retry, and OpenCode retry numeric inputs', async () => {
     await renderProfileSetup()
 
     const prdInput = screen.getByLabelText('PRD Coverage Passes') as HTMLInputElement
     const beadsInput = screen.getByLabelText('Beads Coverage Passes') as HTMLInputElement
     const structuredRetryInput = screen.getByLabelText('Structured Output Retries') as HTMLInputElement
+    const opencodeRetryLimitInput = screen.getByLabelText('OpenCode Retry Limit') as HTMLInputElement
+    const opencodeRetryDelayInput = screen.getByLabelText('OpenCode Retry Grace Window') as HTMLInputElement
 
     fireEvent.change(prdInput, { target: { value: '1' } })
     fireEvent.change(beadsInput, { target: { value: '21' } })
     fireEvent.change(structuredRetryInput, { target: { value: '6' } })
+    fireEvent.change(opencodeRetryLimitInput, { target: { value: '51' } })
+    fireEvent.change(opencodeRetryDelayInput, { target: { value: '3601' } })
 
     expect(screen.getByText('Minimum is 2')).toBeInTheDocument()
     expect(screen.getByText('Maximum is 20')).toBeInTheDocument()
     expect(screen.getByText('Maximum is 5')).toBeInTheDocument()
+    expect(screen.getByText('Maximum is 50')).toBeInTheDocument()
+    expect(screen.getByText('Maximum is 3600')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 })

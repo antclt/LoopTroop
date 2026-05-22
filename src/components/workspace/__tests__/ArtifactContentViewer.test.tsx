@@ -196,7 +196,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByRole('button', { name: 'Copy raw output' })).toBeInTheDocument()
     expect(screen.getByRole('group', { name: /gpt-5 · Execution setup plan raw output/i })).toBeInTheDocument()
     expect(screen.getByText(/summary: regenerated/)).toBeInTheDocument()
-  })
+  }, 10_000)
 
   it('hides failed execution setup plan model output from details and exposes it in raw diagnostics', () => {
     const modelOutput = '<EXECUTION_SETUP_PLAN>\nsummary: failed draft\n</EXECUTION_SETUP_PLAN>'

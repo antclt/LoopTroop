@@ -231,8 +231,11 @@ All numeric fields are validated against min/max bounds defined in `numericField
 | Execution Setup Timeout | [Execution Loop](execution-loop.md#execution-setup-timeout) |
 | AI Response Timeout | [LLM Council](llm-council.md#council-response-timeout) |
 | Max Bead Retries | [Execution Loop](execution-loop.md#max-bead-retries) |
+| OpenCode Retry Limit | [Execution Loop](execution-loop.md#opencode-retry-limit) |
+| OpenCode Retry Grace Window | [Execution Loop](execution-loop.md#opencode-retry-grace-window) |
 | Min Council Quorum | [LLM Council](llm-council.md#min-council-quorum) |
 | Max Interview Questions | [Ticket Flow](ticket-flow.md#max-interview-questions) |
+| Structured Output Retries | [Configuration Reference](configuration.md#structured-output-retries) |
 | Coverage Follow-Up Budget | [Ticket Flow](ticket-flow.md#coverage-follow-up-budget) |
 | Interview Coverage Passes | [Ticket Flow](ticket-flow.md#interview-coverage-passes) |
 | PRD Coverage Passes | [Ticket Flow](ticket-flow.md#prd-coverage-passes) |
@@ -242,7 +245,7 @@ All numeric fields are validated against min/max bounds defined in `numericField
 | Tool Error Max Chars | [Execution Loop](execution-loop.md#tool-log-truncation) |
 
 > [!NOTE]
-> Timeout fields are stored in **milliseconds**. `ProfileSetup` converts the stored milliseconds to seconds for display and back to milliseconds on save.
+> Timeout and delay fields are stored in **milliseconds**. `ProfileSetup` converts those stored milliseconds to seconds for display and back to milliseconds on save.
 
 Profile settings are inherited by new tickets at start time. The locked copies in the ticket record are what the workflow actually uses for that run.
 

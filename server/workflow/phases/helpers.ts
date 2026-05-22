@@ -1523,6 +1523,8 @@ export function resolveCouncilRuntimeSettings(context: TicketContext): {
 export function resolveExecutionRuntimeSettings(context: TicketContext): {
   maxIterations: number
   perIterationTimeoutMs: number
+  opencodeRetryLimit: number
+  opencodeRetryDelayMs: number
 } {
   const storedContext = getStoredTicketContext(context.ticketId)
   const profile = appDb.select().from(profiles).get()
@@ -1533,10 +1535,14 @@ export function resolveExecutionRuntimeSettings(context: TicketContext): {
   const perIterationTimeoutMs = storedContext?.localProject.perIterationTimeout
     ?? profile?.perIterationTimeout
     ?? PROFILE_DEFAULTS.perIterationTimeout
+  const opencodeRetryLimit = profile?.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit
+  const opencodeRetryDelayMs = profile?.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay
 
   return {
     maxIterations,
     perIterationTimeoutMs,
+    opencodeRetryLimit,
+    opencodeRetryDelayMs,
   }
 }
 

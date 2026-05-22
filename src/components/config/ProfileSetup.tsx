@@ -45,6 +45,8 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
     maxBeadsCoveragePasses: profile?.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
     structuredRetryCount: profile?.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount,
     maxIterations: profile?.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
+    opencodeRetryLimit: profile?.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit,
+    opencodeRetryDelay: profile?.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay,
     toolInputMaxChars: profile?.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
     toolOutputMaxChars: profile?.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
     toolErrorMaxChars: profile?.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
@@ -94,6 +96,8 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
       maxBeadsCoveragePasses: profile.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
       structuredRetryCount: profile.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount,
       maxIterations: profile.maxIterations ?? PROFILE_DEFAULTS.maxIterations,
+      opencodeRetryLimit: profile.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit,
+      opencodeRetryDelay: profile.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay,
       toolInputMaxChars: profile.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
       toolOutputMaxChars: profile.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
       toolErrorMaxChars: profile.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
@@ -110,6 +114,8 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
       maxPrdCoveragePasses: profile.maxPrdCoveragePasses ?? PROFILE_DEFAULTS.maxPrdCoveragePasses,
       maxBeadsCoveragePasses: profile.maxBeadsCoveragePasses ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses,
       structuredRetryCount: profile.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount,
+      opencodeRetryLimit: profile.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit,
+      opencodeRetryDelay: profile.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay,
       toolInputMaxChars: profile.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
       toolOutputMaxChars: profile.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
       toolErrorMaxChars: profile.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
@@ -388,6 +394,10 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
           <div className="grid grid-cols-2 gap-3">
             <NumericField fieldKey="maxIterations" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum automatic retries per bead during coding (0–20). Final test retries use the same limit." />
             <NumericField fieldKey="perIterationTimeout" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Timeout for each attempt (10–3600s)" />
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <NumericField fieldKey="opencodeRetryLimit" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Continuable OpenCode retry events before blocking (0–50)." />
+            <NumericField fieldKey="opencodeRetryDelay" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum OpenCode retry grace window before blocking (0–3600s)." />
           </div>
           <div className="mt-3">
             <NumericField

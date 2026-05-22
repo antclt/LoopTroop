@@ -194,6 +194,53 @@ describe('handleCoding', () => {
     expect(executedBead.id).toBe('bead-1')
   })
 
+  it('passes OpenCode retry settings to execution and resets the attempt countdown start time', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.setSystemTime(new Date('2026-02-02T03:04:05.000Z'))
+      const { ticket, context } = createInitializedTestTicket(repoManager, {
+        title: 'Attempt countdown reset',
+      })
+      writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1, {
+        startedAt: '2026-01-01T00:00:00.000Z',
+      })])
+      const sendEvent = vi.fn()
+
+      executeBeadMock.mockImplementationOnce(async (
+        _adapter: unknown,
+        _bead: unknown,
+        _contextParts: unknown,
+        _worktreePath: unknown,
+        _maxIterations: unknown,
+        _perIterationTimeoutMs: unknown,
+        _signal: unknown,
+        callbacks: {
+          opencodeRetryPolicy?: { limit?: number; delayMs?: number }
+          onSessionCreated?: (sessionId: string, iteration: number) => void
+        },
+      ) => {
+        expect(callbacks.opencodeRetryPolicy).toEqual({ limit: 10, delayMs: 60_000 })
+        callbacks.onSessionCreated?.('ses-retry-policy', 2)
+        return {
+          success: true,
+          beadId: 'bead-1',
+          iteration: 2,
+          output: 'done',
+          errors: [],
+        }
+      })
+
+      await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+      const finalBead = readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-1')
+      expect(finalBead?.startedAt).toBe('2026-02-02T03:04:05.000Z')
+      expect(finalBead?.iteration).toBe(2)
+      expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('sends ALL_BEADS_DONE when the last pending bead succeeds', async () => {
     const { ticket, context } = createInitializedTestTicket(repoManager, {
       title: 'Last bead success',
@@ -277,6 +324,34 @@ describe('handleCoding', () => {
     const failedBead = finalBeads.find((b) => b.id === 'bead-1')
     expect(failedBead?.status).toBe('error')
     expect(failedBead?.iteration).toBe(10)
+  })
+
+  it('lets continuable OpenCode retry errors bubble for the workflow ERROR path instead of BEAD_ERROR', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Continuable OpenCode retry error',
+    })
+    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1)])
+    const sendEvent = vi.fn()
+    const retryError = Object.assign(new Error('OpenCode retry budget exhausted after 10 retry event(s): The usage limit has been reached'), {
+      blockedErrorDiagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'The usage limit has been reached',
+        sessionId: 'ses-limit',
+        modelId: context.lockedMainImplementer ?? undefined,
+        isRetryable: true,
+      },
+      blockedErrorCodes: ['OPENCODE_PROVIDER_ERROR'],
+    })
+
+    executeBeadMock.mockRejectedValueOnce(retryError)
+
+    await expect(
+      handleCoding(ticket.id, context, sendEvent, new AbortController().signal),
+    ).rejects.toThrow('OpenCode retry budget exhausted')
+
+    expect(sendEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'BEAD_ERROR' }))
+    expect(commitBeadChangesMock).not.toHaveBeenCalled()
   })
 
   it('invokes resetToBeadStart and persists notes through the fresh-reload when onContextWipe fires', async () => {

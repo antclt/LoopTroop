@@ -198,7 +198,7 @@ flowchart TB
 | `DRAFT` | `start`, `cancel` | `start` locks model configuration and initializes the ticket workspace. |
 | `WAITING_INTERVIEW_APPROVAL`, `WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL` | `approve`, `cancel` | The generic approve route dispatches to the phase-specific approval handler. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | `merge` is also exposed through `/verify` as an alias during the transition period. |
-| `BLOCKED_ERROR` | `retry`, conditional `continue`, `cancel` | `retry` archives the failed active phase attempt for every non-implementation `previousStatus`, creates a fresh active attempt, then re-enters that exact status. `CODING` keeps bead-scoped retry recovery instead. `continue` appears only for resumable OpenCode/provider interruptions with a matching active preserved session and sends exactly `continue please` into that same session. |
+| `BLOCKED_ERROR` | `retry`, conditional `continue`, `cancel` | `retry` archives the failed active phase attempt for every non-implementation `previousStatus`, creates a fresh active attempt, then re-enters that exact status. `CODING` keeps bead-scoped retry recovery except for continuable OpenCode retry-budget blocks that preserve the active session. `continue` appears only for resumable OpenCode/provider interruptions with a matching active preserved session and sends exactly `continue please` into that same session. |
 | Most active phases | `cancel` | Active work can be stopped from planning, execution, or review phases. |
 | `COMPLETED`, `CANCELED` | none | These are terminal states. |
 
@@ -208,7 +208,7 @@ Two extra guards matter at the user-action layer:
 - `BLOCKED_ERROR` retry from `CODING` first tries to restore the failed bead into a retryable state before it re-enters `CODING`.
 - `BLOCKED_ERROR` retry from a non-implementation phase archives the failed version with `manual_retry_after_blocked_error` and writes the rerun into the next phase attempt.
 - `BLOCKED_ERROR` retry is rejected when no preserved `previousStatus` exists.
-- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look transient (rate/usage limit, overload/capacity, timeout, selected 5xx/529, or transport failure) rather than auth, billing, quota, invalid-request, configuration, or request-size failures.
+- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look transient (rate/usage limit, retry-budget exhaustion, overload/capacity, timeout, selected 5xx/529, or transport failure) rather than auth, billing, quota, invalid-request, configuration, or request-size failures.
 - `CODING` retry is rejected when the failed bead cannot be reset to a recorded bead-start commit.
 
 ## Artifact Checkpoints
@@ -343,7 +343,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `CODING` | The coding agent executes one bead at a time. Each bead gets narrow context, owned sessions, structured completion markers, bead diffs, and bounded fresh-session retries. | Bead status updates, bead notes, per-bead commits, diff artifacts, execution log stream. | `cancel` | Each successful bead self-transitions back to `CODING`; when all beads are done the flow moves to final test. |
+| `CODING` | The coding agent executes one bead at a time. Each bead gets narrow context, owned sessions, structured completion markers, bead diffs, bounded fresh-session retries, and profile-controlled OpenCode retry-budget blocking for transient provider stalls. | Bead status updates, bead notes, per-bead commits, diff artifacts, execution log stream. | `cancel` | Each successful bead self-transitions back to `CODING`; when all beads are done the flow moves to final test. |
 
 ### Post-Implementation
 
@@ -388,7 +388,7 @@ Before dispatching `RETRY`, every non-implementation phase archives the active p
 continue please
 ```
 
-For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. Normal Retry keeps the reset-first behavior.
+For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. OpenCode rate/usage limit retry-budget blocks use this path when the session is preserved. Normal Retry keeps the reset-first behavior.
 
 ## Safe Resume By Interruption Type
 

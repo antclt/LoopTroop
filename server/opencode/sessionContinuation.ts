@@ -81,7 +81,7 @@ function hasContinuableSignal(diagnostics: BlockedErrorDiagnostics): boolean {
   if (diagnostics.kind === 'timeout' || diagnostics.kind === 'transport') return true
 
   const haystack = buildDiagnosticHaystack(diagnostics)
-  return /\b(rate[_ -]?limit|usage limit|limit reached|resource exhausted|overloaded|overload|capacity|temporarily unavailable|timeout|timed out|deadline|fetch failed|connection reset|econnreset|socket hang up|network)\b/.test(haystack)
+  return /\b(rate[_ -]?(?:limit|limited)|too many requests|usage limit|limit (?:has been )?reached|resource exhausted|overloaded|overload|capacity|service unavailable|temporarily unavailable|timeout|timed out|deadline(?: exceeded)?|fetch failed|connection reset|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network)\b/.test(haystack)
 }
 
 export function isContinuableBlockedError(input: ContinuableBlockedErrorInput): boolean {

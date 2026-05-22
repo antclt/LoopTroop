@@ -18,6 +18,8 @@ export const profiles = sqliteTable('profiles', {
   maxBeadsCoveragePasses: integer('max_beads_coverage_passes').default(PROFILE_DEFAULTS.maxBeadsCoveragePasses),
   structuredRetryCount: integer('structured_retry_count').default(PROFILE_DEFAULTS.structuredRetryCount),
   maxIterations: integer('max_iterations').default(PROFILE_DEFAULTS.maxIterations),
+  opencodeRetryLimit: integer('opencode_retry_limit').default(PROFILE_DEFAULTS.opencodeRetryLimit),
+  opencodeRetryDelay: integer('opencode_retry_delay').default(PROFILE_DEFAULTS.opencodeRetryDelay),
   toolInputMaxChars: integer('tool_input_max_chars').default(PROFILE_DEFAULTS.toolInputMaxChars),
   toolOutputMaxChars: integer('tool_output_max_chars').default(PROFILE_DEFAULTS.toolOutputMaxChars),
   toolErrorMaxChars: integer('tool_error_max_chars').default(PROFILE_DEFAULTS.toolErrorMaxChars),

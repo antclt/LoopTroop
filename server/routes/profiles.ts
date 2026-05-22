@@ -25,6 +25,8 @@ const profileSchema = z.object({
   maxBeadsCoveragePasses: z.number().int().min(2).max(20).optional(),
   structuredRetryCount: z.number().int().min(0).max(5).optional(),
   maxIterations: z.number().int().min(0).max(20).optional(),
+  opencodeRetryLimit: z.number().int().min(0).max(50).optional(),
+  opencodeRetryDelay: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(),
   toolInputMaxChars: z.number().int().min(500).max(50_000).optional(),
   toolOutputMaxChars: z.number().int().min(1_000).max(100_000).optional(),
   toolErrorMaxChars: z.number().int().min(500).max(50_000).optional(),

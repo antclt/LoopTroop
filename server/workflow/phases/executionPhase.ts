@@ -296,14 +296,20 @@ export async function handleCoding(
         model: codingModelId,
         variant: context.lockedMainImplementerVariant ?? undefined,
         structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
+        opencodeRetryPolicy: {
+          limit: executionSettings.opencodeRetryLimit,
+          delayMs: executionSettings.opencodeRetryDelayMs,
+        },
         onSessionCreated: (sessionId, iteration) => {
           const currentBeads = readTicketBeads(ticketId)
+          const attemptStartedAt = new Date().toISOString()
           const updated = currentBeads.map((bead) => bead.id === executingBead.id
             ? {
                 ...bead,
                 status: 'in_progress' as const,
                 iteration,
-                updatedAt: new Date().toISOString(),
+                startedAt: attemptStartedAt,
+                updatedAt: attemptStartedAt,
               }
             : bead)
           writeTicketBeads(ticketId, updated)

@@ -127,6 +127,15 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
       ? queued.response
       : queued
     const signal = options?.signal ?? _signal
+    const streamEvents = typeof queued === 'object' && 'response' in queued && Array.isArray(queued.streamEvents)
+      ? queued.streamEvents
+      : []
+    const messageInfo = typeof queued === 'object' && 'response' in queued
+      ? queued.messageInfo
+      : undefined
+    for (const event of streamEvents) {
+      options?.onEvent?.(event)
+    }
     const response = typeof queuedResponse === 'string'
       ? queuedResponse
       : signal
@@ -141,19 +150,9 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
     const messageContent = typeof queued === 'object' && 'response' in queued && typeof queued.messageContent === 'string'
       ? queued.messageContent
       : response
-    const streamEvents = typeof queued === 'object' && 'response' in queued && Array.isArray(queued.streamEvents)
-      ? queued.streamEvents
-      : []
-    const messageInfo = typeof queued === 'object' && 'response' in queued
-      ? queued.messageInfo
-      : undefined
     const assistantMessageId = typeof messageInfo?.id === 'string'
       ? messageInfo.id
       : `msg-${sessionId}-${this.sessionMessages.size + 1}`
-
-    for (const event of streamEvents) {
-      options?.onEvent?.(event)
-    }
 
     const assistantMessage: Message = {
       id: assistantMessageId,
@@ -384,6 +383,148 @@ describe('runOpenCodePrompt', () => {
     await expect(runPromise).resolves.toMatchObject({
       response: 'assistant response',
       session: { id: 'ses-1' },
+    })
+  })
+
+  it('blocks after 10 continuable OpenCode retry events by default and preserves the session for Continue', async () => {
+    resetTestDb()
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Default OpenCode retry budget',
+    })
+    patchTicket(ticket.id, { status: 'DRAFTING_PRD' })
+    const adapter = new TestOpenCodeAdapter([{
+      response: 'assistant response',
+      streamEvents: Array.from({ length: 10 }, (_, index) => ({
+        type: 'session_status' as const,
+        sessionId: 'ses-1',
+        status: 'retry' as const,
+        attempt: index + 1,
+        message: 'The usage limit has been reached',
+      })),
+    }])
+
+    let thrown: unknown
+    try {
+      await runOpenCodePrompt({
+        adapter,
+        projectPath: '/tmp/project',
+        parts: [{ type: 'text', content: 'Prompt body' }],
+        model: TEST.implementer,
+        sessionOwnership: {
+          ticketId: ticket.id,
+          phase: 'DRAFTING_PRD',
+          keepActive: true,
+        },
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(thrown).toMatchObject({
+      message: expect.stringContaining('OpenCode retry budget exhausted after 10 retry event(s)'),
+      blockedErrorDiagnostics: expect.objectContaining({
+        kind: 'opencode_provider',
+        source: 'provider',
+        sessionId: 'ses-1',
+        modelId: TEST.implementer,
+      }),
+      blockedErrorCodes: expect.arrayContaining(['OPENCODE_PROVIDER_ERROR']),
+    })
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['active'])).toHaveLength(1)
+  })
+
+  it('blocks after the configured continuable OpenCode retry limit', async () => {
+    const adapter = new TestOpenCodeAdapter([{
+      response: 'assistant response',
+      streamEvents: [
+        {
+          type: 'session_status',
+          sessionId: 'ses-1',
+          status: 'retry',
+          attempt: 1,
+          message: 'rate limited',
+        },
+        {
+          type: 'session_status',
+          sessionId: 'ses-1',
+          status: 'busy',
+        },
+        {
+          type: 'session_status',
+          sessionId: 'ses-1',
+          status: 'retry',
+          attempt: 2,
+          message: 'rate limited',
+        },
+      ],
+    }])
+
+    await expect(runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Prompt body' }],
+      opencodeRetryPolicy: { limit: 2, delayMs: 0 },
+    })).rejects.toThrow('OpenCode retry budget exhausted after 2 retry event(s)')
+  })
+
+  it('blocks when a continuable OpenCode retry state exceeds the configured grace window', async () => {
+    vi.useFakeTimers()
+    try {
+      const deferredResponse = createDeferred<string>()
+      const adapter = new TestOpenCodeAdapter([{
+        response: deferredResponse,
+        streamEvents: [{
+          type: 'session_status',
+          sessionId: 'ses-1',
+          status: 'retry',
+          attempt: 1,
+          message: 'temporarily unavailable',
+        }],
+      }])
+
+      const runPromise = runOpenCodePrompt({
+        adapter,
+        projectPath: '/tmp/project',
+        parts: [{ type: 'text', content: 'Prompt body' }],
+        opencodeRetryPolicy: { limit: 50, delayMs: 20 },
+      })
+      const rejection = expect(runPromise).rejects.toThrow('OpenCode retry grace window expired after 20ms')
+
+      await Promise.resolve()
+      await vi.advanceTimersByTimeAsync(25)
+
+      await rejection
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('ignores non-matching OpenCode retry status messages', async () => {
+    const adapter = new TestOpenCodeAdapter([{
+      response: 'assistant response',
+      streamEvents: [
+        {
+          type: 'session_status',
+          sessionId: 'ses-1',
+          status: 'busy',
+        },
+        {
+          type: 'session_status',
+          sessionId: 'ses-1',
+          status: 'retry',
+          attempt: 1,
+          message: 'Refreshing local workspace state',
+        },
+      ],
+    }])
+
+    await expect(runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Prompt body' }],
+      opencodeRetryPolicy: { limit: 0, delayMs: 1 },
+    })).resolves.toMatchObject({
+      response: 'assistant response',
     })
   })
 

@@ -110,7 +110,7 @@ function isProviderLikeFailure(info: ModelErrorInfo | undefined, message: string
 
   return hasProviderSignal(info)
     || isAuthLikeFailure(info, message)
-    || /\b(rate[_ -]?limit|usage limit|limit reached|quota|credits?|modelerror|model error|invalid_request_error|provider)\b/.test(haystack)
+    || /\b(rate[_ -]?(?:limit|limited)|too many requests|usage limit|limit (?:has been )?reached|resource exhausted|overloaded|overload|capacity|service unavailable|temporarily unavailable|quota|credits?|modelerror|model error|invalid_request_error|provider)\b/.test(haystack)
 }
 
 function parseHttpStatus(message: string): number | undefined {
@@ -176,7 +176,7 @@ function isTimeoutLike(message: string): boolean {
 }
 
 function isTransportLike(message: string): boolean {
-  return /\b(connection reset|econnreset|socket hang up|network|fetch failed|failed to prompt|unreachable)\b/i.test(message)
+  return /\b(connection reset|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network|fetch failed|failed to prompt|unreachable)\b/i.test(message)
 }
 
 function resolveKind(input: {

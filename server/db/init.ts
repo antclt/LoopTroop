@@ -52,6 +52,8 @@ function migrateLegacyProfilesTable() {
         max_beads_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses},
         structured_retry_count INTEGER DEFAULT ${PROFILE_DEFAULTS.structuredRetryCount},
         max_iterations INTEGER DEFAULT ${PROFILE_DEFAULTS.maxIterations},
+        opencode_retry_limit INTEGER DEFAULT ${PROFILE_DEFAULTS.opencodeRetryLimit},
+        opencode_retry_delay INTEGER DEFAULT ${PROFILE_DEFAULTS.opencodeRetryDelay},
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
@@ -71,6 +73,8 @@ function migrateLegacyProfilesTable() {
         max_beads_coverage_passes,
         structured_retry_count,
         max_iterations,
+        opencode_retry_limit,
+        opencode_retry_delay,
         created_at,
         updated_at
       )
@@ -89,6 +93,8 @@ function migrateLegacyProfilesTable() {
         ${selectLegacyProfileValue(columnSet, 'max_beads_coverage_passes', PROFILE_DEFAULTS.maxBeadsCoveragePasses)},
         ${selectLegacyProfileValue(columnSet, 'structured_retry_count', PROFILE_DEFAULTS.structuredRetryCount)},
         ${selectLegacyProfileValue(columnSet, 'max_iterations', PROFILE_DEFAULTS.maxIterations)},
+        ${selectLegacyProfileValue(columnSet, 'opencode_retry_limit', PROFILE_DEFAULTS.opencodeRetryLimit)},
+        ${selectLegacyProfileValue(columnSet, 'opencode_retry_delay', PROFILE_DEFAULTS.opencodeRetryDelay)},
         ${selectLegacyProfileExpression(columnSet, 'created_at', "datetime('now')")},
         ${selectLegacyProfileExpression(columnSet, 'updated_at', "datetime('now')")}
       FROM profiles;
@@ -118,6 +124,8 @@ export function initializeDatabase() {
       max_beads_coverage_passes INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses},
       structured_retry_count INTEGER DEFAULT ${PROFILE_DEFAULTS.structuredRetryCount},
       max_iterations INTEGER DEFAULT ${PROFILE_DEFAULTS.maxIterations},
+      opencode_retry_limit INTEGER DEFAULT ${PROFILE_DEFAULTS.opencodeRetryLimit},
+      opencode_retry_delay INTEGER DEFAULT ${PROFILE_DEFAULTS.opencodeRetryDelay},
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -143,6 +151,8 @@ export function initializeDatabase() {
   ensureColumn('profiles', 'max_beads_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses}`)
   ensureColumn('profiles', 'structured_retry_count', `INTEGER DEFAULT ${PROFILE_DEFAULTS.structuredRetryCount}`)
   ensureColumn('profiles', 'execution_setup_timeout', `INTEGER DEFAULT ${PROFILE_DEFAULTS.executionSetupTimeout}`)
+  ensureColumn('profiles', 'opencode_retry_limit', `INTEGER DEFAULT ${PROFILE_DEFAULTS.opencodeRetryLimit}`)
+  ensureColumn('profiles', 'opencode_retry_delay', `INTEGER DEFAULT ${PROFILE_DEFAULTS.opencodeRetryDelay}`)
   ensureColumn('profiles', 'main_implementer_variant', 'TEXT')
   ensureColumn('profiles', 'council_member_variants', 'TEXT')
   ensureColumn('profiles', 'tool_input_max_chars', `INTEGER DEFAULT ${PROFILE_DEFAULTS.toolInputMaxChars}`)

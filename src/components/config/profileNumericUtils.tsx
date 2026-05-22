@@ -15,7 +15,7 @@ export interface NumericFieldProps {
 export function NumericField({ fieldKey, rawNumeric, onChange, hint, tooltip }: NumericFieldProps) {
   const cfg = numericFields[fieldKey]
   const error = getFieldError(fieldKey, rawNumeric)
-  const unitSuffix = fieldKey === 'councilResponseTimeout' || fieldKey === 'perIterationTimeout' || fieldKey === 'executionSetupTimeout'
+  const unitSuffix = fieldKey === 'councilResponseTimeout' || fieldKey === 'perIterationTimeout' || fieldKey === 'executionSetupTimeout' || fieldKey === 'opencodeRetryDelay'
     ? ' (s)'
     : fieldKey === 'coverageFollowUpBudgetPercent'
       ? ' (%)'

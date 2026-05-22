@@ -29,7 +29,7 @@ For each bead:
 1. Load the active bead specification and the current execution profile.
 2. Recover any interrupted in-progress bead from a current `bead_execution` checkpoint when possible, or reset it from its recorded start snapshot before retry.
 3. Start or reattach to the owned OpenCode session for that bead iteration; new session creation uses the shared 1s/3s/7s retry wrapper before the bead attempt is considered blocked.
-4. Prompt the model with the coding template and the narrow execution context.
+4. Prompt the model with the coding template and the narrow execution context, while watching OpenCode retry status events for provider-side retry loops.
 5. Require structured completion markers so the system can tell whether the attempt really finished.
 6. Capture logs, diff artifacts, and status updates.
 7. Mark the bead done, or generate a retry path if the attempt failed.
@@ -90,6 +90,19 @@ Execution combines fresh sessions with ownership-aware reconnect.
 | Explicit completion or abandonment | Keep session state auditable in `opencode_sessions` |
 
 See [OpenCode Integration](opencode-integration.md) for the full session model.
+
+## OpenCode Retry Budget
+
+OpenCode can emit `session.status` retry events while it is internally backing off from provider interruptions. LoopTroop now treats matching retry states as prompt-level blockers instead of letting them consume bead iterations until the per-iteration timeout expires.
+
+The profile controls two limits:
+
+- `OpenCode Retry Limit`: the number of matching retry events allowed before blocking; default 10
+- `OpenCode Retry Grace Window`: how long a prompt may remain in a matching retry state without progress before blocking; default 60 seconds
+
+Matching messages include rate limits, usage limits, resource exhaustion, overloaded/capacity responses, temporary unavailability, timeout/deadline errors, fetch failures, and network/socket resets. Auth, billing, invalid-request, permission, missing-key, and insufficient-quota style errors remain non-continuable.
+
+During `CODING`, retry-budget exhaustion preserves the owned active session when possible and routes the ticket to `BLOCKED_ERROR` with diagnostics. Continue sends exactly `continue please` into that same session. Retry keeps the normal bead reset/retry behavior.
 
 ## Worktree Hygiene
 
@@ -172,6 +185,14 @@ Per-iteration timeout is the maximum allowed runtime for one bead attempt in `CO
 ### Max Bead Retries
 
 Max bead retries defines how many fresh-session re-attempts LoopTroop allows for a bead before it enters `BLOCKED_ERROR`. The same limit also bounds final-test retries so execution remains deterministic.
+
+### OpenCode Retry Limit
+
+OpenCode retry limit defines how many matching provider retry status events are allowed inside one OpenCode prompt before LoopTroop blocks for manual intervention. It is prompt-level provider recovery, not bead-level implementation retry.
+
+### OpenCode Retry Grace Window
+
+OpenCode retry grace window defines how long a prompt can stay in a matching OpenCode retry state without progress before LoopTroop blocks. Set it to 0 to rely only on the retry count.
 
 ### Tool Log Truncation
 

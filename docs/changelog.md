@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added profile-controlled OpenCode retry budgets so transient provider stalls block early with diagnostics and same-session Continue instead of burning coding retries.
 - Extended the ticket disk space card in the details view to allow expanding any category (Source Code, Phase Artifacts, or Execution Logs) to see which specific folders/files are occupying space, rendered in a beautiful HSL dark-mode monochrome interactive accordion.
 - Added a beautiful button and card to calculate and display ticket disk space usage with granular breakdown by logs, artifacts, and source code.
 - Made manual Retry preserve versioned logs and artifacts for every non-implementation failed status while keeping CODING bead-scoped.
@@ -27,6 +28,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added profile settings for `OpenCode Retry Limit` and `OpenCode Retry Grace Window`, exposed through the API, Configuration UI, and documentation with defaults of 10 retry events and 60 seconds.
 - Added recursive nested file and folder expansion directly in the ticket disk space details view, incorporating standard monochrome folder/file icons, exact size formatting, and custom collapsible sub-accordions with smooth transitions.
 - Added full recursive top-level and category child listings with sizes in the Hono ticket size API endpoint (`/tickets/:id/size`).
 - Added a ticket disk space calculation card under the Artifacts Location in details view with a premium themed button, interactive hover effects, live loading state, error alert banner, and on-demand recursive disk size computation broken down by Source Code, Phase Artifacts, and Execution Logs.
@@ -58,6 +60,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Annotated the unused `votes` context key as reserved and added a note to `CONTEXT_KEY_LABELS`.
 
 #### Fixed
+- OpenCode `session.status` retry events for rate limits, usage limits, overload/capacity, temporary unavailability, timeouts, and network/socket failures now block through `BLOCKED_ERROR` after the configured budget, preserving provider diagnostics and active sessions for Continue when eligible.
+- CODING now routes continuable OpenCode/provider retry exhaustion through the normal blocked-error path instead of converting it into bead retry exhaustion, while ordinary implementation failures keep the existing bead reset/retry behavior.
+- Active bead countdowns now reset their start timestamp when a new coding iteration/session begins, preventing the UI from sticking at `00:00/20:00` while later iterations continue.
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.
 - Coding error occurrence labels now use the ticket's runtime bead counters, so left-panel rows and blocked-error headers show labels such as `Implementing (Bead 2/5)` instead of the generic `Bead ?/?` fallback.
 - Lazy-loaded Configuration, ticket creation, project, and workspace views now automatically refresh once after recoverable dynamic-import/chunk-load failures, avoiding the root crash screen caused by transient first-load module fetch races.
