@@ -82,6 +82,36 @@ describe('OpenCode blocked error diagnostics', () => {
     })
   })
 
+  it('carries OpenCode log-correlated provider identity into blocked diagnostics', () => {
+    const result = buildOpenCodeBlockedErrorDiagnostics({
+      error: Object.assign(new Error('Provider returned error'), {
+        modelErrorDetails: {
+          name: 'AI_APICallError',
+          providerId: 'kilo',
+          providerModelId: 'kilo-auto/free',
+          requestModel: 'anthropic/claude-haiku-4.5',
+          statusCode: 402,
+          responseErrorType: 'usage_limit_exceeded',
+          responseErrorTitle: 'Low Credit Warning!',
+          responseErrorMessage: 'Add credits to continue, or switch to a free model',
+        },
+      }),
+    })
+
+    expect(result.errorCodes).toEqual([OPENCODE_PROVIDER_ERROR])
+    expect(result.diagnostics).toMatchObject({
+      kind: 'opencode_provider',
+      source: 'provider',
+      providerId: 'kilo',
+      providerModelId: 'kilo-auto/free',
+      requestModel: 'anthropic/claude-haiku-4.5',
+      statusCode: 402,
+      providerErrorType: 'usage_limit_exceeded',
+      providerErrorTitle: 'Low Credit Warning!',
+      providerErrorMessage: 'Add credits to continue, or switch to a free model',
+    })
+  })
+
   it('classifies plain OpenCode/provider error messages without structured metadata', () => {
     const result = buildOpenCodeBlockedErrorDiagnostics({
       error: new Error('rate_limit_error: Model usage limit reached (HTTP 429)'),

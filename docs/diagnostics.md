@@ -47,6 +47,14 @@ It captures:
 - **Advanced Diagnostics**: event-loop lag, DNS probe, FD limits, TCP connection states, zombie process count, diagnostic heap snapshot, and swap pressure
 - macOS-specific: `vm_stat`, load average, CPU count, and top processes (macOS only)
 
+## OpenCode Provider Errors
+
+OpenCode sometimes streams only `Provider returned error` even though its local log contains the exact API failure. LoopTroop automatically correlates those generic stream errors with the newest OpenCode log files by `session.id` and surfaces a sanitized provider summary in ticket logs and blocked-error diagnostics when a match exists.
+
+The enrichment records only compact diagnostic fields such as HTTP status, retryability, provider/model identity, request model, provider error type/title/message, and a short response-body preview. It does not persist prompt bodies, raw request payloads, headers, cookies, authorization values, or URL query strings. For managed local servers, the default OpenCode log directory is used. For external or nonstandard servers, set `LOOPTROOP_OPENCODE_LOG_DIR` to the directory containing OpenCode's log files.
+
+If no matching local log exists, the ticket keeps the generic error and includes a hint to start future local runs with `npm run dev --opencode-logs=all` or configure `LOOPTROOP_OPENCODE_LOG_DIR`.
+
 ## Useful Options
 
 ```bash

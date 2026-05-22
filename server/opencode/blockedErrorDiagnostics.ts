@@ -280,6 +280,8 @@ export function buildOpenCodeBlockedErrorDiagnostics(
     summary: summaryMessage,
     modelId: input.modelId,
     sessionId: input.sessionId,
+    providerId: info?.providerId,
+    providerModelId: info?.providerModelId,
     statusCode,
     requestModel: info?.requestModel,
     isRetryable: info?.isRetryable,

@@ -95,6 +95,8 @@ function buildDiagnosticRows(diagnostics: NonNullable<TicketErrorOccurrence['dia
   ]
 
   if (diagnostics.modelId) rows.push({ label: 'Model', value: diagnostics.modelId })
+  if (diagnostics.providerId) rows.push({ label: 'Provider', value: diagnostics.providerId })
+  if (diagnostics.providerModelId) rows.push({ label: 'Provider model', value: diagnostics.providerModelId })
   if (diagnostics.requestModel && diagnostics.requestModel !== diagnostics.modelId) rows.push({ label: 'Request model', value: diagnostics.requestModel })
   if (diagnostics.sessionId) rows.push({ label: 'Session', value: diagnostics.sessionId })
   if (typeof diagnostics.statusCode === 'number') rows.push({ label: 'HTTP', value: String(diagnostics.statusCode) })

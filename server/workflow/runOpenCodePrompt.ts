@@ -31,6 +31,7 @@ import {
   resolveOpenCodeRetryPolicy,
   type OpenCodeRetryPolicy,
 } from '../opencode/retryPolicy'
+import { findOpenCodeLogErrorDetails } from '../opencode/logDiagnostics'
 
 export interface OpenCodeRunCallbacks {
   onSessionCreated?: (session: Session) => void
@@ -509,6 +510,13 @@ export async function runOpenCodeSessionPrompt({
       : `OpenCode retry grace window expired after ${resolvedRetryPolicy.delayMs}ms`
     const error = new Error(`${summary} (${retryLabel}): ${retryMessage}`)
     error.name = 'OpenCodeRetryLimitError'
+    const logDetails = findOpenCodeLogErrorDetails(resolvedSession.id)
+    if (logDetails) {
+      Object.assign(error, {
+        details: logDetails,
+        modelErrorDetails: logDetails,
+      })
+    }
     return error
   }
   const blockForOpenCodeRetry = (reason: 'limit' | 'delay') => {

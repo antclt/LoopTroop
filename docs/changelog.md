@@ -8,8 +8,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
 
 ### Detailed Changes
+
+#### Fixed
+- Enriched generic `Provider returned error` OpenCode failures by correlating the session with local OpenCode logs, surfacing sanitized HTTP/provider details while excluding prompts, request bodies, headers, credentials, cookies, and URL query strings.
 
 ---
 

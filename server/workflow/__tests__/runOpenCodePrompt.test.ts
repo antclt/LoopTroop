@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, describe, expect, it, vi } from 'vitest'
 import { patchTicket } from '../../storage/tickets'
 import { TEST } from '../../test/factories'
@@ -1185,6 +1188,58 @@ describe('runOpenCodePrompt', () => {
     await expect(adapter.promptSession('ses-1', [{ type: 'text', content: 'Prompt body' }]))
       .rejects
       .toThrow(/Your authentication token has been invalidated.*HTTP 401/)
+  })
+
+  it('enriches generic streamed provider errors from matching OpenCode log entries', async () => {
+    const logDir = mkdtempSync(join(tmpdir(), 'looptroop-opencode-stream-'))
+    const previousLogDir = process.env.LOOPTROOP_OPENCODE_LOG_DIR
+    process.env.LOOPTROOP_OPENCODE_LOG_DIR = logDir
+    writeFileSync(join(logDir, '2026-05-22T151603.log'), 'ERROR 2026-05-22T15:45:45 +166301ms service=llm providerID=kilo modelID=kilo-auto/free session.id=ses-generic small=false agent=build mode=primary error={"error":{"name":"AI_APICallError","url":"https://api.kilo.ai/api/gateway/chat/completions","requestBodyValues":{"model":"anthropic/claude-haiku-4.5","messages":[{"role":"user","content":"prompt must not leak"}]},"statusCode":402,"isRetryable":false,"responseBody":"{\\"error\\":{\\"title\\":\\"Low Credit Warning!\\",\\"message\\":\\"Add credits to continue, or switch to a free model\\"},\\"error_type\\":\\"usage_limit_exceeded\\"}"}}} stream error')
+    try {
+      const fakeClient = createFakeSdkClient({
+        create: async () => ({ data: { id: 'ses-generic', directory: '/tmp/project' } }),
+        prompt: async () => {
+          await new Promise<void>((resolve) => setTimeout(resolve, 20))
+          return { data: { parts: [] } }
+        },
+        messages: async () => ({ data: [] }),
+        subscribe: async () => ({
+          stream: (async function* () {
+            yield {
+              type: 'session.error',
+              properties: {
+                sessionID: 'ses-generic',
+                error: 'Provider returned error',
+              },
+            }
+            yield { type: 'session.idle', properties: { info: { id: 'ses-generic' } } }
+          })(),
+        }),
+      })
+      const adapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+
+      await expect(runOpenCodePrompt({
+        adapter,
+        projectPath: '/tmp/project',
+        parts: [{ type: 'text', content: 'Prompt body' }],
+      })).rejects.toMatchObject({
+        message: expect.stringContaining('Low Credit Warning!: Add credits to continue, or switch to a free model'),
+        modelErrorDetails: expect.objectContaining({
+          statusCode: 402,
+          responseErrorType: 'usage_limit_exceeded',
+          responseErrorTitle: 'Low Credit Warning!',
+          responseErrorMessage: 'Add credits to continue, or switch to a free model',
+          requestModel: 'anthropic/claude-haiku-4.5',
+        }),
+      })
+    } finally {
+      if (previousLogDir === undefined) {
+        delete process.env.LOOPTROOP_OPENCODE_LOG_DIR
+      } else {
+        process.env.LOOPTROOP_OPENCODE_LOG_DIR = previousLogDir
+      }
+      rmSync(logDir, { recursive: true, force: true })
+    }
   })
 
   it('surfaces provider metadata from the latest assistant snapshot instead of reusing stale text', async () => {

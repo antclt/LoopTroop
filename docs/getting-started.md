@@ -104,6 +104,8 @@ npm run dev
 
 For full managed OpenCode DEBUG logs in your terminal, use `npm run dev --opencode-logs=all`. This maps to OpenCode's `--print-logs --log-level DEBUG` flags and may expose sensitive request or provider details in the terminal.
 
+If a ticket shows only `Provider returned error`, LoopTroop automatically checks local OpenCode logs for the matching session and displays a sanitized exact provider cause when available. Set `LOOPTROOP_OPENCODE_LOG_DIR` when using an external OpenCode server with logs outside the default directory.
+
 For non-mutating startup, forced maintenance, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
 
 By default, the services run on these ports:

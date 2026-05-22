@@ -222,6 +222,8 @@ describe('ErrorView', () => {
           summary: 'invalid_request_error: Your authentication token has been invalidated. Please try signing in again. (HTTP 401)',
           modelId: 'openai/gpt-5.3-codex',
           sessionId: 'ses-auth',
+          providerId: 'openai',
+          providerModelId: 'gpt-5.3-codex',
           statusCode: 401,
           providerErrorType: 'invalid_request_error',
           providerErrorMessage: 'Your authentication token has been invalidated. Please try signing in again.',
@@ -240,6 +242,9 @@ describe('ErrorView', () => {
     expect(screen.getByText(/invalid_request_error: Your authentication token has been invalidated/)).toBeInTheDocument()
     expect(screen.getByText('HTTP:')).toBeInTheDocument()
     expect(screen.getByText('401')).toBeInTheDocument()
+    expect(screen.getByText('Provider:')).toBeInTheDocument()
+    expect(screen.getByText('openai')).toBeInTheDocument()
+    expect(screen.getByText('Provider model:')).toBeInTheDocument()
     expect(screen.getByText('Provider type:')).toBeInTheDocument()
     expect(screen.getByText('invalid_request_error')).toBeInTheDocument()
     expect(screen.getByText('Retryable:')).toBeInTheDocument()

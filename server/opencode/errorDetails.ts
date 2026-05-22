@@ -1,6 +1,8 @@
 export interface ModelErrorInfo {
   name?: string
   message?: string
+  providerId?: string
+  providerModelId?: string
   statusCode?: number
   url?: string
   isRetryable?: boolean
@@ -17,6 +19,18 @@ export interface ModelErrorSummary {
 }
 
 const MAX_ERROR_PREVIEW_LENGTH = 280
+const REDACTED = '[redacted]'
+const CREDENTIAL_WORD_KEY_PATTERN = String.raw`(?:x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret|authorization|cookie|set[-_\s]?cookie)`
+const CREDENTIAL_VALUE_PATTERN = new RegExp(
+  String.raw`(["']?(?:${CREDENTIAL_WORD_KEY_PATTERN})["']?\s*[:=]\s*)(["']?)(?:Bearer\s+)?([^"',\s}&]+)(\2)`,
+  'gi',
+)
+const BEARER_TOKEN_PATTERN = /\b(Bearer\s+)([A-Za-z0-9._~+/-]+=*)/gi
+const CREDENTIAL_WORD_PATTERN = new RegExp(
+  String.raw`\b(${CREDENTIAL_WORD_KEY_PATTERN})\s+(?:is\s+)?(["']?)([^"',\s}&]+)(\2)`,
+  'gi',
+)
+const URL_PATTERN = /\bhttps?:\/\/[^\s"',}]+/gi
 
 function toRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value) return undefined
@@ -48,6 +62,39 @@ function getBoolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined
 }
 
+function sanitizeUrl(value: string | undefined): string | undefined {
+  const cleaned = value ? trimQuotes(value).trim() : ''
+  if (!cleaned) return undefined
+  try {
+    const url = new URL(cleaned)
+    url.search = ''
+    url.hash = ''
+    return url.toString()
+  } catch {
+    return cleaned.split(/[?#]/, 1)[0]
+  }
+}
+
+function redactUrlQuery(value: string): string {
+  URL_PATTERN.lastIndex = 0
+  return value.replace(URL_PATTERN, (url) => sanitizeUrl(url) ?? url)
+}
+
+function redactSensitive(value: string): string {
+  CREDENTIAL_VALUE_PATTERN.lastIndex = 0
+  BEARER_TOKEN_PATTERN.lastIndex = 0
+  CREDENTIAL_WORD_PATTERN.lastIndex = 0
+  return redactUrlQuery(value)
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, REDACTED)
+    .replace(CREDENTIAL_VALUE_PATTERN, (_match, prefix: string, quote: string, _secret: string, closingQuote: string) =>
+      `${prefix}${quote}${REDACTED}${closingQuote}`,
+    )
+    .replace(CREDENTIAL_WORD_PATTERN, (_match, key: string, quote: string, _secret: string, closingQuote: string) =>
+      `${key} ${quote}${REDACTED}${closingQuote}`,
+    )
+    .replace(BEARER_TOKEN_PATTERN, `$1${REDACTED}`)
+}
+
 function trimQuotes(value: string): string {
   const trimmed = value.trim()
   if (trimmed.length >= 2) {
@@ -62,7 +109,7 @@ function trimQuotes(value: string): string {
 
 function cleanMessage(value: string | undefined): string | undefined {
   if (!value) return undefined
-  const trimmed = trimQuotes(value)
+  const trimmed = redactSensitive(trimQuotes(value))
   return trimmed.length > 0 ? trimmed : undefined
 }
 
@@ -96,8 +143,21 @@ function unwrapErrorRecord(error: unknown): Record<string, unknown> | undefined 
   }
 }
 
+function findRetryErrorRecord(record: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!record || !Array.isArray(record.errors)) return undefined
+
+  for (let index = record.errors.length - 1; index >= 0; index -= 1) {
+    const candidate = unwrapErrorRecord(record.errors[index])
+    if (!candidate) continue
+    return findRetryErrorRecord(candidate) ?? candidate
+  }
+
+  return undefined
+}
+
 export function extractModelErrorInfo(error: unknown): ModelErrorInfo | undefined {
-  const record = unwrapErrorRecord(error)
+  const baseRecord = unwrapErrorRecord(error)
+  const record = findRetryErrorRecord(baseRecord) ?? baseRecord
   const fallbackMessage = typeof error === 'string'
     ? cleanMessage(error)
     : error instanceof Error
@@ -106,10 +166,13 @@ export function extractModelErrorInfo(error: unknown): ModelErrorInfo | undefine
 
   const data = toRecord(record?.data)
   const dataError = toRecord(data?.error)
+  const dataDetail = toRecord(data?.detail)
   const responseBodySource = getString(record?.responseBody) ?? getString(data?.responseBody)
   const responseBody = truncate(responseBodySource)
   const responseBodyRecord = parseJsonRecord(responseBodySource)
   const responseBodyError = toRecord(responseBodyRecord?.error)
+  const responseBodyErrorText = getString(responseBodyRecord?.error)
+  const responseBodyDetail = toRecord(responseBodyRecord?.detail)
 
   const info: ModelErrorInfo = {
     name: cleanMessage(getString(record?.name)),
@@ -117,10 +180,17 @@ export function extractModelErrorInfo(error: unknown): ModelErrorInfo | undefine
       getString(record?.message)
       ?? getString(data?.message)
       ?? getString(dataError?.message)
+      ?? getString(responseBodyError?.message)
+      ?? responseBodyErrorText
+      ?? getString(responseBodyRecord?.message)
+      ?? getString(dataDetail?.message)
+      ?? getString(responseBodyDetail?.message)
       ?? fallbackMessage,
     ),
+    providerId: cleanMessage(getString(record?.providerId)),
+    providerModelId: cleanMessage(getString(record?.providerModelId)),
     statusCode: getNumber(record?.statusCode) ?? getNumber(data?.statusCode),
-    url: getString(record?.url),
+    url: sanitizeUrl(getString(record?.url)),
     isRetryable: getBoolean(record?.isRetryable) ?? getBoolean(data?.isRetryable),
     requestModel: cleanMessage(
       getString(record?.requestModel)
@@ -130,6 +200,7 @@ export function extractModelErrorInfo(error: unknown): ModelErrorInfo | undefine
       getString(record?.responseErrorType)
       ?? getString(dataError?.type)
       ?? getString(responseBodyError?.type)
+      ?? getString(responseBodyRecord?.error_type)
       ?? getString(responseBodyRecord?.type),
     ),
     responseErrorTitle: cleanMessage(
@@ -143,7 +214,13 @@ export function extractModelErrorInfo(error: unknown): ModelErrorInfo | undefine
       ?? getString(data?.message)
       ?? getString(dataError?.message)
       ?? getString(responseBodyError?.message)
-      ?? getString(responseBodyRecord?.message),
+      ?? responseBodyErrorText
+      ?? getString(responseBodyRecord?.message)
+      ?? getString(dataDetail?.message)
+      ?? getString(responseBodyDetail?.message)
+      ?? getString(dataDetail?.code)
+      ?? getString(responseBodyDetail?.code)
+      ?? getString(responseBodyRecord?.code)
     ),
     responseBodyPreview: truncate(getString(record?.responseBodyPreview)) ?? responseBody,
   }
@@ -156,6 +233,8 @@ export function hasRichModelErrorInfo(info: ModelErrorInfo | undefined): boolean
   return [
     info.statusCode,
     info.url,
+    info.providerId,
+    info.providerModelId,
     info.requestModel,
     info.responseErrorType,
     info.responseErrorTitle,

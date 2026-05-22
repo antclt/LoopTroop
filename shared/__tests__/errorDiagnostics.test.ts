@@ -51,4 +51,19 @@ describe('shared blocked error diagnostics', () => {
       inputTokens: 13252,
     })
   })
+
+  it('normalizes OpenCode provider identity fields', () => {
+    const diagnostics = normalizeBlockedErrorDiagnostics({
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'Low Credit Warning!: Add credits to continue, or switch to a free model (HTTP 402)',
+      providerId: 'kilo',
+      providerModelId: 'kilo-auto/free',
+    })
+
+    expect(diagnostics).toMatchObject({
+      providerId: 'kilo',
+      providerModelId: 'kilo-auto/free',
+    })
+  })
 })

@@ -15,6 +15,8 @@ export interface BlockedErrorDiagnostics {
   summary: string
   modelId?: string
   sessionId?: string
+  providerId?: string
+  providerModelId?: string
   statusCode?: number
   requestModel?: string
   isRetryable?: boolean
@@ -104,6 +106,8 @@ export function normalizeBlockedErrorDiagnostics(value: unknown): BlockedErrorDi
 
   const modelId = cleanString(value.modelId, 240)
   const sessionId = cleanString(value.sessionId, 240)
+  const providerId = cleanString(value.providerId, 240)
+  const providerModelId = cleanString(value.providerModelId, 240)
   const requestModel = cleanString(value.requestModel, 240)
   const providerErrorType = cleanString(value.providerErrorType, 240)
   const providerErrorTitle = cleanString(value.providerErrorTitle, 500)
@@ -117,6 +121,8 @@ export function normalizeBlockedErrorDiagnostics(value: unknown): BlockedErrorDi
     summary,
     ...(modelId ? { modelId } : {}),
     ...(sessionId ? { sessionId } : {}),
+    ...(providerId ? { providerId } : {}),
+    ...(providerModelId ? { providerModelId } : {}),
     ...(cleanNumber(value.statusCode) !== undefined ? { statusCode: cleanNumber(value.statusCode) } : {}),
     ...(requestModel ? { requestModel } : {}),
     ...(cleanBoolean(value.isRetryable) !== undefined ? { isRetryable: cleanBoolean(value.isRetryable) } : {}),

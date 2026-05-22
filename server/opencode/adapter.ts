@@ -42,6 +42,7 @@ import {
   extractTextFromMessageParts,
 } from './assistantMessageAnalysis'
 import { summarizeModelErrorForLog } from './errorDetails'
+import { enrichGenericOpenCodeProviderError } from './logDiagnostics'
 import { getErrorMessage } from '@shared/typeGuards'
 
 interface RawEvent {
@@ -368,6 +369,15 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     } catch (err) {
       if (err instanceof Error && (err.name === 'AbortError' || promptOptions.signal?.aborted)) throw err
       if (err instanceof Error && err.name === 'OpenCodeSessionError') throw err
+      const enriched = enrichGenericOpenCodeProviderError(err, sessionId)
+      if (enriched) {
+        const error = new Error(`Failed to prompt OpenCode session: ${enriched.message}`)
+        Object.assign(error, {
+          details: enriched.details,
+          modelErrorDetails: enriched.details,
+        })
+        throw error
+      }
       throw new Error(
         `Failed to prompt OpenCode session: ${getErrorMessage(err)}`,
       )
@@ -399,7 +409,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         this.requestOptions(this.withSdkOperationTimeout(signal)),
       )
       return Array.isArray(res.data)
-        ? res.data.map((entry) => this.mapMessageRecord(entry))
+        ? res.data.map((entry) => this.mapMessageRecord(entry, sessionId))
         : []
     } catch {
       return []
@@ -731,9 +741,14 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     }
   }
 
-  private mapMessageRecord(entry: unknown): Message {
+  private mapMessageRecord(entry: unknown, sessionId?: string): Message {
     const record = this.getRecord(entry)
-    const info = this.getRecord(record?.info) as MessageInfo | null
+    const rawInfo = this.getRecord(record?.info) as MessageInfo | null
+    const info = rawInfo ? { ...rawInfo } : null
+    if (info?.error) {
+      const enriched = enrichGenericOpenCodeProviderError(info.error, sessionId ?? info.sessionID)
+      if (enriched) info.error = enriched.details
+    }
     const parts = Array.isArray(record?.parts) ? record.parts as MessagePart[] : []
     const createdAt = typeof info?.time?.created === 'number'
       ? new Date(info.time.created).toISOString()
@@ -899,13 +914,16 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         }
       }
 
-      case 'session.error':
+      case 'session.error': {
+        const rawError = props.error ?? props
+        const enriched = enrichGenericOpenCodeProviderError(rawError, sessionId)
         return {
           type: 'session_error',
           sessionId,
-          error: this.describeError(props.error ?? props),
-          details: props.error ?? props,
+          error: enriched?.message ?? this.describeError(rawError),
+          details: enriched?.details ?? rawError,
         }
+      }
 
       case 'question.asked': {
         const request = this.mapQuestionRequest(props)
