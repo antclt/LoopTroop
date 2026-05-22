@@ -121,6 +121,7 @@ interface SizeItem {
   name: string
   size: number
   isDirectory: boolean
+  children?: SizeItem[]
 }
 
 interface BreakdownCategory {
@@ -133,6 +134,60 @@ interface SizeBreakdown {
   artifacts: BreakdownCategory
   source: BreakdownCategory
 }
+
+function FileTreeNode({ node, depth = 0 }: { node: SizeItem; depth?: number }) {
+  const [isOpen, setIsOpen] = useState(false)
+  const hasChildren = node.isDirectory && node.children && node.children.length > 0
+
+  return (
+    <div className="flex flex-col select-none">
+      <div
+        onClick={() => hasChildren && setIsOpen(!isOpen)}
+        className={`flex items-center justify-between text-[11px] hover:bg-muted/40 px-2 py-0.5 rounded transition-colors group ${
+          hasChildren ? 'cursor-pointer' : ''
+        }`}
+        style={{ paddingLeft: `${depth * 8 + 8}px` }}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
+          {node.isDirectory ? (
+            <>
+              {hasChildren ? (
+                isOpen ? (
+                  <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0" />
+                ) : (
+                  <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0" />
+                )
+              ) : (
+                <span className="w-3 h-3 shrink-0" />
+              )}
+              <Folder className="h-3.5 w-3.5 text-foreground/75 shrink-0" />
+            </>
+          ) : (
+            <>
+              <span className="w-3 h-3 shrink-0" />
+              <File className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+            </>
+          )}
+          <span className="truncate text-foreground font-mono" title={node.name}>
+            {node.name}
+          </span>
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground ml-2 shrink-0 group-hover:text-foreground transition-colors">
+          {formatBytes(node.size)}
+        </span>
+      </div>
+
+      {isOpen && hasChildren && (
+        <div className="flex flex-col gap-0.5 border-l border-border/10 ml-3.5 mt-0.5 pl-1">
+          {node.children!.map((child, idx) => (
+            <FileTreeNode key={idx} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 
 export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const { dispatch } = useUI()
@@ -659,21 +714,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                                       <div className="text-[10px] text-muted-foreground italic pl-1.5 py-1">No source files found</div>
                                     ) : (
                                       sizeBreakdown.source.children.map((child, index) => (
-                                        <div key={index} className="flex items-center justify-between text-[11px] hover:bg-muted/40 px-2 py-0.5 rounded transition-colors group">
-                                          <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
-                                            {child.isDirectory ? (
-                                              <Folder className="h-3.5 w-3.5 text-foreground/75 shrink-0" />
-                                            ) : (
-                                              <File className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                                            )}
-                                            <span className="truncate text-foreground font-mono" title={child.name}>
-                                              {child.name}
-                                            </span>
-                                          </div>
-                                          <span className="text-[10px] font-mono text-muted-foreground ml-2 shrink-0 group-hover:text-foreground transition-colors">
-                                            {formatBytes(child.size)}
-                                          </span>
-                                        </div>
+                                        <FileTreeNode key={index} node={child} />
                                       ))
                                     )}
                                   </div>
@@ -691,21 +732,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                                       <div className="text-[10px] text-muted-foreground italic pl-1.5 py-1">No artifacts found</div>
                                     ) : (
                                       sizeBreakdown.artifacts.children.map((child, index) => (
-                                        <div key={index} className="flex items-center justify-between text-[11px] hover:bg-muted/40 px-2 py-0.5 rounded transition-colors group">
-                                          <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
-                                            {child.isDirectory ? (
-                                              <Folder className="h-3.5 w-3.5 text-foreground/75 shrink-0" />
-                                            ) : (
-                                              <File className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
-                                            )}
-                                            <span className="truncate text-foreground font-mono" title={child.name}>
-                                              {child.name}
-                                            </span>
-                                          </div>
-                                          <span className="text-[10px] font-mono text-muted-foreground ml-2 shrink-0 group-hover:text-foreground transition-colors">
-                                            {formatBytes(child.size)}
-                                          </span>
-                                        </div>
+                                        <FileTreeNode key={index} node={child} />
                                       ))
                                     )}
                                   </div>

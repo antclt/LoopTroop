@@ -875,10 +875,17 @@ export async function handleGetTicketSize(c: Context) {
     }
   }
 
-  async function getTopLevelChildrenSizes(
+  interface SizeNode {
+    name: string
+    size: number
+    isDirectory: boolean
+    children?: SizeNode[]
+  }
+
+  async function getDirectoryChildren(
     dirPath: string,
     excludeNames: string[] = []
-  ): Promise<{ name: string; size: number; isDirectory: boolean }[]> {
+  ): Promise<SizeNode[]> {
     try {
       const entries = await fsPromises.readdir(dirPath, { withFileTypes: true })
       const children = await Promise.all(
@@ -887,30 +894,37 @@ export async function handleGetTicketSize(c: Context) {
           const fullPath = path.join(dirPath, entry.name)
           const isDirectory = entry.isDirectory()
           let size = 0
+          let nestedChildren: SizeNode[] | undefined
           try {
             const stats = await fsPromises.lstat(fullPath)
             if (stats.isDirectory()) {
               size = await getDirectorySize(fullPath)
+              nestedChildren = await getDirectoryChildren(fullPath)
             } else if (stats.isFile()) {
               size = stats.size
             }
           } catch {
             // Ignore error
           }
-          return { name: entry.name, size, isDirectory }
+          return {
+            name: entry.name,
+            size,
+            isDirectory,
+            ...(nestedChildren && nestedChildren.length > 0 ? { children: nestedChildren } : {})
+          }
         })
       )
       return children
-        .filter((c): c is { name: string; size: number; isDirectory: boolean } => c !== null && c.size > 0)
+        .filter((c): c is SizeNode => c !== null && c.size > 0)
         .sort((a, b) => b.size - a.size)
     } catch {
       return []
     }
   }
 
-  async function getArtifactsChildren(): Promise<{ name: string; size: number; isDirectory: boolean }[]> {
+  async function getArtifactsChildren(): Promise<SizeNode[]> {
     if (!ticketDir) return []
-    const list: { name: string; size: number; isDirectory: boolean }[] = []
+    const list: SizeNode[] = []
     try {
       const topEntries = await fsPromises.readdir(ticketDir, { withFileTypes: true })
       for (const entry of topEntries) {
@@ -918,6 +932,7 @@ export async function handleGetTicketSize(c: Context) {
         if (entry.name === 'runtime') {
           try {
             const runtimeEntries = await fsPromises.readdir(fullPath, { withFileTypes: true })
+            const runtimeChildren: SizeNode[] = []
             for (const rEntry of runtimeEntries) {
               const rFullPath = path.join(fullPath, rEntry.name)
               const excludeLogs = [
@@ -931,8 +946,22 @@ export async function handleGetTicketSize(c: Context) {
               const isDir = rEntry.isDirectory()
               const size = isDir ? await getDirectorySize(rFullPath) : await getFileSize(rFullPath)
               if (size > 0) {
-                list.push({ name: `runtime/${rEntry.name}`, size, isDirectory: isDir })
+                const nested = isDir ? await getDirectoryChildren(rFullPath) : undefined
+                runtimeChildren.push({
+                  name: rEntry.name,
+                  size,
+                  isDirectory: isDir,
+                  ...(nested && nested.length > 0 ? { children: nested } : {})
+                })
               }
+            }
+            if (runtimeChildren.length > 0) {
+              list.push({
+                name: 'runtime',
+                size: runtimeChildren.reduce((acc, c) => acc + c.size, 0),
+                isDirectory: true,
+                children: runtimeChildren.sort((a, b) => b.size - a.size)
+              })
             }
           } catch {
             // ignore
@@ -941,7 +970,13 @@ export async function handleGetTicketSize(c: Context) {
           const isDir = entry.isDirectory()
           const size = isDir ? await getDirectorySize(fullPath) : await getFileSize(fullPath)
           if (size > 0) {
-            list.push({ name: entry.name, size, isDirectory: isDir })
+            const nested = isDir ? await getDirectoryChildren(fullPath) : undefined
+            list.push({
+              name: entry.name,
+              size,
+              isDirectory: isDir,
+              ...(nested && nested.length > 0 ? { children: nested } : {})
+            })
           }
         }
       }
@@ -976,7 +1011,7 @@ export async function handleGetTicketSize(c: Context) {
 
   const [artifactsList, sourceList] = await Promise.all([
     getArtifactsChildren(),
-    getTopLevelChildrenSizes(worktreePath, ['.ticket']),
+    getDirectoryChildren(worktreePath, ['.ticket']),
   ])
 
   return c.json({

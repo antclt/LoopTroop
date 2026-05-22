@@ -99,13 +99,19 @@ describe('ticketRouter GET /tickets/:id/size', () => {
     const response = await app.request(`/api/tickets/${ticket.id}/size`)
     expect(response.status).toBe(200)
 
+    interface SizeNode {
+      name: string
+      size: number
+      isDirectory: boolean
+      children?: SizeNode[]
+    }
     const payload = await response.json() as {
       size: number
       exists: boolean
       breakdown: {
-        logs: { total: number; children: { name: string; size: number; isDirectory: boolean }[] }
-        artifacts: { total: number; children: { name: string; size: number; isDirectory: boolean }[] }
-        source: { total: number; children: { name: string; size: number; isDirectory: boolean }[] }
+        logs: { total: number; children: SizeNode[] }
+        artifacts: { total: number; children: SizeNode[] }
+        source: { total: number; children: SizeNode[] }
       }
     }
     expect(payload.exists).toBe(true)
@@ -121,7 +127,10 @@ describe('ticketRouter GET /tickets/:id/size', () => {
     expect(payload.breakdown.logs.children[0]!.size).toBe(7)
 
     expect(payload.breakdown.artifacts.children.length).toBeGreaterThanOrEqual(1)
-    expect(payload.breakdown.artifacts.children.some(c => c.name === 'runtime/some-artifact.json')).toBe(true)
+    const runtimeNode = payload.breakdown.artifacts.children.find(c => c.name === 'runtime')
+    expect(runtimeNode).toBeDefined()
+    expect(runtimeNode!.children).toBeDefined()
+    expect(runtimeNode!.children!.some(c => c.name === 'some-artifact.json')).toBe(true)
 
     expect(payload.breakdown.source.children.length).toBeGreaterThanOrEqual(2)
     expect(payload.breakdown.source.children.some(c => c.name === 'test1.txt')).toBe(true)
