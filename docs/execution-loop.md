@@ -104,6 +104,8 @@ Matching messages include rate limits, usage limits, resource exhaustion, overlo
 
 In any owned phase, retry-budget exhaustion can preserve the active OpenCode session when possible and route the ticket to `BLOCKED_ERROR` with diagnostics. Continue sends exactly `continue please` into that same session. During `CODING`, this also prevents provider stalls from consuming the bead iteration timeout or bead retry budget; Retry still keeps the normal bead reset/retry behavior.
 
+During `CODING`, matching OpenCode retry/session/output-limit diagnostics are also remembered while the bead continues. If the bead later blocks through completion-marker exhaustion or the normal bead retry budget, the blocked error keeps that latest underlying OpenCode cause in its diagnostics while the primary error still describes the bead failure.
+
 ## Worktree Hygiene
 
 Execution happens inside the ticket worktree, not the attached project root.

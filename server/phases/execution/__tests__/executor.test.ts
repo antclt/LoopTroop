@@ -6,7 +6,7 @@ import type { Bead } from '../../beads/types'
 import { PROFILE_DEFAULTS } from '../../../db/defaults'
 import { patchTicket } from '../../../storage/tickets'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../../test/integration'
-import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../../shared/errorCodes'
+import { BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR } from '../../../../shared/errorCodes'
 
 class SequencedMockOpenCodeAdapter extends MockOpenCodeAdapter {
   private promptCounts = new Map<string, number>()
@@ -251,6 +251,55 @@ describe('executeBead', () => {
     expect(notesUpdates[0]!.beadId).toBe('bead-1')
     expect(notesUpdates[0]!.notes).toContain('failed')
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
+  })
+
+  it('preserves usage-limit retry diagnostics when completion markers exhaust the bead window', async () => {
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.mockResponses.set('mock-session-1#1', '')
+    adapter.mockResponses.set('mock-session-1#2', 'Attempt stalled because the provider usage limit was reached.')
+    adapter.mockStreamEvents.set('mock-session-1#1', [
+      {
+        type: 'session_status',
+        sessionId: 'mock-session-1',
+        status: 'retry',
+        attempt: 1,
+        message: 'The usage limit has been reached',
+      },
+      {
+        type: 'session_status',
+        sessionId: 'mock-session-1',
+        status: 'retry',
+        attempt: 2,
+        message: 'The usage limit has been reached',
+      },
+    ])
+
+    const result = await executeBead(
+      adapter,
+      buildBead(),
+      [{ type: 'text', content: 'Bead context' }],
+      '/tmp/test',
+      1,
+      PROFILE_DEFAULTS.perIterationTimeout,
+      undefined,
+      {
+        model: 'openai/gpt-5.2',
+        structuredRetryCount: 0,
+        opencodeRetryPolicy: { limit: 50, delayMs: 0 },
+      },
+    )
+
+    expect(result.success).toBe(false)
+    expect(result.errorCodes).toEqual([BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR])
+    expect(result.diagnostics).toMatchObject({
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'The usage limit has been reached',
+      modelId: 'openai/gpt-5.2',
+      sessionId: 'mock-session-1',
+    })
+    expect(result.errors).toContain('Iteration 1: No completion marker found')
+    expect(result.errors).toContain('Iteration 1: Completion marker failed validation after 0 structured retry attempt(s): No completion marker found')
   })
 
   it('creates allow-all sessions for owned coding attempts', async () => {

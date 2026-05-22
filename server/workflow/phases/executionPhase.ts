@@ -457,10 +457,13 @@ export async function handleCoding(
       modelId: codingModelId,
       beadId: finalizingBead.id,
       errors: result.errors,
+      ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
     })
-    sendEvent(result.errorCodes && result.errorCodes.length > 0
-      ? { type: 'BEAD_ERROR', codes: result.errorCodes }
-      : { type: 'BEAD_ERROR' })
+    sendEvent({
+      type: 'BEAD_ERROR',
+      ...(result.errorCodes && result.errorCodes.length > 0 ? { codes: result.errorCodes } : {}),
+      ...(result.diagnostics ? { diagnostics: result.diagnostics } : {}),
+    })
     return
   }
 

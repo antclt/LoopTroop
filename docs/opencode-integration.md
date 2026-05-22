@@ -97,6 +97,8 @@ Retry-status handling is driven by OpenCode stream events, not only by log text.
 
 When a ticket is blocked by a resumable OpenCode/provider interruption, the prompt runner can preserve the active owned session instead of abandoning it. Eligible interruptions include retryable diagnostics, HTTP 408/429/500/502/503/504/529, rate or usage limits, overload/capacity messages, timeouts, and transport failures. Auth, billing, invalid request, request-size, permission, missing API key, and insufficient-quota signals remain non-continuable.
 
+CODING also carries the latest meaningful OpenCode retry/session/output-limit diagnostic forward when a bead later blocks for completion-marker or bead retry-budget reasons, so the Error view can show the underlying provider/session cause alongside the bead wrapper failure.
+
 The public Continue action records a pending continuation keyed by OpenCode `sessionId`. After the state machine returns from `BLOCKED_ERROR` to the failed phase, the next owned active-session prompt consumes that pending request and replaces only that prompt body with exactly:
 
 ```text

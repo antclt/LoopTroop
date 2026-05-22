@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added profile-controlled OpenCode retry budgets so transient provider stalls block early with diagnostics and same-session Continue across OpenCode-backed phases.
+- Preserved underlying OpenCode provider/session causes on coding bead failures so parser or retry-budget wrappers no longer hide usage-limit style blockers.
 - Extended the ticket disk space card in the details view to allow expanding any category (Source Code, Phase Artifacts, or Execution Logs) to see which specific folders/files are occupying space, rendered in a beautiful HSL dark-mode monochrome interactive accordion.
 - Added a beautiful button and card to calculate and display ticket disk space usage with granular breakdown by logs, artifacts, and source code.
 - Made manual Retry preserve versioned logs and artifacts for every non-implementation failed status while keeping CODING bead-scoped.
@@ -62,6 +63,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Fixed
 - OpenCode `session.status` retry events for rate limits, usage limits, overload/capacity, temporary unavailability, timeouts, and network/socket failures now block through `BLOCKED_ERROR` after the configured budget, preserving provider diagnostics and active sessions for Continue when eligible.
+- Coding completion-marker and bead retry-budget failures now retain the latest underlying OpenCode provider/session diagnostic, such as usage-limit retries, in the blocked error details.
 - CODING now routes continuable OpenCode/provider retry exhaustion through the normal blocked-error path instead of converting it into bead retry exhaustion, while ordinary implementation failures keep the existing bead reset/retry behavior.
 - Active bead countdowns now reset their start timestamp when a new coding iteration/session begins, preventing the UI from sticking at `00:00/20:00` while later iterations continue.
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.

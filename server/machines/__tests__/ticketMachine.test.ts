@@ -43,6 +43,81 @@ describe('ticketMachine execution setup flow', () => {
     expect(actor.getSnapshot().context.errorDiagnostics).toBeNull()
   })
 
+  it('records and clears structured diagnostics for blocked BEAD_ERROR events', () => {
+    const actor = createActor(ticketMachine, {
+      snapshot: {
+        status: 'active',
+        value: 'CODING',
+        historyValue: {},
+        context: {
+          ticketId: '1:T-1',
+          projectId: 1,
+          externalId: 'T-1',
+          title: 'Diagnostic bead error',
+          status: 'CODING',
+          lockedMainImplementer: 'openai/gpt-5.2',
+          lockedMainImplementerVariant: null,
+          lockedCouncilMembers: ['openai/gpt-5.2'],
+          lockedCouncilMemberVariants: null,
+          lockedInterviewQuestions: null,
+          lockedCoverageFollowUpBudgetPercent: null,
+          lockedMaxCoveragePasses: null,
+          lockedMaxPrdCoveragePasses: null,
+          lockedMaxBeadsCoveragePasses: null,
+          lockedStructuredRetryCount: null,
+          previousStatus: 'PREPARING_EXECUTION_ENV',
+          error: null,
+          errorCodes: [],
+          errorDiagnostics: null,
+          blockedErrorResolution: null,
+          beadProgress: { total: 1, completed: 0, current: 'bead-1' },
+          iterationCount: 0,
+          maxIterations: 5,
+          councilResults: null,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        },
+        children: {},
+      } as unknown as never,
+      input: {
+        ticketId: '1:T-1',
+        projectId: 1,
+        externalId: 'T-1',
+        title: 'Diagnostic bead error',
+        maxIterations: 5,
+        lockedMainImplementer: 'openai/gpt-5.2',
+        lockedCouncilMembers: ['openai/gpt-5.2'],
+      },
+    })
+
+    actor.start()
+    actor.send({
+      type: 'BEAD_ERROR',
+      codes: ['BEAD_RETRY_BUDGET_EXHAUSTED', 'OPENCODE_PROVIDER_ERROR'],
+      diagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'The usage limit has been reached',
+        modelId: 'openai/gpt-5.2',
+        sessionId: 'ses-limit',
+      },
+    })
+
+    expect(actor.getSnapshot().value).toBe('BLOCKED_ERROR')
+    expect(actor.getSnapshot().context.errorCodes).toEqual(['BEAD_RETRY_BUDGET_EXHAUSTED', 'OPENCODE_PROVIDER_ERROR'])
+    expect(actor.getSnapshot().context.errorDiagnostics).toMatchObject({
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'The usage limit has been reached',
+      sessionId: 'ses-limit',
+    })
+
+    actor.send({ type: 'RETRY' })
+
+    expect(actor.getSnapshot().value).toBe('CODING')
+    expect(actor.getSnapshot().context.errorDiagnostics).toBeNull()
+  })
+
   it('routes approval through pre-flight, setup-plan approval, and execution setup before coding', () => {
     const actor = createActor(ticketMachine, {
       input: {

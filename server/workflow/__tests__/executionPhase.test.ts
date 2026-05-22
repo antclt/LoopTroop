@@ -5,7 +5,7 @@ import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from 
 import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
 import { readTicketBeads, recoverFailedCodingBead, writeTicketBeads } from '../phases/beadsPhase'
 import { phaseIntermediate } from '../phases/state'
-import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../shared/errorCodes'
+import { BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR } from '../../../shared/errorCodes'
 import {
   clearAllPendingSessionContinuationsForTests,
   requestSessionContinuation,
@@ -324,6 +324,43 @@ describe('handleCoding', () => {
     const failedBead = finalBeads.find((b) => b.id === 'bead-1')
     expect(failedBead?.status).toBe('error')
     expect(failedBead?.iteration).toBe(10)
+  })
+
+  it('propagates underlying OpenCode diagnostics with bead failures', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Bead failure with OpenCode diagnostics',
+    })
+    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1)])
+    const sendEvent = vi.fn()
+
+    executeBeadMock.mockResolvedValueOnce({
+      success: false,
+      beadId: 'bead-1',
+      iteration: 5,
+      output: '',
+      errors: ['Iteration 5: No completion marker found'],
+      errorCodes: [BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR],
+      diagnostics: {
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'The usage limit has been reached',
+        modelId: context.lockedMainImplementer ?? undefined,
+        sessionId: 'ses-limit',
+      },
+    })
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'BEAD_ERROR',
+      codes: [BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR],
+      diagnostics: expect.objectContaining({
+        kind: 'opencode_provider',
+        source: 'provider',
+        summary: 'The usage limit has been reached',
+        sessionId: 'ses-limit',
+      }),
+    })
   })
 
   it('lets continuable OpenCode retry errors bubble for the workflow ERROR path instead of BEAD_ERROR', async () => {

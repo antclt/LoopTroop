@@ -79,6 +79,7 @@ export const ticketMachine = setup({
       },
       errorDiagnostics: ({ event }) => {
         if (event.type === 'ERROR') return event.diagnostics ?? null
+        if (event.type === 'BEAD_ERROR') return event.diagnostics ?? null
         return null
       },
       blockedErrorResolution: () => null,

@@ -1,6 +1,7 @@
 import type { OpenCodeAdapter } from '../../opencode/adapter'
 import type { Bead } from '../beads/types'
 import type { Message, PromptPart, Session, StreamEvent } from '../../opencode/types'
+import type { BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 import { parseCompletionMarker } from './completionChecker'
 import {
   clearOpenCodePromptDispatchCount,
@@ -20,10 +21,15 @@ import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import { buildPromptFromTemplate, buildSameSessionPromptFromTemplate, PROM_CODING, PROM51 } from '../../prompts/index'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '../../../shared/errorCodes'
 import {
+  buildOpenCodeBlockedErrorDiagnostics,
+  mergeErrorCodes,
+  type OpenCodeBlockedErrorDiagnosticsResult,
+} from '../../opencode/blockedErrorDiagnostics'
+import {
   attachContinuationDiagnostics,
   shouldPreserveSessionForContinuation,
 } from '../../opencode/sessionContinuation'
-import type { OpenCodeRetryPolicy } from '../../opencode/retryPolicy'
+import { isContinuableOpenCodeRetryMessage, type OpenCodeRetryPolicy } from '../../opencode/retryPolicy'
 
 const BEAD_STATUS_SCHEMA_REMINDER = [
   'Return exactly one <BEAD_STATUS>...</BEAD_STATUS> block and nothing else.',
@@ -49,6 +55,7 @@ export interface ExecutionResult {
   output: string
   errors: string[]
   errorCodes?: string[]
+  diagnostics?: BlockedErrorDiagnostics | null
 }
 
 type ContextPartsInput = PromptPart[] | (() => Promise<PromptPart[]>)
@@ -97,6 +104,11 @@ function buildContinuationPrompt(
 
 function shouldUseStructuredRetry(result: ReturnType<typeof parseCompletionMarker>): boolean {
   return !result.complete && (!result.markerFound || Boolean(result.validationError))
+}
+
+function shouldRememberOpenCodeDiagnostics(result: OpenCodeBlockedErrorDiagnosticsResult): boolean {
+  const kind = result.diagnostics?.kind
+  return Boolean(kind && kind !== 'runtime' && kind !== 'unknown')
 }
 
 function truncateForNote(text: string, maxLength = EXECUTOR_NOTE_TRUNCATION_LENGTH): string {
@@ -271,8 +283,68 @@ export async function executeBead(
   let lastAttemptIteration = startingIteration - 1
   let lastOutput = ''
   const errors: string[] = []
+  const latestOpenCodeDiagnostics: { current: OpenCodeBlockedErrorDiagnosticsResult | null } = { current: null }
   const sessionManager = callbacks?.ticketId ? new SessionManager(adapter) : null
   const structuredRetryCount = normalizeStructuredRetryCount(callbacks?.structuredRetryCount)
+
+  const rememberOpenCodeDiagnostics = (result: OpenCodeBlockedErrorDiagnosticsResult) => {
+    if (shouldRememberOpenCodeDiagnostics(result)) {
+      latestOpenCodeDiagnostics.current = result
+    }
+  }
+
+  const rememberOpenCodeStreamDiagnostics = (sessionId: string, event: StreamEvent) => {
+    if (event.type === 'session_status' && event.status === 'retry' && isContinuableOpenCodeRetryMessage(event.message)) {
+      rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
+        modelId: callbacks?.model,
+        sessionId,
+        fallbackMessage: event.message,
+      }))
+      return
+    }
+
+    if (event.type === 'session_error') {
+      rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
+        modelId: callbacks?.model,
+        sessionId,
+        responseMeta: {
+          hasAssistantMessage: false,
+          latestAssistantWasEmpty: true,
+          latestAssistantHasError: false,
+          latestAssistantWasStale: false,
+          sessionErrored: true,
+          sessionError: event.error,
+          sessionErrorDetails: event.details,
+        },
+      }))
+      return
+    }
+
+    if (event.type === 'step' && event.step === 'finish') {
+      rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
+        modelId: callbacks?.model,
+        sessionId,
+        responseMeta: {
+          hasAssistantMessage: false,
+          latestAssistantWasEmpty: true,
+          latestAssistantHasError: false,
+          latestAssistantWasStale: false,
+          sessionErrored: false,
+          latestStepFinishReason: event.reason,
+          latestStepFinishTokens: event.tokens,
+        },
+      }))
+    }
+  }
+
+  const rememberPromptCompletedDiagnostics = (event: OpenCodePromptCompletedEvent) => {
+    rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
+      modelId: callbacks?.model,
+      sessionId: event.session.id,
+      responseMeta: event.responseMeta,
+      attemptMeta: event.attemptMeta,
+    }))
+  }
 
   while (maxAttemptIteration == null || iteration <= maxAttemptIteration) {
     lastAttemptIteration = iteration
@@ -324,6 +396,7 @@ export async function executeBead(
         },
         onStreamEvent: (event) => {
           if (!sessionId) return
+          rememberOpenCodeStreamDiagnostics(sessionId, event)
           callbacks?.onOpenCodeStreamEvent?.({
             sessionId,
             iteration,
@@ -338,6 +411,7 @@ export async function executeBead(
           })
         },
         onPromptCompleted: (event) => {
+          rememberPromptCompletedDiagnostics(event)
           callbacks?.onPromptCompleted?.({
             iteration,
             stage: 'coding_main',
@@ -410,6 +484,7 @@ export async function executeBead(
               opencodeRetryPolicy: callbacks?.opencodeRetryPolicy,
               erroredSessionPolicy: 'discard_errored_session_output',
               onStreamEvent: (event) => {
+                rememberOpenCodeStreamDiagnostics(runResult.session.id, event)
                 callbacks?.onOpenCodeStreamEvent?.({
                   sessionId: runResult.session.id,
                   iteration,
@@ -424,6 +499,7 @@ export async function executeBead(
                 })
               },
               onPromptCompleted: (event) => {
+                rememberPromptCompletedDiagnostics(event)
                 callbacks?.onPromptCompleted?.({
                   iteration,
                   stage: 'coding_structured_retry',
@@ -457,6 +533,7 @@ export async function executeBead(
           erroredSessionPolicy: 'discard_errored_session_output',
           toolPolicy: PROM_CODING.toolPolicy,
           onStreamEvent: (event) => {
+            rememberOpenCodeStreamDiagnostics(runResult.session.id, event)
             callbacks?.onOpenCodeStreamEvent?.({
               sessionId: runResult.session.id,
               iteration,
@@ -471,6 +548,7 @@ export async function executeBead(
             })
           },
           onPromptCompleted: (event) => {
+            rememberPromptCompletedDiagnostics(event)
             callbacks?.onPromptCompleted?.({
               iteration,
               stage: 'coding_continue',
@@ -481,6 +559,12 @@ export async function executeBead(
       }
     } catch (err) {
       throwIfCancelled(err, signal)
+      rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
+        error: err,
+        modelId: callbacks?.model,
+        sessionId: activeSessionId ?? undefined,
+        fallbackMessage: err instanceof Error ? err.message : undefined,
+      }))
       if (
         activeSessionId
         && callbacks?.ticketId
@@ -538,9 +622,15 @@ export async function executeBead(
             model: callbacks?.model,
             variant: callbacks?.variant,
             iteration,
-            onOpenCodeStreamEvent: callbacks?.onOpenCodeStreamEvent,
+            onOpenCodeStreamEvent: ({ sessionId, event }) => {
+              rememberOpenCodeStreamDiagnostics(sessionId, event)
+              callbacks?.onOpenCodeStreamEvent?.({ sessionId, iteration, event })
+            },
             onPromptDispatched: callbacks?.onPromptDispatched,
-            onPromptCompleted: callbacks?.onPromptCompleted,
+            onPromptCompleted: (entry) => {
+              rememberPromptCompletedDiagnostics(entry.event)
+              callbacks?.onPromptCompleted?.(entry)
+            },
           },
         )
       }
@@ -582,14 +672,19 @@ export async function executeBead(
     errors.push(`Reached the configured per-bead retry budget at iteration ${lastAttemptIteration}.`)
   }
 
+  const baseErrorCodes = maxAttemptIteration !== null && lastAttemptIteration >= maxAttemptIteration
+    ? [BEAD_RETRY_BUDGET_EXHAUSTED]
+    : []
+  const openCodeDiagnostics = latestOpenCodeDiagnostics.current
+  const errorCodes = mergeErrorCodes(baseErrorCodes, openCodeDiagnostics?.errorCodes ?? [])
+
   return {
     beadId: bead.id,
     success: false,
     iteration: lastAttemptIteration,
     output: lastOutput,
     errors,
-    ...(maxAttemptIteration !== null && lastAttemptIteration >= maxAttemptIteration
-      ? { errorCodes: [BEAD_RETRY_BUDGET_EXHAUSTED] }
-      : {}),
+    ...(errorCodes.length > 0 ? { errorCodes } : {}),
+    ...(openCodeDiagnostics?.diagnostics ? { diagnostics: openCodeDiagnostics.diagnostics } : {}),
   }
 }

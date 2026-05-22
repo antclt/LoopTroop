@@ -70,7 +70,7 @@ export type TicketEvent =
   | { type: 'EXECUTION_SETUP_FAILED'; errors?: string[] }
   | { type: 'CHECKS_FAILED'; errors: string[] }
   | { type: 'BEAD_COMPLETE' }
-  | { type: 'BEAD_ERROR'; codes?: string[] }
+  | { type: 'BEAD_ERROR'; codes?: string[]; diagnostics?: BlockedErrorDiagnostics | null }
   | { type: 'ALL_BEADS_DONE' }
   | { type: 'TESTS_PASSED' }
   | { type: 'TESTS_FAILED' }
