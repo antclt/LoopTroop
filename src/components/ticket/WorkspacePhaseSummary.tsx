@@ -209,8 +209,8 @@ function DetailsList({ items }: { items: readonly string[] }) {
  * and optional live coverage-version badge.
  */
 export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: WorkspacePhaseSummaryProps) {
-  const [open, setOpen] = useState(false)
-  const [expanded, setExpanded] = useState(true)
+  const [isOpen, setIsOpen] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(true)
   const phaseMeta = getWorkflowPhaseMeta(phase)
   const runtime = getTicketRuntime(ticket)
   const descriptionId = useId()
@@ -255,13 +255,13 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
       <div className="shrink-0 border-b border-border bg-muted/20 px-4 py-1.5">
         <button
           type="button"
-          onClick={() => setExpanded((value) => !value)}
-          aria-expanded={expanded}
+          onClick={() => setIsExpanded((value) => !value)}
+          aria-expanded={isExpanded}
           aria-controls={descriptionId}
           aria-label={phaseLabel}
           className="flex items-center gap-1 py-0 text-[13px] font-medium text-foreground transition-colors hover:text-foreground/80"
         >
-          <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', expanded && 'rotate-90')} />
+          <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', isExpanded && 'rotate-90')} />
           <span>{phaseLabel}</span>
           {phase === 'CODING' && runtime.activeBeadId && runtime.perIterationTimeoutMs ? (() => {
             const activeBead = runtime.beads?.find(b => b.id === runtime.activeBeadId)
@@ -276,7 +276,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
             return null
           })() : null}
         </button>
-        {expanded ? (
+        {isExpanded ? (
           <p id={descriptionId} className="mt-px ml-5 text-[11px] leading-[15px] text-muted-foreground">
             {phaseMeta.description}
             {' '}
@@ -286,7 +286,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
                   type="button"
                   onClick={(event) => {
                     event.stopPropagation()
-                    setOpen(true)
+                    setIsOpen(true)
                   }}
                   className="underline underline-offset-2 transition-colors hover:text-foreground"
                   aria-label={`Show detailed explanation for ${phaseLabel}`}
@@ -300,7 +300,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
         ) : null}
       </div>
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent closeButtonVariant="dashboard" className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{phaseLabel}</DialogTitle>

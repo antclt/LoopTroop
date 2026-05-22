@@ -28,7 +28,7 @@ export function ArtifactList({ memberArtifacts, compactInterviewArtifacts, compa
           : compactInterviewArtifacts
             ? 'min-w-[150px] max-w-[220px] px-3 py-2 h-auto flex-none items-start gap-2'
             : 'min-w-[220px] flex-1 px-3 py-2 h-auto items-start gap-2'
-        const showStatus = !compactInterviewArtifacts
+        const shouldShowStatus = !compactInterviewArtifacts
         const nameClass = compact ? 'text-[9px] font-medium truncate' : 'text-xs font-medium truncate'
         const subClass = compact ? 'text-[8px] opacity-80 mt-0.5 truncate' : 'text-[10px] opacity-80 mt-0.5 truncate'
         const detailClass = compact ? `text-[8px] mt-0.5 truncate ${detailTone}` : `text-[10px] mt-0.5 truncate ${detailTone}`
@@ -42,7 +42,7 @@ export function ArtifactList({ memberArtifacts, compactInterviewArtifacts, compa
           >
             <div className="min-w-0 text-left flex-1">
               <div className={nameClass}>{getModelDisplayName(artifact.modelId)}</div>
-              {showStatus && (
+              {shouldShowStatus && (
                 <div className={subClass}>
                   {getCouncilStatusEmoji(artifact.outcome, artifact.action)} {getCouncilStatusLabel(artifact.outcome, artifact.action)}
                 </div>

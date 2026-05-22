@@ -393,30 +393,30 @@ export function PhaseLogPanel({
 
   const singleModelTabId = !isKnownMultiModelPhase && modelTabs.length === 1 ? modelTabs[0]! : null
   const aiTabLabel = singleModelTabId ? `AI > ${getModelDisplayName(singleModelTabId)}` : 'AI'
-  const showModelTabs = modelTabs.length > 0 && !singleModelTabId
+  const hasModelTabs = modelTabs.length > 0 && !singleModelTabId
   const availableTabs: string[] = useMemo(() => {
     const tabs: string[] = [...FIXED_TABS]
-    if (showModelTabs) tabs.push(...modelTabs)
+    if (hasModelTabs) tabs.push(...modelTabs)
     if (hasCmdLogs) tabs.push('CMD')
     return tabs
-  }, [showModelTabs, modelTabs, hasCmdLogs])
+  }, [hasModelTabs, modelTabs, hasCmdLogs])
   const effectiveTab = availableTabs.includes(activeTab)
     ? activeTab
     : singleModelTabId && activeTab === singleModelTabId
       ? 'AI'
       : 'ALL'
   const filteredLogs = filterEntries(phaseLogs, effectiveTab)
-  const showModelNameInLogTags = effectiveTab === 'ALL' || effectiveTab === 'AI'
+  const shouldShowModelNameInLogTags = effectiveTab === 'ALL' || effectiveTab === 'AI'
   const hasLogs = filteredLogs.length > 0
   const [copied, copyToClipboard] = useCopyToClipboard()
   const handleCopyLogs = useCallback(() => {
     if (!filteredLogs.length) return
     const textToCopy = filteredLogs.map((entry) => {
       const ts = entry.timestamp ? `[${entry.timestamp}] ` : ''
-      return `${ts}${formatLogLine(entry, showModelNameInLogTags).copyText}`
+      return `${ts}${formatLogLine(entry, shouldShowModelNameInLogTags).copyText}`
     }).join('\n')
     copyToClipboard(textToCopy)
-  }, [filteredLogs, showModelNameInLogTags, copyToClipboard])
+  }, [filteredLogs, shouldShowModelNameInLogTags, copyToClipboard])
 
   const visibleLogTail = useMemo(() => {
     const lastEntry = filteredLogs.at(-1)
@@ -504,7 +504,7 @@ export function PhaseLogPanel({
             )
           }
 
-          if (tab === 'AI' && showModelTabs) {
+          if (tab === 'AI' && hasModelTabs) {
             const isActive = effectiveTab === tab
             return (
               <Fragment key={tab}>
@@ -663,7 +663,7 @@ export function PhaseLogPanel({
           <div ref={contentRef} className="font-mono text-xs bg-muted rounded-md p-3 min-h-[100px] w-full max-w-full">
             {hasLogs ? (
               filteredLogs.map((entry, i) => (
-                <LogEntryRow key={entry.entryId} entry={entry} index={i} showModelName={showModelNameInLogTags} />
+                <LogEntryRow key={entry.entryId} entry={entry} index={i} showModelName={shouldShowModelNameInLogTags} />
               ))
             ) : isLoadingLogs ? (
               <span className="text-muted-foreground/50 italic">

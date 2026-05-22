@@ -172,8 +172,8 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
   const [isApproving, setIsApproving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
-  const [showCascadeWarning, setShowCascadeWarning] = useState(false)
-  const [showFullAnswers, setShowFullAnswers] = useState(false)
+  const [isCascadeWarningOpen, setIsCascadeWarningOpen] = useState(false)
+  const [isFullAnswersOpen, setIsFullAnswersOpen] = useState(false)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
@@ -358,7 +358,7 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
     }
 
     if (cascadeWarningMessage) {
-      setShowCascadeWarning(true)
+      setIsCascadeWarningOpen(true)
       return
     }
 
@@ -366,7 +366,7 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
   }
 
   function handleConfirmCascade() {
-    setShowCascadeWarning(false)
+    setIsCascadeWarningOpen(false)
     openFriendlyEditor()
   }
 
@@ -388,9 +388,9 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
       <CascadeWarning
         message={cascadeWarningMessage ?? ''}
-        open={showCascadeWarning}
+        open={isCascadeWarningOpen}
         onConfirm={handleConfirmCascade}
-        onCancel={() => setShowCascadeWarning(false)}
+        onCancel={() => setIsCascadeWarningOpen(false)}
       />
 
       <Dialog open={discardTarget !== null} onOpenChange={(open) => !open && setDiscardTarget(null)}>
@@ -412,7 +412,7 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showFullAnswers} onOpenChange={setShowFullAnswers}>
+      <Dialog open={isFullAnswersOpen} onOpenChange={setIsFullAnswersOpen}>
         <DialogContent className="max-w-2xl max-h-[80vh]">
           <DialogHeader>
             <DialogTitle className="text-sm flex items-center gap-2">
@@ -455,7 +455,7 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => setShowFullAnswers(true)}
+                                    onClick={() => setIsFullAnswersOpen(true)}
                                     className="h-7 shrink-0 gap-1.5 px-2 text-[11px]"
                                   >
                                     <FileText className="h-3.5 w-3.5" />

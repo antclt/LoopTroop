@@ -87,7 +87,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
   const rawContent = interviewData?.raw ?? ''
   const currentContentSha256 = interviewData?.contentSha256 ?? null
   const rawDisplayContent = useMemo(() => buildReadableRawDisplayContent(rawContent), [rawContent])
-  const showSkippedQuestionsNotice = hasSkippedInterviewAnswers(interviewDocument)
+  const hasSkippedQuestions = hasSkippedInterviewAnswers(interviewDocument)
   const isPreparingStructuredInterview = !interviewDocument && Boolean(rawContent) && isFetching
 
   const [isEditMode, setIsEditMode] = useState(false)
@@ -98,7 +98,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
   const [isApproving, setIsApproving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
-  const [showCascadeWarning, setShowCascadeWarning] = useState(false)
+  const [isCascadeWarningOpen, setIsCascadeWarningOpen] = useState(false)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
@@ -286,7 +286,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
     }
 
     if (cascadeWarningMessage) {
-      setShowCascadeWarning(true)
+      setIsCascadeWarningOpen(true)
       return
     }
 
@@ -294,7 +294,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
   }
 
   function handleConfirmCascade() {
-    setShowCascadeWarning(false)
+    setIsCascadeWarningOpen(false)
     openFriendlyEditor()
   }
 
@@ -316,9 +316,9 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
       <CascadeWarning
         message={cascadeWarningMessage ?? ''}
-        open={showCascadeWarning}
+        open={isCascadeWarningOpen}
         onConfirm={handleConfirmCascade}
-        onCancel={() => setShowCascadeWarning(false)}
+        onCancel={() => setIsCascadeWarningOpen(false)}
       />
 
       <Dialog open={discardTarget !== null} onOpenChange={(open) => !open && setDiscardTarget(null)}>
@@ -363,7 +363,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
           </Button>
         </div>
 
-        {showSkippedQuestionsNotice && (
+        {hasSkippedQuestions && (
           <div
             role="note"
             className="flex items-start gap-2 rounded-md border border-blue-200 bg-blue-50/70 px-3 py-2 text-xs text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100"

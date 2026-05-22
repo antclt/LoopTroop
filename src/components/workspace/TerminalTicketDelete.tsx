@@ -33,12 +33,12 @@ export function TerminalTicketDelete({
   buttonClassName,
 }: TerminalTicketDeleteProps) {
   const { dispatch } = useUI()
-  const [open, setOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
   const { mutate: deleteTicket, isPending, error, reset } = useDeleteTicket()
 
   const handleOpenChange = (nextOpen: boolean) => {
     if (!nextOpen) reset()
-    setOpen(nextOpen)
+    setIsOpen(nextOpen)
   }
 
   const handleDelete = () => {
@@ -67,7 +67,7 @@ export function TerminalTicketDelete({
             <TooltipContent className="max-w-xs text-center text-balance">{buttonTitle}</TooltipContent>
           </Tooltip>
 
-      <Dialog open={open} onOpenChange={handleOpenChange}>
+      <Dialog open={isOpen} onOpenChange={handleOpenChange}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete Ticket</DialogTitle>

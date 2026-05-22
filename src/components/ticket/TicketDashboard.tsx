@@ -166,7 +166,7 @@ export function TicketDashboard() {
   const { data: ticket } = useTicket(ticketId)
   const { mutate: saveTicketUiState } = useSaveTicketUIState()
   const [navWidth, setNavWidth] = useState(280)
-  const [fullLogOpen, setFullLogOpen] = useState(false)
+  const [isFullLogOpen, setIsFullLogOpen] = useState(false)
   const [phaseSelection, setPhaseSelection] = useState<{ ticketId: string | null; phase: string | null }>({
     ticketId: null,
     phase: null,
@@ -191,7 +191,7 @@ export function TicketDashboard() {
     previousStatus: null,
     reviewCutoffStatus: null,
   })
-  const [mobileNavOpen, setMobileNavOpen] = useState(false)
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [liveUpdatesState, setLiveUpdatesState] = useState<SSEConnectionState>('connecting')
 
   const snapshotPreviousStatus = useMemo(
@@ -203,7 +203,7 @@ export function TicketDashboard() {
     [ticket?.reviewCutoffStatus],
   )
 
-  const closeMobileNav = useCallback(() => setMobileNavOpen(false), [])
+  const closeMobileNav = useCallback(() => setIsMobileNavOpen(false), [])
 
   const dbStatus = ticket?.status ?? null
   const effectiveLivePhase = useMemo(() => {
@@ -272,17 +272,17 @@ export function TicketDashboard() {
   const handleSelectPhase = useCallback((phase: string | null) => {
     setPhaseSelection({ ticketId, phase })
     setErrorSelection({ ticketId: null, occurrenceId: null })
-    setFullLogOpen(false)
+    setIsFullLogOpen(false)
   }, [ticketId])
   const handleOpenFullLog = useCallback(() => {
-    setFullLogOpen(true)
+    setIsFullLogOpen(true)
     setErrorSelection({ ticketId: null, occurrenceId: null })
   }, [])
   const handleSelectErrorOccurrence = useCallback((occurrenceId: string | null) => {
     setErrorSelection({ ticketId, occurrenceId })
     if (occurrenceId != null) {
       setPhaseSelection({ ticketId: null, phase: null })
-      setFullLogOpen(false)
+      setIsFullLogOpen(false)
     }
   }, [ticketId])
   const handleLiveStatusChange = useCallback(({ status, previousStatus }: { status: string; previousStatus?: string }) => {
@@ -410,8 +410,8 @@ export function TicketDashboard() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (mobileNavOpen) {
-          setMobileNavOpen(false)
+        if (isMobileNavOpen) {
+          setIsMobileNavOpen(false)
         } else {
           dispatch({ type: 'CLOSE_TICKET' })
         }
@@ -419,7 +419,7 @@ export function TicketDashboard() {
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [dispatch, mobileNavOpen])
+  }, [dispatch, isMobileNavOpen])
 
   if (!ticketId) return null
 
@@ -498,7 +498,7 @@ export function TicketDashboard() {
       ticketId={ticketId}
       currentStatus={currentStatus}
       visiblePhase={contextPhase}
-      fullLogOpen={fullLogOpen}
+      fullLogOpen={isFullLogOpen}
     >
       <SSELogConnector
         ticketId={ticketId}
@@ -547,7 +547,7 @@ export function TicketDashboard() {
           <div className="md:hidden flex items-center px-3 py-2 border-b border-border">
             <button
               className="flex items-center justify-center h-8 w-8 rounded-md border border-border text-foreground hover:bg-accent"
-              onClick={() => setMobileNavOpen(true)}
+              onClick={() => setIsMobileNavOpen(true)}
               aria-label="Open navigation"
             >
               <Menu className="h-4 w-4" />
@@ -555,7 +555,7 @@ export function TicketDashboard() {
           </div>
 
           {/* Mobile nav overlay */}
-          {mobileNavOpen && (
+          {isMobileNavOpen && (
             <div className="md:hidden fixed inset-0 z-[70]">
               <div className="fixed inset-0 bg-black/50" onClick={closeMobileNav} />
               <div className="fixed left-0 top-0 bottom-0 z-[71] w-72 bg-background border-r border-border shadow-xl flex flex-col">
@@ -577,18 +577,18 @@ export function TicketDashboard() {
                     selectedErrorOccurrenceId={selectedErrorOccurrenceId}
                     reviewCutoffStatus={reviewCutoffStatus}
                     previousStatus={previousStatus}
-                    fullLogOpen={fullLogOpen}
+                    fullLogOpen={isFullLogOpen}
                     onSelectPhase={(phase) => {
                       handleSelectPhase(phase)
-                      setMobileNavOpen(false)
+                      setIsMobileNavOpen(false)
                     }}
                     onSelectErrorOccurrence={(occurrenceId) => {
                       handleSelectErrorOccurrence(occurrenceId)
-                      setMobileNavOpen(false)
+                      setIsMobileNavOpen(false)
                     }}
                     onOpenFullLog={() => {
                       handleOpenFullLog()
-                      setMobileNavOpen(false)
+                      setIsMobileNavOpen(false)
                     }}
                     contextPhase={contextPhase}
                   />
@@ -611,7 +611,7 @@ export function TicketDashboard() {
                 selectedErrorOccurrenceId={selectedErrorOccurrenceId}
                 reviewCutoffStatus={reviewCutoffStatus}
                 previousStatus={previousStatus}
-                fullLogOpen={fullLogOpen}
+                fullLogOpen={isFullLogOpen}
                 onSelectPhase={handleSelectPhase}
                 onSelectErrorOccurrence={handleSelectErrorOccurrence}
                 onOpenFullLog={handleOpenFullLog}
@@ -621,7 +621,7 @@ export function TicketDashboard() {
             <ResizeHandle onResize={setNavWidth} />
             {/* Active Workspace */}
             <div className="flex flex-col flex-1 overflow-hidden">
-              {!fullLogOpen && (
+              {!isFullLogOpen && (
                 <WorkspacePhaseSummary
                   key={renderTicket.id}
                   phase={summaryPhase}
@@ -635,7 +635,7 @@ export function TicketDashboard() {
                 selectedErrorOccurrenceId={activeErrorOccurrenceId}
                 previousStatus={previousStatus}
                 reviewCutoffStatus={reviewCutoffStatus}
-                fullLogOpen={fullLogOpen}
+                fullLogOpen={isFullLogOpen}
               />
             </div>
           </div>

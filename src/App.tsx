@@ -46,10 +46,10 @@ function App() {
   const ticketsRef = useRef(tickets)
   useEffect(() => { ticketsRef.current = tickets }, [tickets])
   const initialUrlProcessed = useRef(false)
-  const [showProfile, setShowProfile] = useState(() => initialModal === 'profile')
-  const [showProject, setShowProject] = useState(() => initialModal === 'project')
-  const [showTicket, setShowTicket] = useState(() => initialModal === 'ticket')
-  const [showWelcome, setShowWelcome] = useState(() => {
+  const [isProfileOpen, setIsProfileOpen] = useState(() => initialModal === 'profile')
+  const [isProjectOpen, setIsProjectOpen] = useState(() => initialModal === 'project')
+  const [isTicketOpen, setIsTicketOpen] = useState(() => initialModal === 'ticket')
+  const [isWelcomeOpen, setIsWelcomeOpen] = useState(() => {
     try {
       return !localStorage.getItem(WELCOME_DISCLAIMER_STORAGE_KEY)
     } catch {
@@ -57,10 +57,10 @@ function App() {
     }
   })
   const prevPathRef = useRef(ROUTE_ROOT)
-  const showRestorePopup = !showWelcome
+  const isRestorePopupOpen = !isWelcomeOpen
     && startupStatus?.storage.kind === 'restored'
     && startupStatus.ui.restoreNotice.shouldShow === true
-  const isModalOpen = showProfile || showProject || showTicket || showWelcome || showRestorePopup
+  const isModalOpen = isProfileOpen || isProjectOpen || isTicketOpen || isWelcomeOpen || isRestorePopupOpen
 
   useEffect(() => {
     if (initialModal === 'profile') {
@@ -80,7 +80,7 @@ function App() {
     } catch {
       // ignore storage errors
     }
-    setShowWelcome(false)
+    setIsWelcomeOpen(false)
   }
 
   // Resolve ticket from URL externalId when tickets load
@@ -104,30 +104,30 @@ function App() {
       prevPathRef.current = p
       if (p === ROUTE_ROOT || p === '') {
         dispatch({ type: 'CLOSE_TICKET' })
-        setShowProfile(false)
-        setShowProject(false)
-        setShowTicket(false)
+        setIsProfileOpen(false)
+        setIsProjectOpen(false)
+        setIsTicketOpen(false)
       } else if (p.startsWith('/ticket/')) {
         const externalId = p.split('/')[2] ?? ''
         if (externalId && externalId !== 'new') {
           const ticket = ticketsRef.current?.find(t => t.externalId === externalId)
           if (ticket) dispatch({ type: 'SELECT_TICKET', ticketId: ticket.id, externalId: ticket.externalId })
         }
-        setShowProfile(false)
-        setShowProject(false)
-        setShowTicket(false)
+        setIsProfileOpen(false)
+        setIsProjectOpen(false)
+        setIsTicketOpen(false)
       } else if (p === ROUTE_CONFIG) {
-        setShowProfile(true)
-        setShowProject(false)
-        setShowTicket(false)
+        setIsProfileOpen(true)
+        setIsProjectOpen(false)
+        setIsTicketOpen(false)
       } else if (p === ROUTE_PROJECT_NEW) {
-        setShowProfile(false)
-        setShowProject(true)
-        setShowTicket(false)
+        setIsProfileOpen(false)
+        setIsProjectOpen(true)
+        setIsTicketOpen(false)
       } else if (p === ROUTE_TICKET_NEW) {
-        setShowProfile(false)
-        setShowProject(false)
-        setShowTicket(true)
+        setIsProfileOpen(false)
+        setIsProjectOpen(false)
+        setIsTicketOpen(true)
       }
     }
     window.addEventListener('popstate', handlePop)
@@ -139,42 +139,42 @@ function App() {
     clearOpenCodeModelsQuery(queryClient)
     prevPathRef.current = window.location.pathname
     window.history.pushState(null, '', ROUTE_CONFIG)
-    setShowProfile(true)
+    setIsProfileOpen(true)
   }
   const closeProfile = () => {
     window.history.pushState(null, '', prevPathRef.current)
-    setShowProfile(false)
+    setIsProfileOpen(false)
   }
   const openProject = () => {
     prevPathRef.current = window.location.pathname
     window.history.pushState(null, '', ROUTE_PROJECT_NEW)
-    setShowProject(true)
+    setIsProjectOpen(true)
   }
   const closeProject = () => {
     window.history.pushState(null, '', prevPathRef.current)
-    setShowProject(false)
+    setIsProjectOpen(false)
   }
   const openTicket = () => {
     prevPathRef.current = window.location.pathname
     window.history.pushState(null, '', ROUTE_TICKET_NEW)
-    setShowTicket(true)
+    setIsTicketOpen(true)
   }
   const closeTicket = () => {
     window.history.pushState(null, '', prevPathRef.current)
-    setShowTicket(false)
+    setIsTicketOpen(false)
   }
 
   return (
     <ToastProvider>
       <AIQuestionProvider tickets={tickets ?? []}>
         <WelcomeDisclaimer
-          open={showWelcome}
+          open={isWelcomeOpen}
           onDismiss={dismissWelcome}
           appPathWarning={startupStatus?.runtime.appPathWarning ?? null}
         />
         {startupStatus && (
           <StartupRestorePopup
-            open={showRestorePopup}
+            open={isRestorePopupOpen}
             startupStatus={startupStatus}
           />
         )}
@@ -187,19 +187,19 @@ function App() {
           {state.activeView === 'ticket' && state.selectedTicketId ? <TicketDashboard /> : <KanbanBoard />}
         </AppShell>
 
-        <CenteredModal open={showProfile} onClose={closeProfile} title="Configuration" maxWidth="max-w-2xl">
+        <CenteredModal open={isProfileOpen} onClose={closeProfile} title="Configuration" maxWidth="max-w-2xl">
           <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Loading…</div>}>
             <ProfileSetup onClose={closeProfile} />
           </Suspense>
         </CenteredModal>
 
-        <CenteredModal open={showProject} onClose={closeProject} title="Projects" maxWidth="max-w-2xl">
+        <CenteredModal open={isProjectOpen} onClose={closeProject} title="Projects" maxWidth="max-w-2xl">
           <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Loading…</div>}>
             <ProjectsPanel onClose={closeProject} />
           </Suspense>
         </CenteredModal>
 
-        <CenteredModal open={showTicket} onClose={closeTicket} title="New Ticket" maxWidth="max-w-xl">
+        <CenteredModal open={isTicketOpen} onClose={closeTicket} title="New Ticket" maxWidth="max-w-xl">
           <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Loading…</div>}>
             <TicketForm onClose={closeTicket} />
           </Suspense>

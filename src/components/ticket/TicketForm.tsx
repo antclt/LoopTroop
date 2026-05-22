@@ -20,7 +20,7 @@ export function TicketForm({ onClose }: TicketFormProps) {
   const [description, setDescription] = useState('')
   const [priority, setPriority] = useState(3)
   const [projectId, setProjectId] = useState<number | ''>('')
-  const [projectPickerOpen, setProjectPickerOpen] = useState(false)
+  const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false)
 
   const selectedProject = projects.find(p => p.id === projectId) ?? projects[0]
   const effectiveProjectId = selectedProject?.id ?? ''
@@ -51,8 +51,8 @@ export function TicketForm({ onClose }: TicketFormProps) {
                         <TooltipContent className="max-w-xs text-center text-balance">Project where the ticket will run</TooltipContent>
                       </Tooltip>
             <DropdownPicker
-              open={projectPickerOpen}
-              onOpenChange={setProjectPickerOpen}
+              open={isProjectPickerOpen}
+              onOpenChange={setIsProjectPickerOpen}
               trigger={
                 <Tooltip>
                     <TooltipTrigger asChild>
@@ -60,7 +60,7 @@ export function TicketForm({ onClose }: TicketFormProps) {
                                     type="button"
                                     className={cn(
                                       'w-full flex items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm',
-                                      projectPickerOpen && 'ring-2 ring-primary/30',
+                                      isProjectPickerOpen && 'ring-2 ring-primary/30',
                                     )}
                                   >
                                     {selectedProject ? (
@@ -102,7 +102,7 @@ export function TicketForm({ onClose }: TicketFormProps) {
                                                 )}
                                                 onClick={() => {
                                                   setProjectId(p.id)
-                                                  setProjectPickerOpen(false)
+                                                  setIsProjectPickerOpen(false)
                                                 }}
                                               >
                                                 <span className="shrink-0 flex items-center">

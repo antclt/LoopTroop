@@ -132,11 +132,11 @@ export function InterviewDocumentView({
   hideAiAnswerBadge?: boolean
 }) {
   const groups = groupInterviewDocumentQuestions(document)
-  const showSummary = !hideSummary && hasInterviewSummaryContent(document)
+  const hasSummary = !hideSummary && hasInterviewSummaryContent(document)
 
   return (
     <div className={cn('space-y-5', className)}>
-      {showSummary && (
+      {hasSummary && (
         <section
           id={getInterviewSummaryAnchorId()}
           className="scroll-mt-6"

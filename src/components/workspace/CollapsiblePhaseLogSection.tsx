@@ -30,7 +30,7 @@ export function CollapsiblePhaseLogSection({
   resizeContainerRef,
   defaultHeight = 200,
 }: CollapsiblePhaseLogSectionProps) {
-  const [expanded, setExpanded] = useState(defaultExpanded)
+  const [isExpanded, setIsExpanded] = useState(defaultExpanded)
   const [height, setHeight] = useState(defaultHeight)
   const [fillNaturalHeight, setFillNaturalHeight] = useState<StickyFillNaturalHeight | null>(null)
   const [fillAvailableHeight, setFillAvailableHeight] = useState<number | null>(null)
@@ -44,7 +44,7 @@ export function CollapsiblePhaseLogSection({
   )
 
   const handleToggleExpanded = useCallback(() => {
-    setExpanded((value) => {
+    setIsExpanded((value) => {
       const nextValue = !value
       if (variant === 'fill') {
         if (nextValue) {
@@ -62,7 +62,7 @@ export function CollapsiblePhaseLogSection({
     : null
 
   const measureFillAvailableHeight = useCallback(() => {
-    if (variant !== 'fill' || !expanded) {
+    if (variant !== 'fill' || !isExpanded) {
       setFillAvailableHeight(null)
       return
     }
@@ -74,10 +74,10 @@ export function CollapsiblePhaseLogSection({
       return
     }
     setFillAvailableHeight(getFillDrawerAvailableHeight(parentEl, rootEl))
-  }, [expanded, variant])
+  }, [isExpanded, variant])
 
   useEffect(() => {
-    if (variant !== 'fill' || !expanded) return
+    if (variant !== 'fill' || !isExpanded) return
 
     const rootEl = rootRef.current
     const parentEl = rootEl?.parentElement
@@ -102,10 +102,10 @@ export function CollapsiblePhaseLogSection({
       observer.disconnect()
       window.removeEventListener('resize', measureFillAvailableHeight)
     }
-  }, [expanded, measureFillAvailableHeight, variant])
+  }, [isExpanded, measureFillAvailableHeight, variant])
 
   const rootStyle = (() => {
-    if (!expanded) return undefined
+    if (!isExpanded) return undefined
     if (variant === 'bottom') return { height, minHeight: 0, maxHeight: '100%' }
     if (variant !== 'fill' || fillAvailableHeight === null) return undefined
 
@@ -124,23 +124,23 @@ export function CollapsiblePhaseLogSection({
     <button
       type="button"
       onClick={handleToggleExpanded}
-      aria-expanded={expanded}
+      aria-expanded={isExpanded}
       aria-controls={panelId}
       className="flex items-center gap-1 py-1 text-xs font-medium text-muted-foreground uppercase tracking-wider transition-colors hover:text-foreground shrink-0"
     >
-      <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', expanded && 'rotate-90')} />
+      <ChevronRight className={cn('h-3.5 w-3.5 transition-transform', isExpanded && 'rotate-90')} />
       <span>Log</span>
     </button>
   )
 
   return (
     <>
-      {variant === 'bottom' && expanded && resizeContainerRef ? (
+      {variant === 'bottom' && isExpanded && resizeContainerRef ? (
         <VerticalResizeHandle onResize={setHeight} containerRef={resizeContainerRef} />
       ) : null}
       <div ref={rootRef} className={rootClassName} style={rootStyle}>
-        {!expanded ? logToggleButton : null}
-        {expanded ? (
+        {!isExpanded ? logToggleButton : null}
+        {isExpanded ? (
           <div id={panelId} className="flex-1 min-h-0 flex flex-col">
             <PhaseLogPanel
               phase={phase}

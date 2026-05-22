@@ -264,7 +264,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
   const [structuredDraft, setStructuredDraft] = useState<ExecutionSetupPlan | null>(null)
   const [rawDraft, setRawDraft] = useState('')
   const [commentary, setCommentary] = useState('')
-  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false)
+  const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
   const [isApproving, setIsApproving] = useState(false)
@@ -316,7 +316,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
     if (!readOnly) return
     setIsEditMode(false)
     setDiscardTarget(null)
-    setShowRegenerateDialog(false)
+    setIsRegenerateDialogOpen(false)
   }, [readOnly])
 
   useApprovalFocusAnchor(ticket.id, EXECUTION_SETUP_PLAN_APPROVAL_FOCUS_EVENT)
@@ -424,7 +424,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
 
       // Close dialog and navigate back to ticket view. The ticket remains in
       // WAITING_EXECUTION_SETUP_APPROVAL, with a fresh active attempt generating.
-      setShowRegenerateDialog(false)
+      setIsRegenerateDialogOpen(false)
       requestWorkspacePhaseNavigation({ ticketId: ticket.id, phase: ticket.status })
       setIsRegenerating(false)
     } catch (error) {
@@ -518,8 +518,8 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
         </DialogContent>
       </Dialog>
 
-      <Dialog open={!readOnly && showRegenerateDialog} onOpenChange={(open) => {
-        setShowRegenerateDialog(open)
+      <Dialog open={!readOnly && isRegenerateDialogOpen} onOpenChange={(open) => {
+        setIsRegenerateDialogOpen(open)
         if (open) setRegenerateError(null)
       }}>
         <DialogContent className="max-w-lg">
@@ -548,7 +548,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
             {regenerateError ? <p className="text-xs text-red-500">{regenerateError}</p> : null}
 
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setShowRegenerateDialog(false)} disabled={isRegenerating}>
+              <Button type="button" variant="outline" size="sm" onClick={() => setIsRegenerateDialogOpen(false)} disabled={isRegenerating}>
                 Cancel
               </Button>
               <Button type="button" size="sm" onClick={handleRegenerate} disabled={isRegenerating || isSaving || isApproving || !commentary.trim()}>
@@ -588,7 +588,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
                 size="sm"
                 onClick={() => {
                   setRegenerateError(null)
-                  setShowRegenerateDialog(true)
+                  setIsRegenerateDialogOpen(true)
                 }}
                 className="text-xs shrink-0"
                 disabled={isPlanGenerating || isSaving || isApproving || isRegenerating}

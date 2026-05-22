@@ -195,11 +195,11 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const { mutate: cancelTicket, isPending: isCancelPending } = useCancelTicket()
   const { mutateAsync: updateTicket } = useUpdateTicket()
   const { data: profile } = useProfile()
-  const [showDetails, setShowDetails] = useState(false)
-  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false)
   const [deleteContent, setDeleteContent] = useState(false)
   const [deleteLog, setDeleteLog] = useState(false)
-  const [showBottomFade, setShowBottomFade] = useState(false)
+  const [isBottomFadeVisible, setIsBottomFadeVisible] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(ticket.title)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -268,10 +268,10 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const handleScroll = useCallback(() => {
     const el = scrollRef.current
     if (!el) return
-    setShowBottomFade(el.scrollHeight - el.scrollTop - el.clientHeight > 8)
+    setIsBottomFadeVisible(el.scrollHeight - el.scrollTop - el.clientHeight > 8)
   }, [])
   const detailsScrollInit = useCallback(() => {
-    setShowBottomFade(true)
+    setIsBottomFadeVisible(true)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => handleScroll())
     })
@@ -344,16 +344,16 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
           canDelete={canDelete}
           isPending={isActionPending}
           cancelLabel={isDraft ? 'Cancel' : 'Cancel…'}
-          onShowDetails={() => setShowDetails(true)}
+          onShowDetails={() => setIsDetailsOpen(true)}
           onCancelConfirm={isDraft
             ? () => { cancelTicket({ id: ticket.id, options: { deleteContent: false, deleteLog: false } }) }
-            : () => setShowCancelConfirm(true)
+            : () => setIsCancelConfirmOpen(true)
           }
           onClose={() => dispatch({ type: 'CLOSE_TICKET' })}
         />
       </div>
 
-      <Dialog open={showDetails} onOpenChange={(open) => { setShowDetails(open); if (open) detailsScrollInit() }}>
+      <Dialog open={isDetailsOpen} onOpenChange={(open) => { setIsDetailsOpen(open); if (open) detailsScrollInit() }}>
         <DialogContent closeButtonVariant="dashboard" className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="text-sm">Ticket Details</DialogTitle>
@@ -805,7 +805,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
               <CopyableDescription description={ticket.description} />
             )}
           </div>
-          {showBottomFade && (
+          {isBottomFadeVisible && (
             <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-background to-transparent pointer-events-none" />
           )}
           </div>
@@ -813,9 +813,9 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
       </Dialog>
 
       <Dialog
-        open={showCancelConfirm}
+        open={isCancelConfirmOpen}
         onOpenChange={(open) => {
-          setShowCancelConfirm(open)
+          setIsCancelConfirmOpen(open)
           if (!open) {
             setDeleteContent(false)
             setDeleteLog(false)
@@ -868,7 +868,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
               variant="outline"
               size="sm"
               onClick={() => {
-                setShowCancelConfirm(false)
+                setIsCancelConfirmOpen(false)
                 setDeleteContent(false)
                 setDeleteLog(false)
               }}
@@ -881,7 +881,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
               disabled={isCancelPending}
               onClick={() => {
                 cancelTicket({ id: ticket.id, options: { deleteContent, deleteLog } })
-                setShowCancelConfirm(false)
+                setIsCancelConfirmOpen(false)
                 setDeleteContent(false)
                 setDeleteLog(false)
               }}

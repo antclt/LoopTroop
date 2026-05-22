@@ -39,7 +39,7 @@ type GitStatus = 'none' | 'checking' | 'valid' | 'invalid'
 export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPickerProps) {
 
     const [data, setData] = useState<LsResponse | null>(null)
-    const [loading, setLoading] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
     const [inputPath, setInputPath] = useState('')
     const [gitStatus, setGitStatus] = useState<GitStatus>('none')
@@ -74,7 +74,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
     }, [])
 
     const fetchLs = useCallback(async (pathStr: string) => {
-        setLoading(true)
+        setIsLoading(true)
         setError(null)
         try {
             const res = await fetch(`/api/projects/ls?path=${encodeURIComponent(pathStr)}`)
@@ -89,7 +89,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
         } catch {
             setError('Failed to fetch directory contents.')
         } finally {
-            setLoading(false)
+            setIsLoading(false)
         }
     }, [checkGit])
 
@@ -119,7 +119,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
                         <Button
                                             variant="outline"
                                             size="icon"
-                                            disabled={!data?.parentPath || loading}
+                                            disabled={!data?.parentPath || isLoading}
                                             onClick={() => data?.parentPath && fetchLs(data.parentPath)}
                                         >
                                             <ArrowUp className="h-4 w-4" />
@@ -139,7 +139,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
                             onChange={(e) => setInputPath(e.target.value)}
                             placeholder="Enter absolute path"
                         />
-                        <Button type="submit" variant="secondary" disabled={loading}>Go</Button>
+                        <Button type="submit" variant="secondary" disabled={isLoading}>Go</Button>
                     </form>
                 </div>
 
@@ -151,7 +151,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
 
                 {/* Directory List */}
                 <div className="flex-1 border border-border rounded-md bg-background overflow-y-auto w-full">
-                    {loading ? (
+                    {isLoading ? (
                         <div className="p-8 text-center text-muted-foreground animate-pulse text-sm">Loading directories...</div>
                     ) : data?.dirs.length === 0 ? (
                         <div className="p-8 text-center text-muted-foreground text-sm">No subdirectories found.</div>
@@ -200,7 +200,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
-                                                    disabled={loading || !!error || !data?.currentPath || gitStatus !== 'valid'}
+                                                    disabled={isLoading || !!error || !data?.currentPath || gitStatus !== 'valid'}
                                                     onClick={() => data?.currentPath && onSelect(data.currentPath)}
                                                 >
                                                     <CheckCircle2 className="h-4 w-4 mr-2" />

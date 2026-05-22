@@ -22,7 +22,7 @@ export function InterviewApprovalNavigator({ ticketId }: { ticketId: string }) {
   const { data, isLoading } = useInterviewQuestions(ticketId)
   const document = normalizeInterviewDocumentLike(data?.document) ?? parseInterviewDocument(data?.raw)
   const groups = document ? groupInterviewDocumentQuestions(document) : []
-  const showSummary = hasInterviewSummaryContent(document)
+  const hasSummary = hasInterviewSummaryContent(document)
 
   return (
     <div className="p-2">
@@ -37,7 +37,7 @@ export function InterviewApprovalNavigator({ ticketId }: { ticketId: string }) {
             <div className="px-2 py-1 text-xs text-muted-foreground">Interview results will appear once the canonical artifact is ready.</div>
           ) : (
             <>
-              {showSummary ? (
+              {hasSummary ? (
                 <button
                   type="button"
                   onClick={() => focusApprovalAnchor(ticketId, getInterviewSummaryAnchorId())}

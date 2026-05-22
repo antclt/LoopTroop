@@ -179,7 +179,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const diagnosticSummary = diagnostics?.summary?.trim() ?? ''
   const normalizedPrimaryError = normalizeErrorText(primaryErrorMessage)
   const normalizedDiagnosticSummary = normalizeErrorText(diagnosticSummary)
-  const showDiagnosticSummary = diagnosticSummary.length > 0
+  const hasDiagnosticSummary = diagnosticSummary.length > 0
     && normalizedPrimaryError.length > 0
     && !normalizedPrimaryError.includes(normalizedDiagnosticSummary)
 
@@ -247,7 +247,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                     <Info className="h-3.5 w-3.5" />
                     Underlying error
                   </div>
-                  {showDiagnosticSummary && (
+                  {hasDiagnosticSummary && (
                     <p className="font-mono whitespace-pre-wrap text-muted-foreground/90">{diagnosticSummary}</p>
                   )}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1">

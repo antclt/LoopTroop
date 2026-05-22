@@ -293,13 +293,13 @@ export function FullLogView({ ticket }: FullLogViewProps) {
 
   const singleModelTabId = modelTabs.length === 1 ? modelTabs[0]! : null
   const aiTabLabel = singleModelTabId ? `AI > ${getModelDisplayName(singleModelTabId)}` : 'AI'
-  const showModelTabs = modelTabs.length > 1
+  const hasModelTabs = modelTabs.length > 1
   const availableTabs: string[] = useMemo(() => {
     const tabs: string[] = [...FIXED_TABS]
-    if (showModelTabs) tabs.push(...modelTabs)
+    if (hasModelTabs) tabs.push(...modelTabs)
     if (hasCmdLogs) tabs.push('CMD')
     return tabs
-  }, [showModelTabs, modelTabs, hasCmdLogs])
+  }, [hasModelTabs, modelTabs, hasCmdLogs])
   const effectiveTab = availableTabs.includes(activeTab)
     ? activeTab
     : singleModelTabId && activeTab === singleModelTabId
@@ -521,7 +521,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
             )
           }
 
-          if (tab === 'AI' && showModelTabs) {
+          if (tab === 'AI' && hasModelTabs) {
             const isActive = effectiveTab === tab
             return (
               <Fragment key={tab}>

@@ -128,16 +128,16 @@ export function CollapsibleSection({
   contentClassName?: string
   scrollOnOpen?: boolean
 }) {
-  const [open, setOpen] = useState(defaultOpen)
+  const [isOpen, setIsOpen] = useState(defaultOpen)
   const sectionRef = useRef<HTMLDivElement>(null)
-  const previousOpenRef = useRef(open)
+  const previousOpenRef = useRef(isOpen)
 
   useEffect(() => {
-    if (scrollOnOpen && !previousOpenRef.current && open) {
+    if (scrollOnOpen && !previousOpenRef.current && isOpen) {
       sectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' })
     }
-    previousOpenRef.current = open
-  }, [open, scrollOnOpen])
+    previousOpenRef.current = isOpen
+  }, [isOpen, scrollOnOpen])
 
   return (
     <div
@@ -147,19 +147,19 @@ export function CollapsibleSection({
       <div className={cn('flex flex-wrap items-start gap-2 min-w-0', headerClassName)}>
         <button
           type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((current) => !current)}
+          aria-expanded={isOpen}
+          onClick={() => setIsOpen((current) => !current)}
           className={cn(
             'flex items-center gap-1.5 flex-1 min-w-0 px-3 py-2 text-xs font-medium hover:bg-accent/50 transition-colors text-left',
             triggerClassName,
           )}
         >
-          {open ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
+          {isOpen ? <ChevronDown className="h-3 w-3 shrink-0" /> : <ChevronRight className="h-3 w-3 shrink-0" />}
           <span className="min-w-0 flex-1 flex items-center">{title}</span>
         </button>
         {headerActions ? <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2">{headerActions}</div> : null}
       </div>
-      {open && <div className={cn('px-3 pb-3 text-xs overflow-x-auto w-full', contentClassName)}>{children}</div>}
+      {isOpen && <div className={cn('px-3 pb-3 text-xs overflow-x-auto w-full', contentClassName)}>{children}</div>}
     </div>
   )
 }
@@ -286,7 +286,7 @@ function isRawContentSourceSelectable(source: RawContentSource): boolean {
   return getRawSourceDefaultSelection(source) !== null
 }
 
-function shouldShowRawSourceSelector(rawSourceOptions: RawContentSource[]): boolean {
+function canShowRawSourceSelector(rawSourceOptions: RawContentSource[]): boolean {
   return rawSourceOptions.length > 1
     || rawSourceOptions.some((source) => Boolean(source.modelId) || (source.variants?.length ?? 0) > 1)
 }
@@ -422,7 +422,7 @@ export function WithRawTab({
     ?? { id: 'all', label: 'All Models', content, parentId: 'all' }
   const activeRawContent = activeRawSource.content ?? ''
   const activeRawDisplayContent = activeRawSource.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
-  const showRawSourceSelector = shouldShowRawSourceSelector(rawSourceOptions)
+  const shouldShowRawSourceSelector = canShowRawSourceSelector(rawSourceOptions)
 
   useEffect(() => {
     if (!findRawSourceSelection(rawSourceOptions, activeRawSourceId)) {
@@ -459,7 +459,7 @@ export function WithRawTab({
 
       {activeTab === 'raw' && (
         <>
-          {showRawSourceSelector && (
+          {shouldShowRawSourceSelector && (
             <div className="flex min-w-0 max-w-full flex-wrap gap-1.5 overflow-hidden" aria-label="Raw vote source">
               {rawSourceOptions.map((source) => {
                 const label = source.label || (source.modelId ? getModelDisplayName(source.modelId) : source.id)
@@ -1331,7 +1331,7 @@ function ArtifactProcessingNotice({
     return null
   }
   const hasOwnerInterventions = Boolean(context?.ownerInterventions?.length)
-  const showOnlyOwnerInterventions = kind === 'vote-aggregate' && hasOwnerInterventions
+  const shouldShowOnlyOwnerInterventions = kind === 'vote-aggregate' && hasOwnerInterventions
   const retryDiagnostics = kind === 'vote-aggregate'
     ? []
     : structuredOutput?.retryDiagnostics ?? []
@@ -1348,7 +1348,7 @@ function ArtifactProcessingNotice({
       body={(
         <div className="space-y-3">
           <div className="leading-5">{copy.body}</div>
-          {!showOnlyOwnerInterventions ? (
+          {!shouldShowOnlyOwnerInterventions ? (
             <>
               <ArtifactInterventionBreakdown interventions={copy.interventions} />
               <ArtifactSourceMessages messages={sourceMessages} />
@@ -4601,7 +4601,7 @@ function ExecutionSetupPlanView({
   const errors = report?.errors ?? []
   const notes = report?.notes ?? []
   const failed = report?.ready === false || report?.status === 'failed'
-  const showModelOutput = Boolean(report?.modelOutput)
+  const hasModelOutput = Boolean(report?.modelOutput)
     && !isExecutionSetupModelOutputEquivalentToRawPlan(content, report?.modelOutput)
     && !failed
   const rawSourceLabel = formatRawAttemptSourceLabel('Execution setup plan', report?.generatedBy)
@@ -4820,7 +4820,7 @@ function ExecutionSetupPlanView({
           </div>
         </CollapsibleSection>
 
-        {(notes.length > 0 || errors.length > 0 || showModelOutput) ? (
+        {(notes.length > 0 || errors.length > 0 || hasModelOutput) ? (
           <CollapsibleSection title="Generation Details" defaultOpen={errors.length > 0}>
             <div className="space-y-3">
               {notes.length > 0 ? (
@@ -4841,7 +4841,7 @@ function ExecutionSetupPlanView({
                 />
               ) : null}
 
-              {showModelOutput ? (
+              {hasModelOutput ? (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Model Output</div>
@@ -6096,16 +6096,16 @@ function parseDiffFiles(content: string): DiffFileEntry[] {
 }
 
 function DiffFileSection({ file }: { file: DiffFileEntry }) {
-  const [open, setOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
 
   return (
     <div className="border border-border/60 rounded-md overflow-hidden">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => setIsOpen((v) => !v)}
         className="flex items-center gap-2 w-full px-3 py-2 text-left hover:bg-accent/40 transition-colors"
       >
-        {open
+        {isOpen
           ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
           : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
         <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -6113,7 +6113,7 @@ function DiffFileSection({ file }: { file: DiffFileEntry }) {
         <span className="text-[11px] font-mono text-green-600 dark:text-green-400 shrink-0">+{file.additions}</span>
         <span className="text-[11px] font-mono text-red-600 dark:text-red-400 shrink-0">-{file.deletions}</span>
       </button>
-      {open && (() => {
+      {isOpen && (() => {
         const numbered = computeLineNumbersWithWordDiff(file.lines)
         return (
           <div className="border-t border-border/40 bg-[var(--color-card)] overflow-auto">
@@ -6337,7 +6337,7 @@ export function ArtifactContent({
     const defaultBeadsTab = phase === 'VERIFYING_BEADS_COVERAGE' || phase === 'EXPANDING_BEADS' || phase === 'WAITING_BEADS_APPROVAL'
       ? 'sections'
       : undefined
-    const showBeadsDiffTab = phase === 'EXPANDING_BEADS'
+    const hasBeadsDiffTab = phase === 'EXPANDING_BEADS'
       ? hasExpansionDiff
       : phase !== 'WAITING_BEADS_APPROVAL'
     return (
@@ -6346,7 +6346,7 @@ export function ArtifactContent({
         hasChanges={hasChanges}
         diffLabel={hasExpansionDiff ? 'Diff vs Plan' : parsedRefinement?.coverageDiffLabel ?? 'Diff'}
         defaultTab={defaultBeadsTab}
-        showDiffTab={showBeadsDiffTab}
+        showDiffTab={hasBeadsDiffTab}
         notice={<ArtifactProcessingNotice structuredOutput={parsedRefinement?.structuredOutput} kind="diff" />}
         sectionsContent={(
           <div className="space-y-6">

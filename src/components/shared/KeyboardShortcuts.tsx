@@ -10,7 +10,7 @@ const SHORTCUTS = [
 ]
 
 export function KeyboardShortcuts() {
-  const [open, setOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false)
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -19,18 +19,18 @@ export function KeyboardShortcuts() {
         if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT'
           || target.isContentEditable || target.closest('[role="textbox"]')) return
         e.preventDefault()
-        setOpen(prev => !prev)
+        setIsOpen(prev => !prev)
       }
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') setIsOpen(false)
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [])
 
-  if (!open) return null
+  if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setOpen(false)}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setIsOpen(false)}>
       <Card className="w-full max-w-md" onClick={e => e.stopPropagation()}>
         <CardHeader>
           <CardTitle className="text-sm">Keyboard Shortcuts</CardTitle>

@@ -648,11 +648,11 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
   const [rawViewingBeadId, setViewingBeadId] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<'details' | 'changes' | 'model'>('details')
   const phaseForView = readOnly ? 'CODING' : ticket.status
-  const showBeadControls = phaseForView === 'CODING'
-  const showPhaseVersionSelector = phaseForView !== 'CODING'
+  const hasBeadControls = phaseForView === 'CODING'
+  const shouldShowPhaseVersionSelector = phaseForView !== 'CODING'
   const { data: phaseAttempts = [] } = useTicketPhaseAttempts(
-    showPhaseVersionSelector ? ticket.id : undefined,
-    showPhaseVersionSelector ? phaseForView : undefined,
+    shouldShowPhaseVersionSelector ? ticket.id : undefined,
+    shouldShowPhaseVersionSelector ? phaseForView : undefined,
   )
   const [manualSelectedAttemptNumber, setManualSelectedAttemptNumber] = useState<number | null>(null)
   useEffect(() => {
@@ -678,7 +678,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
       ? { phase: phaseForView, phaseAttempt: archivedAttemptNumber }
       : undefined,
   )
-  const viewingBeadId = showBeadControls ? rawViewingBeadId : null
+  const viewingBeadId = hasBeadControls ? rawViewingBeadId : null
   
   // -- Auto-scroll state for the model log tab --
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -739,18 +739,18 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
   const { data: fetchedBeads = [] } = useQuery({
     queryKey: ['ticket-beads', ticket.id],
     queryFn: () => fetchTicketBeads(ticket.id),
-    enabled: showBeadControls && ticket.runtime.totalBeads > 0,
-    placeholderData: showBeadControls
+    enabled: hasBeadControls && ticket.runtime.totalBeads > 0,
+    placeholderData: hasBeadControls
       ? (ticket.runtime.beads ?? []).map((bead) => normalizeBead(bead))
       : [],
     staleTime: 5000,
     refetchOnMount: false,
   })
   const beads = useMemo(
-    () => showBeadControls
+    () => hasBeadControls
       ? mergeBeadRuntimeOverlay(fetchedBeads, ticket.runtime.beads)
       : [],
-    [fetchedBeads, showBeadControls, ticket.runtime.beads],
+    [fetchedBeads, hasBeadControls, ticket.runtime.beads],
   )
 
   const total = ticket.runtime.totalBeads || beads.length
@@ -797,7 +797,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
         <span className="text-sm font-medium">
           {isCompleted ? 'Completed Successfully' : phaseLabel}
         </span>
-        {showBeadControls && (
+        {hasBeadControls && (
           <>
             <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
               <div
@@ -810,7 +810,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
             </span>
           </>
         )}
-        {showBeadControls && activeIteration && activeIteration > 0 && (
+        {hasBeadControls && activeIteration && activeIteration > 0 && (
           <span className="text-[11px] text-muted-foreground shrink-0">
             {activeBead?.title ?? ticket.runtime.activeBeadId ?? 'Bead'} · Iteration {activeIteration}
             {maxIterationsPerBead && maxIterationsPerBead > 0 ? `/${maxIterationsPerBead}` : ''}
@@ -818,7 +818,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
         )}
       </div>
 
-      {showPhaseVersionSelector && phaseAttempts.length > 1 ? (
+      {shouldShowPhaseVersionSelector && phaseAttempts.length > 1 ? (
         <div className="px-4 py-2 border-b border-border shrink-0">
           <PhaseAttemptSelector
             attempts={phaseAttempts}
@@ -854,7 +854,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
         </div>
       )}
 
-      {showBeadControls && beads.length > 0 && (
+      {hasBeadControls && beads.length > 0 && (
         <div className="px-4 py-2 border-b border-border shrink-0">
           <BeadGrid beads={beads} viewingBeadId={viewingBeadId} onSelect={setViewingBeadId} />
         </div>

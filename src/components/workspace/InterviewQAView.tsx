@@ -43,8 +43,8 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
   const containerRef = useRef<HTMLDivElement>(null)
-  const [showHistory, setShowHistory] = useState(false)
-  const [showSkipConfirm, setShowSkipConfirm] = useState(false)
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false)
+  const [isSkipConfirmOpen, setIsSkipConfirmOpen] = useState(false)
   const questionRefs = useRef<Record<string, HTMLDivElement | null>>({})
 
   const {
@@ -104,7 +104,7 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
     const handler = (event: Event) => {
       const detail = (event as CustomEvent<{ ticketId?: string; questionId?: string }>).detail
       if (!detail?.questionId || String(detail.ticketId) !== String(ticket.id)) return
-      setShowHistory(true)
+      setIsHistoryOpen(true)
       window.requestAnimationFrame(() => focusQuestion(detail.questionId!))
     }
 
@@ -146,7 +146,7 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
 
   const onConfirmSkipAll = useCallback(async () => {
     await handleConfirmSkipAll(currentBatch, batchAnswers)
-    setShowSkipConfirm(false)
+    setIsSkipConfirmOpen(false)
   }, [handleConfirmSkipAll, currentBatch, batchAnswers])
 
   const handleStartEdit = useCallback((questionId: string, currentAnswer: string) => {
@@ -234,7 +234,7 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
 
   return (
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
-      <Dialog open={showSkipConfirm} onOpenChange={setShowSkipConfirm}>
+      <Dialog open={isSkipConfirmOpen} onOpenChange={setIsSkipConfirmOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Skip Remaining Interview Questions</DialogTitle>
@@ -244,7 +244,7 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" size="sm" onClick={() => setShowSkipConfirm(false)} disabled={isBusy}>
+            <Button variant="outline" size="sm" onClick={() => setIsSkipConfirmOpen(false)} disabled={isBusy}>
               Keep Interview
             </Button>
             <Button variant="destructive" size="sm" onClick={onConfirmSkipAll} disabled={isBusy}>
@@ -257,8 +257,8 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         <QuestionList
           historyGroups={historyGroups}
-          showHistory={showHistory}
-          onToggleHistory={() => setShowHistory(v => !v)}
+          showHistory={isHistoryOpen}
+          onToggleHistory={() => setIsHistoryOpen(v => !v)}
           editingQuestionId={editingQuestionId}
           editingText={editingText}
           isEditingAnswer={isEditingAnswer}
@@ -290,7 +290,7 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
             onSkipQuestion={onSkipQuestion}
             onUnskipQuestion={onUnskipQuestion}
             onSubmitBatch={onSubmitBatch}
-            onShowSkipConfirm={() => setShowSkipConfirm(true)}
+            onShowSkipConfirm={() => setIsSkipConfirmOpen(true)}
             questionRefs={questionRefs}
             currentBatch={currentBatch}
           />
