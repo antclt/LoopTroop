@@ -22,7 +22,7 @@ function MetaPill({ children, className }: { children: React.ReactNode; classNam
 function SummaryList({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="space-y-2 rounded-xl border border-border/70 bg-background/70 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</div>
+      <div className="section-label">{title}</div>
       {items.length > 0 ? (
         <ul className="space-y-1.5 text-sm text-foreground">
           {items.map((item) => (
@@ -162,7 +162,7 @@ export function InterviewDocumentView({
                 <SummaryList title="Non-goals" items={document.summary.non_goals} />
               </div>
               <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-                <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Final Free-Form Answer</div>
+                <div className="section-label">Final Free-Form Answer</div>
                 <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
                   {document.summary.final_free_form_answer || 'No final free-form answer recorded.'}
                 </div>

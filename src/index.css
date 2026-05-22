@@ -73,3 +73,8 @@ body {
   @apply min-w-0 max-w-full whitespace-pre-wrap break-words break-all overflow-x-hidden text-[11px] font-mono;
   overflow-wrap: anywhere;
 }
+
+/* Section label used for sub-section headings inside content viewers and document editors */
+.section-label {
+  @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
+}

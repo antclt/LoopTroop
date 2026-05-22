@@ -21,7 +21,7 @@ function isChoiceQuestion(answerType: string): boolean {
 function ReadOnlySummary({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-      <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</div>
+      <div className="section-label">{title}</div>
       {items.length > 0 ? (
         <div className="mt-2 flex flex-wrap gap-1.5">
           {items.map((item) => (

@@ -73,13 +73,13 @@ export function PrdDocumentView({
         >
           <div className="space-y-3">
             <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Problem Statement</div>
+              <div className="section-label">Problem Statement</div>
               <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
                 {document.product.problem_statement || 'No problem statement recorded.'}
               </div>
             </div>
             <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Target Users</div>
+              <div className="section-label">Target Users</div>
               <div className="mt-2">
                 <StringList items={document.product.target_users} emptyLabel="No target users recorded." />
               </div>
@@ -105,13 +105,13 @@ export function PrdDocumentView({
         >
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">In Scope</div>
+              <div className="section-label">In Scope</div>
               <div className="mt-2">
                 <StringList items={document.scope.in_scope} emptyLabel="No in-scope items recorded." />
               </div>
             </div>
             <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Out Of Scope</div>
+              <div className="section-label">Out Of Scope</div>
               <div className="mt-2">
                 <StringList items={document.scope.out_of_scope} emptyLabel="No out-of-scope items recorded." />
               </div>
@@ -143,7 +143,7 @@ export function PrdDocumentView({
                 className="rounded-xl border border-border/70 bg-background/70 p-3 scroll-mt-6"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{section.label}</div>
+                  <div className="section-label">{section.label}</div>
                 </div>
                 <div className="mt-2">
                   <StringList items={section.values} emptyLabel="No requirements recorded." />
@@ -201,14 +201,14 @@ export function PrdDocumentView({
             >
               <div className="space-y-4">
                 <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Objective</div>
+                  <div className="section-label">Objective</div>
                   <div className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">
                     {epic.objective || 'No objective recorded.'}
                   </div>
                 </div>
 
                 <div className="rounded-xl border border-border/70 bg-background/70 p-3">
-                  <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Epic Implementation Steps</div>
+                  <div className="section-label">Epic Implementation Steps</div>
                   <div className="mt-2">
                     <StringList items={epic.implementation_steps} emptyLabel="No implementation steps recorded." />
                   </div>
@@ -228,19 +228,19 @@ export function PrdDocumentView({
                         </div>
                         <div className="grid gap-3 md:grid-cols-3">
                           <div className="rounded-xl border border-border/70 bg-muted/20 p-3 md:col-span-1">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Acceptance Criteria</div>
+                            <div className="section-label">Acceptance Criteria</div>
                             <div className="mt-2">
                               <StringList items={story.acceptance_criteria} emptyLabel="No acceptance criteria recorded." />
                             </div>
                           </div>
                           <div className="rounded-xl border border-border/70 bg-muted/20 p-3 md:col-span-1">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Implementation Steps</div>
+                            <div className="section-label">Implementation Steps</div>
                             <div className="mt-2">
                               <StringList items={story.implementation_steps} emptyLabel="No implementation steps recorded." />
                             </div>
                           </div>
                           <div className="rounded-xl border border-border/70 bg-muted/20 p-3 md:col-span-1">
-                            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Verification Commands</div>
+                            <div className="section-label">Verification Commands</div>
                             <div className="mt-2">
                               <StringList items={story.verification.required_commands} emptyLabel="No verification commands recorded." />
                             </div>

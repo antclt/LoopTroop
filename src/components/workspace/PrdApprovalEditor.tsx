@@ -64,7 +64,7 @@ function StringListEditor({
   return (
     <div className="space-y-2 rounded-xl border border-border/70 bg-background/70 p-3">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{label}</div>
+        <div className="section-label">{label}</div>
         <Button
           type="button"
           size="sm"
@@ -189,7 +189,7 @@ function StoryEditor({
 
         <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Story ID</span>
+            <span className="section-label">Story ID</span>
             <input
               value={story.id}
               disabled={disabled}
@@ -198,7 +198,7 @@ function StoryEditor({
             />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Title</span>
+            <span className="section-label">Title</span>
             <input
               value={story.title}
               disabled={disabled}
@@ -308,7 +308,7 @@ function EpicEditor({
 
         <div className="grid gap-3 md:grid-cols-2">
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Epic ID</span>
+            <span className="section-label">Epic ID</span>
             <input
               value={epic.id}
               disabled={disabled}
@@ -317,7 +317,7 @@ function EpicEditor({
             />
           </label>
           <label className="space-y-1">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Title</span>
+            <span className="section-label">Title</span>
             <input
               value={epic.title}
               disabled={disabled}
@@ -328,7 +328,7 @@ function EpicEditor({
         </div>
 
         <label className="space-y-1">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Objective</span>
+          <span className="section-label">Objective</span>
           <textarea
             rows={3}
             value={epic.objective}
@@ -349,7 +349,7 @@ function EpicEditor({
 
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">User Stories</div>
+            <div className="section-label">User Stories</div>
             <Button
               type="button"
               size="sm"
@@ -420,7 +420,7 @@ export function PrdApprovalEditor({ draft, disabled = false, onChange }: PrdAppr
       </div>
 
       <label className="space-y-1 rounded-2xl border border-border bg-background/80 p-4 shadow-sm">
-        <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Problem Statement</span>
+        <span className="section-label">Problem Statement</span>
         <textarea
           rows={4}
           value={draft.product.problem_statement}
