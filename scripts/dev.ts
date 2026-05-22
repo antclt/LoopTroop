@@ -17,6 +17,7 @@ import {
   type DependencySyncReport,
 } from './dev-maintenance'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
+import { LOOPTROOP_OPENCODE_LOGS, resolveOpenCodeLogMode } from './opencode-log-mode'
 import { getErrorMessage } from '../shared/typeGuards'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -37,6 +38,19 @@ type DevService = {
   command: string
   displayCommand: string
   description: string
+}
+
+const opencodeLogMode = (() => {
+  try {
+    return resolveOpenCodeLogMode()
+  } catch (error) {
+    console.error(`[dev] ${getErrorMessage(error)}`)
+    process.exit(1)
+  }
+})()
+
+if (opencodeLogMode.mode === 'all') {
+  childEnv[LOOPTROOP_OPENCODE_LOGS] = 'all'
 }
 
 const { baseUrl, note, status } = await resolveOpenCodeBaseUrl({
@@ -164,6 +178,18 @@ function printAuditIssueDetails(report: NonNullable<ReturnType<typeof readDevPre
   }
 }
 
+function formatOpenCodeLogSummary(status: string) {
+  if (opencodeLogMode.mode !== 'all') {
+    return 'Default WARN logs; use npm run dev -- --opencode-logs=all'
+  }
+
+  if (status === 'ready-to-start') {
+    return 'Managed server will print DEBUG logs to stderr'
+  }
+
+  return 'DEBUG logs requested, but this start is not launching OpenCode'
+}
+
 const services: DevService[] = [
   {
     name: 'OPEN',
@@ -200,6 +226,7 @@ printSummaryLine('Frontend', `http://localhost:${getFrontendPort()}`)
 printSummaryLine('Backend', `http://localhost:${getBackendPort()}`)
 printSummaryLine('Docs', getDocsOrigin())
 printSummaryLine('OpenCode', baseUrl)
+printSummaryLine('OpenCode logs', formatOpenCodeLogSummary(status))
 printSummaryBlock('Package gate', formatDependencyReleasePolicySummaryLines())
 
 if (preflightReport) {

@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Extended the ticket disk space card in the details view to allow expanding any category (Source Code, Phase Artifacts, or Execution Logs) to see which specific folders/files are occupying space, rendered in a beautiful HSL dark-mode monochrome interactive accordion.
 - Added a beautiful button and card to calculate and display ticket disk space usage with granular breakdown by logs, artifacts, and source code.
 - Made manual Retry preserve versioned logs and artifacts for every non-implementation failed status while keeping CODING bead-scoped.
 - Made documentation screenshots collapsible and clickable, with expanded bead error screenshots on the docs home page.
@@ -20,17 +21,21 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
 - Made OpenCode runtime setup permissive and self-healing while keeping missing execution tooling as a hard setup blocker.
 - Made OpenCode session startup more resilient with bounded app-wide retries and health diagnostics.
+- Added an opt-in `npm run dev -- --opencode-logs=all` mode for full managed OpenCode troubleshooting logs.
 - Audited and corrected all user-facing status descriptions, Details content, and documentation for accuracy and consistency.
 
 ### Detailed Changes
 
 #### Added
+- Added recursive nested file and folder expansion directly in the ticket disk space details view, incorporating standard monochrome folder/file icons, exact size formatting, and custom collapsible sub-accordions with smooth transitions.
+- Added full recursive top-level and category child listings with sizes in the Hono ticket size API endpoint (`/tickets/:id/size`).
 - Added a ticket disk space calculation card under the Artifacts Location in details view with a premium themed button, interactive hover effects, live loading state, error alert banner, and on-demand recursive disk size computation broken down by Source Code, Phase Artifacts, and Execution Logs.
 - Added a `GET /tickets/:id/size` route to Hono backend for recursively measuring ticket worktree folders using safe non-symlink-following `lstat` concurrency, computing precise space breakdowns for logs, artifacts, and source files.
 - Added a robust integration test `server/routes/__tests__/tickets.size.test.ts` verifying exact and recursive file size aggregation and granular category splits.
 - Added two bead error screenshots to the docs home page and a docs-wide image lightbox so screenshots can be opened nearly full screen with a top-right close button.
 - Added a dedicated `Changelog` documentation page (`docs/changelog.md`) detailing LoopTroop's official release history starting from release `0.1.0`.
 - Integrated `/changelog` route into both VitePress sidebar and top navbar navigation.
+- Added `npm run dev -- --opencode-logs=all` to start managed OpenCode with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
 - Manual Retry from `BLOCKED_ERROR` now archives and creates fresh phase attempts for every non-implementation status, including runtime setup and post-implementation phases, while `CODING` keeps its existing failed-bead reset and retry history.

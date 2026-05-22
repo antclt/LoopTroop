@@ -102,13 +102,28 @@ describe('ticketRouter GET /tickets/:id/size', () => {
     const payload = await response.json() as {
       size: number
       exists: boolean
-      breakdown: { logs: number; artifacts: number; source: number }
+      breakdown: {
+        logs: { total: number; children: { name: string; size: number; isDirectory: boolean }[] }
+        artifacts: { total: number; children: { name: string; size: number; isDirectory: boolean }[] }
+        source: { total: number; children: { name: string; size: number; isDirectory: boolean }[] }
+      }
     }
     expect(payload.exists).toBe(true)
     // The total size is at least 21 bytes (5 + 6 + 7 + 3)
     expect(payload.size).toBeGreaterThanOrEqual(21)
-    expect(payload.breakdown.logs).toBe(7)
-    expect(payload.breakdown.artifacts).toBeGreaterThanOrEqual(3)
-    expect(payload.breakdown.source).toBeGreaterThanOrEqual(11)
+    expect(payload.breakdown.logs.total).toBe(7)
+    expect(payload.breakdown.artifacts.total).toBeGreaterThanOrEqual(3)
+    expect(payload.breakdown.source.total).toBeGreaterThanOrEqual(11)
+
+    // Verify children lists
+    expect(payload.breakdown.logs.children.length).toBeGreaterThanOrEqual(1)
+    expect(payload.breakdown.logs.children[0]!.name).toBe('execution-log.jsonl')
+    expect(payload.breakdown.logs.children[0]!.size).toBe(7)
+
+    expect(payload.breakdown.artifacts.children.length).toBeGreaterThanOrEqual(1)
+    expect(payload.breakdown.artifacts.children.some(c => c.name === 'runtime/some-artifact.json')).toBe(true)
+
+    expect(payload.breakdown.source.children.length).toBeGreaterThanOrEqual(2)
+    expect(payload.breakdown.source.children.some(c => c.name === 'test1.txt')).toBe(true)
   })
 })

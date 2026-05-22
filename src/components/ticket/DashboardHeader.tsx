@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
-import { FolderOpen, Copy, Check as CheckIcon, Pencil, HardDrive, RotateCw } from 'lucide-react'
+import { FolderOpen, Copy, Check as CheckIcon, Pencil, HardDrive, RotateCw, ChevronDown, ChevronRight, File, Folder } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -117,6 +117,23 @@ function formatBytes(bytes: number, decimals = 2) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
 }
 
+interface SizeItem {
+  name: string
+  size: number
+  isDirectory: boolean
+}
+
+interface BreakdownCategory {
+  total: number
+  children: SizeItem[]
+}
+
+interface SizeBreakdown {
+  logs: BreakdownCategory
+  artifacts: BreakdownCategory
+  source: BreakdownCategory
+}
+
 export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const { dispatch } = useUI()
   const { isPending } = useTicketAction()
@@ -134,8 +151,9 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
 
   const [isCalculatingSize, setIsCalculatingSize] = useState(false)
   const [ticketSize, setTicketSize] = useState<number | null>(null)
-  const [sizeBreakdown, setSizeBreakdown] = useState<{ logs: number; artifacts: number; source: number } | null>(null)
+  const [sizeBreakdown, setSizeBreakdown] = useState<SizeBreakdown | null>(null)
   const [sizeError, setSizeError] = useState<string | null>(null)
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({})
 
   const handleCalculateSize = async () => {
     setIsCalculatingSize(true)
@@ -161,6 +179,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
     setTicketSize(null)
     setSizeBreakdown(null)
     setSizeError(null)
+    setExpandedSections({})
   }, [ticket.id])
 
   useEffect(() => {
@@ -536,56 +555,196 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                       </div>
 
                       {sizeBreakdown && (
-                        <div className="flex flex-col gap-2 mt-1 border-t border-border/40 pt-2.5">
+                        <div className="flex flex-col gap-2.5 mt-1 border-t border-border/40 pt-2.5">
                           {/* Segmented Disk Allocation Bar */}
                           <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden flex">
                             <div
-                              style={{ width: `${Math.max(0.5, (sizeBreakdown.source / ticketSize) * 100)}%` }}
+                              style={{ width: `${Math.max(0.5, (sizeBreakdown.source.total / ticketSize) * 100)}%` }}
                               className="bg-primary h-full transition-all duration-500"
-                              title={`Source Code: ${formatBytes(sizeBreakdown.source)}`}
+                              title={`Source Code: ${formatBytes(sizeBreakdown.source.total)}`}
                             />
                             <div
-                              style={{ width: `${Math.max(0.5, (sizeBreakdown.artifacts / ticketSize) * 100)}%` }}
+                              style={{ width: `${Math.max(0.5, (sizeBreakdown.artifacts.total / ticketSize) * 100)}%` }}
                               className="bg-muted-foreground/60 h-full transition-all duration-500"
-                              title={`Phase Artifacts: ${formatBytes(sizeBreakdown.artifacts)}`}
+                              title={`Phase Artifacts: ${formatBytes(sizeBreakdown.artifacts.total)}`}
                             />
                             <div
-                              style={{ width: `${Math.max(0.5, (sizeBreakdown.logs / ticketSize) * 100)}%` }}
+                              style={{ width: `${Math.max(0.5, (sizeBreakdown.logs.total / ticketSize) * 100)}%` }}
                               className="bg-muted-foreground/25 h-full transition-all duration-500"
-                              title={`Execution Logs: ${formatBytes(sizeBreakdown.logs)}`}
+                              title={`Execution Logs: ${formatBytes(sizeBreakdown.logs.total)}`}
                             />
                           </div>
 
-                          {/* Legend & Stat Breakdown */}
+                          {/* Legend & Stat Breakdown - Clickable to expand */}
                           <div className="grid grid-cols-3 gap-2 mt-1">
-                            <div className="flex flex-col">
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSections(prev => ({ ...prev, source: !prev.source }))}
+                              className={`flex flex-col text-left p-1.5 rounded border transition-all focus:outline-none ${
+                                expandedSections['source']
+                                  ? 'bg-primary/5 border-primary/50 ring-1 ring-primary/20 shadow-sm'
+                                  : 'bg-muted/10 border-border/30 hover:bg-muted/40 hover:border-border/60'
+                              }`}
+                            >
                               <span className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
                                 Source Code
                               </span>
-                              <span className="text-xs font-bold font-mono text-foreground mt-0.5">
-                                {formatBytes(sizeBreakdown.source)}
+                              <span className="text-xs font-extrabold font-mono text-foreground mt-0.5 flex items-center gap-1 justify-between w-full">
+                                {formatBytes(sizeBreakdown.source.total)}
+                                {expandedSections['source'] ? (
+                                  <ChevronDown className="h-3 w-3 text-primary shrink-0 transition-transform duration-200" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0 transition-transform duration-200" />
+                                )}
                               </span>
-                            </div>
-                            <div className="flex flex-col">
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSections(prev => ({ ...prev, artifacts: !prev.artifacts }))}
+                              className={`flex flex-col text-left p-1.5 rounded border transition-all focus:outline-none ${
+                                expandedSections['artifacts']
+                                  ? 'bg-muted-foreground/5 border-muted-foreground/50 ring-1 ring-muted-foreground/20 shadow-sm'
+                                  : 'bg-muted/10 border-border/30 hover:bg-muted/40 hover:border-border/60'
+                              }`}
+                            >
                               <span className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 shrink-0" />
                                 Phase Artifacts
                               </span>
-                              <span className="text-xs font-bold font-mono text-foreground mt-0.5">
-                                {formatBytes(sizeBreakdown.artifacts)}
+                              <span className="text-xs font-extrabold font-mono text-foreground mt-0.5 flex items-center gap-1 justify-between w-full">
+                                {formatBytes(sizeBreakdown.artifacts.total)}
+                                {expandedSections['artifacts'] ? (
+                                  <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-200" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0 transition-transform duration-200" />
+                                )}
                               </span>
-                            </div>
-                            <div className="flex flex-col">
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setExpandedSections(prev => ({ ...prev, logs: !prev.logs }))}
+                              className={`flex flex-col text-left p-1.5 rounded border transition-all focus:outline-none ${
+                                expandedSections['logs']
+                                  ? 'bg-muted-foreground/5 border-muted-foreground/30 ring-1 ring-muted-foreground/10 shadow-sm'
+                                  : 'bg-muted/10 border-border/30 hover:bg-muted/40 hover:border-border/60'
+                              }`}
+                            >
                               <span className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
                                 <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25 shrink-0" />
                                 Execution Logs
                               </span>
-                              <span className="text-xs font-bold font-mono text-foreground mt-0.5">
-                                {formatBytes(sizeBreakdown.logs)}
+                              <span className="text-xs font-extrabold font-mono text-foreground mt-0.5 flex items-center gap-1 justify-between w-full">
+                                {formatBytes(sizeBreakdown.logs.total)}
+                                {expandedSections['logs'] ? (
+                                  <ChevronDown className="h-3 w-3 text-muted-foreground shrink-0 transition-transform duration-200" />
+                                ) : (
+                                  <ChevronRight className="h-3 w-3 text-muted-foreground/60 shrink-0 transition-transform duration-200" />
+                                )}
                               </span>
-                            </div>
+                            </button>
                           </div>
+
+                          {/* Expanded breakdown list */}
+                          {(expandedSections['source'] || expandedSections['artifacts'] || expandedSections['logs']) && (
+                            <div className="mt-1.5 border border-border/40 rounded bg-muted/15 p-2 flex flex-col gap-2.5 max-h-[220px] overflow-y-auto divide-y divide-border/20 shadow-inner">
+                              {expandedSections['source'] && (
+                                <div className="flex flex-col gap-1.5 pb-2 last:pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
+                                  <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                    Source Code Files ({sizeBreakdown.source.children.length})
+                                  </div>
+                                  <div className="flex flex-col gap-0.5 pl-1.5">
+                                    {sizeBreakdown.source.children.length === 0 ? (
+                                      <div className="text-[10px] text-muted-foreground italic pl-1.5 py-1">No source files found</div>
+                                    ) : (
+                                      sizeBreakdown.source.children.map((child, index) => (
+                                        <div key={index} className="flex items-center justify-between text-[11px] hover:bg-muted/40 px-2 py-0.5 rounded transition-colors group">
+                                          <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
+                                            {child.isDirectory ? (
+                                              <Folder className="h-3.5 w-3.5 text-foreground/75 shrink-0" />
+                                            ) : (
+                                              <File className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                                            )}
+                                            <span className="truncate text-foreground font-mono" title={child.name}>
+                                              {child.name}
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] font-mono text-muted-foreground ml-2 shrink-0 group-hover:text-foreground transition-colors">
+                                            {formatBytes(child.size)}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {expandedSections['artifacts'] && (
+                                <div className="flex flex-col gap-1.5 py-2 first:pt-0 last:pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
+                                  <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 shrink-0" />
+                                    Phase Artifacts ({sizeBreakdown.artifacts.children.length})
+                                  </div>
+                                  <div className="flex flex-col gap-0.5 pl-1.5">
+                                    {sizeBreakdown.artifacts.children.length === 0 ? (
+                                      <div className="text-[10px] text-muted-foreground italic pl-1.5 py-1">No artifacts found</div>
+                                    ) : (
+                                      sizeBreakdown.artifacts.children.map((child, index) => (
+                                        <div key={index} className="flex items-center justify-between text-[11px] hover:bg-muted/40 px-2 py-0.5 rounded transition-colors group">
+                                          <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
+                                            {child.isDirectory ? (
+                                              <Folder className="h-3.5 w-3.5 text-foreground/75 shrink-0" />
+                                            ) : (
+                                              <File className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                                            )}
+                                            <span className="truncate text-foreground font-mono" title={child.name}>
+                                              {child.name}
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] font-mono text-muted-foreground ml-2 shrink-0 group-hover:text-foreground transition-colors">
+                                            {formatBytes(child.size)}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {expandedSections['logs'] && (
+                                <div className="flex flex-col gap-1.5 pt-2 last:pb-0 animate-in fade-in slide-in-from-top-1 duration-200">
+                                  <div className="flex items-center gap-1.5 text-[9px] font-bold text-muted-foreground uppercase tracking-wider">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25 shrink-0" />
+                                    Execution Logs ({sizeBreakdown.logs.children.length})
+                                  </div>
+                                  <div className="flex flex-col gap-0.5 pl-1.5">
+                                    {sizeBreakdown.logs.children.length === 0 ? (
+                                      <div className="text-[10px] text-muted-foreground italic pl-1.5 py-1">No logs found</div>
+                                    ) : (
+                                      sizeBreakdown.logs.children.map((child, index) => (
+                                        <div key={index} className="flex items-center justify-between text-[11px] hover:bg-muted/40 px-2 py-0.5 rounded transition-colors group">
+                                          <div className="flex items-center gap-1.5 min-w-0 text-muted-foreground">
+                                            {child.isDirectory ? (
+                                              <Folder className="h-3.5 w-3.5 text-foreground/75 shrink-0" />
+                                            ) : (
+                                              <File className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0" />
+                                            )}
+                                            <span className="truncate text-foreground font-mono" title={child.name}>
+                                              {child.name}
+                                            </span>
+                                          </div>
+                                          <span className="text-[10px] font-mono text-muted-foreground ml-2 shrink-0 group-hover:text-foreground transition-colors">
+                                            {formatBytes(child.size)}
+                                          </span>
+                                        </div>
+                                      ))
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

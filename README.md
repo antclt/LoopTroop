@@ -181,6 +181,8 @@ npm run dev
 
 `npm run dev` starts the local LoopTroop stack and runs the startup preflight. The preflight can refresh the local OpenCode CLI, sync direct npm dependencies, and run safe audit remediation during local development. Routine startup now explains the package gate up front: direct npm dependency updates and npm audit fixes wait until a release has been published for 7 days, newer releases are shown as held with their next eligible time, and OpenCode updates immediately. It also summarizes maintenance once, including each updated package with its previous and new version.
 
+For full OpenCode troubleshooting output, start with `npm run dev -- --opencode-logs=all`. This only affects the managed OpenCode server started by `npm run dev`; it maps to OpenCode's `--print-logs --log-level DEBUG`, and DEBUG output may include sensitive request or provider details.
+
 The app starts:
 
 | Service | Default address |
