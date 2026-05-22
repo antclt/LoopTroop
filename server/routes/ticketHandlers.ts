@@ -1976,6 +1976,7 @@ export function handleRetryTicket(c: Context) {
 
   try {
     if (isAttemptTrackedPhase(ticket.previousStatus)) {
+      ensureActivePhaseAttempt(ticketId, ticket.previousStatus)
       archiveActivePhaseAttempts(ticketId, [ticket.previousStatus], 'manual_retry_after_blocked_error')
       createFreshPhaseAttempts(ticketId, [ticket.previousStatus])
     }

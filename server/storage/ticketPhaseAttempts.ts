@@ -1,28 +1,13 @@
 import { desc, eq } from 'drizzle-orm'
+import { WORKFLOW_PHASES } from '@shared/workflowMeta'
 import { ticketPhaseAttempts } from '../db/schema'
 import { getTicketContext } from './ticketQueries'
 
-const ATTEMPT_TRACKED_PHASES = new Set([
-  'SCANNING_RELEVANT_FILES',
-  'COUNCIL_DELIBERATING',
-  'COUNCIL_VOTING_INTERVIEW',
-  'COMPILING_INTERVIEW',
-  'WAITING_INTERVIEW_ANSWERS',
-  'VERIFYING_INTERVIEW_COVERAGE',
-  'WAITING_INTERVIEW_APPROVAL',
-  'DRAFTING_PRD',
-  'COUNCIL_VOTING_PRD',
-  'REFINING_PRD',
-  'VERIFYING_PRD_COVERAGE',
-  'WAITING_PRD_APPROVAL',
-  'DRAFTING_BEADS',
-  'COUNCIL_VOTING_BEADS',
-  'REFINING_BEADS',
-  'VERIFYING_BEADS_COVERAGE',
-  'EXPANDING_BEADS',
-  'WAITING_BEADS_APPROVAL',
-  'WAITING_EXECUTION_SETUP_APPROVAL',
-])
+const ATTEMPT_TRACKED_PHASES = new Set(
+  WORKFLOW_PHASES
+    .filter((phase) => phase.groupId !== 'implementation' && phase.groupId !== 'done' && phase.groupId !== 'errors')
+    .map((phase) => phase.id),
+)
 
 export const INTERVIEW_EDIT_RESTART_PHASES = [
   'WAITING_INTERVIEW_APPROVAL',

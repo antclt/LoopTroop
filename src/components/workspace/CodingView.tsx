@@ -10,12 +10,15 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { PhaseArtifactsPanel } from './PhaseArtifactsPanel'
 import { CollapsiblePhaseLogSection } from './CollapsiblePhaseLogSection'
+import { PhaseAttemptSelector } from './PhaseAttemptSelector'
 import { BeadDiffViewer } from './BeadDiffViewer'
 import { LogEntryRow } from './LogLine'
 import { filterBeadLogEntries } from './logFormat'
 import { VerificationSummaryPanel } from './VerificationSummaryPanel'
 import type { Ticket } from '@/hooks/useTickets'
 import { useTicketAction } from '@/hooks/useTickets'
+import { useTicketArtifacts } from '@/hooks/useTicketArtifacts'
+import { useTicketPhaseAttempts } from '@/hooks/useTicketPhaseAttempts'
 import { cn } from '@/lib/utils'
 import { getStatusUserLabel } from '@/lib/workflowMeta'
 import { parsePrdDocument, parsePrdDocumentContent, normalizePrdDocumentLike } from '@/lib/prdDocument'
@@ -646,6 +649,35 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
   const [detailTab, setDetailTab] = useState<'details' | 'changes' | 'model'>('details')
   const phaseForView = readOnly ? 'CODING' : ticket.status
   const showBeadControls = phaseForView === 'CODING'
+  const showPhaseVersionSelector = phaseForView !== 'CODING'
+  const { data: phaseAttempts = [] } = useTicketPhaseAttempts(
+    showPhaseVersionSelector ? ticket.id : undefined,
+    showPhaseVersionSelector ? phaseForView : undefined,
+  )
+  const [manualSelectedAttemptNumber, setManualSelectedAttemptNumber] = useState<number | null>(null)
+  useEffect(() => {
+    setManualSelectedAttemptNumber(null)
+  }, [phaseForView])
+  const selectedAttemptNumber = useMemo(() => {
+    if (manualSelectedAttemptNumber != null && phaseAttempts.some((attempt) => attempt.attemptNumber === manualSelectedAttemptNumber)) {
+      return manualSelectedAttemptNumber
+    }
+    return (phaseAttempts.find((attempt) => attempt.state === 'active') ?? phaseAttempts[0])?.attemptNumber ?? null
+  }, [manualSelectedAttemptNumber, phaseAttempts])
+  const selectedAttempt = useMemo(
+    () => phaseAttempts.find((attempt) => attempt.attemptNumber === selectedAttemptNumber)
+      ?? phaseAttempts.find((attempt) => attempt.state === 'active')
+      ?? phaseAttempts[0]
+      ?? null,
+    [phaseAttempts, selectedAttemptNumber],
+  )
+  const archivedAttemptNumber = selectedAttempt?.state === 'archived' ? selectedAttempt.attemptNumber : undefined
+  const { artifacts: archivedPhaseArtifacts } = useTicketArtifacts(
+    archivedAttemptNumber != null ? ticket.id : undefined,
+    archivedAttemptNumber != null
+      ? { phase: phaseForView, phaseAttempt: archivedAttemptNumber }
+      : undefined,
+  )
   const viewingBeadId = showBeadControls ? rawViewingBeadId : null
   
   // -- Auto-scroll state for the model log tab --
@@ -786,6 +818,16 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
         )}
       </div>
 
+      {showPhaseVersionSelector && phaseAttempts.length > 1 ? (
+        <div className="px-4 py-2 border-b border-border shrink-0">
+          <PhaseAttemptSelector
+            attempts={phaseAttempts}
+            value={selectedAttempt?.attemptNumber ?? phaseAttempts[0]!.attemptNumber}
+            onChange={setManualSelectedAttemptNumber}
+          />
+        </div>
+      ) : null}
+
       {isAwaitingManualVerification && (
         <VerificationSummaryPanel
           ticket={ticket}
@@ -819,7 +861,12 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
       )}
 
       <div className="px-3 py-1.5 border-b border-border shrink-0">
-        <PhaseArtifactsPanel phase={phaseForView} isCompleted={isCompleted} ticketId={ticket.id} />
+        <PhaseArtifactsPanel
+          phase={phaseForView}
+          isCompleted={isCompleted}
+          ticketId={ticket.id}
+          preloadedArtifacts={archivedAttemptNumber != null ? archivedPhaseArtifacts : undefined}
+        />
       </div>
 
       <div className="flex-1 min-h-0 px-2 py-2 flex flex-col">
@@ -1166,7 +1213,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
             )}
           </div>
         ) : (
-          <CollapsiblePhaseLogSection phase={phaseForView} ticket={ticket} />
+          <CollapsiblePhaseLogSection phase={phaseForView} phaseAttempt={archivedAttemptNumber} ticket={ticket} />
         )}
       </div>
     </div>

@@ -91,7 +91,7 @@ The short descriptions below match the `description` field in `shared/workflowMe
 | `CLEANING_ENV` | Removes transient runtime resources (lock files, session folders, temp files) while preserving permanent artifacts (interview, PRD, beads, logs, test and integration reports) for long-term review and audit. |
 | `COMPLETED` | The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible. The ticket records whether it closed as a merged PR or finished without merge. |
 | `CANCELED` | Ticket canceled by user action. Artifacts are preserved by default; optional cleanup is available at cancellation time. |
-| `BLOCKED_ERROR` | A phase failure paused the workflow. The failed phase is preserved so Retry can re-enter it with a fresh attempt, while eligible Continue can re-enter without archiving attempts and send exactly `continue please` to the preserved OpenCode session. Structured diagnostics include provider, model, session, timeout, and rate-limit-style failures when available. |
+| `BLOCKED_ERROR` | A phase failure paused the workflow. Retry versions every failed non-implementation phase before re-entering it, while CODING keeps bead-scoped retry recovery and eligible Continue re-enters without archiving attempts by sending exactly `continue please` to the preserved OpenCode session. Structured diagnostics include provider, model, session, timeout, and rate-limit-style failures when available. |
 
 ## Transition Model
 
@@ -211,9 +211,10 @@ This keeps browser reloads, frontend reconnects, backend restarts, and OpenCode 
 
 - it stores the failed state as `previousStatus`
 - `RETRY` returns to that exact state, not to a generic restart point
+- `RETRY` archives and creates a fresh phase attempt for every non-implementation state
 - the retry target can be a planning phase, an approval phase, or any execution-band phase
 - `RETRY` is rejected when `previousStatus` is missing, because there is no safe phase to re-enter
-- `CODING` retry must first restore the failed bead and reset the worktree to its bead-start commit before execution can safely re-enter
+- `CODING` retry is the implementation exception: it must first restore the failed bead and reset the worktree to its bead-start commit before execution can safely re-enter, and it does not create phase attempts
 
 This is why `BLOCKED_ERROR` has a dedicated `errors` group even though it can be reached from planning, implementation, or delivery. It is the system-wide manual recovery gate.
 

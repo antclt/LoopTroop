@@ -58,7 +58,7 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
   const supplementalArtifacts = useMemo(() => getSupplementalArtifacts(phase, isCompleted), [phase, isCompleted])
   const [viewingSelection, setViewingSelection] = useState<ViewingArtifactSelection | null>(null)
   const [fallbackArtifacts, setFallbackArtifacts] = useState<DBartifact[]>([])
-  const hasPreloadedArtifacts = Boolean(preloadedArtifacts && preloadedArtifacts.length > 0)
+  const hasPreloadedArtifacts = preloadedArtifacts !== undefined
   const { artifacts: cachedArtifacts, isLoading: isLoadingArtifacts } = useTicketArtifacts(ticketId, { skipFetch: hasPreloadedArtifacts })
   const normalizedCachedArtifacts = useMemo(() => cachedArtifacts ?? [], [cachedArtifacts])
 

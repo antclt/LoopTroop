@@ -8,12 +8,14 @@ import {
   createTicket,
   ensureActivePhaseAttempt,
   getTicketByRef,
+  isAttemptTrackedPhase,
   listPhaseArtifacts,
   listPhaseAttempts,
   patchTicket,
   upsertLatestPhaseArtifact,
 } from '../../storage/tickets'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
+import { WORKFLOW_PHASES } from '@shared/workflowMeta'
 
 vi.mock('../../machines/persistence', async () => {
   const storage = await import('../../storage/tickets')
@@ -92,6 +94,33 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
     repoManager.cleanup()
   })
 
+  it('tracks every retry-resumable non-implementation workflow status', () => {
+    const expectedTracked = WORKFLOW_PHASES
+      .filter((phase) => phase.groupId !== 'implementation' && phase.groupId !== 'done' && phase.groupId !== 'errors')
+      .map((phase) => phase.id)
+    const expectedUntracked = WORKFLOW_PHASES
+      .filter((phase) => phase.groupId === 'implementation' || phase.groupId === 'done' || phase.groupId === 'errors')
+      .map((phase) => phase.id)
+
+    expect(expectedTracked).toEqual(expect.arrayContaining([
+      'DRAFT',
+      'PRE_FLIGHT_CHECK',
+      'PREPARING_EXECUTION_ENV',
+      'RUNNING_FINAL_TEST',
+      'INTEGRATING_CHANGES',
+      'CREATING_PULL_REQUEST',
+      'WAITING_PR_REVIEW',
+      'CLEANING_ENV',
+    ]))
+    expect(expectedUntracked).toEqual(expect.arrayContaining(['CODING', 'COMPLETED', 'CANCELED', 'BLOCKED_ERROR']))
+    for (const phase of expectedTracked) {
+      expect(isAttemptTrackedPhase(phase)).toBe(true)
+    }
+    for (const phase of expectedUntracked) {
+      expect(isAttemptTrackedPhase(phase)).toBe(false)
+    }
+  })
+
   it('archives the failed tracked phase and writes retry artifacts to the fresh attempt', async () => {
     const { app, ticket } = setupRetryTicketApp()
     ensureActivePhaseAttempt(ticket.id, 'REFINING_PRD')
@@ -135,6 +164,84 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
     expect(JSON.parse(archivedArtifacts[0]!.content ?? '{}')).toMatchObject({ refinedContent: 'failed attempt artifact' })
   })
 
+  it.each([
+    {
+      phase: 'PREPARING_EXECUTION_ENV',
+      artifactType: 'execution_setup_report',
+      failedContent: { status: 'failed', summary: 'setup blocker' },
+      successfulContent: { status: 'ready', summary: 'setup ready' },
+    },
+    {
+      phase: 'RUNNING_FINAL_TEST',
+      artifactType: 'final_test_report',
+      failedContent: { status: 'failed', summary: 'test blocker' },
+      successfulContent: { status: 'passed', summary: 'tests passed' },
+    },
+  ])('versions manual retry artifacts for $phase', async ({ phase, artifactType, failedContent, successfulContent }) => {
+    const { app, ticket } = setupRetryTicketApp()
+    ensureActivePhaseAttempt(ticket.id, phase)
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      artifactType,
+      phase,
+      JSON.stringify(failedContent),
+    )
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: phase } }),
+      errorMessage: `${phase} failed`,
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
+    const attempts = listPhaseAttempts(ticket.id, phase)
+    expect(attempts[0]).toMatchObject({ attemptNumber: 2, state: 'active' })
+    expect(attempts[1]).toMatchObject({
+      attemptNumber: 1,
+      state: 'archived',
+      archivedReason: 'manual_retry_after_blocked_error',
+    })
+    expect(getTicketByRef(ticket.id)?.status).toBe(phase)
+
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      artifactType,
+      phase,
+      JSON.stringify(successfulContent),
+    )
+
+    const activeArtifacts = listPhaseArtifacts(ticket.id, { phase })
+    const archivedArtifacts = listPhaseArtifacts(ticket.id, { phase, phaseAttempt: 1 })
+    expect(activeArtifacts[0]).toMatchObject({ phaseAttempt: 2 })
+    expect(JSON.parse(activeArtifacts[0]!.content ?? '{}')).toMatchObject(successfulContent)
+    expect(archivedArtifacts[0]).toMatchObject({ phaseAttempt: 1 })
+    expect(JSON.parse(archivedArtifacts[0]!.content ?? '{}')).toMatchObject(failedContent)
+  })
+
+  it('creates an archived DRAFT attempt when no active attempt row exists before retry', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'DRAFT' } }),
+      errorMessage: 'Start blocked during initialization',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
+    const attempts = listPhaseAttempts(ticket.id, 'DRAFT')
+    expect(attempts[0]).toMatchObject({ attemptNumber: 2, state: 'active' })
+    expect(attempts[1]).toMatchObject({
+      attemptNumber: 1,
+      state: 'archived',
+      archivedReason: 'manual_retry_after_blocked_error',
+    })
+    expect(getTicketByRef(ticket.id)?.status).toBe('DRAFT')
+  })
+
   it('rejects retry when the blocked status has no previous status', async () => {
     const { app, ticket } = setupRetryTicketApp()
     patchTicket(ticket.id, {
@@ -162,5 +269,11 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
     expect(response.status).toBe(200)
     expect(recoverCodingBeadWithReset).toHaveBeenCalledWith(ticket.id, expect.objectContaining({ requireReset: true }))
     expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
+    expect(listPhaseAttempts(ticket.id, 'CODING')).toHaveLength(1)
+    expect(listPhaseAttempts(ticket.id, 'CODING')[0]).toMatchObject({
+      attemptNumber: 1,
+      state: 'active',
+      archivedReason: null,
+    })
   })
 })

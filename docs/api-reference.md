@@ -209,7 +209,7 @@ Example UI-state response:
 | `POST` | `/api/tickets/:id/merge` | Merge delivered PR |
 | `POST` | `/api/tickets/:id/close-unmerged` | Close without merge |
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
-| `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase |
+| `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase; versions every non-implementation failed phase and keeps CODING on bead-scoped reset recovery |
 | `POST` | `/api/tickets/:id/continue` | Continue a blocked ticket only when a resumable OpenCode/provider interruption has a matching active preserved OpenCode session |
 | `POST` | `/api/tickets/:id/dev-event` | Disabled by default; requires `LOOPTROOP_ENABLE_DEV_EVENT=1`, `LOOPTROOP_DEV_EVENT_TOKEN`, and `X-LoopTroop-Dev-Event-Token` |
 

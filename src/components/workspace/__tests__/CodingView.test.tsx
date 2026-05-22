@@ -2,10 +2,13 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeTicket } from '@/test/factories'
+import { makeTicket, TEST } from '@/test/factories'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
 import type { Ticket } from '@/hooks/useTickets'
 import { useLogs } from '@/context/useLogContext'
+
+const mockUseTicketArtifacts = vi.fn()
+const mockUseTicketPhaseAttempts = vi.fn()
 
 vi.mock('@/hooks/useTickets', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTickets')>('@/hooks/useTickets')
@@ -19,12 +22,36 @@ vi.mock('@/context/useLogContext', () => ({
   useLogs: vi.fn(),
 }))
 
+vi.mock('@/hooks/useTicketArtifacts', () => ({
+  useTicketArtifacts: (...args: unknown[]) => mockUseTicketArtifacts(...args),
+}))
+
+vi.mock('@/hooks/useTicketPhaseAttempts', () => ({
+  useTicketPhaseAttempts: (...args: unknown[]) => mockUseTicketPhaseAttempts(...args),
+}))
+
 vi.mock('../PhaseArtifactsPanel', () => ({
-  PhaseArtifactsPanel: () => <div data-testid="phase-artifacts-panel" />,
+  PhaseArtifactsPanel: ({
+    phase,
+    preloadedArtifacts,
+  }: {
+    phase: string
+    preloadedArtifacts?: Array<{ content?: string | null }>
+  }) => (
+    <div data-testid="phase-artifacts-panel">
+      {phase}:{preloadedArtifacts?.[0]?.content ?? 'live'}
+    </div>
+  ),
 }))
 
 vi.mock('../CollapsiblePhaseLogSection', () => ({
-  CollapsiblePhaseLogSection: () => <div data-testid="collapsible-log-section" />,
+  CollapsiblePhaseLogSection: ({
+    phase,
+    phaseAttempt,
+  }: {
+    phase: string
+    phaseAttempt?: number
+  }) => <div data-testid="collapsible-log-section">{phase}:{phaseAttempt ?? 'active'}</div>,
 }))
 
 vi.mock('../BeadDiffViewer', () => ({
@@ -67,6 +94,10 @@ beforeEach(() => {
   fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
     new Response(JSON.stringify([]), { status: 200 }),
   )
+  mockUseTicketArtifacts.mockReset()
+  mockUseTicketArtifacts.mockReturnValue({ artifacts: [], isLoading: false })
+  mockUseTicketPhaseAttempts.mockReset()
+  mockUseTicketPhaseAttempts.mockReturnValue({ data: [] })
   vi.mocked(useLogs).mockReturnValue(null)
 })
 
@@ -151,6 +182,89 @@ describe('CodingView', () => {
     expect(
       fetchSpy.mock.calls.some(([url]: [string, ...unknown[]]) => url === '/api/tickets/1:TEST-1/beads'),
     ).toBe(false)
+  })
+
+  it('shows archived versions for non-coding runtime phases and scopes artifacts and logs', () => {
+    mockUseTicketPhaseAttempts.mockReturnValue({
+      data: [
+        {
+          ticketId: TEST.ticketId,
+          phase: 'PREPARING_EXECUTION_ENV',
+          attemptNumber: 2,
+          state: 'active',
+          archivedReason: null,
+          createdAt: '2026-04-29T12:00:00.000Z',
+          archivedAt: null,
+        },
+        {
+          ticketId: TEST.ticketId,
+          phase: 'PREPARING_EXECUTION_ENV',
+          attemptNumber: 1,
+          state: 'archived',
+          archivedReason: 'manual_retry_after_blocked_error',
+          createdAt: '2026-04-29T11:00:00.000Z',
+          archivedAt: '2026-04-29T12:00:00.000Z',
+        },
+      ],
+    })
+    mockUseTicketArtifacts.mockImplementation((_ticketId?: string, options?: { phaseAttempt?: number }) => ({
+      artifacts: options?.phaseAttempt === 1
+        ? [{ content: 'archived runtime report' }]
+        : [{ content: 'current runtime report' }],
+      isLoading: false,
+    }))
+
+    renderCoding({ status: 'PREPARING_EXECUTION_ENV' })
+
+    const selector = screen.getByRole('combobox', { name: /version/i })
+    expect(selector).toHaveValue('2')
+    expect(screen.getByText('Current version (2)')).toBeInTheDocument()
+    expect(screen.getByText('Archived version 1')).toBeInTheDocument()
+    expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:live')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:active')
+
+    fireEvent.change(selector, { target: { value: '1' } })
+
+    expect(mockUseTicketArtifacts).toHaveBeenCalledWith(TEST.ticketId, {
+      phase: 'PREPARING_EXECUTION_ENV',
+      phaseAttempt: 1,
+    })
+    expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:archived runtime report')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:1')
+
+    fireEvent.change(selector, { target: { value: '2' } })
+
+    expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:live')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:active')
+  })
+
+  it('hides the phase version selector for CODING because bead retry has separate recovery', () => {
+    mockUseTicketPhaseAttempts.mockReturnValue({
+      data: [
+        {
+          ticketId: TEST.ticketId,
+          phase: 'CODING',
+          attemptNumber: 2,
+          state: 'active',
+          archivedReason: null,
+          createdAt: '2026-04-29T12:00:00.000Z',
+          archivedAt: null,
+        },
+        {
+          ticketId: TEST.ticketId,
+          phase: 'CODING',
+          attemptNumber: 1,
+          state: 'archived',
+          archivedReason: 'manual_retry_after_blocked_error',
+          createdAt: '2026-04-29T11:00:00.000Z',
+          archivedAt: '2026-04-29T12:00:00.000Z',
+        },
+      ],
+    })
+
+    renderCoding({ status: 'CODING' })
+
+    expect(screen.queryByRole('combobox', { name: /version/i })).toBeNull()
   })
 
   describe('status normalization', () => {

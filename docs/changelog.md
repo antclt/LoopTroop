@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Made manual Retry preserve versioned logs and artifacts for every non-implementation failed status while keeping CODING bead-scoped.
 - Made documentation screenshots collapsible and clickable, with expanded bead error screenshots on the docs home page.
 - Consolidated changelog maintenance into the docs changelog while keeping a root pointer for discoverability.
 - Prevented first-interaction crashes when a lazy UI module fails to load during dev startup.
@@ -28,6 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Integrated `/changelog` route into both VitePress sidebar and top navbar navigation.
 
 #### Changed
+- Manual Retry from `BLOCKED_ERROR` now archives and creates fresh phase attempts for every non-implementation status, including runtime setup and post-implementation phases, while `CODING` keeps its existing failed-bead reset and retry history.
 - Wrapped the docs home-page screenshots in collapsed-by-default details sections so only each screenshot title is visible until expanded.
 - Made `docs/changelog.md` the canonical full changelog, including unreleased changes, and replaced the root `CHANGELOG.md` with a discoverability pointer.
 - `npm run dev` now prints a short multi-line package gate note in the startup summary, making it clearer that direct npm dependency updates and audit fixes wait until package releases are 7 days old while OpenCode updates immediately.

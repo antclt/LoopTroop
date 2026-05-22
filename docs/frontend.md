@@ -178,7 +178,7 @@ Council drafts with `invalid_output`, `failed`, or `timed_out` outcomes are diag
 
 Failed execution setup plan and runtime reports keep `modelOutput` out of the structured details/body. When available, that model output and any `rawAttempts` are exposed through Raw tab variants so failure diagnostics remain inspectable without presenting rejected setup text as accepted plan content.
 
-Manual Retry from `BLOCKED_ERROR` is represented as a phase version, not another Raw variant. Views that load archived phase attempts use the existing previous-version selector and `phaseAttempt`-scoped artifact/log queries; error occurrence history remains the source for the blocked-error timeline.
+Manual Retry from `BLOCKED_ERROR` is represented as a phase version for every non-implementation status, not another Raw variant. Views that load archived phase attempts use the existing previous-version selector and `phaseAttempt`-scoped artifact/log queries, including non-`CODING` runtime/delivery phases shown through `CodingView`; error occurrence history remains the source for the blocked-error timeline. `CODING` keeps its bead-scoped retry UI instead of phase versions.
 
 ### Artifact Processing Notices
 
