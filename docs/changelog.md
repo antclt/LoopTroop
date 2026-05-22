@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Extracted magic numbers into named constants, consolidated a repeated Tailwind label class, and standardised boolean variable naming across the codebase.
 - Hardened workflow approval, audit, bead-finalization, archived-version, and cleanup boundaries with content hashes and visible cleanup warnings.
 - Documented the ticket-handler route split from a single file into focused route modules without changing workflow behavior.
 - Added profile-controlled OpenCode retry budgets so transient provider stalls block early with diagnostics and same-session Continue across OpenCode-backed phases.
@@ -31,6 +32,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Applied targeted reliability and safety fixes from an external audit: atomic write durability, git timeout hardening, ticket cancel race, interview null guard, and bead schema validation.
 
 ### Detailed Changes
+
+#### Changed
+- Extracted 9 magic numbers (`GIT_CHECK_DEBOUNCE_MS`, `COUNTDOWN_TICK_MS`, `DROPDOWN_Z_INDEX`, etc.) into named constants in `src/lib/constants.ts`.
+- Consolidated the repeated `text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground` Tailwind pattern (21 occurrences) into a `.section-label` `@apply` class in `src/index.css`.
+- Standardised all boolean state and derived variables across 21 components to use `is`/`has`/`should` prefixes (e.g. `open` → `isOpen`, `showHistory` → `isHistoryOpen`, `showModelTabs` → `hasModelTabs`).
 
 #### Added
 - Added SHA-256 content identity to approval snapshots/receipts and artifact read responses, required `expectedContentSha256` approval payloads with stale-approval `409` responses, durable approval receipts for all approval gates, and append-only `user_edit_receipt:*` artifacts for manual artifact edits.
