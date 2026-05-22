@@ -102,7 +102,7 @@ The main development command starts the frontend, backend, docs, and the OpenCod
 npm run dev
 ```
 
-For full managed OpenCode troubleshooting output, use `npm run dev -- --opencode-logs=all`. This maps to OpenCode's `--print-logs --log-level DEBUG` flags and may expose sensitive request or provider details in the terminal.
+For full managed OpenCode troubleshooting output, use `npm run dev --opencode-logs=all`. This maps to OpenCode's `--print-logs --log-level DEBUG` flags and may expose sensitive request or provider details in the terminal.
 
 For non-mutating startup, forced maintenance, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
 

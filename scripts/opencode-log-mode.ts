@@ -1,7 +1,8 @@
 export const LOOPTROOP_OPENCODE_LOGS = 'LOOPTROOP_OPENCODE_LOGS'
+export const NPM_CONFIG_OPENCODE_LOGS = 'npm_config_opencode_logs'
 
 export type OpenCodeLogMode = 'default' | 'all'
-export type OpenCodeLogModeSource = 'flag' | 'env'
+export type OpenCodeLogModeSource = 'npm-config' | 'env'
 
 export type ResolvedOpenCodeLogMode = {
   mode: OpenCodeLogMode
@@ -11,42 +12,13 @@ export type ResolvedOpenCodeLogMode = {
 }
 
 type ResolveOpenCodeLogModeOptions = {
-  argv?: readonly string[]
   env?: Partial<Record<string, string | undefined>>
 }
 
-const OPENCODE_LOGS_FLAG = '--opencode-logs'
 const ALL_LOGS_VALUE = 'all'
 
 function normalizeLogModeValue(value: string) {
   return value.trim().toLowerCase()
-}
-
-function getFlagValue(argv: readonly string[]) {
-  let value: string | undefined
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
-    if (arg === undefined) continue
-
-    if (arg === OPENCODE_LOGS_FLAG) {
-      const next = argv[index + 1]
-      value = next && !next.startsWith('--') ? next : ''
-      index += 1
-      continue
-    }
-
-    if (arg.startsWith(`${OPENCODE_LOGS_FLAG}=`)) {
-      value = arg.slice(`${OPENCODE_LOGS_FLAG}=`.length)
-      continue
-    }
-
-    if (arg.startsWith(OPENCODE_LOGS_FLAG)) {
-      value = arg.slice(OPENCODE_LOGS_FLAG.length)
-    }
-  }
-
-  return value
 }
 
 function assertAllLogsValue(value: string, source: OpenCodeLogModeSource) {
@@ -55,25 +27,26 @@ function assertAllLogsValue(value: string, source: OpenCodeLogModeSource) {
     return normalized
   }
 
-  const sourceHint = source === 'flag'
-    ? `${OPENCODE_LOGS_FLAG}=all`
-    : `${LOOPTROOP_OPENCODE_LOGS}=all`
+  let sourceHint: string
+  if (source === 'npm-config') {
+    sourceHint = 'npm run dev --opencode-logs=all'
+  } else {
+    sourceHint = `${LOOPTROOP_OPENCODE_LOGS}=all`
+  }
   throw new Error(`Invalid OpenCode log mode "${value}". Use ${sourceHint}.`)
 }
 
 export function resolveOpenCodeLogMode({
-  argv = process.argv.slice(2),
   env = process.env,
 }: ResolveOpenCodeLogModeOptions = {}): ResolvedOpenCodeLogMode {
-  const flagValue = getFlagValue(argv)
-
-  if (flagValue !== undefined) {
-    assertAllLogsValue(flagValue, 'flag')
+  const npmConfigValue = env[NPM_CONFIG_OPENCODE_LOGS]?.trim()
+  if (npmConfigValue) {
+    assertAllLogsValue(npmConfigValue, 'npm-config')
     return {
       mode: 'all',
       requested: true,
       serveArgs: ['--print-logs', '--log-level', 'DEBUG'],
-      source: 'flag',
+      source: 'npm-config',
     }
   }
 

@@ -21,7 +21,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Kept the left-panel Errors header compact while showing real bead counters in expanded coding-error labels.
 - Made OpenCode runtime setup permissive and self-healing while keeping missing execution tooling as a hard setup blocker.
 - Made OpenCode session startup more resilient with bounded app-wide retries and health diagnostics.
-- Added an opt-in `npm run dev -- --opencode-logs=all` mode for full managed OpenCode troubleshooting logs.
+- Added an opt-in `npm run dev --opencode-logs=all` mode for full managed OpenCode troubleshooting logs.
 - Audited and corrected all user-facing status descriptions, Details content, and documentation for accuracy and consistency.
 
 ### Detailed Changes
@@ -35,7 +35,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added two bead error screenshots to the docs home page and a docs-wide image lightbox so screenshots can be opened nearly full screen with a top-right close button.
 - Added a dedicated `Changelog` documentation page (`docs/changelog.md`) detailing LoopTroop's official release history starting from release `0.1.0`.
 - Integrated `/changelog` route into both VitePress sidebar and top navbar navigation.
-- Added `npm run dev -- --opencode-logs=all` to start managed OpenCode with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
+- Added `npm run dev --opencode-logs=all` to start managed OpenCode with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
 - Manual Retry from `BLOCKED_ERROR` now archives and creates fresh phase attempts for every non-implementation status, including runtime setup and post-implementation phases, while `CODING` keeps its existing failed-bead reset and retry history.

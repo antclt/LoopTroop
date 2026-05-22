@@ -180,7 +180,7 @@ function printAuditIssueDetails(report: NonNullable<ReturnType<typeof readDevPre
 
 function formatOpenCodeLogSummary(status: string) {
   if (opencodeLogMode.mode !== 'all') {
-    return 'Default WARN logs; use npm run dev -- --opencode-logs=all'
+    return 'Default WARN logs; use npm run dev --opencode-logs=all'
   }
 
   if (status === 'ready-to-start') {
