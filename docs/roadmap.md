@@ -14,7 +14,28 @@ search: false
 
 ## High Priority
 
-
+*   **Context Slimming Pipeline (per-phase input/output field audit + deterministic strip-and-store contract):** For every workflow phase, manually audit which fields the AI model outputs and which fields downstream phases actually consume, then strip unused fields from the canonical context so future model calls receive slimmer input while stripped data is preserved for UI display and forensic audit.
+    *   Audit each phase input and output, status by status, starting with the first (`DRAFT`) and proceeding sequentially through the full lifecycle.
+    *   The AI model must continue to output all fields it currently outputs; no model-side changes are required.
+    *   After the model returns output, the app applies a deterministic strip pass that removes fields not consumed by any downstream phase, UI surface, or audit/log contract.
+    *   Stripped data must be persisted to a companion artifact (`.looptroop/tickets/<ticket-id>/context/stripped-<phase>-<attempt>.json`) so it remains available for UI rendering, diagnostics, and forensic replay.
+    *   The canonical context artifact passed to subsequent phases contains only the slimmed payload; the stripped companion is loaded only when the UI or an audit tool requests it.
+    *   Manually classify every output field per phase into one of three ownership classes:
+        *   `required_downstream`: consumed by at least one subsequent phase, UI surface, or log contract — kept in canonical context.
+        *   `required_display_only`: not consumed by any downstream phase but needed for UI display or user-facing detail views — stripped from canonical context, preserved in stripped companion.
+        *   `obsolete`: not consumed by any downstream phase, UI surface, or log contract — stripped from canonical context and preserved in stripped companion with `obsolete: true` marker for future manual removal.
+    *   After initial audit, physically remove all `obsolete` fields from the AI output schema (prompt + structured-output validation) so models no longer waste tokens generating them.
+    *   Persist the field-classification manifest at `.looptroop/tickets/<ticket-id>/context/field-manifest-<phase>.yaml` with per-field entries: `field_path`, `class`, `consumed_by[]`, `first_audit_at`, `last_verified_at`.
+    *   For every retry path (structured retry, coverage-retry loop, context-wipe retry, model-fallback retry), also audit which additional fields the retry adds to the context and classify them the same way; persist retry-specific entries in the field manifest with `retry_kind` and `retry_added_fields[]`.
+    *   If a retry variant introduces new fields not present in the base phase output, the strip pass must handle those fields independently and not carry them forward unless a downstream phase explicitly consumes them.
+    *   Context pack assembly (`buildMinimalContext`) must consume only the slimmed canonical artifacts; stripped companions are never injected into model prompts.
+    *   Add token-savings telemetry per phase: persist `tokens_saved_estimate`, `fields_stripped_count`, `fields_kept_count` in each strip receipt so the impact of slimming is measurable.
+    *   Strip receipts must be deterministic: same input always produces the same slimmed output and the same stripped companion, enabling reproducible context-pack audits.
+    *   UI must transparently show both the slimmed context (what the model saw) and the full context (with stripped data re-attached) so users can verify nothing important was lost.
+    *   When a downstream phase is found to need a previously stripped field, update the field manifest (`required_downstream`), add the consuming phase to `consumed_by[]`, and stop stripping that field from that point forward — no schema migration required.
+    *   Add `Doctor` validation that checks every field manifest against actual runtime consumption and warns on stale classifications (fields marked `required_downstream` but never consumed, or fields marked `obsolete` that are actually consumed).
+    *   Audit order (status by status, starting with first): `DRAFT` → `SCANNING_RELEVANT_FILES` → `COUNCIL_DELIBERATING` → `COUNCIL_VOTING_INTERVIEW` → `COMPILING_INTERVIEW` → `WAITING_INTERVIEW_ANSWERS` → `VERIFYING_INTERVIEW_COVERAGE` → `WAITING_INTERVIEW_APPROVAL` → `DRAFTING_PRD` → `COUNCIL_VOTING_PRD` → `REFINING_PRD` → `VERIFYING_PRD_COVERAGE` → `WAITING_PRD_APPROVAL` → `DRAFTING_BEADS` → `COUNCIL_VOTING_BEADS` → `REFINING_BEADS` → `VERIFYING_BEADS_COVERAGE` → `EXPANDING_BEADS` → `WAITING_BEADS_APPROVAL` → `PRE_FLIGHT_CHECK` → `WAITING_EXECUTION_SETUP_APPROVAL` → `PREPARING_EXECUTION_ENV` → `CODING` → `RUNNING_FINAL_TEST` → `INTEGRATING_CHANGES` → `CREATING_PULL_REQUEST` → `WAITING_PR_REVIEW` → `CLEANING_ENV` → `COMPLETED`.
+    *   For each status, document: input fields consumed, output fields produced, output fields actually used downstream, and fields added by any retry path.
 *   **Adversarial Critique Pre-Pass:** After relevant-file scanning and any enabled research briefs, optionally run a bounded ticket-level critique before Interview begins.
     *   Persist `.looptroop/tickets/<ticket-id>/critique.yaml` with verdict, major risks, counterproposals, interview follow-ups, and stop conditions.
     *   Treat the critique as read-only planning context, not a council vote or automatic cancel path.

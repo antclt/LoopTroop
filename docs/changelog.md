@@ -26,6 +26,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made OpenCode session startup more resilient with bounded app-wide retries and health diagnostics.
 - Added an opt-in `npm run dev --opencode-logs=all` mode for full managed OpenCode DEBUG logs in the terminal.
 - Audited and corrected all user-facing status descriptions, Details content, and documentation for accuracy and consistency.
+- Added a high-priority roadmap item for a Context Slimming Pipeline that audits per-phase input/output fields, strips unused data from canonical context while preserving it in companion artifacts, and classifies every field by downstream consumption.
 
 ### Detailed Changes
 
@@ -42,6 +43,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
+- Added "Context Slimming Pipeline" as a high-priority roadmap item in `docs/roadmap.md` for per-phase input/output field auditing, deterministic strip-and-store, and retry-path field classification.
 - Updated architecture and ticket-flow documentation to reference the focused `server/routes/ticketHandlers/` module directory for user-triggered ticket actions.
 - Clarified the Configuration UI copy for OpenCode Provider Recovery so it explicitly mentions rate-limit, usage-limit, overload, timeout, and network retry events across phases.
 - Manual Retry from `BLOCKED_ERROR` now archives and creates fresh phase attempts for every non-implementation status, including runtime setup and post-implementation phases, while `CODING` keeps its existing failed-bead reset and retry history.
