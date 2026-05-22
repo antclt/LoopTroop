@@ -129,6 +129,100 @@ function withExecutionCheckpoint(result: ExecutionResult, bead: Bead): Persisted
   }
 }
 
+function findRecoverableSuccessfulCheckpoint(ticketId: string, beads: Bead[]): Bead | null {
+  const candidates = [...beads]
+    .filter((bead) => bead.status === 'error' || bead.status === 'in_progress')
+    .sort(compareBeadRecoveryOrder)
+
+  for (const bead of candidates) {
+    const executionArtifact = getLatestPhaseArtifact(ticketId, getBeadExecutionArtifactType(bead.id), 'CODING')
+    if (!executionArtifact) continue
+    try {
+      const parsed = JSON.parse(executionArtifact.content) as unknown
+      if (
+        isPersistedExecutionResult(parsed, bead.id)
+        && parsed.success === true
+        && isCurrentExecutionCheckpoint(parsed, bead)
+      ) {
+        return bead
+      }
+    } catch {
+      continue
+    }
+  }
+
+  return null
+}
+
+export function recoverSuccessfulExecutionCheckpointForFinalization(ticketId: string): Bead | null {
+  const beads = readTicketBeads(ticketId)
+  const checkpointedBead = findRecoverableSuccessfulCheckpoint(ticketId, beads)
+  if (!checkpointedBead) return null
+
+  if (checkpointedBead.status === 'in_progress') return checkpointedBead
+
+  const recoveredBeads = beads.map((bead) => bead.id === checkpointedBead.id
+    ? {
+        ...bead,
+        status: 'in_progress' as const,
+      }
+    : bead)
+  writeTicketBeads(ticketId, recoveredBeads)
+  updateTicketProgressFromBeads(ticketId, recoveredBeads)
+  return recoveredBeads.find((bead) => bead.id === checkpointedBead.id) ?? checkpointedBead
+}
+
+function markBeadFinalizationFailed(input: {
+  ticketId: string
+  context: TicketContext
+  finalizingBead: Bead
+  freshBeads: Bead[]
+  result: ExecutionResult
+  codingModelId: string
+  sendEvent: (event: TicketEvent) => void
+  message: string
+}) {
+  const failureNote = `Finalization failed after successful implementation: ${input.message}`
+  const failedBeads = input.freshBeads.map((bead) => bead.id === input.finalizingBead.id
+    ? {
+        ...bead,
+        status: 'error' as const,
+        iteration: input.result.iteration,
+        notes: [
+          bead.notes,
+          failureNote,
+        ].filter(Boolean).join('\n\n'),
+      }
+    : bead)
+
+  writeTicketBeads(input.ticketId, failedBeads)
+  updateTicketProgressFromBeads(input.ticketId, failedBeads)
+  emitPhaseLog(
+    input.ticketId,
+    input.context.externalId,
+    'CODING',
+    'error',
+    `Bead ${input.finalizingBead.id} implementation succeeded but finalization failed: ${input.message}`,
+    {
+      source: 'system',
+      modelId: input.codingModelId,
+      beadId: input.finalizingBead.id,
+      errorCode: 'BEAD_FINALIZATION_FAILED',
+    },
+  )
+  input.sendEvent({
+    type: 'BEAD_ERROR',
+    codes: ['BEAD_FINALIZATION_FAILED'],
+    diagnostics: {
+      kind: 'runtime',
+      source: 'system',
+      summary: `Bead ${input.finalizingBead.id} implementation succeeded, but finalization failed: ${input.message}`,
+      modelId: input.codingModelId,
+      isRetryable: true,
+    },
+  })
+}
+
 export async function handleMockExecutionUnsupported(
   ticketId: string,
   context: TicketContext,
@@ -467,6 +561,48 @@ export async function handleCoding(
     return
   }
 
+  // Finalize durable local changes before marking the bead complete. A local
+  // commit failure blocks progress; a push failure after a commit is recoverable.
+  let gitResult: Awaited<ReturnType<typeof commitBeadChanges>>
+  try {
+    gitResult = await withCommandLoggingFieldsAsync({ beadId: finalizingBead.id }, async () => commitBeadChanges(paths.worktreePath, finalizingBead.id, finalizingBead.title))
+  } catch (err) {
+    markBeadFinalizationFailed({
+      ticketId,
+      context,
+      finalizingBead,
+      freshBeads,
+      result,
+      codingModelId,
+      sendEvent,
+      message: err instanceof Error ? err.message : 'Unknown error',
+    })
+    return
+  }
+
+  if (gitResult.error && !gitResult.committed) {
+    markBeadFinalizationFailed({
+      ticketId,
+      context,
+      finalizingBead,
+      freshBeads,
+      result,
+      codingModelId,
+      sendEvent,
+      message: gitResult.error,
+    })
+    return
+  }
+
+  if (gitResult.error) {
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Git push warning for bead ${finalizingBead.id}: ${gitResult.error}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
+  }
+  if (gitResult.committed) {
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Committed bead ${finalizingBead.id} changes${gitResult.pushed ? ' and pushed' : ' (push pending)'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
+  } else {
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `No local commit was needed for bead ${finalizingBead.id}; finalization continued as a no-op.`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
+  }
+
   const doneNow = new Date().toISOString()
   const completedBeads = freshBeads.map(bead => bead.id === finalizingBead.id
     ? {
@@ -479,19 +615,6 @@ export async function handleCoding(
     : bead)
   writeTicketBeads(ticketId, completedBeads)
   updateTicketProgressFromBeads(ticketId, completedBeads)
-
-  // Commit and push bead changes
-  try {
-    const gitResult = await withCommandLoggingFieldsAsync({ beadId: finalizingBead.id }, async () => commitBeadChanges(paths.worktreePath, finalizingBead.id, finalizingBead.title))
-    if (gitResult.error) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Git operation warning for bead ${finalizingBead.id}: ${gitResult.error}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
-    }
-    if (gitResult.committed) {
-      emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Committed bead ${finalizingBead.id} changes${gitResult.pushed ? ' and pushed' : ' (push pending)'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
-    }
-  } catch (err) {
-    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Could not commit bead changes: ${err instanceof Error ? err.message : 'Unknown error'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
-  }
 
   // Capture code-only diff for this bead (excludes .ticket/** metadata)
   if (beadStartCommit) {

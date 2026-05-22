@@ -1,6 +1,6 @@
-import { createHash } from 'node:crypto'
 import type { RefinementChange } from '@shared/refinementChanges'
 import type { StructuredRetryDiagnostic } from '@shared/structuredRetryDiagnostics'
+import { contentSha256 } from '../lib/contentHash'
 import { looksLikePromptEcho, looksLikeStructuredPromptSchemaEcho } from '../lib/promptEcho'
 import type { PrdDocument, PrdDraftMetrics, StructuredOutputResult } from './types'
 import { normalizeInterviewDocumentOutput } from './interviewDocument'
@@ -40,10 +40,6 @@ const PRD_NESTED_MAPPING_CHILDREN = {
 } as const
 
 const PRD_PROMPT_ECHO_ERROR = 'PRD output echoed the prompt instead of returning structured PRD YAML'
-
-function hashContent(content: string | undefined): string {
-  return createHash('sha256').update(content ?? '').digest('hex')
-}
 
 function readOptionalString(record: Record<string, unknown>, aliases: string[]): string {
   const value = getValueByAliases(record, aliases)
@@ -285,7 +281,7 @@ export function normalizePrdYamlOutput(
       }
 
       const normalizedInterviewContent = ensureInterviewArtifactForPrd(options.interviewContent, options.ticketId)
-      const runtimeInterviewHash = hashContent(normalizedInterviewContent)
+      const runtimeInterviewHash = contentSha256(normalizedInterviewContent ?? '')
       const providedTicketId = readOptionalString(parsed, ['ticketid', 'ticket_id'])
       const providedInterviewHash = readOptionalString(sourceInterview, ['contentsha256', 'content_sha256'])
       const runtimeTicketId = options.ticketId.trim()

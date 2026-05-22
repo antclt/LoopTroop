@@ -17,6 +17,7 @@ import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { initializeTicket } from '../../ticket/initialize'
 import { ticketRouter } from '../tickets'
 import { beadsRouter } from '../beads'
+import { contentSha256 } from '../../lib/contentHash'
 
 vi.mock('../../machines/persistence', async () => {
   const storage = await import('../../storage/tickets')
@@ -125,6 +126,13 @@ function setupBeadsApprovalTicket() {
   return { app, ticket, paths, beadsContent }
 }
 
+function approvalPayload(raw: string) {
+  return {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedContentSha256: contentSha256(raw) }),
+  }
+}
+
 describe('ticketRouter beads approval routes', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>
 
@@ -145,10 +153,11 @@ describe('ticketRouter beads approval routes', () => {
   })
 
   it('approves beads, stamps approval receipt, and advances the ticket', async () => {
-    const { app, ticket } = setupBeadsApprovalTicket()
+    const { app, ticket, beadsContent } = setupBeadsApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(beadsContent),
     })
 
     expect(response.status).toBe(200)
@@ -163,13 +172,15 @@ describe('ticketRouter beads approval routes', () => {
     expect(receiptData.approved_by).toBe('user')
     expect(receiptData.approved_at).toBeTruthy()
     expect(receiptData.bead_count).toBe(2)
+    expect(receiptData.content_sha256).toBe(contentSha256(beadsContent))
   })
 
   it('dispatches beads approval through the generic approve route', async () => {
-    const { app, ticket } = setupBeadsApprovalTicket()
+    const { app, ticket, beadsContent } = setupBeadsApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve`, {
       method: 'POST',
+      ...approvalPayload(beadsContent),
     })
 
     expect(response.status).toBe(200)
@@ -229,8 +240,10 @@ describe('ticketRouter beads approval routes', () => {
     busyApp.route('/api', ticketRouter)
     busyApp.route('/api', beadsRouter)
 
+    const waitingBeadsContent = sampleBeadsJsonl()
     const response = await busyApp.request(`/api/tickets/${waitingTicket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(waitingBeadsContent),
     })
 
     expect(response.status).toBe(409)
@@ -239,12 +252,13 @@ describe('ticketRouter beads approval routes', () => {
   })
 
   it('rejects approval when ticket is not in WAITING_BEADS_APPROVAL status', async () => {
-    const { app, ticket } = setupBeadsApprovalTicket()
+    const { app, ticket, beadsContent } = setupBeadsApprovalTicket()
 
     patchTicket(ticket.id, { status: 'DRAFTING_BEADS' })
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(beadsContent),
     })
 
     expect(response.status).toBe(409)
@@ -253,10 +267,11 @@ describe('ticketRouter beads approval routes', () => {
   })
 
   it('returns 404 when ticket does not exist', async () => {
-    const { app } = setupBeadsApprovalTicket()
+    const { app, beadsContent } = setupBeadsApprovalTicket()
 
     const response = await app.request('/api/tickets/9999/approve-beads', {
       method: 'POST',
+      ...approvalPayload(beadsContent),
     })
 
     expect(response.status).toBe(404)
@@ -265,13 +280,14 @@ describe('ticketRouter beads approval routes', () => {
   })
 
   it('returns 500 when beads file is missing', async () => {
-    const { app, ticket, paths } = setupBeadsApprovalTicket()
+    const { app, ticket, paths, beadsContent } = setupBeadsApprovalTicket()
 
     // Remove beads file
     unlinkSync(paths.beadsPath)
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(beadsContent),
     })
 
     expect(response.status).toBe(500)
@@ -312,10 +328,12 @@ describe('ticketRouter beads approval routes', () => {
     const { app, ticket, paths } = setupBeadsApprovalTicket()
 
     // Write invalid JSON — first line has valid id+title, second has bad JSON
-    writeFileSync(paths.beadsPath, '{"id":"bead-001","title":"Valid bead"}\nnot valid json\n')
+    const invalidContent = '{"id":"bead-001","title":"Valid bead"}\nnot valid json\n'
+    writeFileSync(paths.beadsPath, invalidContent)
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(invalidContent),
     })
 
     expect(response.status).toBe(500)
@@ -328,6 +346,7 @@ describe('ticketRouter beads approval routes', () => {
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(beadsContent),
     })
 
     expect(response.status).toBe(200)
@@ -340,15 +359,48 @@ describe('ticketRouter beads approval routes', () => {
   it('handles empty beads file gracefully', async () => {
     const { app, ticket, paths } = setupBeadsApprovalTicket()
 
-    writeFileSync(paths.beadsPath, '\n')
+    const emptyContent = '\n'
+    writeFileSync(paths.beadsPath, emptyContent)
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
       method: 'POST',
+      ...approvalPayload(emptyContent),
     })
 
     expect(response.status).toBe(500)
     const payload = (await response.json()) as { error: string; details: string }
     expect(payload.details).toContain('empty')
+  })
+
+  it('requires expectedContentSha256 for beads approval', async () => {
+    const { app, ticket } = setupBeadsApprovalTicket()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(400)
+    const payload = await response.json() as { error?: string }
+    expect(payload.error).toBe('Invalid approval payload')
+  })
+
+  it('rejects stale beads approval hashes with 409', async () => {
+    const { app, ticket, beadsContent } = setupBeadsApprovalTicket()
+    const expectedContentSha256 = '0'.repeat(64)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedContentSha256 }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'Stale approval',
+      artifactType: 'beads',
+      expectedContentSha256,
+      currentContentSha256: contentSha256(beadsContent),
+    })
   })
 
   it('reads beads via GET endpoint', async () => {

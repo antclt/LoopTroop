@@ -8,6 +8,7 @@ import { resolvePhaseAttempt } from '../storage/ticketPhaseAttempts'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { foldPersistedLogEntries } from '../log/readDedupe'
 import { handlePutInterview, handlePutPrd } from './ticketHandlers'
+import { contentSha256 } from '../lib/contentHash'
 
 const filesRouter = new Hono()
 
@@ -204,7 +205,7 @@ filesRouter.get('/files/:ticketId/:file', async (c) => {
   }
 
   const content = await fs.promises.readFile(filePath, 'utf-8')
-  return c.json({ content, exists: true })
+  return c.json({ content, exists: true, contentSha256: contentSha256(content) })
 })
 
 filesRouter.put('/files/:ticketId/:file', async (c) => {

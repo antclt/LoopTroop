@@ -1,5 +1,7 @@
 import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
 import { nowIso } from '../../lib/dateUtils'
+import { assertExpectedContentSha256 } from '../../lib/artifactApproval'
+import { contentSha256 } from '../../lib/contentHash'
 import { normalizeExecutionSetupPlanOutput } from '../../structuredOutput'
 import type { ExecutionSetupPlan } from './types'
 import {
@@ -25,6 +27,7 @@ function normalizeStoredExecutionSetupPlanContent(rawContent: string) {
 export function readExecutionSetupPlan(ticketId: string, phaseAttempt?: number): {
   artifactId: number | null
   raw: string | null
+  contentSha256: string | null
   plan: ExecutionSetupPlan | null
   updatedAt: string | null
 } {
@@ -33,6 +36,7 @@ export function readExecutionSetupPlan(ticketId: string, phaseAttempt?: number):
     return {
       artifactId: null,
       raw: null,
+      contentSha256: null,
       plan: null,
       updatedAt: null,
     }
@@ -46,6 +50,7 @@ export function readExecutionSetupPlan(ticketId: string, phaseAttempt?: number):
   return {
     artifactId: artifact.id,
     raw: artifact.content,
+    contentSha256: contentSha256(artifact.content),
     plan: normalized.value,
     updatedAt: artifact.createdAt,
   }
@@ -53,6 +58,7 @@ export function readExecutionSetupPlan(ticketId: string, phaseAttempt?: number):
 
 export function saveExecutionSetupPlan(ticketId: string, plan: ExecutionSetupPlan): {
   raw: string
+  contentSha256: string
   plan: ExecutionSetupPlan
 } {
   const raw = serializeExecutionSetupPlan(plan)
@@ -62,11 +68,12 @@ export function saveExecutionSetupPlan(ticketId: string, plan: ExecutionSetupPla
   }
   const canonicalRaw = serializeExecutionSetupPlan(normalized.value)
   upsertLatestPhaseArtifact(ticketId, EXECUTION_SETUP_PLAN_ARTIFACT_TYPE, EXECUTION_SETUP_PLAN_PHASE, canonicalRaw)
-  return { raw: canonicalRaw, plan: normalized.value }
+  return { raw: canonicalRaw, contentSha256: contentSha256(canonicalRaw), plan: normalized.value }
 }
 
 export function saveExecutionSetupPlanRawContent(ticketId: string, rawContent: string): {
   raw: string
+  contentSha256: string
   plan: ExecutionSetupPlan
 } {
   const normalized = normalizeStoredExecutionSetupPlanContent(rawContent)
@@ -101,22 +108,37 @@ export function writeExecutionSetupPlanReport(ticketId: string, content: string)
   upsertLatestPhaseArtifact(ticketId, EXECUTION_SETUP_PLAN_REPORT_ARTIFACT_TYPE, EXECUTION_SETUP_PLAN_PHASE, content)
 }
 
-export function approveExecutionSetupPlan(ticketId: string, plan: ExecutionSetupPlan): {
+export function approveExecutionSetupPlan(
+  ticketId: string,
+  plan: ExecutionSetupPlan,
+  raw: string,
+  expectedContentSha256: string,
+): {
   approvedAt: string
   stepCount: number
   commandCount: number
+  contentSha256: string
 } {
+  const reviewedContentSha256 = assertExpectedContentSha256({
+    artifactType: 'execution_setup_plan',
+    currentContent: raw,
+    expectedContentSha256,
+  })
   const approvedAt = nowIso()
   const commandCount = plan.steps.reduce((sum, step) => sum + step.commands.length, 0)
   upsertLatestPhaseArtifact(ticketId, 'approval_receipt', EXECUTION_SETUP_PLAN_PHASE, JSON.stringify({
     approved_by: 'user',
     approved_at: approvedAt,
+    artifact_type: 'execution_setup_plan',
+    phase: EXECUTION_SETUP_PLAN_PHASE,
     step_count: plan.steps.length,
     command_count: commandCount,
+    content_sha256: reviewedContentSha256,
   }))
   return {
     approvedAt,
     stepCount: plan.steps.length,
     commandCount,
+    contentSha256: reviewedContentSha256,
   }
 }

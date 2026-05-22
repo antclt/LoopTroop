@@ -69,6 +69,11 @@ export interface Ticket {
   activeErrorOccurrenceId?: string | null
   hasPastErrors?: boolean
   completionDisposition?: 'merged' | 'closed_unmerged' | null
+  cleanup?: {
+    status: 'clean' | 'warning' | null
+    errorCount: number
+    latestReportArtifactId: number | null
+  }
   lockedMainImplementer: string | null
   lockedMainImplementerVariant?: string | null
   lockedInterviewQuestions?: number | null

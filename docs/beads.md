@@ -102,8 +102,9 @@ Important details:
 
 - `flow` defaults to the ticket base branch when not provided
 - the file is line-oriented JSONL
-- `PUT /api/tickets/:id/beads` rewrites the full file atomically
-- the server also refreshes the approval snapshot and clears execution-setup state after updates
+- `GET /api/tickets/:id/beads` returns the canonical plan hash in the `X-Content-Sha256` header
+- `PUT /api/tickets/:id/beads` rewrites the full file atomically only while the ticket is in `WAITING_BEADS_APPROVAL`
+- the server also refreshes the approval snapshot, writes `user_edit_receipt:beads`, and clears execution-setup state after updates
 
 So `issues.jsonl` is durable and canonical, but it is not append-only in the event-log sense.
 
@@ -115,10 +116,12 @@ Beads move through a small local lifecycle even while the ticket moves through a
 | --- | --- |
 | `pending` | Planned but not yet started |
 | `in_progress` | Currently selected by the execution loop |
-| `done` | Successfully implemented and accepted by the executor |
-| `error` | Last attempt failed and needs retry or manual recovery |
+| `done` | OpenCode succeeded and local finalization succeeded: changed work was committed, or the bead was a true no-op |
+| `error` | Last attempt or finalization failed and needs retry or manual recovery |
 
 The scheduler decides which `pending` bead becomes active based on dependency satisfaction.
+
+Push failures after a successful local bead commit are warnings, not bead failures. Fatal local finalization errors use `BEAD_FINALIZATION_FAILED`, avoid `bead_complete`, and route the ticket through `BLOCKED_ERROR` so the bead can be retried.
 
 ## Scheduler Rules
 

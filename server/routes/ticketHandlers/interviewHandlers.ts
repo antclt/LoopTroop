@@ -35,6 +35,8 @@ import {
 } from '../../phases/interview/finalDocument'
 import { isBeforeExecution, isStatusAtOrPast } from '@shared/workflowMeta'
 import { getErrorMessage } from '@shared/typeGuards'
+import { contentSha256 } from '../../lib/contentHash'
+import { writeUserEditReceipt } from '../../workflow/artifactEditReceipts'
 import {
   buildRouteStatePayload,
   emitRoutePhaseLog,
@@ -52,6 +54,7 @@ import {
 function buildInterviewPayload(ticketId: string): {
   winnerId: string | null
   raw: string | null
+  contentSha256: string | null
   document: InterviewDocument | null
   session: ReturnType<typeof parseInterviewSessionSnapshot>
   questions: ReturnType<typeof buildInterviewQuestionViews>
@@ -87,6 +90,7 @@ function buildInterviewPayload(ticketId: string): {
     return {
       winnerId: session?.winnerId ?? null,
       raw,
+      contentSha256: raw ? contentSha256(raw) : null,
       document,
       session,
       questions,
@@ -97,6 +101,7 @@ function buildInterviewPayload(ticketId: string): {
     const parsed = parseCompiledInterviewArtifact(artifact.content)
     return {
       raw: raw ?? parsed.refinedContent,
+      contentSha256: contentSha256(raw ?? parsed.refinedContent),
       document,
       winnerId: session?.winnerId ?? parsed.winnerId,
       session,
@@ -105,6 +110,7 @@ function buildInterviewPayload(ticketId: string): {
   } catch {
     return {
       raw: raw ?? artifact.content,
+      contentSha256: contentSha256(raw ?? artifact.content),
       document,
       winnerId: session?.winnerId ?? null,
       session,
@@ -307,6 +313,16 @@ export async function handlePutInterviewAnswers(c: Context) {
     return c.json({ error: 'Invalid interview answer payload', details: parsed.error.flatten() }, 400)
   }
 
+  let beforeRaw: string | null = null
+  let beforeItemCount: number | null = null
+  try {
+    const before = readInterviewDocument(ticketId)
+    beforeRaw = before.raw
+    beforeItemCount = before.document.questions.length
+  } catch {
+    beforeRaw = null
+  }
+
   let document: InterviewDocument
   try {
     document = buildDraftInterviewDocumentFromAnswerUpdates(ticketId, parsed.data.questions)
@@ -318,14 +334,32 @@ export async function handlePutInterviewAnswers(c: Context) {
   }
 
   try {
+    const shouldRestart = ticket.status !== 'WAITING_INTERVIEW_APPROVAL'
+    let restart: Awaited<ReturnType<typeof preparePlanningRestart>> | null = null
+    let result: ReturnType<typeof saveInterviewDocument>
     if (ticket.status !== 'WAITING_INTERVIEW_APPROVAL') {
-      await preparePlanningRestart(ticketId, 'WAITING_INTERVIEW_APPROVAL')
-      saveApprovedInterviewDocument(ticketId, document)
+      restart = await preparePlanningRestart(ticketId, 'WAITING_INTERVIEW_APPROVAL')
+      result = saveApprovedInterviewDocument(ticketId, document)
       emitRoutePhaseLog(ticketId, 'WAITING_INTERVIEW_APPROVAL', 'info', 'Interview edit saved and approved. Restarting PRD planning from the edited interview.')
       sendTicketEvent(ticketId, { type: 'APPROVE' })
     } else {
-      saveInterviewDocument(ticketId, document)
+      result = saveInterviewDocument(ticketId, document)
     }
+    writeUserEditReceipt({
+      ticketId,
+      artifactType: 'interview',
+      phase: 'WAITING_INTERVIEW_APPROVAL',
+      action: shouldRestart ? 'save_and_restart' : 'save',
+      editSurface: 'answers',
+      statusBeforeEdit: ticket.status,
+      statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+      beforeRaw,
+      afterRaw: result.raw,
+      beforeItemCount,
+      afterItemCount: result.document.questions.length,
+      restart,
+      invalidation: result.invalidation,
+    })
     return c.json({
       success: true,
       ...buildInterviewPayload(ticketId),
@@ -353,6 +387,16 @@ export async function handlePutInterview(c: Context) {
     return c.json({ error: 'Invalid interview document payload', details: parsed.error.flatten() }, 400)
   }
 
+  let beforeRaw: string | null = null
+  let beforeItemCount: number | null = null
+  try {
+    const before = readInterviewDocument(ticketId)
+    beforeRaw = before.raw
+    beforeItemCount = before.document.questions.length
+  } catch {
+    beforeRaw = null
+  }
+
   let document: InterviewDocument
   try {
     document = buildDraftInterviewDocumentFromRawContent(ticketId, parsed.data.content)
@@ -364,14 +408,32 @@ export async function handlePutInterview(c: Context) {
   }
 
   try {
+    const shouldRestart = ticket.status !== 'WAITING_INTERVIEW_APPROVAL'
+    let restart: Awaited<ReturnType<typeof preparePlanningRestart>> | null = null
+    let result: ReturnType<typeof saveInterviewDocument>
     if (ticket.status !== 'WAITING_INTERVIEW_APPROVAL') {
-      await preparePlanningRestart(ticketId, 'WAITING_INTERVIEW_APPROVAL')
-      saveApprovedInterviewDocument(ticketId, document)
+      restart = await preparePlanningRestart(ticketId, 'WAITING_INTERVIEW_APPROVAL')
+      result = saveApprovedInterviewDocument(ticketId, document)
       emitRoutePhaseLog(ticketId, 'WAITING_INTERVIEW_APPROVAL', 'info', 'Interview edit saved and approved. Restarting PRD planning from the edited interview.')
       sendTicketEvent(ticketId, { type: 'APPROVE' })
     } else {
-      saveInterviewDocument(ticketId, document)
+      result = saveInterviewDocument(ticketId, document)
     }
+    writeUserEditReceipt({
+      ticketId,
+      artifactType: 'interview',
+      phase: 'WAITING_INTERVIEW_APPROVAL',
+      action: shouldRestart ? 'save_and_restart' : 'save',
+      editSurface: 'raw',
+      statusBeforeEdit: ticket.status,
+      statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+      beforeRaw,
+      afterRaw: result.raw,
+      beforeItemCount,
+      afterItemCount: result.document.questions.length,
+      restart,
+      invalidation: result.invalidation,
+    })
     return c.json({
       success: true,
       ...buildInterviewPayload(ticketId),

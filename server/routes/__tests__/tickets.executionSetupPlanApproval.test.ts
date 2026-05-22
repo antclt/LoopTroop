@@ -14,6 +14,7 @@ import {
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { initializeTicket } from '../../ticket/initialize'
 import { ticketRouter } from '../tickets'
+import { contentSha256 } from '../../lib/contentHash'
 
 function buildPlan(ticketId: string, summary = 'Prepare the workspace runtime.'): Record<string, unknown> {
   return {
@@ -53,6 +54,17 @@ function buildPlan(ticketId: string, summary = 'Prepare the workspace runtime.')
       full_project_fallback: 'never-block-on-unrelated-baseline',
     },
     cautions: ['Repository-native bootstrap may create local dependency caches.'],
+  }
+}
+
+function serializePlan(ticketId: string, summary?: string): string {
+  return JSON.stringify(buildPlan(ticketId, summary), null, 2)
+}
+
+function approvalPayload(raw: string) {
+  return {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedContentSha256: contentSha256(raw) }),
   }
 }
 
@@ -245,7 +257,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
       ticket.id,
       'execution_setup_plan',
       'WAITING_EXECUTION_SETUP_APPROVAL',
-      JSON.stringify(buildPlan(ticket.externalId), null, 2),
+      serializePlan(ticket.externalId),
     )
 
     const response = await app.request(`/api/tickets/${ticket.id}/execution-setup-plan`)
@@ -309,6 +321,22 @@ describe('ticketRouter execution setup plan approval routes', () => {
     expect(payload.plan.summary).toBe('Structured save')
     const stored = getLatestPhaseArtifact(ticket.id, 'execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')
     expect(stored?.content).toContain('Structured save')
+    const receipt = getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(receipt).toBeDefined()
+    const receiptData = JSON.parse(receipt!.content)
+    expect(receiptData).toMatchObject({
+      target_artifact: 'execution_setup_plan',
+      action: 'save',
+      edit_surface: 'structured',
+      before: {
+        sha256: null,
+        item_count: null,
+      },
+      after: {
+        item_count: 1,
+      },
+    })
+    expect(receiptData.after.sha256).toBe(contentSha256(stored!.content))
   })
 
   it('saves a no-op execution setup plan when the workspace is already ready', async () => {
@@ -410,6 +438,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
     const payload = await response.json() as { error: string; details: string }
     expect(payload.error).toBe('Failed to save execution setup plan')
     expect(payload.details).toContain('cannot include setup steps when readiness is ready')
+    expect(getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')).toBeUndefined()
   })
 
   it('regenerates the execution setup plan with commentary (returns immediately, generates in background)', async () => {
@@ -418,7 +447,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
       ticket.id,
       'execution_setup_plan',
       'WAITING_EXECUTION_SETUP_APPROVAL',
-      JSON.stringify(buildPlan(ticket.externalId), null, 2),
+      serializePlan(ticket.externalId),
     )
 
     const response = await app.request(`/api/tickets/${ticket.id}/regenerate-execution-setup-plan`, {
@@ -443,7 +472,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
       ticket.id,
       'execution_setup_plan',
       'WAITING_EXECUTION_SETUP_APPROVAL',
-      JSON.stringify(buildPlan(ticket.externalId, 'Original plan.'), null, 2),
+      serializePlan(ticket.externalId, 'Original plan.'),
     )
 
     const response = await app.request(`/api/tickets/${ticket.id}/regenerate-execution-setup-plan`, {
@@ -477,7 +506,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
       ticket.id,
       'execution_setup_plan',
       'WAITING_EXECUTION_SETUP_APPROVAL',
-      JSON.stringify(buildPlan(ticket.externalId, 'Attempt 1 plan.'), null, 2),
+      serializePlan(ticket.externalId, 'Attempt 1 plan.'),
     )
 
     // Regenerate to archive attempt 1 and start attempt 2
@@ -504,15 +533,17 @@ describe('ticketRouter execution setup plan approval routes', () => {
 
   it('approves the execution setup plan, stamps approval receipt, and advances the ticket', async () => {
     const { app, ticket } = setupExecutionSetupPlanTicket()
+    const raw = serializePlan(ticket.externalId)
     upsertLatestPhaseArtifact(
       ticket.id,
       'execution_setup_plan',
       'WAITING_EXECUTION_SETUP_APPROVAL',
-      JSON.stringify(buildPlan(ticket.externalId), null, 2),
+      raw,
     )
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-execution-setup-plan`, {
       method: 'POST',
+      ...approvalPayload(raw),
     })
 
     expect(response.status).toBe(200)
@@ -526,24 +557,71 @@ describe('ticketRouter execution setup plan approval routes', () => {
     expect(receiptData.approved_by).toBe('user')
     expect(receiptData.step_count).toBe(1)
     expect(receiptData.command_count).toBe(1)
+    expect(receiptData.content_sha256).toBe(contentSha256(raw))
   })
 
   it('dispatches execution setup plan approval through the generic approve route', async () => {
     const { app, ticket } = setupExecutionSetupPlanTicket()
+    const raw = serializePlan(ticket.externalId)
     upsertLatestPhaseArtifact(
       ticket.id,
       'execution_setup_plan',
       'WAITING_EXECUTION_SETUP_APPROVAL',
-      JSON.stringify(buildPlan(ticket.externalId), null, 2),
+      raw,
     )
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve`, {
       method: 'POST',
+      ...approvalPayload(raw),
     })
 
     expect(response.status).toBe(200)
     const payload = await response.json() as { status?: string; message?: string }
     expect(payload.message).toBe('Execution setup plan approved')
     expect(payload.status).toBe('PREPARING_EXECUTION_ENV')
+  })
+
+  it('requires expectedContentSha256 for execution setup plan approval', async () => {
+    const { app, ticket } = setupExecutionSetupPlanTicket()
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      'execution_setup_plan',
+      'WAITING_EXECUTION_SETUP_APPROVAL',
+      serializePlan(ticket.externalId),
+    )
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-execution-setup-plan`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(400)
+    const payload = await response.json() as { error?: string }
+    expect(payload.error).toBe('Invalid approval payload')
+  })
+
+  it('rejects stale execution setup plan approval hashes with 409', async () => {
+    const { app, ticket } = setupExecutionSetupPlanTicket()
+    const raw = serializePlan(ticket.externalId)
+    const expectedContentSha256 = '0'.repeat(64)
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      'execution_setup_plan',
+      'WAITING_EXECUTION_SETUP_APPROVAL',
+      raw,
+    )
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-execution-setup-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedContentSha256 }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'Stale approval',
+      artifactType: 'execution_setup_plan',
+      expectedContentSha256,
+      currentContentSha256: contentSha256(raw),
+    })
   })
 })

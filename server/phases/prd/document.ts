@@ -9,6 +9,8 @@ import { clearExecutionSetupState } from '../executionSetup/storage'
 import { broadcaster } from '../../sse/broadcaster'
 import { getActivePhaseAttempt, getTicketByRef, getTicketContext, getTicketPaths } from '../../storage/tickets'
 import { upsertLatestPhaseArtifact } from '../../storage/ticketArtifacts'
+import { assertExpectedContentSha256 } from '../../lib/artifactApproval'
+import { contentSha256 } from '../../lib/contentHash'
 import { normalizePrdYamlOutput } from '../../structuredOutput'
 import { buildYamlDocument } from '../../structuredOutput/yamlUtils'
 import { phaseIntermediate } from '../../workflow/phases/state'
@@ -76,15 +78,25 @@ function normalizePrdDocumentForTicket(ticketId: string, rawContent: string): Pr
   }
 }
 
-export function writePrdDocument(ticketId: string, document: PrdDocument): string {
+export function writePrdDocument(
+  ticketId: string,
+  document: PrdDocument,
+  options?: {
+    approvalSnapshotRaw?: string
+  },
+): string {
   const prdPath = getPrdPath(ticketId)
   const nextRaw = buildYamlDocument(document)
   safeAtomicWrite(prdPath, nextRaw)
+  const snapshotRaw = options?.approvalSnapshotRaw ?? nextRaw
   upsertLatestPhaseArtifact(
     ticketId,
     PRD_APPROVAL_SNAPSHOT_ARTIFACT,
     'WAITING_PRD_APPROVAL',
-    JSON.stringify({ raw: nextRaw }),
+    JSON.stringify({
+      raw: snapshotRaw,
+      content_sha256: contentSha256(snapshotRaw),
+    }),
   )
   return nextRaw
 }
@@ -138,19 +150,49 @@ export function toDraftPrdDocument(document: PrdDocument): PrdDocument {
   }
 }
 
-export function approvePrdDocument(ticketId: string): {
+export function approvePrdDocument(ticketId: string, expectedContentSha256: string): {
   raw: string
   document: PrdDocument
+  contentSha256: string
+  storedContentSha256: string
 } {
   const current = readPrdDocument(ticketId)
-  const document = buildApprovedPrdDocument(current.document, nowIso())
-  const raw = writePrdDocument(ticketId, document)
-  return { raw, document }
+  const reviewedContentSha256 = assertExpectedContentSha256({
+    artifactType: 'prd',
+    currentContent: current.raw,
+    expectedContentSha256,
+  })
+  const approvedAt = nowIso()
+  const document = buildApprovedPrdDocument(current.document, approvedAt)
+  const raw = writePrdDocument(ticketId, document, {
+    approvalSnapshotRaw: current.raw,
+  })
+  const storedContentSha256 = contentSha256(raw)
+  upsertLatestPhaseArtifact(
+    ticketId,
+    'approval_receipt',
+    'WAITING_PRD_APPROVAL',
+    JSON.stringify({
+      approved_by: 'user',
+      approved_at: approvedAt,
+      artifact_type: 'prd',
+      phase: 'WAITING_PRD_APPROVAL',
+      content_sha256: reviewedContentSha256,
+      stored_content_sha256: storedContentSha256,
+    }),
+  )
+  return {
+    raw,
+    document,
+    contentSha256: reviewedContentSha256,
+    storedContentSha256,
+  }
 }
 
 export function invalidateDownstreamBeadsArtifacts(ticketId: string): {
   removedArtifacts: number
   removedFiles: string[]
+  invalidatedPhases: string[]
 } {
   const ticketContext = getTicketContext(ticketId)
   if (!ticketContext) {
@@ -210,7 +252,11 @@ export function invalidateDownstreamBeadsArtifacts(ticketId: string): {
     })
   }
 
-  return { removedArtifacts, removedFiles }
+  return {
+    removedArtifacts,
+    removedFiles,
+    invalidatedPhases: [...BEADS_DOWNSTREAM_PHASES],
+  }
 }
 
 export function savePrdRawContent(
@@ -219,7 +265,7 @@ export function savePrdRawContent(
 ): {
   raw: string
   document: PrdDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   return savePrdDocument(ticketId, buildDraftPrdDocumentFromRawContent(ticketId, rawContent))
 }
@@ -230,7 +276,7 @@ export function savePrdStructuredContent(
 ): {
   raw: string
   document: PrdDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   return savePrdDocument(ticketId, buildDraftPrdDocumentFromStructuredContent(ticketId, document))
 }
@@ -241,7 +287,7 @@ export function savePrdDocument(
 ): {
   raw: string
   document: PrdDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   const raw = writePrdDocument(ticketId, document)
   const invalidation = invalidateDownstreamBeadsArtifacts(ticketId)
@@ -254,7 +300,7 @@ export function saveApprovedPrdDocument(
 ): {
   raw: string
   document: PrdDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   return savePrdDocument(ticketId, buildApprovedPrdDocument(document, nowIso()))
 }

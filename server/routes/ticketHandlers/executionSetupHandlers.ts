@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import { getTicketByRef } from '../../storage/tickets'
+import { ArchivedArtifactWriteError, assertCurrentEditablePhaseAttempt } from '../../storage/ticketPhaseAttempts'
 import {
   readExecutionSetupPlan,
   saveExecutionSetupPlan,
@@ -8,6 +9,7 @@ import {
 import { regenerateExecutionSetupPlanDraft } from '../../workflow/phases/executionSetupPlanPhase'
 import { normalizeExecutionSetupPlanOutput } from '../../structuredOutput'
 import { getErrorMessage } from '@shared/typeGuards'
+import { writeUserEditReceipt } from '../../workflow/artifactEditReceipts'
 import {
   emitRoutePhaseLog,
   getMachineContext,
@@ -19,6 +21,10 @@ import {
   regenerateExecutionSetupPlanSchema,
   structuredExecutionSetupPlanSaveSchema,
 } from './schemas'
+
+function countPlanCommands(plan: { steps: Array<{ commands: unknown[] }> } | null): number | null {
+  return plan ? plan.steps.reduce((sum, step) => sum + step.commands.length, 0) : null
+}
 
 export function handleGetExecutionSetupPlan(c: Context) {
   const ticketId = getTicketParam(c)
@@ -34,6 +40,7 @@ export function handleGetExecutionSetupPlan(c: Context) {
       artifactId: current.artifactId,
       updatedAt: current.updatedAt,
       raw: current.raw,
+      contentSha256: current.contentSha256,
       plan: current.plan,
     })
   } catch (err) {
@@ -51,13 +58,60 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   if (ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for execution setup plan approval' }, 409)
   }
+  const phaseAttemptParam = c.req.query('phaseAttempt')
+  if (phaseAttemptParam != null) {
+    const phaseAttempt = Number(phaseAttemptParam)
+    if (!Number.isFinite(phaseAttempt) || phaseAttempt <= 0) {
+      return c.json({ error: 'Invalid phaseAttempt parameter: must be a positive number' }, 400)
+    }
+    try {
+      assertCurrentEditablePhaseAttempt({
+        ticketId,
+        phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+        requestedPhaseAttempt: phaseAttempt,
+      })
+    } catch (err) {
+      if (err instanceof ArchivedArtifactWriteError) {
+        return c.json({
+          error: 'Archived artifact versions are read-only',
+          phase: err.phase,
+          requestedPhaseAttempt: err.requestedPhaseAttempt,
+          activePhaseAttempt: err.activePhaseAttempt,
+        }, 409)
+      }
+      throw err
+    }
+  }
+
+  let beforeRaw: string | null = null
+  let beforeCommandCount: number | null = null
+  try {
+    const before = readExecutionSetupPlan(ticketId)
+    beforeRaw = before.raw
+    beforeCommandCount = countPlanCommands(before.plan)
+  } catch {
+    beforeRaw = null
+  }
 
   const body = await c.req.json().catch(() => ({}))
   const rawParsed = rawExecutionSetupPlanSaveSchema.safeParse(body)
   if (rawParsed.success) {
     try {
-      const { raw, plan } = saveExecutionSetupPlanRawContent(ticketId, rawParsed.data.content)
-      return c.json({ success: true, raw, plan })
+      const { raw, contentSha256, plan } = saveExecutionSetupPlanRawContent(ticketId, rawParsed.data.content)
+      writeUserEditReceipt({
+        ticketId,
+        artifactType: 'execution_setup_plan',
+        phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+        action: 'save',
+        editSurface: 'raw',
+        statusBeforeEdit: ticket.status,
+        statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+        beforeRaw,
+        afterRaw: raw,
+        beforeItemCount: beforeCommandCount,
+        afterItemCount: countPlanCommands(plan),
+      })
+      return c.json({ success: true, raw, contentSha256, plan })
     } catch (err) {
       return c.json({
         error: 'Failed to save execution setup plan',
@@ -72,8 +126,21 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   }
 
   try {
-    const { raw, plan } = saveExecutionSetupPlan(ticketId, structuredParsed.data.plan)
-    return c.json({ success: true, raw, plan })
+    const { raw, contentSha256, plan } = saveExecutionSetupPlan(ticketId, structuredParsed.data.plan)
+    writeUserEditReceipt({
+      ticketId,
+      artifactType: 'execution_setup_plan',
+      phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      action: 'save',
+      editSurface: 'structured',
+      statusBeforeEdit: ticket.status,
+      statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+      beforeRaw,
+      afterRaw: raw,
+      beforeItemCount: beforeCommandCount,
+      afterItemCount: countPlanCommands(plan),
+    })
+    return c.json({ success: true, raw, contentSha256, plan })
   } catch (err) {
     return c.json({
       error: 'Failed to save execution setup plan',

@@ -216,6 +216,7 @@ describe('ExecutionSetupPlanApprovalPane', () => {
           new Response(JSON.stringify({
             exists: true,
             raw: buildRawPlan(),
+            contentSha256: 'a'.repeat(64),
             plan: buildPlan(),
             updatedAt: '2026-03-25T10:15:00.000Z',
           }), {
@@ -230,6 +231,7 @@ describe('ExecutionSetupPlanApprovalPane', () => {
           new Response(JSON.stringify({
             exists: true,
             raw: buildRawPlan('Archived rejected draft.'),
+            contentSha256: 'b'.repeat(64),
             plan: buildPlan('Archived rejected draft.'),
             updatedAt: '2026-03-25T10:05:00.000Z',
           }), {
@@ -244,6 +246,7 @@ describe('ExecutionSetupPlanApprovalPane', () => {
           new Response(JSON.stringify({
             success: true,
             raw: buildRawPlan('Regenerated plan summary.'),
+            contentSha256: 'c'.repeat(64),
             plan: buildPlan('Regenerated plan summary.'),
           }), {
             status: 200,

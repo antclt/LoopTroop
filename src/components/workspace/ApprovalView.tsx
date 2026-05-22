@@ -47,6 +47,11 @@ interface BeadsApprovalUiState {
   structuredDraft?: ParsedBead[]
 }
 
+interface BeadsArtifactResponse {
+  beads: unknown[]
+  contentSha256: string | null
+}
+
 function beadsArrayToJsonl(beads: unknown[]): string {
   return beads.map((b) => JSON.stringify(b)).join('\n') + '\n'
 }
@@ -145,17 +150,24 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
 
   // Cache stores array form (matching navigator expectations)
   const { data: fetchedBeads, isLoading } = useQuery({
-    queryKey: ['artifact', ticket.id, 'beads'],
+    queryKey: ['artifact', ticket.id, 'beads', 'approval'],
     queryFn: async () => {
       const r = await fetch(`/api/tickets/${ticket.id}/beads`)
       if (!r.ok) throw new Error('Failed to load')
+      const contentSha256 = typeof r.headers?.get === 'function'
+        ? r.headers.get('X-Content-Sha256')
+        : null
       const data = await r.json()
-      return Array.isArray(data) ? data as unknown[] : []
+      return {
+        beads: Array.isArray(data) ? data as unknown[] : [],
+        contentSha256,
+      } satisfies BeadsArtifactResponse
     },
     staleTime: QUERY_STALE_TIME_5M,
   })
 
-  const beadsArray = useMemo(() => fetchedBeads ?? [], [fetchedBeads])
+  const beadsArray = useMemo(() => fetchedBeads?.beads ?? [], [fetchedBeads])
+  const currentContentSha256 = fetchedBeads?.contentSha256 ?? null
   const rawJsonl = useMemo(() => beadsArray.length > 0 ? beadsArrayToJsonl(beadsArray) : '', [beadsArray])
 
   const [isEditMode, setIsEditMode] = useState(false)
@@ -277,7 +289,15 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
       }
 
       // Update cache with the saved array (API returns { success: true })
+      const nextContentSha256 = typeof response.headers?.get === 'function'
+        ? response.headers.get('X-Content-Sha256')
+        : null
+      queryClient.setQueryData(['artifact', ticket.id, 'beads', 'approval'], {
+        beads: beadsToSave,
+        contentSha256: nextContentSha256,
+      } satisfies BeadsArtifactResponse)
       queryClient.setQueryData(['artifact', ticket.id, 'beads'], beadsToSave)
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'beads', 'approval'] })
       queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'beads'] })
       queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
       clearTicketArtifactsCache(ticket.id)
@@ -298,6 +318,8 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
     try {
       const response = await fetch(`/api/tickets/${ticket.id}/approve-beads`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedContentSha256: currentContentSha256 }),
       })
       const payload = await response.json().catch(() => ({})) as { error?: string; details?: string }
       if (!response.ok) {
@@ -306,6 +328,7 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
 
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
       queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'beads', 'approval'] })
       queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'beads'] })
       clearTicketArtifactsCache(ticket.id)
       setIsEditMode(false)
@@ -315,7 +338,7 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
     } finally {
       setIsApproving(false)
     }
-  }, [ticket.id, queryClient])
+  }, [currentContentSha256, ticket.id, queryClient])
 
   function requestTabChange(nextTab: EditTab) {
     if (nextTab === editTab) return
@@ -389,7 +412,7 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
           <Button
             size="sm"
             onClick={handleApprove}
-            disabled={isApproving || isSaving || (isEditMode && hasUnsavedChanges) || beadsArray.length === 0 || ticket.status !== 'WAITING_BEADS_APPROVAL'}
+            disabled={isApproving || isSaving || (isEditMode && hasUnsavedChanges) || beadsArray.length === 0 || !currentContentSha256 || ticket.status !== 'WAITING_BEADS_APPROVAL'}
             className="text-xs shrink-0"
           >
             {isApproving ? 'Approving…' : 'Approve'}

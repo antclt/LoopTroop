@@ -65,7 +65,7 @@ vi.mock('../../sse/broadcaster', () => ({
   SSEBroadcaster: class {},
 }))
 
-import { handleCoding } from '../phases/executionPhase'
+import { handleCoding, recoverSuccessfulExecutionCheckpointForFinalization } from '../phases/executionPhase'
 
 const repoManager = createTestRepoManager('execution-phase-')
 
@@ -834,7 +834,7 @@ describe('handleCoding', () => {
 
   // --- Git error recovery ---
 
-  it('marks bead done and sends completion event even when commitBeadChanges throws', async () => {
+  it('keeps the bead retryable and blocks progress when finalization throws', async () => {
     commitBeadChangesMock.mockImplementation(() => {
       throw new Error('git commit failed')
     })
@@ -854,9 +854,129 @@ describe('handleCoding', () => {
 
     await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
 
-    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'BEAD_ERROR',
+      codes: ['BEAD_FINALIZATION_FAILED'],
+    }))
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'BEAD_COMPLETE' })
+    expect(broadcastMock).not.toHaveBeenCalledWith(expect.anything(), 'bead_complete', expect.anything())
+    expect(captureBeadDiffMock).not.toHaveBeenCalled()
     const finalBeads = readTicketBeads(ticket.id)
-    expect(finalBeads.find((b) => b.id === 'bead-1')?.status).toBe('done')
+    const failedBead = finalBeads.find((b) => b.id === 'bead-1')
+    expect(failedBead?.status).toBe('error')
+    expect(failedBead?.notes).toContain('Finalization failed after successful implementation: git commit failed')
+  })
+
+  it('keeps the bead retryable and blocks progress when local commit returns an error', async () => {
+    commitBeadChangesMock.mockReturnValue({ committed: false, pushed: false, error: 'git add failed: permission denied' })
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'commitBeadChanges returns error',
+    })
+    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1)])
+    const sendEvent = vi.fn()
+
+    executeBeadMock.mockResolvedValueOnce({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 1,
+      output: 'done',
+      errors: [],
+    })
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'BEAD_ERROR',
+      codes: ['BEAD_FINALIZATION_FAILED'],
+    }))
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(broadcastMock).not.toHaveBeenCalledWith(expect.anything(), 'bead_complete', expect.anything())
+    expect(readTicketBeads(ticket.id).find((b) => b.id === 'bead-1')?.status).toBe('error')
+  })
+
+  it('marks the bead done when finalization is a true no-op', async () => {
+    commitBeadChangesMock.mockReturnValue({ committed: false, pushed: false })
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'No-op finalization',
+    })
+    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1)])
+    const sendEvent = vi.fn()
+
+    executeBeadMock.mockResolvedValueOnce({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 1,
+      output: 'done',
+      errors: [],
+    })
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(readTicketBeads(ticket.id).find((b) => b.id === 'bead-1')?.status).toBe('done')
+  })
+
+  it('treats push failure as a warning after successful local commit', async () => {
+    commitBeadChangesMock.mockReturnValue({ committed: true, pushed: false, error: 'remote rejected push' })
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Push warning finalization',
+    })
+    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1)])
+    const sendEvent = vi.fn()
+
+    executeBeadMock.mockResolvedValueOnce({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 1,
+      output: 'done',
+      errors: [],
+    })
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(sendEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'BEAD_ERROR' }))
+    expect(readTicketBeads(ticket.id).find((b) => b.id === 'bead-1')?.status).toBe('done')
+  })
+
+  it('re-finalizes a successful execution checkpoint after a finalization retry without resetting work', async () => {
+    commitBeadChangesMock.mockReturnValue({ committed: false, pushed: false })
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Re-finalize checkpoint',
+    })
+    const failedFinalizationBead = makePendingBead('bead-1', 1, {
+      status: 'error',
+      startedAt: '2026-01-01T00:01:00.000Z',
+      updatedAt: '2026-01-01T00:02:00.000Z',
+      beadStartCommit: 'start-sha',
+    })
+    writeTicketBeads(ticket.id, [failedFinalizationBead])
+    upsertLatestPhaseArtifact(ticket.id, 'bead_execution:bead-1', 'CODING', JSON.stringify({
+      success: true,
+      beadId: 'bead-1',
+      iteration: 1,
+      output: 'checkpointed success',
+      errors: [],
+      checkpoint: {
+        beadId: failedFinalizationBead.id,
+        iteration: failedFinalizationBead.iteration,
+        startedAt: failedFinalizationBead.startedAt,
+        updatedAt: failedFinalizationBead.updatedAt,
+        beadStartCommit: failedFinalizationBead.beadStartCommit,
+      },
+    }))
+    const sendEvent = vi.fn()
+
+    const recovered = recoverSuccessfulExecutionCheckpointForFinalization(ticket.id)
+    expect(recovered?.status).toBe('in_progress')
+
+    await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(executeBeadMock).not.toHaveBeenCalled()
+    expect(resetToBeadStartMock).not.toHaveBeenCalled()
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
+    expect(readTicketBeads(ticket.id).find((b) => b.id === 'bead-1')?.status).toBe('done')
   })
 
   it('requeues the latest failed bead for retry without clearing notes or iteration', () => {

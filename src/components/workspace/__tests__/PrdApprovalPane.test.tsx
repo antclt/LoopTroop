@@ -8,6 +8,8 @@ import { PrdApprovalPane } from '../PrdApprovalPane'
 const mockSaveUiState = vi.fn()
 const mockClearTicketArtifactsCache = vi.fn()
 const mockUseTicketArtifacts = vi.fn()
+const INITIAL_CONTENT_HASH = 'a'.repeat(64)
+const SAVED_CONTENT_HASH = 'b'.repeat(64)
 
 vi.mock('@/hooks/useTickets', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTickets')>('@/hooks/useTickets')
@@ -16,7 +18,7 @@ vi.mock('@/hooks/useTickets', async () => {
     useTicketUIState: () => ({
       data: { scope: 'approval_prd', exists: false, data: null, updatedAt: null },
     }),
-    useSaveTicketUIState: () => ({ mutate: mockSaveUiState }),
+    useSaveTicketUIState: () => ({ mutate: mockSaveUiState, mutateAsync: mockSaveUiState }),
   }
 })
 
@@ -76,9 +78,11 @@ vi.mock('../CollapsiblePhaseLogSection', () => ({
 
 describe('PrdApprovalPane', () => {
   let currentContent = buildPrdDocumentYaml(makePrdDocument())
+  let currentContentSha256 = INITIAL_CONTENT_HASH
 
   beforeEach(() => {
     currentContent = buildPrdDocumentYaml(makePrdDocument())
+    currentContentSha256 = INITIAL_CONTENT_HASH
     mockSaveUiState.mockReset()
     mockClearTicketArtifactsCache.mockReset()
     mockUseTicketArtifacts.mockReset()
@@ -89,7 +93,7 @@ describe('PrdApprovalPane', () => {
 
       if (url === `/api/files/${TEST.ticketId}/prd` && (!init || init.method === 'GET')) {
         return Promise.resolve(
-          new Response(JSON.stringify({ content: currentContent }), {
+          new Response(JSON.stringify({ content: currentContent, contentSha256: currentContentSha256 }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
@@ -99,8 +103,9 @@ describe('PrdApprovalPane', () => {
       if (url === `/api/files/${TEST.ticketId}/prd` && init?.method === 'PUT') {
         const body = JSON.parse(String(init.body)) as { content?: string; document?: ReturnType<typeof makePrdDocument> }
         currentContent = body.document ? buildPrdDocumentYaml(body.document) : body.content ?? currentContent
+        currentContentSha256 = SAVED_CONTENT_HASH
         return Promise.resolve(
-          new Response(JSON.stringify({ content: currentContent }), {
+          new Response(JSON.stringify({ content: currentContent, contentSha256: currentContentSha256 }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
@@ -293,7 +298,10 @@ describe('PrdApprovalPane', () => {
     await waitFor(() => {
       expect(globalThis.fetch).toHaveBeenCalledWith(
         `/api/tickets/${TEST.ticketId}/approve-prd`,
-        expect.objectContaining({ method: 'POST' }),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ expectedContentSha256: SAVED_CONTENT_HASH }),
+        }),
       )
     })
   })

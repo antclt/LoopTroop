@@ -31,6 +31,7 @@ type DiscardTarget = { type: 'close' } | { type: 'switch-tab'; tab: EditTab } | 
 interface ExecutionSetupPlanApprovalResponse {
   exists: boolean
   raw: string | null
+  contentSha256?: string | null
   plan: ExecutionSetupPlan | null
   updatedAt: string | null
 }
@@ -234,6 +235,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
   })
 
   const rawContent = fetchedPlan?.raw ?? ''
+  const currentContentSha256 = fetchedPlan?.contentSha256 ?? null
   const plan = fetchedPlan?.plan ?? null
   const isPlanGenerating = ticket.status === 'WAITING_EXECUTION_SETUP_APPROVAL' && !plan && (isLoading || isFetching || !fetchedPlan?.exists)
   const executionSetupPlanReportContent = useMemo(() => {
@@ -364,7 +366,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
             : { content: rawDraft },
         ),
       })
-      const payload = await response.json() as { raw?: string; plan?: ExecutionSetupPlan; error?: string; details?: string }
+      const payload = await response.json() as { raw?: string; contentSha256?: string | null; plan?: ExecutionSetupPlan; error?: string; details?: string }
       if (!response.ok) {
         throw new Error(payload.details || payload.error || 'Failed to save execution setup plan')
       }
@@ -372,6 +374,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
       const nextData: ExecutionSetupPlanApprovalResponse = {
         exists: Boolean(payload.plan),
         raw: payload.raw ?? rawDraft,
+        contentSha256: payload.contentSha256 ?? null,
         plan: payload.plan ?? structuredDraft ?? null,
         updatedAt: new Date().toISOString(),
       }
@@ -436,6 +439,8 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
     try {
       const response = await fetch(`/api/tickets/${ticket.id}/approve-execution-setup-plan`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedContentSha256: currentContentSha256 }),
       })
       const payload = await response.json() as { error?: string; details?: string }
       if (!response.ok) {
@@ -602,7 +607,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
               <Button
                 size="sm"
                 onClick={handleApprove}
-                disabled={isApproving || isSaving || isRegenerating || (isEditMode && hasUnsavedChanges) || !plan || ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL'}
+                disabled={isApproving || isSaving || isRegenerating || (isEditMode && hasUnsavedChanges) || !plan || !currentContentSha256 || ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL'}
                 className="text-xs shrink-0"
               >
                 {isApproving ? 'Approving…' : 'Approve'}

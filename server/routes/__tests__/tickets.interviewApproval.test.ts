@@ -22,6 +22,7 @@ import { buildInterviewDocumentYaml } from '../../structuredOutput'
 import { ticketRouter } from '../tickets'
 import { buildInterviewDocument } from '../../test/factories'
 import type { InterviewDocument } from '@shared/interviewArtifact'
+import { contentSha256 } from '../../lib/contentHash'
 
 vi.mock('../../machines/persistence', async () => {
   const storage = await import('../../storage/tickets')
@@ -97,6 +98,13 @@ function setupApprovalTicket() {
   return { app, ticket, paths, document, raw }
 }
 
+function approvalPayload(raw: string) {
+  return {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedContentSha256: contentSha256(raw) }),
+  }
+}
+
 describe('ticketRouter interview approval routes', () => {
   beforeEach(() => {
     clearProjectDatabaseCache()
@@ -109,8 +117,8 @@ describe('ticketRouter interview approval routes', () => {
     repoManager.cleanup()
   })
 
-  it('saves answer-only edits, rewrites canonical YAML, and clears downstream planning artifacts', async () => {
-    const { app, ticket, paths } = setupApprovalTicket()
+  it('saves answer-only edits, rewrites canonical YAML, writes an edit receipt, and clears downstream planning artifacts', async () => {
+    const { app, ticket, paths, raw } = setupApprovalTicket()
 
     safeAtomicWrite(`${paths.ticketDir}/prd.yaml`, 'artifact: prd\n')
     upsertLatestPhaseArtifact(ticket.id, 'prd', 'WAITING_PRD_APPROVAL', 'artifact: prd\n')
@@ -162,6 +170,27 @@ describe('ticketRouter interview approval routes', () => {
     expect(existsSync(`${paths.ticketDir}/prd.yaml`)).toBe(false)
     expect(getLatestPhaseArtifact(ticket.id, 'prd', 'WAITING_PRD_APPROVAL')).toBeUndefined()
     expect(getLatestPhaseArtifact(ticket.id, 'ui_state:approval_prd', 'UI_STATE')).toBeUndefined()
+
+    const receipt = getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:interview', 'WAITING_INTERVIEW_APPROVAL')
+    expect(receipt).toBeDefined()
+    const receiptData = JSON.parse(receipt!.content)
+    expect(receiptData).toMatchObject({
+      target_artifact: 'interview',
+      action: 'save',
+      edit_surface: 'answers',
+      before: {
+        sha256: contentSha256(raw),
+        item_count: 2,
+      },
+      after: {
+        sha256: contentSha256(savedRaw),
+        item_count: 2,
+      },
+      invalidation: {
+        removed_artifacts: 2,
+      },
+    })
+    expect(receiptData.invalidation.invalidated_phases).toContain('WAITING_PRD_APPROVAL')
   })
 
   it('archives approval and PRD attempts, clears stale PRD state, approves the edit, and starts PRD drafting', async () => {
@@ -355,6 +384,7 @@ describe('ticketRouter interview approval routes', () => {
     expect(response.status).toBe(400)
     const savedRaw = readFileSync(`${paths.ticketDir}/interview.yaml`, 'utf-8')
     expect(savedRaw).toBe(raw)
+    expect(getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:interview', 'WAITING_INTERVIEW_APPROVAL')).toBeUndefined()
   })
 
   it('validates raw interview YAML, canonicalizes it, and forces draft status', async () => {
@@ -444,10 +474,11 @@ describe('ticketRouter interview approval routes', () => {
   })
 
   it('approves the interview, stamps approval metadata, and advances the ticket', async () => {
-    const { app, ticket, paths } = setupApprovalTicket()
+    const { app, ticket, paths, raw } = setupApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-interview`, {
       method: 'POST',
+      ...approvalPayload(raw),
     })
 
     expect(response.status).toBe(200)
@@ -459,5 +490,42 @@ describe('ticketRouter interview approval routes', () => {
     expect(savedRaw).toContain('status: approved')
     expect(savedRaw).toContain('approved_by: user')
     expect(savedRaw).toMatch(/approved_at: .+/)
+
+    const receipt = getLatestPhaseArtifact(ticket.id, 'approval_receipt', 'WAITING_INTERVIEW_APPROVAL')
+    expect(receipt).toBeDefined()
+    const receiptData = JSON.parse(receipt!.content)
+    expect(receiptData.content_sha256).toBe(contentSha256(raw))
+    expect(receiptData.stored_content_sha256).toBe(contentSha256(savedRaw))
+  })
+
+  it('requires expectedContentSha256 for interview approval', async () => {
+    const { app, ticket } = setupApprovalTicket()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-interview`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(400)
+    const payload = await response.json() as { error?: string }
+    expect(payload.error).toBe('Invalid approval payload')
+  })
+
+  it('rejects stale interview approval hashes with 409', async () => {
+    const { app, ticket, raw } = setupApprovalTicket()
+    const expectedContentSha256 = '0'.repeat(64)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-interview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedContentSha256 }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'Stale approval',
+      artifactType: 'interview',
+      expectedContentSha256,
+      currentContentSha256: contentSha256(raw),
+    })
   })
 })

@@ -26,6 +26,12 @@ const DEFAULT_TICKET_RUNTIME: TicketRuntime = {
   prHeadSha: null,
 }
 
+const DEFAULT_CLEANUP_SUMMARY: NonNullable<Ticket['cleanup']> = {
+  status: null,
+  errorCount: 0,
+  latestReportArtifactId: null,
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
@@ -118,10 +124,18 @@ export function getTicketAvailableActions(ticket: Ticket): Ticket['availableActi
 }
 
 export function normalizeTicketForRender(ticket: Ticket): Ticket {
+  const cleanup = isRecord((ticket as unknown as Record<string, unknown>).cleanup)
+    ? (ticket as unknown as { cleanup?: Ticket['cleanup'] }).cleanup
+    : null
   return {
     ...ticket,
     runtime: getTicketRuntime(ticket),
     lockedCouncilMembers: getTicketCouncilMembers(ticket),
     availableActions: getTicketAvailableActions(ticket),
+    cleanup: {
+      status: cleanup?.status === 'clean' || cleanup?.status === 'warning' ? cleanup.status : null,
+      errorCount: numberOrFallback(cleanup?.errorCount, DEFAULT_CLEANUP_SUMMARY.errorCount),
+      latestReportArtifactId: nullableNumber(cleanup?.latestReportArtifactId),
+    },
   }
 }

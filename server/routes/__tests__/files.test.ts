@@ -214,6 +214,7 @@ describe('cleanupTicketResources', () => {
 
     const report = cleanupTicketResources(ticket.id)
 
+    expect(report.status).toBe('clean')
     expect(report.errors).toEqual([])
     expect(report.preservedPaths).toContain(paths.executionLogPath)
     expect(report.preservedPaths).toContain(paths.debugLogPath)
@@ -221,5 +222,12 @@ describe('cleanupTicketResources', () => {
     expect(existsSync(paths.executionLogPath)).toBe(true)
     expect(existsSync(paths.debugLogPath)).toBe(true)
     expect(existsSync(paths.aiLogPath)).toBe(true)
+  })
+
+  it('marks cleanup reports as warning when cleanup cannot find ticket resources', () => {
+    const report = cleanupTicketResources('missing-ticket')
+
+    expect(report.status).toBe('warning')
+    expect(report.errors).toEqual(['Ticket directory not found'])
   })
 })

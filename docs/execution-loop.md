@@ -31,8 +31,8 @@ For each bead:
 3. Start or reattach to the owned OpenCode session for that bead iteration; new session creation uses the shared 1s/3s/7s retry wrapper before the bead attempt is considered blocked.
 4. Prompt the model with the coding template and the narrow execution context, while watching OpenCode retry status events for provider-side retry loops.
 5. Require structured completion markers so the system can tell whether the attempt really finished.
-6. Capture logs, diff artifacts, and status updates.
-7. Mark the bead done, or generate a retry path if the attempt failed.
+6. Persist the execution checkpoint, then finalize the local work.
+7. Mark the bead done only after local finalization succeeds, or generate a retry/blocking path if execution or finalization fails.
 
 ## Structured Completion Matters
 
@@ -55,9 +55,11 @@ When a bead attempt fails, LoopTroop does not keep extending the same degraded t
 ```mermaid
 flowchart TD
     A[Run bead attempt] --> B{Structured success?}
-    B -- yes --> C[Capture diff and mark bead done]
-    B -- no --> D[Generate context wipe note]
-    D --> E[Reset worktree to bead start commit]
+    B -- yes --> C{Local finalization OK?}
+    C -- yes --> S[Mark bead done and capture diff]
+    C -- no --> H[Enter BLOCKED_ERROR]
+    B -- no --> N[Generate context wipe note]
+    N --> E[Reset worktree to bead start commit]
     E --> F{Retry budget left?}
     F -- yes --> G[Fresh session, next iteration]
     G --> A
@@ -113,7 +115,7 @@ Execution happens inside the ticket worktree, not the attached project root.
 Important `gitOps.ts` behavior:
 
 - diffs are captured without `.ticket/**`
-- bead commit creation is best-effort
+- local bead commits are required when code changes exist; true no-op completions may finish without a commit, and remote push failures are warnings after a successful local commit
 - resets can hard-reset and clean the worktree back to the bead start snapshot
 - resets preserve LoopTroop-owned `.ticket` state, including beads, PRD, relevant files, approvals, metadata, UI companions, and logs
 - runtime directories like `.ticket/runtime`, `.ticket/locks`, `.ticket/streams`, `.ticket/sessions`, `.ticket/tmp`, `node_modules`, `.looptroop`, `dist`, and `build` are blocked from normal change capture
@@ -140,11 +142,15 @@ That means dependencies are enforced outside the model. The model implements the
 
 A successful bead execution typically does all of the following:
 
-- updates bead status
+- persists a `bead_execution:{beadId}` checkpoint
+- creates the local bead commit when changes exist, or records a true no-op completion
+- updates bead status to `done` only after local finalization succeeds
 - persists logs
 - captures a bead diff artifact
 - advances runtime progress
 - hands control back to the scheduler
+
+If local commit/finalization fails after OpenCode reported success, LoopTroop does not broadcast `bead_complete` and does not mark the bead done. It sends `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED`, keeps the bead retryable, and routes the ticket to `BLOCKED_ERROR`. A push failure after a successful local commit is visible as a warning but does not undo the completed bead.
 
 Once all beads are complete, the workflow moves to final testing and then PR delivery.
 
@@ -165,6 +171,7 @@ Execution recovery is intentionally stricter after process or OpenCode interrupt
 - an interrupted bead is not treated as successful just because the model session might have continued somewhere else
 - model sessions are owned by ticket, phase, phase attempt, bead, and iteration before they are reused
 - without a valid `bead_execution` checkpoint, the worktree must reset to the bead-start commit before a failed or interrupted coding retry can run
+- a current successful checkpoint can be re-finalized without resetting away uncommitted successful work
 - missing reset metadata keeps the ticket blocked so the user can inspect the partial state manually
 
 ## Execution Configuration Controls

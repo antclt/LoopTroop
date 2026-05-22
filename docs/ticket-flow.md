@@ -196,7 +196,7 @@ flowchart TB
 | Status set | Available actions | Notes |
 | --- | --- | --- |
 | `DRAFT` | `start`, `cancel` | `start` locks model configuration and initializes the ticket workspace. |
-| `WAITING_INTERVIEW_APPROVAL`, `WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL` | `approve`, `cancel` | The generic approve route dispatches to the phase-specific approval handler. |
+| `WAITING_INTERVIEW_APPROVAL`, `WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL` | `approve`, `cancel` | The generic approve route dispatches to the phase-specific approval handler. Approval requests must include `expectedContentSha256`; stale hashes return `409` and leave the gate paused. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | `merge` is also exposed through `/verify` as an alias during the transition period. |
 | `BLOCKED_ERROR` | `retry`, conditional `continue`, `cancel` | `retry` archives the failed active phase attempt for every non-implementation `previousStatus`, creates a fresh active attempt, then re-enters that exact status. `CODING` keeps bead-scoped retry recovery except for continuable OpenCode retry-budget blocks that preserve the active session. `continue` appears only for resumable OpenCode/provider interruptions with a matching active preserved session and sends exactly `continue please` into that same session. |
 | Most active phases | `cancel` | Active work can be stopped from planning, execution, or review phases. |
@@ -205,6 +205,7 @@ flowchart TB
 Two extra guards matter at the user-action layer:
 
 - `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL`, and execution-band retries check for project-level execution-band conflicts before they advance.
+- Approval gates compare the submitted `expectedContentSha256` against the current canonical artifact bytes before writing approval receipts.
 - `BLOCKED_ERROR` retry from `CODING` first tries to restore the failed bead into a retryable state before it re-enters `CODING`.
 - `BLOCKED_ERROR` retry from a non-implementation phase archives the failed version with `manual_retry_after_blocked_error` and writes the rerun into the next phase attempt.
 - `BLOCKED_ERROR` retry is rejected when no preserved `previousStatus` exists.
@@ -219,12 +220,13 @@ Two extra guards matter at the user-action layer:
 | Workflow state | durable ticket status plus serialized XState snapshot |
 | Relevant file scan | `.ticket/relevant-files.yaml` plus scan companion artifacts |
 | Interview refinement and answers | `.ticket/interview.yaml`, interview session snapshot, answer state |
-| PRD drafting and approval | `.ticket/prd.yaml`, per-model full answers artifacts, raw attempt diagnostics for rejected Full Answers/PRD drafts, winning Full Answers approval context, PRD coverage history |
-| Beads coverage and approval | `.ticket/beads/<flow>/.beads/issues.jsonl`, beads coverage history, approval receipt |
-| Setup-plan approval | `execution_setup_plan` artifact and approval receipt |
+| PRD drafting and approval | `.ticket/prd.yaml`, per-model full answers artifacts, raw attempt diagnostics for rejected Full Answers/PRD drafts, winning Full Answers approval context, PRD coverage history, approval snapshot/receipt hashes |
+| Beads coverage and approval | `.ticket/beads/<flow>/.beads/issues.jsonl`, beads coverage history, approval snapshot/receipt hashes |
+| Setup-plan approval | `execution_setup_plan` artifact and approval receipt with reviewed-content hash |
 | Execution runtime | `.ticket/runtime/execution-log.jsonl`, `.ticket/runtime/execution-log.debug.jsonl`, `.ticket/runtime/execution-log.ai.jsonl`, `.ticket/runtime/state.yaml`, execution setup profile, bead notes and diffs |
+| Manual artifact edits | Append-only `user_edit_receipt:*` phase artifacts with old/new content hashes and invalidation details |
 | Frontend resume | ticket UI-state artifacts for approval drafts and interview drafts, plus SSE last-event id in browser storage |
-| Final delivery | final test report, integration report, pull request report, merge report, cleanup report |
+| Final delivery | final test report, integration report, pull request report, merge report, cleanup report with `clean` or `warning` status |
 
 Execution setup, coding, and final-test retry resets preserve the LoopTroop-owned `.ticket` directory so planning artifacts, bead state, approvals, UI companions, and logs remain available while project file changes are rolled back.
 
@@ -234,7 +236,8 @@ Approved interview and PRD artifacts can still be edited while the ticket is in 
 
 - Editing the interview from PRD or beads planning archives the current approved interview version and downstream PRD/beads phase attempts, aborts active downstream sessions as intentional cancellation, clears stale PRD/beads artifacts and approval UI state, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`.
 - Editing the PRD from beads planning archives the current approved PRD version and downstream beads phase attempts, aborts active downstream sessions as intentional cancellation, clears stale beads artifacts and approval UI state, saves and approves the edited PRD as the new active version, and starts `DRAFTING_BEADS`.
-- Versions are approved planning generations backed by phase attempts. Archived versions are read-only.
+- Manual edits write append-only `user_edit_receipt:*` artifacts that record old/new SHA-256 hashes, the source status, and downstream invalidation details.
+- Versions are approved planning generations backed by phase attempts. Archived versions are read-only, and explicit archived-version writes return `409`.
 - Interview and PRD edits are rejected with `409` at `PRE_FLIGHT_CHECK` or later. At that point the bead plan has crossed into execution readiness, so LoopTroop does not use approval edit routes to modify execution readiness.
 - Existing tickets and projects, including `PCKM-22`, are not migrated or repaired by this behavior.
 
@@ -278,7 +281,7 @@ The UI and API both group workflow states:
 | `COMPILING_INTERVIEW` | The winning draft is normalized into the interactive interview that the UI can render and track across batches and follow-up rounds. Previous draft Raw views stay aligned to the validated content refinement consumed. | Canonical interview artifact and interview session snapshot. | `cancel` | Success advances to `WAITING_INTERVIEW_ANSWERS`. |
 | `WAITING_INTERVIEW_ANSWERS` | The automated pipeline pauses while you answer or skip the active question batch. This state can self-loop when the interview has another batch, and can also repeat later when coverage asks for follow-up questions. | Answer state, updated interview artifact, per-round history. | submit answers, skip, skip all, `cancel` | Non-final submission stays here with the next batch; final submission moves to coverage; skip-all jumps directly to approval with a synthetic clean coverage receipt. |
 | `VERIFYING_INTERVIEW_COVERAGE` | The interview winner checks whether the current answers are sufficient. If not, it creates targeted follow-up questions until the configured budget is exhausted. | Coverage artifact, gap descriptions, follow-up batch when needed. | `cancel` | Gaps loop back to answers; clean or budget exhaustion advances to approval. |
-| `WAITING_INTERVIEW_APPROVAL` | You review the finalized interview in structured or raw form, edit it if needed, and explicitly approve the interview as the source material for PRD generation. Post-approval edits remain allowed only before `PRE_FLIGHT_CHECK`; saving from downstream planning archives the current approved interview version and downstream PRD/beads attempts, saves and approves the edit, and starts `DRAFTING_PRD`. | Approved interview artifact, approval receipt, and read-only archived versions when post-approval edits occur. | `approve`, `cancel` | Approval advances to PRD drafting. |
+| `WAITING_INTERVIEW_APPROVAL` | You review the finalized interview in structured or raw form, edit it if needed, and explicitly approve the interview as the source material for PRD generation. Approval includes the reviewed content hash and stale hashes return `409`. Post-approval edits remain allowed only before `PRE_FLIGHT_CHECK`; saving from downstream planning archives the current approved interview version and downstream PRD/beads attempts, saves and approves the edit, and starts `DRAFTING_PRD`. | Approved interview artifact, approval receipt with content hashes, user-edit receipts, and read-only archived versions when post-approval edits occur. | `approve`, `cancel` | Approval advances to PRD drafting. |
 
 #### Max Interview Questions
 
@@ -306,7 +309,7 @@ See [Configuration Reference → Interview Coverage Passes](/configuration#inter
 | `COUNCIL_VOTING_PRD` | The council scores anonymized PRD drafts against a weighted requirements rubric and selects the best baseline. Previous draft Raw views show only validated draft content. | PRD vote artifacts, ranking breakdowns, winner selection. | `cancel` | Winner advances to PRD refinement. |
 | `REFINING_PRD` | The winning PRD model upgrades its own draft by selectively merging stronger requirements, acceptance criteria, tests, and edge cases from the losing drafts. Previous draft Raw views are validated-only. | Refined PRD Candidate v1 and optional diff metadata. | `cancel` | Success advances to PRD coverage. |
 | `VERIFYING_PRD_COVERAGE` | The current PRD candidate is checked against the winning model's Full Answers artifact and revised in-place when gaps are found. This is a versioned loop capped by configuration. | PRD coverage history, latest PRD candidate, unresolved-gap diagnostics. | `cancel` | Clean or cap-reached advances to PRD approval. |
-| `WAITING_PRD_APPROVAL` | You review the current PRD candidate, inspect any unresolved warnings, optionally open the compact read-only Full Answers chip for the winning model's Part 1 artifact, edit the PRD document if needed, and explicitly lock the spec that beads planning will decompose. Coverage warnings may include unresolved source-artifact contradictions. Post-approval edits remain allowed only before `PRE_FLIGHT_CHECK`; saving from downstream beads planning archives the current approved PRD version and downstream beads attempts, saves and approves the edit, and starts `DRAFTING_BEADS`. | Approved PRD artifact, approval receipt, winning Full Answers context, and read-only archived versions when post-approval edits occur. | `approve`, `cancel` | Approval advances to beads drafting. |
+| `WAITING_PRD_APPROVAL` | You review the current PRD candidate, inspect any unresolved warnings, optionally open the compact read-only Full Answers chip for the winning model's Part 1 artifact, edit the PRD document if needed, and explicitly lock the spec that beads planning will decompose. Approval includes the reviewed content hash and stale hashes return `409`. Post-approval edits remain allowed only before `PRE_FLIGHT_CHECK`; saving from downstream beads planning archives the current approved PRD version and downstream beads attempts, saves and approves the edit, and starts `DRAFTING_BEADS`. | Approved PRD artifact, approval receipt with content hashes, winning Full Answers context, user-edit receipts, and read-only archived versions when post-approval edits occur. | `approve`, `cancel` | Approval advances to beads drafting. |
 
 #### PRD Coverage Passes
 
@@ -323,7 +326,7 @@ See [Configuration Reference → PRD Coverage Passes](/configuration#prd-coverag
 | `REFINING_BEADS` | The winning blueprint is strengthened with better tasks, constraints, and test ideas from losing blueprints, while preserving the dependency graph shape. Previous blueprint Raw views are validated-only. | Refined semantic blueprint plus diff metadata. | `cancel` | Success advances to beads coverage. |
 | `VERIFYING_BEADS_COVERAGE` | The semantic blueprint is checked against the PRD and revised until coverage is acceptable or the pass budget is exhausted. | Coverage history, revised blueprint candidate, unresolved-gap diagnostics. | `cancel` | Clean or cap-reached advances to beads expansion. |
 | `EXPANDING_BEADS` | The coverage-validated blueprint is expanded into execution-ready bead records with file targets, commands, and runtime dependency fields. | Expanded `issues.jsonl`, approval candidate. | `cancel` | Expanded plan advances to beads approval. |
-| `WAITING_BEADS_APPROVAL` | You review the execution-ready bead plan before any coding begins. This is the last planning approval gate and the last easy point to reshape execution ordering. Coverage warnings may include unresolved source-artifact contradictions. | Approved beads artifact and approval receipt. | `approve`, `cancel` | Approval advances to pre-flight checks. |
+| `WAITING_BEADS_APPROVAL` | You review the execution-ready bead plan before any coding begins. This is the last planning approval gate and the last easy point to reshape execution ordering. Bead reads expose `X-Content-Sha256`; approval includes that reviewed hash and stale hashes return `409`. | Approved beads artifact, approval receipt with content hash, and user-edit receipts. | `approve`, `cancel` | Approval advances to pre-flight checks. |
 
 #### Beads Coverage Passes
 
@@ -336,14 +339,14 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
 | `PRE_FLIGHT_CHECK` | LoopTroop runs deterministic readiness checks: workspace health, OpenCode reachability, execution-mode probe, bead availability, and dependency-graph sanity. | Pre-flight report. | `cancel` | Passing checks move to setup-plan approval. |
-| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. Regenerating archives the current draft as a prior version, starts background generation, and returns you to the ticket overview immediately; all prior versions are accessible via the VERSION dropdown at the top of the approval pane. Failed setup-plan model output is diagnostic-only and is not shown as structured setup content. | `execution_setup_plan`, generation report, raw setup diagnostics, approval receipt on approval. | `approve`, `cancel` | Approved plan advances to execution setup. |
+| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. Regenerating archives the current draft as a prior version; archived versions are read-only. Approval includes the reviewed plan hash and stale hashes return `409`. | `execution_setup_plan` with `contentSha256`, generation report, raw setup diagnostics, approval receipt, and user-edit receipts. | `approve`, `cancel` | Approved plan advances to execution setup. |
 | `PREPARING_EXECUTION_ENV` | The approved setup plan is executed in a constrained way. Missing required tooling is provisioned under ticket-owned temp roots before blocking, and the goal is a reusable runtime profile rather than general project mutation. | Execution setup profile, runtime wrapper artifacts, setup logs, setup diagnostics. | `cancel` | Success enters `CODING`. |
 
 ### Implementation
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `CODING` | The coding agent executes one bead at a time. Each bead gets narrow context, owned sessions, structured completion markers, bead diffs, bounded fresh-session retries, and profile-controlled OpenCode retry-budget blocking for transient provider stalls. | Bead status updates, bead notes, per-bead commits, diff artifacts, execution log stream. | `cancel` | Each successful bead self-transitions back to `CODING`; when all beads are done the flow moves to final test. |
+| `CODING` | The coding agent executes one bead at a time. Each bead gets narrow context, owned sessions, structured completion markers, bead diffs, bounded fresh-session retries, and profile-controlled OpenCode retry-budget blocking for transient provider stalls. A bead becomes `done` only after local finalization succeeds. | Bead status updates, bead notes, local per-bead commits or no-op completion, diff artifacts, execution log stream. | `cancel` | Each finalized successful bead self-transitions back to `CODING`; when all beads are done the flow moves to final test. |
 
 ### Post-Implementation
 
@@ -353,14 +356,14 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 | `INTEGRATING_CHANGES` | The ticket branch is squashed into a single clean candidate commit for human review, while preserving the bead-level history in audit artifacts. | Integration report and candidate commit metadata. | `cancel` | Success advances to PR creation. |
 | `CREATING_PULL_REQUEST` | The candidate branch is pushed and a draft PR is created or updated on GitHub using the ticket intent, diff, and verification results. | Pull request report with URL, number, head SHA, generated title/body. | `cancel` | Success advances to PR review waiting state. |
 | `WAITING_PR_REVIEW` | Automation stops while you review the draft PR and decide whether to merge it or finish without merging. External merges can also be detected and synchronized from here. | Stable review gate, merge report after decision. | `merge`, `close_unmerged`, `cancel` | Merge or close-unmerged both advance to cleanup. |
-| `CLEANING_ENV` | LoopTroop removes transient runtime state but preserves planning artifacts, execution logs, reports, and audit history. | Cleanup report and preserved history. | `cancel` | Successful cleanup moves to `COMPLETED`. |
+| `CLEANING_ENV` | LoopTroop removes transient runtime state but preserves planning artifacts, execution logs, reports, and audit history. Cleanup warnings are recorded but non-blocking. | Cleanup report with `clean` or `warning` status and preserved history. | `cancel` | Cleanup completion moves to `COMPLETED` even when warnings exist. |
 
 ### Recovery And Terminal States
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
 | `BLOCKED_ERROR` | A blocking failure has paused the workflow. The error is tied to a preserved `previousStatus`, so recovery can re-enter the exact failed phase rather than guessing where to resume. | Error occurrence history, failure diagnostics, preserved `previousStatus`, and eligible preserved OpenCode session metadata. | `retry`, conditional `continue`, `cancel` | `retry` versions every non-implementation phase before re-entering it, while `CODING` keeps bead-scoped reset/retry recovery; `continue` re-enters without creating a fresh attempt and sends only `continue please` into the preserved session; `cancel` moves to `CANCELED`. |
-| `COMPLETED` | The ticket finished successfully. The workflow is now read-only from an automation perspective, but all artifacts remain available for inspection. | Full lifecycle history remains accessible. | none | Terminal. |
+| `COMPLETED` | The ticket finished successfully. The workflow is now read-only from an automation perspective, but all artifacts remain available for inspection. Cleanup warnings remain visible as a separate summary. | Full lifecycle history and cleanup summary remain accessible. | none | Terminal. |
 | `CANCELED` | The ticket was stopped by user action before or after partial progress. Earlier artifacts are preserved for review. | Preserved partial history and cancellation metadata. | none | Terminal. |
 
 ## Retry, Continue, And Blocked-Error Semantics
@@ -378,7 +381,7 @@ This matters because LoopTroop does not treat recovery as “restart the whole t
 The retry route adds two safety checks before it dispatches `RETRY`:
 
 - if `previousStatus` is absent, retry returns a conflict response and the user must cancel or inspect the stored failure
-- if the preserved status is `CODING`, LoopTroop resets the failed or interrupted bead to its `beadStartCommit`; if that reset cannot be performed, retry returns a conflict response instead of resuming against a dirty worktree
+- if the preserved status is `CODING`, LoopTroop first re-finalizes a current successful execution checkpoint when one exists; otherwise it resets the failed or interrupted bead to its `beadStartCommit`; if neither path can prove a safe recovery point, retry returns a conflict response instead of resuming against a dirty worktree
 
 Before dispatching `RETRY`, every non-implementation phase archives the active phase attempt and creates a fresh active attempt. `CODING` is the exception: it keeps bead-scoped retry history and must reset the failed bead before re-entering. Automatic structured retries inside a phase version do not create versions; they are kept as `rawAttempts` in the artifact Raw tab. Manual retry versions are loaded through the existing previous-version selector with `phaseAttempt`-scoped artifacts/logs, while blocked-error history remains attached to error occurrences.
 

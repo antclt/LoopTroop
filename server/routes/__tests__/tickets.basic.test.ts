@@ -4,7 +4,7 @@ import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { attachProject, type PublicProject } from '../../storage/projects'
-import { createTicket, getTicketByRef, patchTicket, type PublicTicket } from '../../storage/tickets'
+import { createTicket, getLatestPhaseArtifact, getTicketByRef, insertPhaseArtifact, patchTicket, type PublicTicket } from '../../storage/tickets'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 
 vi.mock('../../workflow/runner', () => ({
@@ -144,6 +144,34 @@ describe('ticketRouter basic ticket routes', () => {
 
     expect(missingResponse.status).toBe(404)
     expect(await missingResponse.json()).toEqual({ error: 'Ticket not found' })
+  })
+
+  it('exposes cleanup warning summaries from the latest cleanup report', async () => {
+    const { ticket } = createBasicTicket()
+    insertPhaseArtifact(ticket.id, {
+      phase: 'CLEANING_ENV',
+      artifactType: 'cleanup_report',
+      content: JSON.stringify({
+        status: 'warning',
+        removedDirs: [],
+        removedFiles: [],
+        preservedPaths: [],
+        errors: ['Failed to remove .ticket/runtime/tmp: EBUSY'],
+      }),
+    })
+    const cleanupReport = getLatestPhaseArtifact(ticket.id, 'cleanup_report', 'CLEANING_ENV')
+    expect(cleanupReport).toBeDefined()
+
+    const response = await app.request(`/api/tickets/${ticket.id}`)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toMatchObject({
+      cleanup: {
+        status: 'warning',
+        errorCount: 1,
+        latestReportArtifactId: cleanupReport!.id,
+      },
+    })
   })
 
   it('patches editable ticket fields while protecting status changes', async () => {

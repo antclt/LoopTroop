@@ -12,6 +12,7 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 | JSON validation | Most write routes validate request bodies with Zod or route-specific parsers |
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
+| Content hashes | Human-reviewed artifacts expose lowercase SHA-256 hashes so approval requests can prove which bytes were reviewed |
 
 When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `X-LoopTroop-Token: <token>` or `Authorization: Bearer <token>`. The only query-token exception is `/api/stream`, where browser `EventSource` clients may use `apiToken=<token>` because they cannot set custom headers. `npm run dev` generates an ephemeral token when needed and keeps it server-side; the Vite dev proxy injects it for same-origin `/api` requests.
 
@@ -217,6 +218,27 @@ Example UI-state response:
 | `POST` | `/api/tickets/:id/continue` | Continue a blocked ticket only when a resumable OpenCode/provider interruption has a matching active preserved OpenCode session |
 | `POST` | `/api/tickets/:id/dev-event` | Disabled by default; requires `LOOPTROOP_ENABLE_DEV_EVENT=1`, `LOOPTROOP_DEV_EVENT_TOKEN`, and `X-LoopTroop-Dev-Event-Token` |
 
+All approval routes, including the generic `/approve` route, require the hash of the content currently shown to the user:
+
+```json
+{
+  "expectedContentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+}
+```
+
+Malformed or missing hashes return `400`. If the current server artifact no longer matches the expected hash, the route returns `409` and leaves the workflow paused:
+
+```json
+{
+  "error": "Stale approval",
+  "artifactType": "prd",
+  "expectedContentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "currentContentSha256": "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+}
+```
+
+Successful approvals write durable `approval_receipt` phase artifacts. Approval snapshots and receipts include `content_sha256`; interview and PRD receipts also include `stored_content_sha256` when approval stamping changes the persisted YAML.
+
 The Continue endpoint is available only from `BLOCKED_ERROR`. It requires a known `previousStatus`, an unresolved active error occurrence with a diagnostic `sessionId`, a matching active `opencode_sessions` row for that ticket and previous phase, and a live OpenCode session with that id. It returns `409` and leaves the ticket blocked when those checks fail. On success it dispatches `CONTINUE`, records the pending session continuation, and the next owned prompt sends exactly `continue please` without creating a fresh phase attempt.
 
 The cancel endpoint accepts an optional JSON request body to trigger cleanup at cancellation time. Both fields default to `false`; the ticket record itself is never deleted.
@@ -245,7 +267,9 @@ The cancel endpoint accepts an optional JSON request body to trigger cleanup at 
 | `POST` | `/api/tickets/:id/skip` | Skip remaining interview questions |
 | `PATCH` | `/api/tickets/:id/edit-answer` | Edit a previously recorded answer while waiting for interview answers |
 
-Interview and PRD approval edits are planning-only. After approval, saving an interview edit is allowed while the ticket is still before `PRE_FLIGHT_CHECK`; if PRD or beads planning already exists, LoopTroop archives the current approved interview version and downstream PRD/beads phase attempts, cancels active downstream sessions as intentional cancellation, clears stale downstream artifacts and approval UI state, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`. Saving a PRD edit follows the same contract for the current approved PRD version and downstream beads attempts, then starts `DRAFTING_BEADS`.
+Interview responses include `contentSha256` for the reviewed raw interview bytes. PRD file responses from `/api/files/:ticketId/prd` include `contentSha256` for the returned file content.
+
+Interview and PRD approval edits are planning-only. After approval, saving an interview edit is allowed while the ticket is still before `PRE_FLIGHT_CHECK`; if PRD or beads planning already exists, LoopTroop archives the current approved interview version and downstream PRD/beads phase attempts, cancels active downstream sessions as intentional cancellation, clears stale downstream artifacts and approval UI state, writes a `user_edit_receipt:interview` artifact, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`. Saving a PRD edit follows the same contract for the current approved PRD version and downstream beads attempts, writes `user_edit_receipt:prd`, then starts `DRAFTING_BEADS`.
 
 Archived versions are read-only approved planning generations backed by phase attempts. Once a ticket reaches `PRE_FLIGHT_CHECK` or any later execution-band status, interview and PRD edit saves return `409`. Intentional downstream session aborts during these planning restarts are cancellation, not blocked errors, and existing tickets/projects such as `PCKM-22` are not migrated or repaired.
 
@@ -326,6 +350,7 @@ Execution setup plan read response:
   "exists": true,
   "artifactId": 42,
   "updatedAt": "2026-04-23T09:00:00.000Z",
+  "contentSha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
   "raw": "{\"schemaVersion\":1,\"ticketId\":\"AUTH-12\",\"artifact\":\"execution_setup_plan\",\"status\":\"draft\",\"summary\":\"Prepare the workspace before implementation.\"}",
   "plan": {
     "schemaVersion": 1,
@@ -367,6 +392,8 @@ Execution setup plan read response:
   }
 }
 ```
+
+Execution setup plan reads may select archived versions with `phaseAttempt`. Archived reads stay available, but explicit writes to non-current phase attempts return `409` because archived versions are read-only. Successful manual saves write `user_edit_receipt:execution_setup_plan`.
 
 Regeneration payload:
 
@@ -431,6 +458,20 @@ Reply payload:
 | `GET` | `/api/tickets/:id/artifacts` | List ticket artifacts, optionally filtered |
 | `GET` | `/api/tickets/:id/phases/:phase/attempts` | List phase attempt history |
 
+Ticket list and detail responses include a cleanup summary derived from the latest `cleanup_report` artifact:
+
+```json
+{
+  "cleanup": {
+    "status": "warning",
+    "errorCount": 2,
+    "latestReportArtifactId": 123
+  }
+}
+```
+
+`cleanup.status` is `clean`, `warning`, or `null`. Cleanup warnings do not change the ticket's terminal `COMPLETED` status.
+
 ## File Routes
 
 These routes are intentionally narrow.
@@ -440,7 +481,7 @@ These routes are intentionally narrow.
 | `GET` | `/api/files/:ticketId/logs` | Read folded normal execution logs from `.ticket/runtime/execution-log.jsonl` |
 | `GET` | `/api/files/:ticketId/logs?channel=debug` | Read folded debug/forensic execution logs from `.ticket/runtime/execution-log.debug.jsonl`; the same `status`, `phase`, and `phaseAttempt` filters apply |
 | `GET` | `/api/files/:ticketId/logs?channel=ai` | Read folded AI detail logs from `.ticket/runtime/execution-log.ai.jsonl`; loaded by AI/model log views |
-| `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
+| `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd`; existing file responses include `contentSha256` |
 | `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 
 Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry.
@@ -452,10 +493,10 @@ There is no generic filesystem browser or arbitrary file read route under `/api/
 | Method | Route | Notes |
 | --- | --- | --- |
 | `GET` | `/api/tickets/:id/beads` | Read bead plan; accepts optional safe relative `?flow=` |
-| `PUT` | `/api/tickets/:id/beads` | Replace bead plan; accepts optional safe relative `?flow=` |
+| `PUT` | `/api/tickets/:id/beads` | Replace bead plan only while the ticket is in `WAITING_BEADS_APPROVAL`; accepts optional safe relative `?flow=` |
 | `GET` | `/api/tickets/:id/beads/:beadId/diff` | Read diff artifact for a bead |
 
-The `flow` value must be a safe relative branch/flow name. Absolute paths, backslashes, `.` segments, and `..` traversal segments are rejected.
+The `flow` value must be a safe relative branch/flow name. Absolute paths, backslashes, `.` segments, and `..` traversal segments are rejected. Bead reads and writes expose the canonical plan hash through the `X-Content-Sha256` response header. Manual bead edits write `user_edit_receipt:beads` and invalidate the execution setup plan.
 
 ## SSE Events
 

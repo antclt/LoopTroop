@@ -162,6 +162,10 @@ export const structuredExecutionSetupPlanSaveSchema = z.object({
   plan: executionSetupPlanSchema,
 }).strict()
 
+export const approvalRequestSchema = z.object({
+  expectedContentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).strict()
+
 export const regenerateExecutionSetupPlanSchema = z.object({
   commentary: z.string().trim().min(1),
   plan: executionSetupPlanSchema.optional(),

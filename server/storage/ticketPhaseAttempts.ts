@@ -40,6 +40,16 @@ export const EXECUTION_SETUP_PLAN_RESTART_PHASES = [
 
 type LocalTicketPhaseAttemptRow = typeof ticketPhaseAttempts.$inferSelect
 
+export class ArchivedArtifactWriteError extends Error {
+  constructor(
+    public readonly phase: string,
+    public readonly requestedPhaseAttempt: number,
+    public readonly activePhaseAttempt: number | null,
+  ) {
+    super(`Archived ${phase} attempt ${requestedPhaseAttempt} is read-only`)
+  }
+}
+
 export interface PublicTicketPhaseAttemptRow {
   ticketId: string
   phase: string
@@ -87,6 +97,35 @@ export function getActivePhaseAttempt(ticketRef: string, phase: string): number 
   const rows = listAttemptRows(ticketRef, phase)
   const active = rows.find((row) => row.state === 'active')
   return active?.attemptNumber ?? null
+}
+
+export function getPhaseAttemptState(
+  ticketRef: string,
+  phase: string,
+  phaseAttempt: number,
+): 'active' | 'archived' | string | null {
+  if (!isAttemptTrackedPhase(phase)) return phaseAttempt === 1 ? 'active' : null
+  const row = listAttemptRows(ticketRef, phase).find((attempt) => attempt.attemptNumber === phaseAttempt)
+  return row?.state ?? null
+}
+
+export function assertCurrentEditablePhaseAttempt(input: {
+  ticketId: string
+  phase: string
+  requestedPhaseAttempt?: number | null
+}): void {
+  const requested = input.requestedPhaseAttempt
+  if (requested == null) return
+  if (!Number.isFinite(requested) || requested <= 0) return
+
+  const activePhaseAttempt = getActivePhaseAttempt(input.ticketId, input.phase)
+  const requestedState = getPhaseAttemptState(input.ticketId, input.phase, requested)
+  if (
+    requestedState === 'archived'
+    || (activePhaseAttempt != null && requested !== activePhaseAttempt)
+  ) {
+    throw new ArchivedArtifactWriteError(input.phase, requested, activePhaseAttempt)
+  }
 }
 
 export function resolvePhaseAttempt(ticketRef: string, phase: string, phaseAttempt?: number | null): number {

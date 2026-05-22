@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Hardened workflow approval, audit, bead-finalization, archived-version, and cleanup boundaries with content hashes and visible cleanup warnings.
 - Documented the ticket-handler route split from a single file into focused route modules without changing workflow behavior.
 - Added profile-controlled OpenCode retry budgets so transient provider stalls block early with diagnostics and same-session Continue across OpenCode-backed phases.
 - Preserved underlying OpenCode provider/session causes on coding bead failures so parser or retry-budget wrappers no longer hide usage-limit style blockers.
@@ -31,6 +32,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added SHA-256 content identity to approval snapshots/receipts and artifact read responses, required `expectedContentSha256` approval payloads with stale-approval `409` responses, durable approval receipts for all approval gates, and append-only `user_edit_receipt:*` artifacts for manual artifact edits.
+- Added `cleanup.status` to cleanup reports and a top-level ticket cleanup summary so completed tickets can surface non-blocking cleanup warnings.
 - Added profile settings for `OpenCode Retry Limit` and `OpenCode Retry Grace Window`, exposed through the API, Configuration UI, and documentation with defaults of 10 retry events and 60 seconds.
 - Added recursive nested file and folder expansion directly in the ticket disk space details view, incorporating standard monochrome folder/file icons, exact size formatting, and custom collapsible sub-accordions with smooth transitions.
 - Added full recursive top-level and category child listings with sizes in the Hono ticket size API endpoint (`/tickets/:id/size`).
@@ -43,6 +46,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
+- Bead completion now means OpenCode success plus local finalization success: local commits are required when code changes exist, true no-op completions are allowed, push failures are warnings, and fatal finalization failures route through `BEAD_FINALIZATION_FAILED` instead of broadcasting `bead_complete`.
+- Archived phase-attempt artifacts are explicitly read-only, while current approval-edit routes continue to write only the active version.
 - Added "Context Slimming Pipeline" as a high-priority roadmap item in `docs/roadmap.md` for per-phase input/output field auditing, deterministic strip-and-store, and retry-path field classification.
 - Updated architecture and ticket-flow documentation to reference the focused `server/routes/ticketHandlers/` module directory for user-triggered ticket actions.
 - Clarified the Configuration UI copy for OpenCode Provider Recovery so it explicitly mentions rate-limit, usage-limit, overload, timeout, and network retry events across phases.

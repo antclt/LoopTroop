@@ -1,6 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
-import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { initializeDatabase } from '../../db/init'
@@ -26,6 +25,7 @@ import { ticketRouter } from '../tickets'
 import { filesRouter } from '../files'
 import { buildInterviewDocument, buildPrdDocument } from '../../test/factories'
 import type { PrdDocument } from '../../structuredOutput/types'
+import { contentSha256 } from '../../lib/contentHash'
 
 vi.mock('../../machines/persistence', async () => {
   const storage = await import('../../storage/tickets')
@@ -94,7 +94,7 @@ function setupPrdApprovalTicket() {
 
   // Build and write prd.yaml
   const interviewContentForHash = readFileSync(`${paths.ticketDir}/interview.yaml`, 'utf-8')
-  const interviewHash = createHash('sha256').update(interviewContentForHash).digest('hex')
+  const interviewHash = contentSha256(interviewContentForHash)
   const prdDoc = buildPrdDocument(ticket.externalId, interviewHash)
   const prdRaw = buildYamlDocument(prdDoc)
   safeAtomicWrite(`${paths.ticketDir}/prd.yaml`, prdRaw)
@@ -104,6 +104,13 @@ function setupPrdApprovalTicket() {
   app.route('/api', filesRouter)
 
   return { app, ticket, paths, prdRaw }
+}
+
+function approvalPayload(raw: string) {
+  return {
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expectedContentSha256: contentSha256(raw) }),
+  }
 }
 
 describe('ticketRouter PRD approval routes', () => {
@@ -119,10 +126,11 @@ describe('ticketRouter PRD approval routes', () => {
   })
 
   it('approves the PRD, stamps approval metadata, and advances the ticket', async () => {
-    const { app, ticket, paths } = setupPrdApprovalTicket()
+    const { app, ticket, paths, prdRaw } = setupPrdApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-prd`, {
       method: 'POST',
+      ...approvalPayload(prdRaw),
     })
 
     expect(response.status).toBe(200)
@@ -134,6 +142,12 @@ describe('ticketRouter PRD approval routes', () => {
     expect(savedRaw).toContain('status: approved')
     expect(savedRaw).toContain('approved_by: user')
     expect(savedRaw).toMatch(/approved_at: .+/)
+
+    const receipt = getLatestPhaseArtifact(ticket.id, 'approval_receipt', 'WAITING_PRD_APPROVAL')
+    expect(receipt).toBeDefined()
+    const receiptData = JSON.parse(receipt!.content)
+    expect(receiptData.content_sha256).toBe(contentSha256(prdRaw))
+    expect(receiptData.stored_content_sha256).toBe(contentSha256(savedRaw))
   })
 
   it('validates raw PRD YAML, canonicalizes it, and forces draft status on save', async () => {
@@ -310,8 +324,8 @@ describe('ticketRouter PRD approval routes', () => {
     expect(savedRaw).toBe(prdRaw)
   })
 
-  it('clears downstream beads artifacts when PRD is edited', async () => {
-    const { app, ticket, paths } = setupPrdApprovalTicket()
+  it('clears downstream beads artifacts and writes an edit receipt when PRD is edited', async () => {
+    const { app, ticket, paths, prdRaw } = setupPrdApprovalTicket()
 
     // Create beads/ directory and a beads artifact in the DB
     const beadsDir = resolve(paths.ticketDir, 'beads')
@@ -378,6 +392,25 @@ describe('ticketRouter PRD approval routes', () => {
     expect(existsSync(beadsDir)).toBe(false)
     expect(getLatestPhaseArtifact(ticket.id, 'beads', 'DRAFTING_BEADS')).toBeUndefined()
     expect(getLatestPhaseArtifact(ticket.id, 'ui_state:approval_beads', 'UI_STATE')).toBeUndefined()
+
+    const savedRaw = readFileSync(`${paths.ticketDir}/prd.yaml`, 'utf-8')
+    const receipt = getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:prd', 'WAITING_PRD_APPROVAL')
+    expect(receipt).toBeDefined()
+    const receiptData = JSON.parse(receipt!.content)
+    expect(receiptData).toMatchObject({
+      target_artifact: 'prd',
+      action: 'save',
+      edit_surface: 'raw',
+      before: {
+        sha256: contentSha256(prdRaw),
+        item_count: 2,
+      },
+      after: {
+        sha256: contentSha256(savedRaw),
+        item_count: 2,
+      },
+    })
+    expect(receiptData.invalidation.invalidated_phases).toContain('WAITING_BEADS_APPROVAL')
   })
 
   it('archives approval and beads attempts, approves the edit, and starts beads drafting when PRD is edited from a later phase', async () => {
@@ -528,13 +561,15 @@ describe('ticketRouter PRD approval routes', () => {
     expect(attempts).toEqual([
       expect.objectContaining({ attemptNumber: 1, state: 'active', archivedReason: null }),
     ])
+    expect(getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:prd', 'WAITING_PRD_APPROVAL')).toBeUndefined()
   })
 
   it('stamps PRD approval metadata through the generic approve route', async () => {
-    const { app, ticket, paths } = setupPrdApprovalTicket()
+    const { app, ticket, paths, prdRaw } = setupPrdApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve`, {
       method: 'POST',
+      ...approvalPayload(prdRaw),
     })
 
     expect(response.status).toBe(200)
@@ -549,16 +584,79 @@ describe('ticketRouter PRD approval routes', () => {
   })
 
   it('rejects approval when ticket is not in WAITING_PRD_APPROVAL status', async () => {
-    const { app, ticket } = setupPrdApprovalTicket()
+    const { app, ticket, prdRaw } = setupPrdApprovalTicket()
 
     patchTicket(ticket.id, { status: 'DRAFTING_PRD' })
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-prd`, {
       method: 'POST',
+      ...approvalPayload(prdRaw),
     })
 
     expect(response.status).toBe(409)
     const payload = await response.json() as { error: string }
     expect(payload.error).toContain('not waiting for PRD approval')
+  })
+
+  it('requires expectedContentSha256 for PRD approval', async () => {
+    const { app, ticket } = setupPrdApprovalTicket()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-prd`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(400)
+    const payload = await response.json() as { error?: string }
+    expect(payload.error).toBe('Invalid approval payload')
+  })
+
+  it('requires expectedContentSha256 for generic approval', async () => {
+    const { app, ticket } = setupPrdApprovalTicket()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(400)
+    const payload = await response.json() as { error?: string }
+    expect(payload.error).toBe('Invalid approval payload')
+  })
+
+  it('rejects stale PRD approval hashes with 409', async () => {
+    const { app, ticket, prdRaw } = setupPrdApprovalTicket()
+    const expectedContentSha256 = '0'.repeat(64)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve-prd`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedContentSha256 }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'Stale approval',
+      artifactType: 'prd',
+      expectedContentSha256,
+      currentContentSha256: contentSha256(prdRaw),
+    })
+  })
+
+  it('rejects stale PRD approval hashes through the generic approve route with 409', async () => {
+    const { app, ticket, prdRaw } = setupPrdApprovalTicket()
+    const expectedContentSha256 = '1'.repeat(64)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ expectedContentSha256 }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'Stale approval',
+      artifactType: 'prd',
+      expectedContentSha256,
+      currentContentSha256: contentSha256(prdRaw),
+    })
   })
 })

@@ -85,6 +85,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
     [interviewData?.document, interviewData?.raw],
   )
   const rawContent = interviewData?.raw ?? ''
+  const currentContentSha256 = interviewData?.contentSha256 ?? null
   const rawDisplayContent = useMemo(() => buildReadableRawDisplayContent(rawContent), [rawContent])
   const showSkippedQuestionsNotice = hasSkippedInterviewAnswers(interviewDocument)
   const isPreparingStructuredInterview = !interviewDocument && Boolean(rawContent) && isFetching
@@ -243,6 +244,8 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
     try {
       const response = await fetch(`/api/tickets/${ticket.id}/approve-interview`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedContentSha256: currentContentSha256 }),
       })
       const payload = await response.json()
       if (!response.ok) {
@@ -353,7 +356,7 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
           <Button
             size="sm"
             onClick={handleApprove}
-            disabled={isApproving || isSaving || (isEditMode && hasUnsavedChanges) || !interviewDocument || ticket.status !== phase}
+            disabled={isApproving || isSaving || (isEditMode && hasUnsavedChanges) || !interviewDocument || !currentContentSha256 || ticket.status !== phase}
             className="text-xs shrink-0"
           >
             {isApproving ? 'Approving…' : 'Approve'}

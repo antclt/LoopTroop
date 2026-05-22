@@ -6,6 +6,8 @@ import { safeAtomicWrite } from '../io/atomicWrite'
 import { syncTicketRuntimeProjection } from '../storage/ticketRuntimeProjection'
 import { clearExecutionSetupState } from '../phases/executionSetup/storage'
 import { upsertBeadsApprovalSnapshot } from '../phases/beads/document'
+import { contentSha256 } from '../lib/contentHash'
+import { writeUserEditReceipt } from '../workflow/artifactEditReceipts'
 
 const beadsRouter = new Hono()
 const FLOW_NAME_PATTERN = /^[A-Za-z0-9._/-]+$/
@@ -33,6 +35,11 @@ function resolveBeadsPath(ticketId: string, flow?: string): { filePath: string }
   return { filePath }
 }
 
+function countJsonlItems(content: string | null): number | null {
+  if (content == null) return null
+  return content.split('\n').filter((line) => line.trim() !== '').length
+}
+
 beadsRouter.get('/tickets/:id/beads', (c) => {
   const ticketId = c.req.param('id')
   if (!getTicketByRef(ticketId)) return c.json({ error: 'Ticket not found' }, 404)
@@ -43,10 +50,12 @@ beadsRouter.get('/tickets/:id/beads', (c) => {
   const { filePath } = resolved
 
   if (!fs.existsSync(filePath)) {
+    c.header('X-Content-Sha256', contentSha256(''))
     return c.json([])
   }
 
   const content = fs.readFileSync(filePath, 'utf-8')
+  c.header('X-Content-Sha256', contentSha256(content))
   const lines = content.split('\n').filter((line) => line.trim() !== '')
   try {
     const beads = lines.map((line) => JSON.parse(line))
@@ -58,7 +67,11 @@ beadsRouter.get('/tickets/:id/beads', (c) => {
 
 beadsRouter.put('/tickets/:id/beads', async (c) => {
   const ticketId = c.req.param('id')
-  if (!getTicketByRef(ticketId)) return c.json({ error: 'Ticket not found' }, 404)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticket.status !== 'WAITING_BEADS_APPROVAL') {
+    return c.json({ error: 'Ticket is not waiting for beads approval' }, 409)
+  }
 
   const flow = c.req.query('flow')
   const body = await c.req.json()
@@ -71,11 +84,31 @@ beadsRouter.put('/tickets/:id/beads', async (c) => {
   const { filePath } = resolved
 
   try {
+    const beforeRaw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null
     const jsonl = body.map((item: unknown) => JSON.stringify(item)).join('\n') + '\n'
     safeAtomicWrite(filePath, jsonl)
     upsertBeadsApprovalSnapshot(ticketId, jsonl)
-    clearExecutionSetupState(ticketId)
+    const executionSetupInvalidation = clearExecutionSetupState(ticketId)
+    writeUserEditReceipt({
+      ticketId,
+      artifactType: 'beads',
+      phase: 'WAITING_BEADS_APPROVAL',
+      action: 'save',
+      editSurface: 'structured',
+      statusBeforeEdit: ticket.status,
+      statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+      beforeRaw,
+      afterRaw: jsonl,
+      beforeItemCount: countJsonlItems(beforeRaw),
+      afterItemCount: body.length,
+      invalidation: {
+        ...executionSetupInvalidation,
+        invalidatedPhases: ['WAITING_EXECUTION_SETUP_APPROVAL', 'PREPARING_EXECUTION_ENV'],
+        clearedExecutionSetupState: executionSetupInvalidation.removedArtifacts > 0 || executionSetupInvalidation.removedFiles.length > 0,
+      },
+    })
     syncTicketRuntimeProjection(ticketId)
+    c.header('X-Content-Sha256', contentSha256(jsonl))
   } catch {
     return c.json({ error: 'Failed to write file' }, 500)
   }

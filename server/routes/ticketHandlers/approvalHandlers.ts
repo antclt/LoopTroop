@@ -9,6 +9,7 @@ import {
   approvePrdDocument,
   buildDraftPrdDocumentFromRawContent,
   buildDraftPrdDocumentFromStructuredContent,
+  readPrdDocument,
   saveApprovedPrdDocument,
   savePrdDocument,
 } from '../../phases/prd/document'
@@ -21,6 +22,9 @@ import type { ExecutionSetupPlan } from '../../phases/executionSetupPlan/types'
 import type { PrdDocument } from '../../structuredOutput/types'
 import { isBeforeExecution, isStatusAtOrPast } from '@shared/workflowMeta'
 import { getErrorMessage } from '@shared/typeGuards'
+import { StaleArtifactApprovalError } from '../../lib/artifactApproval'
+import { contentSha256 } from '../../lib/contentHash'
+import { writeUserEditReceipt } from '../../workflow/artifactEditReceipts'
 import {
   buildExecutionBandConflictMessage,
   buildRouteStatePayload,
@@ -29,9 +33,27 @@ import {
   preparePlanningRestart,
   respondWithState,
 } from './routeUtils'
-import { rawPrdSaveSchema, structuredPrdSaveSchema } from './schemas'
+import { approvalRequestSchema, rawPrdSaveSchema, structuredPrdSaveSchema } from './schemas'
 
-export function handleApproveTicket(c: Context) {
+function countPrdItems(document: PrdDocument): number {
+  return document.epics.reduce((count, epic) => count + 1 + epic.user_stories.length, 0)
+}
+
+async function parseApprovalRequest(c: Context) {
+  const body = await c.req.json().catch(() => ({}))
+  return approvalRequestSchema.safeParse(body)
+}
+
+function staleApprovalResponse(c: Context, err: StaleArtifactApprovalError) {
+  return c.json({
+    error: 'Stale approval',
+    artifactType: err.artifactType,
+    expectedContentSha256: err.expectedContentSha256,
+    currentContentSha256: err.currentContentSha256,
+  }, 409)
+}
+
+export async function handleApproveTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
@@ -41,17 +63,23 @@ export function handleApproveTicket(c: Context) {
     return c.json({ error: 'Ticket is not in an approval state' }, 409)
   }
 
+  const parsed = await parseApprovalRequest(c)
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid approval payload', details: parsed.error.flatten() }, 400)
+  }
+  const expectedContentSha256 = parsed.data.expectedContentSha256
+
   if (ticket.status === 'WAITING_INTERVIEW_APPROVAL') {
-    return handleApproveInterview(c)
+    return approveInterviewForRoute(c, ticketId, expectedContentSha256)
   }
   if (ticket.status === 'WAITING_PRD_APPROVAL') {
-    return handleApprovePrd(c)
+    return approvePrdForRoute(c, ticketId, expectedContentSha256)
   }
   if (ticket.status === 'WAITING_BEADS_APPROVAL') {
-    return handleApproveBeads(c)
+    return approveBeadsForRoute(c, ticketId, expectedContentSha256)
   }
   if (ticket.status === 'WAITING_EXECUTION_SETUP_APPROVAL') {
-    return handleApproveExecutionSetupPlan(c)
+    return approveExecutionSetupPlanForRoute(c, ticketId, expectedContentSha256)
   }
 
   try {
@@ -76,6 +104,16 @@ export async function handlePutPrd(c: Context) {
   const body = await c.req.json().catch(() => ({}))
   const rawParsed = rawPrdSaveSchema.safeParse(body)
   if (rawParsed.success) {
+    let beforeRaw: string | null = null
+    let beforeItemCount: number | null = null
+    try {
+      const before = readPrdDocument(ticketId)
+      beforeRaw = before.raw
+      beforeItemCount = countPrdItems(before.document)
+    } catch {
+      beforeRaw = null
+    }
+
     let document: PrdDocument
     try {
       document = buildDraftPrdDocumentFromRawContent(ticketId, rawParsed.data.content)
@@ -87,21 +125,56 @@ export async function handlePutPrd(c: Context) {
     }
 
     try {
+      const shouldRestart = ticket.status !== 'WAITING_PRD_APPROVAL'
+      let restart: Awaited<ReturnType<typeof preparePlanningRestart>> | null = null
+      let result: ReturnType<typeof savePrdDocument>
       if (ticket.status !== 'WAITING_PRD_APPROVAL') {
-        await preparePlanningRestart(ticketId, 'WAITING_PRD_APPROVAL')
-        const { raw } = saveApprovedPrdDocument(ticketId, document)
+        restart = await preparePlanningRestart(ticketId, 'WAITING_PRD_APPROVAL')
+        result = saveApprovedPrdDocument(ticketId, document)
         emitRoutePhaseLog(ticketId, 'WAITING_PRD_APPROVAL', 'info', 'PRD edit saved and approved. Restarting Beads planning from the edited PRD.')
         sendTicketEvent(ticketId, { type: 'APPROVE' })
+        writeUserEditReceipt({
+          ticketId,
+          artifactType: 'prd',
+          phase: 'WAITING_PRD_APPROVAL',
+          action: shouldRestart ? 'save_and_restart' : 'save',
+          editSurface: 'raw',
+          statusBeforeEdit: ticket.status,
+          statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+          beforeRaw,
+          afterRaw: result.raw,
+          beforeItemCount,
+          afterItemCount: countPrdItems(result.document),
+          restart,
+          invalidation: result.invalidation,
+        })
         return c.json({
           success: true,
-          content: raw,
+          content: result.raw,
+          contentSha256: contentSha256(result.raw),
           ...buildRouteStatePayload(ticketId),
         })
       }
-      const { raw } = savePrdDocument(ticketId, document)
+      result = savePrdDocument(ticketId, document)
+      writeUserEditReceipt({
+        ticketId,
+        artifactType: 'prd',
+        phase: 'WAITING_PRD_APPROVAL',
+        action: shouldRestart ? 'save_and_restart' : 'save',
+        editSurface: 'raw',
+        statusBeforeEdit: ticket.status,
+        statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+        beforeRaw,
+        afterRaw: result.raw,
+        beforeItemCount,
+        afterItemCount: countPrdItems(result.document),
+        restart,
+        invalidation: result.invalidation,
+      })
       return c.json({
         success: true,
-        content: raw,
+        content: result.raw,
+        contentSha256: contentSha256(result.raw),
         ...buildRouteStatePayload(ticketId),
       })
     } catch (err) {
@@ -117,6 +190,16 @@ export async function handlePutPrd(c: Context) {
     return c.json({ error: 'Invalid PRD document payload', details: structuredParsed.error.flatten() }, 400)
   }
 
+  let beforeRaw: string | null = null
+  let beforeItemCount: number | null = null
+  try {
+    const before = readPrdDocument(ticketId)
+    beforeRaw = before.raw
+    beforeItemCount = countPrdItems(before.document)
+  } catch {
+    beforeRaw = null
+  }
+
   let document: PrdDocument
   try {
     document = buildDraftPrdDocumentFromStructuredContent(ticketId, structuredParsed.data.document)
@@ -128,21 +211,56 @@ export async function handlePutPrd(c: Context) {
   }
 
   try {
+    const shouldRestart = ticket.status !== 'WAITING_PRD_APPROVAL'
+    let restart: Awaited<ReturnType<typeof preparePlanningRestart>> | null = null
+    let result: ReturnType<typeof savePrdDocument>
     if (ticket.status !== 'WAITING_PRD_APPROVAL') {
-      await preparePlanningRestart(ticketId, 'WAITING_PRD_APPROVAL')
-      const { raw } = saveApprovedPrdDocument(ticketId, document)
+      restart = await preparePlanningRestart(ticketId, 'WAITING_PRD_APPROVAL')
+      result = saveApprovedPrdDocument(ticketId, document)
       emitRoutePhaseLog(ticketId, 'WAITING_PRD_APPROVAL', 'info', 'PRD edit saved and approved. Restarting Beads planning from the edited PRD.')
       sendTicketEvent(ticketId, { type: 'APPROVE' })
+      writeUserEditReceipt({
+        ticketId,
+        artifactType: 'prd',
+        phase: 'WAITING_PRD_APPROVAL',
+        action: shouldRestart ? 'save_and_restart' : 'save',
+        editSurface: 'structured',
+        statusBeforeEdit: ticket.status,
+        statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+        beforeRaw,
+        afterRaw: result.raw,
+        beforeItemCount,
+        afterItemCount: countPrdItems(result.document),
+        restart,
+        invalidation: result.invalidation,
+      })
       return c.json({
         success: true,
-        content: raw,
+        content: result.raw,
+        contentSha256: contentSha256(result.raw),
         ...buildRouteStatePayload(ticketId),
       })
     }
-    const { raw } = savePrdDocument(ticketId, document)
+    result = savePrdDocument(ticketId, document)
+    writeUserEditReceipt({
+      ticketId,
+      artifactType: 'prd',
+      phase: 'WAITING_PRD_APPROVAL',
+      action: shouldRestart ? 'save_and_restart' : 'save',
+      editSurface: 'structured',
+      statusBeforeEdit: ticket.status,
+      statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
+      beforeRaw,
+      afterRaw: result.raw,
+      beforeItemCount,
+      afterItemCount: countPrdItems(result.document),
+      restart,
+      invalidation: result.invalidation,
+    })
     return c.json({
       success: true,
-      content: raw,
+      content: result.raw,
+      contentSha256: contentSha256(result.raw),
       ...buildRouteStatePayload(ticketId),
     })
   } catch (err) {
@@ -153,8 +271,16 @@ export async function handlePutPrd(c: Context) {
   }
 }
 
-export function handleApproveInterview(c: Context) {
+export async function handleApproveInterview(c: Context) {
   const ticketId = getTicketParam(c)
+  const parsed = await parseApprovalRequest(c)
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid approval payload', details: parsed.error.flatten() }, 400)
+  }
+  return approveInterviewForRoute(c, ticketId, parsed.data.expectedContentSha256)
+}
+
+function approveInterviewForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
   if (ticket.status !== 'WAITING_INTERVIEW_APPROVAL') {
@@ -162,7 +288,7 @@ export function handleApproveInterview(c: Context) {
   }
 
   try {
-    approveInterviewDocument(ticketId)
+    approveInterviewDocument(ticketId, expectedContentSha256)
     ensureActorForTicket(ticketId)
 
     const phase = 'WAITING_INTERVIEW_APPROVAL'
@@ -170,6 +296,7 @@ export function handleApproveInterview(c: Context) {
 
     sendTicketEvent(ticketId, { type: 'APPROVE' })
   } catch (err) {
+    if (err instanceof StaleArtifactApprovalError) return staleApprovalResponse(c, err)
     console.error(`[tickets] Failed to approve interview for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve interview',
@@ -180,8 +307,16 @@ export function handleApproveInterview(c: Context) {
   return respondWithState(c, ticketId, 'Interview approved')
 }
 
-export function handleApprovePrd(c: Context) {
+export async function handleApprovePrd(c: Context) {
   const ticketId = getTicketParam(c)
+  const parsed = await parseApprovalRequest(c)
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid approval payload', details: parsed.error.flatten() }, 400)
+  }
+  return approvePrdForRoute(c, ticketId, parsed.data.expectedContentSha256)
+}
+
+function approvePrdForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
   if (ticket.status !== 'WAITING_PRD_APPROVAL') {
@@ -189,7 +324,7 @@ export function handleApprovePrd(c: Context) {
   }
 
   try {
-    approvePrdDocument(ticketId)
+    approvePrdDocument(ticketId, expectedContentSha256)
     ensureActorForTicket(ticketId)
 
     const phase = 'WAITING_PRD_APPROVAL'
@@ -197,6 +332,7 @@ export function handleApprovePrd(c: Context) {
 
     sendTicketEvent(ticketId, { type: 'APPROVE' })
   } catch (err) {
+    if (err instanceof StaleArtifactApprovalError) return staleApprovalResponse(c, err)
     console.error(`[tickets] Failed to approve PRD for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve PRD',
@@ -207,8 +343,16 @@ export function handleApprovePrd(c: Context) {
   return respondWithState(c, ticketId, 'PRD approved')
 }
 
-export function handleApproveBeads(c: Context) {
+export async function handleApproveBeads(c: Context) {
   const ticketId = getTicketParam(c)
+  const parsed = await parseApprovalRequest(c)
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid approval payload', details: parsed.error.flatten() }, 400)
+  }
+  return approveBeadsForRoute(c, ticketId, parsed.data.expectedContentSha256)
+}
+
+function approveBeadsForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
   if (ticket.status !== 'WAITING_BEADS_APPROVAL') {
@@ -221,7 +365,7 @@ export function handleApproveBeads(c: Context) {
   }
 
   try {
-    approveBeadsDocument(ticketId)
+    approveBeadsDocument(ticketId, expectedContentSha256)
     ensureActorForTicket(ticketId)
 
     const phase = 'WAITING_BEADS_APPROVAL'
@@ -229,6 +373,7 @@ export function handleApproveBeads(c: Context) {
 
     sendTicketEvent(ticketId, { type: 'APPROVE' })
   } catch (err) {
+    if (err instanceof StaleArtifactApprovalError) return staleApprovalResponse(c, err)
     console.error(`[tickets] Failed to approve beads for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve beads',
@@ -239,8 +384,16 @@ export function handleApproveBeads(c: Context) {
   return respondWithState(c, ticketId, 'Beads approved')
 }
 
-export function handleApproveExecutionSetupPlan(c: Context) {
+export async function handleApproveExecutionSetupPlan(c: Context) {
   const ticketId = getTicketParam(c)
+  const parsed = await parseApprovalRequest(c)
+  if (!parsed.success) {
+    return c.json({ error: 'Invalid approval payload', details: parsed.error.flatten() }, 400)
+  }
+  return approveExecutionSetupPlanForRoute(c, ticketId, parsed.data.expectedContentSha256)
+}
+
+function approveExecutionSetupPlanForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
   if (ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL') {
@@ -254,12 +407,16 @@ export function handleApproveExecutionSetupPlan(c: Context) {
 
   let plan: ExecutionSetupPlan | null = null
   try {
-    plan = readExecutionSetupPlan(ticketId).plan
+    const current = readExecutionSetupPlan(ticketId)
+    plan = current.plan
     if (!plan) {
       return c.json({ error: 'Execution setup plan is not ready yet' }, 409)
     }
+    if (!current.raw) {
+      return c.json({ error: 'Execution setup plan is not ready yet' }, 409)
+    }
 
-    approveExecutionSetupPlan(ticketId, plan)
+    approveExecutionSetupPlan(ticketId, plan, current.raw, expectedContentSha256)
     ensureActorForTicket(ticketId)
 
     const phase = 'WAITING_EXECUTION_SETUP_APPROVAL'
@@ -267,6 +424,7 @@ export function handleApproveExecutionSetupPlan(c: Context) {
 
     sendTicketEvent(ticketId, { type: 'APPROVE_EXECUTION_SETUP_PLAN' })
   } catch (err) {
+    if (err instanceof StaleArtifactApprovalError) return staleApprovalResponse(c, err)
     console.error(`[tickets] Failed to approve execution setup plan for ${ticketId}:`, err)
     return c.json({
       error: 'Failed to approve execution setup plan',

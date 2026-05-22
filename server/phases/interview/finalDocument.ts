@@ -9,6 +9,8 @@ import { clearExecutionSetupState } from '../executionSetup/storage'
 import { broadcaster } from '../../sse/broadcaster'
 import { getActivePhaseAttempt, getTicketByRef, getTicketContext, getTicketPaths } from '../../storage/tickets'
 import { upsertLatestPhaseArtifact } from '../../storage/ticketArtifacts'
+import { assertExpectedContentSha256 } from '../../lib/artifactApproval'
+import { contentSha256 } from '../../lib/contentHash'
 import {
   buildApprovedInterviewDocument,
   buildInterviewDocumentYaml,
@@ -76,15 +78,25 @@ function normalizeInterviewDocumentForTicket(ticketId: string, rawContent: strin
   }
 }
 
-function writeInterviewDocument(ticketId: string, document: InterviewDocument): string {
+function writeInterviewDocument(
+  ticketId: string,
+  document: InterviewDocument,
+  options?: {
+    approvalSnapshotRaw?: string
+  },
+): string {
   const interviewPath = getInterviewPath(ticketId)
   const nextRaw = buildInterviewDocumentYaml(document)
   safeAtomicWrite(interviewPath, nextRaw)
+  const snapshotRaw = options?.approvalSnapshotRaw ?? nextRaw
   upsertLatestPhaseArtifact(
     ticketId,
     INTERVIEW_APPROVAL_SNAPSHOT_ARTIFACT,
     'WAITING_INTERVIEW_APPROVAL',
-    JSON.stringify({ raw: nextRaw }),
+    JSON.stringify({
+      raw: snapshotRaw,
+      content_sha256: contentSha256(snapshotRaw),
+    }),
   )
   return nextRaw
 }
@@ -118,6 +130,7 @@ export function readInterviewDocument(ticketId: string): {
 export function invalidateDownstreamPlanningArtifacts(ticketId: string): {
   removedArtifacts: number
   removedFiles: string[]
+  invalidatedPhases: string[]
 } {
   const ticketContext = getTicketContext(ticketId)
   if (!ticketContext) {
@@ -184,7 +197,11 @@ export function invalidateDownstreamPlanningArtifacts(ticketId: string): {
     })
   }
 
-  return { removedArtifacts, removedFiles }
+  return {
+    removedArtifacts,
+    removedFiles,
+    invalidatedPhases: [...DOWNSTREAM_PHASES],
+  }
 }
 
 export function saveInterviewRawContent(
@@ -193,7 +210,7 @@ export function saveInterviewRawContent(
 ): {
   raw: string
   document: InterviewDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   return saveInterviewDocument(ticketId, buildDraftInterviewDocumentFromRawContent(ticketId, rawContent))
 }
@@ -204,7 +221,7 @@ export function saveInterviewAnswerUpdates(
 ): {
   raw: string
   document: InterviewDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   return saveInterviewDocument(ticketId, buildDraftInterviewDocumentFromAnswerUpdates(ticketId, updates))
 }
@@ -215,7 +232,7 @@ export function saveInterviewDocument(
 ): {
   raw: string
   document: InterviewDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   const raw = writeInterviewDocument(ticketId, document)
   const invalidation = invalidateDownstreamPlanningArtifacts(ticketId)
@@ -228,17 +245,46 @@ export function saveApprovedInterviewDocument(
 ): {
   raw: string
   document: InterviewDocument
-  invalidation: { removedArtifacts: number; removedFiles: string[] }
+  invalidation: { removedArtifacts: number; removedFiles: string[]; invalidatedPhases: string[] }
 } {
   return saveInterviewDocument(ticketId, buildApprovedInterviewDocument(document, nowIso()))
 }
 
-export function approveInterviewDocument(ticketId: string): {
+export function approveInterviewDocument(ticketId: string, expectedContentSha256: string): {
   raw: string
   document: InterviewDocument
+  contentSha256: string
+  storedContentSha256: string
 } {
   const current = readInterviewDocument(ticketId)
-  const document = buildApprovedInterviewDocument(current.document, nowIso())
-  const raw = writeInterviewDocument(ticketId, document)
-  return { raw, document }
+  const reviewedContentSha256 = assertExpectedContentSha256({
+    artifactType: 'interview',
+    currentContent: current.raw,
+    expectedContentSha256,
+  })
+  const approvedAt = nowIso()
+  const document = buildApprovedInterviewDocument(current.document, approvedAt)
+  const raw = writeInterviewDocument(ticketId, document, {
+    approvalSnapshotRaw: current.raw,
+  })
+  const storedContentSha256 = contentSha256(raw)
+  upsertLatestPhaseArtifact(
+    ticketId,
+    'approval_receipt',
+    'WAITING_INTERVIEW_APPROVAL',
+    JSON.stringify({
+      approved_by: 'user',
+      approved_at: approvedAt,
+      artifact_type: 'interview',
+      phase: 'WAITING_INTERVIEW_APPROVAL',
+      content_sha256: reviewedContentSha256,
+      stored_content_sha256: storedContentSha256,
+    }),
+  )
+  return {
+    raw,
+    document,
+    contentSha256: reviewedContentSha256,
+    storedContentSha256,
+  }
 }

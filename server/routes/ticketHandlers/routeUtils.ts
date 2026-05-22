@@ -20,6 +20,7 @@ import {
   getTicketByRef,
   INTERVIEW_EDIT_RESTART_PHASES,
   PRD_EDIT_RESTART_PHASES,
+  type PublicTicketPhaseAttemptRow,
 } from '../../storage/tickets'
 
 export function getProfileDefaults() {
@@ -132,10 +133,16 @@ export function buildExecutionBandConflictMessage(conflict: {
   return `Project execution is busy with ${conflict.externalId} (${conflict.status}): ${conflict.title}`
 }
 
+export interface PhaseRestartSummary {
+  reason: string
+  archivedAttempts: PublicTicketPhaseAttemptRow[]
+  createdAttempts: PublicTicketPhaseAttemptRow[]
+}
+
 export async function preparePlanningRestart(
   ticketId: string,
   targetApprovalStatus: 'WAITING_INTERVIEW_APPROVAL' | 'WAITING_PRD_APPROVAL',
-): Promise<void> {
+): Promise<PhaseRestartSummary> {
   const restartPhase = targetApprovalStatus === 'WAITING_INTERVIEW_APPROVAL'
     ? 'WAITING_INTERVIEW_APPROVAL'
     : 'WAITING_PRD_APPROVAL'
@@ -151,20 +158,33 @@ export async function preparePlanningRestart(
   await abortTicketSessions(ticketId)
   clearContextCache(ticketId)
   ensureActivePhaseAttempt(ticketId, targetApprovalStatus)
-  archiveActivePhaseAttempts(ticketId, phasesToArchive, restartReason)
-  createFreshPhaseAttempts(ticketId, phasesToArchive)
+  const archivedAttempts = archiveActivePhaseAttempts(ticketId, phasesToArchive, restartReason)
+  const createdAttempts = createFreshPhaseAttempts(ticketId, phasesToArchive)
 
   ensureActorForTicket(ticketId)
   revertTicketToApprovalStatus(ticketId, targetApprovalStatus)
+
+  return {
+    reason: restartReason,
+    archivedAttempts,
+    createdAttempts,
+  }
 }
 
-export async function prepareExecutionSetupPlanRestart(ticketId: string): Promise<void> {
+export async function prepareExecutionSetupPlanRestart(ticketId: string): Promise<PhaseRestartSummary> {
+  const restartReason = 'execution_setup_plan_regenerate'
   emitRoutePhaseLog(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL', 'info', 'Archiving current execution setup plan attempt for versioned regenerate.')
   cancelTicket(ticketId)
   await abortTicketSessions(ticketId)
   clearContextCache(ticketId)
   ensureActivePhaseAttempt(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL')
-  archiveActivePhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES, 'execution_setup_plan_regenerate')
-  createFreshPhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES)
+  const archivedAttempts = archiveActivePhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES, restartReason)
+  const createdAttempts = createFreshPhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES)
   ensureActorForTicket(ticketId)
+
+  return {
+    reason: restartReason,
+    archivedAttempts,
+    createdAttempts,
+  }
 }

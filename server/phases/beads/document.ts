@@ -1,6 +1,8 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { getTicketPaths } from '../../storage/tickets'
 import { upsertLatestPhaseArtifact } from '../../storage/ticketArtifacts'
+import { assertExpectedContentSha256 } from '../../lib/artifactApproval'
+import { contentSha256 } from '../../lib/contentHash'
 import { nowIso } from '../../lib/dateUtils'
 
 const BEADS_APPROVAL_SNAPSHOT_ARTIFACT = 'approval_snapshot:beads'
@@ -19,13 +21,17 @@ export function upsertBeadsApprovalSnapshot(ticketId: string, rawContent?: strin
     ticketId,
     BEADS_APPROVAL_SNAPSHOT_ARTIFACT,
     'WAITING_BEADS_APPROVAL',
-    JSON.stringify({ raw: content }),
+    JSON.stringify({
+      raw: content,
+      content_sha256: contentSha256(content),
+    }),
   )
 }
 
-export function approveBeadsDocument(ticketId: string): {
+export function approveBeadsDocument(ticketId: string, expectedContentSha256: string): {
   beadCount: number
   approvedAt: string
+  contentSha256: string
 } {
   const beadsPath = resolveBeadsPath(ticketId)
   if (!existsSync(beadsPath)) {
@@ -33,7 +39,11 @@ export function approveBeadsDocument(ticketId: string): {
   }
 
   const content = readFileSync(beadsPath, 'utf-8')
-  upsertBeadsApprovalSnapshot(ticketId, content)
+  const reviewedContentSha256 = assertExpectedContentSha256({
+    artifactType: 'beads',
+    currentContent: content,
+    expectedContentSha256,
+  })
   const lines = content.split('\n').filter((line) => line.trim() !== '')
   const beadCount = lines.length
 
@@ -61,14 +71,18 @@ export function approveBeadsDocument(ticketId: string): {
     }
   }
 
+  upsertBeadsApprovalSnapshot(ticketId, content)
   const approvedAt = nowIso()
   const approvalReceipt = JSON.stringify({
     approved_by: 'user',
     approved_at: approvedAt,
+    artifact_type: 'beads',
+    phase: 'WAITING_BEADS_APPROVAL',
     bead_count: beadCount,
+    content_sha256: reviewedContentSha256,
   })
 
   upsertLatestPhaseArtifact(ticketId, 'approval_receipt', 'WAITING_BEADS_APPROVAL', approvalReceipt)
 
-  return { beadCount, approvedAt }
+  return { beadCount, approvedAt, contentSha256: reviewedContentSha256 }
 }

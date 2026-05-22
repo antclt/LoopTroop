@@ -36,6 +36,10 @@ export async function handleCleanup(
     emitPhaseLog(ticketId, context.externalId, 'CLEANING_ENV', 'error', `Cleanup error: ${err}`)
   }
 
-  emitPhaseLog(ticketId, context.externalId, 'CLEANING_ENV', 'info', 'Cleanup phase completed.')
+  if (report.status === 'warning') {
+    emitPhaseLog(ticketId, context.externalId, 'CLEANING_ENV', 'error', `Cleanup completed with ${report.errors.length} warning(s).`)
+  } else {
+    emitPhaseLog(ticketId, context.externalId, 'CLEANING_ENV', 'info', 'Cleanup phase completed cleanly.')
+  }
   sendEvent({ type: 'CLEANUP_DONE' })
 }

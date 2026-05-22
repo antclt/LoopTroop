@@ -310,14 +310,16 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Review Interface: LoopTroop exposes the canonical interview in two modes — a structured view showing questions and answers in a readable format, and a raw YAML editing view for direct text manipulation. You can switch between these views freely.',
       'Editing Answers: You can adjust any answer text, change skip decisions, or modify the raw YAML directly. The UI maintains temporary unsaved draft state between view switches so your edits are not lost when toggling between structured and raw modes.',
-      'Saving Changes: Saving writes the updated interview artifact back to the ticket workspace and refreshes all relevant caches. If this is a post-approval edit while the ticket is still before PRE_FLIGHT_CHECK, saving archives the current approved interview version plus downstream PRD/beads planning attempts, intentionally cancels active downstream planning sessions, saves and approves the edited interview as the new active version, clears stale downstream artifacts and UI state, and starts DRAFTING_PRD.',
-      'Approval Decision: Approving locks in the current interview results as the authoritative source material for PRD drafting. Once approved, the interview answers become the ground truth that the PRD council uses to generate specifications.',
+      'Saving Changes: Saving writes the updated interview artifact back to the ticket workspace, records a user-edit receipt with old/new content hashes, and refreshes all relevant caches. If this is a post-approval edit while the ticket is still before PRE_FLIGHT_CHECK, saving archives the current approved interview version plus downstream PRD/beads planning attempts, intentionally cancels active downstream planning sessions, saves and approves the edited interview as the new active version, clears stale downstream artifacts and UI state, and starts DRAFTING_PRD.',
+      'Approval Decision: Approving locks in the current interview results as the authoritative source material for PRD drafting. The approval request includes the SHA-256 hash of the bytes you reviewed; if the server artifact changed in the meantime, approval returns a stale-content 409 instead of advancing. Once approved, the interview answers become the ground truth that the PRD council uses to generate specifications.',
       'Post-Approval Editing Window: After approval, interview edits remain allowed only while the ticket is still before PRE_FLIGHT_CHECK. Once the ticket reaches pre-flight or later, interview edits are rejected because implementation planning has already been locked for execution.',
     ],
     outputs: [
       'Approved interview artifact — the finalized, authoritative version of interview questions and answers.',
       'User-edited replacement (if edits were made before approval).',
       'Optional persisted UI draft state for in-progress edits.',
+      'Approval snapshot and approval receipt with `content_sha256`; interview receipts also record `stored_content_sha256` when approval metadata changes the stored YAML.',
+      'Append-only `user_edit_receipt:interview` artifacts for manual saves.',
       'A locked interview baseline that the PRD council treats as ground truth.',
       'Archived approved interview versions and downstream PRD/beads planning attempts remain read-only history when a post-approval edit creates a new active version.',
     ],
@@ -327,6 +329,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'This is the review artifact gate for the interview phase — it ensures a human has signed off before expensive PRD generation begins.',
+      'The approval UI and API compare content hashes so stale tabs cannot approve an interview version that is no longer current.',
       'No AI context is passed in this phase — it is entirely user-driven. The AI does not see or process anything during approval.',
       'Tip: Review skipped questions carefully. Skipped questions will have AI-generated answers filled in during PRD drafting. If you have opinions about those topics, it is better to provide real answers now than to rely on AI guesses later.',
       'Tip: This is your last easy chance to influence the interview before it feeds into the PRD. Editing after approval is possible only before PRE_FLIGHT_CHECK, and saving intentionally cancels active downstream planning sessions as cancellation rather than blocked errors so DRAFTING_PRD restarts from the new approved interview.',
@@ -466,8 +469,8 @@ const WORKFLOW_PHASE_DETAILS = {
       'Review Interface: LoopTroop renders the PRD in two modes — a structured view showing requirements, acceptance criteria, edge cases, and test intent in a readable format, and a raw YAML editing view for direct manipulation. You can switch freely between views.',
       'Full Answers Context: If the winning PRD model produced a Full Answers artifact during Part 1 of PRD drafting, the approval header shows a compact Full Answers chip. Opening it displays the complete read-only interview answer set that the winning PRD draft used, including user answers and any AI-filled skipped answers. This artifact is supporting context only; edits are made to the PRD itself.',
       'Coverage Warnings: If the latest PRD candidate reached approval after exhausting the coverage loop cap (rather than achieving a fully clean status), coverage warnings are displayed prominently. These warnings describe unresolved gaps, including unresolved source-artifact contradictions when present, so you can decide whether to address them manually before approving.',
-      'Editing: You can edit any section of the PRD — add requirements, refine acceptance criteria, adjust edge cases, or rewrite test intent. The UI preserves temporary draft state between view switches. Saving writes the updated PRD artifact back to the ticket workspace. If this is a post-approval edit while the ticket is still before PRE_FLIGHT_CHECK, saving archives the current approved PRD version plus downstream beads planning attempts, intentionally cancels active downstream planning sessions, saves and approves the edited PRD as the new active version, clears stale downstream artifacts and UI state, and starts DRAFTING_BEADS.',
-      'Approval Decision: Approving confirms the current PRD as the authoritative specification for beads drafting. The beads council will decompose this approved PRD into implementable tasks.',
+      'Editing: You can edit any section of the PRD — add requirements, refine acceptance criteria, adjust edge cases, or rewrite test intent. The UI preserves temporary draft state between view switches. Saving writes the updated PRD artifact back to the ticket workspace and records a user-edit receipt with old/new content hashes. If this is a post-approval edit while the ticket is still before PRE_FLIGHT_CHECK, saving archives the current approved PRD version plus downstream beads planning attempts, intentionally cancels active downstream planning sessions, saves and approves the edited PRD as the new active version, clears stale downstream artifacts and UI state, and starts DRAFTING_BEADS.',
+      'Approval Decision: Approving confirms the current PRD as the authoritative specification for beads drafting. The request includes the SHA-256 hash of the reviewed PRD bytes; stale hashes return 409 and leave approval paused. The beads council will decompose this approved PRD into implementable tasks.',
       'Post-Approval Editing Window: After approval, PRD edits remain allowed only while the ticket is still before PRE_FLIGHT_CHECK. Once the ticket reaches pre-flight or later, PRD edits are rejected because the implementation plan has already been accepted for execution.',
     ],
     outputs: [
@@ -475,6 +478,8 @@ const WORKFLOW_PHASE_DETAILS = {
       'User-edited replacement (if edits were made before approval).',
       'Optional UI draft state for in-progress structured and raw edits.',
       'Read-only winning Full Answers artifact available as approval context when PRD drafting produced one.',
+      'Approval snapshot and approval receipt with `content_sha256`; PRD receipts also record `stored_content_sha256` when approval metadata changes the stored YAML.',
+      'Append-only `user_edit_receipt:prd` artifacts for manual saves.',
       'A locked PRD baseline that the beads council uses as its primary input.',
       'Archived approved PRD versions and downstream beads planning attempts remain read-only history when a post-approval edit creates a new active version.',
     ],
@@ -484,6 +489,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'This is the review artifact gate for the PRD phase — it ensures a human has signed off on the specification before expensive architecture planning begins.',
+      'The approval UI and API compare content hashes so stale tabs cannot approve a PRD version that is no longer current.',
       'No AI context is passed in this phase — it is entirely user-driven. The AI does not see or process anything during approval.',
       'The Full Answers chip does not create another editable approval artifact. It shows the winning model\'s Part 1 context so you can understand which completed interview answers shaped the PRD.',
       'Tip: Pay special attention to acceptance criteria — they directly determine how the AI will verify its own implementation during the coding phase.',
@@ -644,14 +650,16 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Execution Plan Review: LoopTroop shows the execution-ready beads breakdown, including each bead\'s description, acceptance criteria, dependency chain, file targets, test commands, and execution ordering. You can see exactly what the coding agent will do and in what order.',
       'Dependency Visualization: The beads are shown with their dependency relationships, so you can verify that the execution order makes sense — beads that depend on other beads will not run until their dependencies complete.',
-      'Editing: You can review the plan in structured form or edit the raw representation before approving. Changes are saved back to the beads artifact.',
+      'Editing: You can review the plan in structured form or edit the raw representation before approving. Changes are saved back to the current beads artifact only while this approval gate is active, record a user-edit receipt with old/new content hashes, and invalidate the execution setup plan.',
       'Coverage Warnings: If the beads plan reached approval after exhausting the coverage loop cap (rather than achieving a fully clean status), coverage warnings are displayed. These describe unresolved gaps, including PRD requirements that may not have corresponding beads and unresolved source-artifact contradictions when present.',
-      'Approval Decision: Approval confirms the execution plan that the coding loop will consume bead-by-bead. After approval, the coding agent receives individual bead specifications — it does not see the full plan, only the bead it is currently implementing.',
+      'Approval Decision: Approval confirms the execution plan that the coding loop will consume bead-by-bead. The request includes the SHA-256 hash of the reviewed JSONL bytes; stale hashes return 409 and leave approval paused. After approval, the coding agent receives individual bead specifications — it does not see the full plan, only the bead it is currently implementing.',
     ],
     outputs: [
       'Approved execution-ready beads plan — the authoritative task breakdown the coding agent will follow.',
       'User-edited replacement (if edits were made before approval).',
       'Saved approval editor state for in-progress reviews.',
+      'Approval snapshot and approval receipt with `content_sha256` for the reviewed JSONL plan.',
+      'Append-only `user_edit_receipt:beads` artifacts for manual saves.',
       'The authoritative bead set consumed by pre-flight checks and the coding loop.',
     ],
     transitions: [
@@ -660,6 +668,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'This is the review artifact gate for the beads phase and the last approval step before automated code execution begins.',
+      'Bead reads expose the reviewed content hash in the `X-Content-Sha256` header, and approval compares that hash against the current server artifact before advancing.',
       'No AI context is passed in this phase — it is entirely user-driven.',
       'Tip: Review the dependency chain carefully. Incorrect dependencies could cause beads to run before their prerequisites are ready, leading to implementation errors.',
       'Tip: Check that acceptance criteria are specific and testable. The coding agent uses acceptance criteria to verify its own work — vague criteria may lead to incomplete implementations.',
@@ -700,14 +709,15 @@ const WORKFLOW_PHASE_DETAILS = {
       'Automatic Readiness Audit On Entry: When this state is entered, LoopTroop asks the locked main implementer to inspect the approved ticket details, relevant files, PRD, beads, the current worktree, and any prior reusable setup profile, then decide whether temporary setup is actually needed. The draft is created automatically if no current setup-plan artifact exists.',
       'Structured Setup Plan: The draft plan captures an explicit readiness assessment (`ready`, `partial`, or `missing`), whether actions are required, the evidence gathered, unresolved gaps, any ordered setup steps that remain necessary, the allowed temp roots, discovered project-wide command families, and the default quality-gate policy later coding beads should follow. Manifests alone do not prove readiness: missing command launchers or toolchains for required checks are setup gaps that must be planned or surfaced before coding. Structured retries are captured as Raw attempt variants on the generation report.',
       'No-Action Cases Are First-Class: If the audit finds that the environment already has everything needed, the plan stays reviewable but contains no setup steps. You can still approve it as-is or edit it to add commands if you want LoopTroop to do additional temporary preparation.',
-      'User Review And Editing: The approval UI lets you review the readiness assessment and setup steps in structured form, edit commands or descriptions, add or remove steps, and fall back to raw YAML/JSON editing when you need full control over the artifact.',
+      'User Review And Editing: The approval UI lets you review the readiness assessment and setup steps in structured form, edit commands or descriptions, add or remove steps, and fall back to raw YAML/JSON editing when you need full control over the current artifact. Manual saves record user-edit receipts with old/new content hashes; archived versions remain read-only.',
       'Regenerate With Commentary: If the initial assessment or plan is close but not correct, you can send commentary describing what should change. LoopTroop will archive the current plan as a prior version, then regenerate a new draft in the background. You are returned to the ticket overview immediately while generation runs. All previous versions are accessible via the VERSION dropdown at the top of the approval pane.',
-      'Approval Handoff: Once approved, this plan becomes the primary execution contract for the next phase. The execution-setup agent must respect the approved readiness assessment and start from the approved plan rather than rediscovering workspace initialization from scratch.',
+      'Approval Handoff: Once approved, this plan becomes the primary execution contract for the next phase. Approval includes the SHA-256 hash of the reviewed serialized plan; stale hashes return 409 and leave the gate paused. The execution-setup agent must respect the approved readiness assessment and start from the approved plan rather than rediscovering workspace initialization from scratch.',
     ],
     outputs: [
       'Editable `execution_setup_plan` artifact containing the readiness assessment, any proposed temporary environment-setup steps, user-facing diagnostics, and regenerate commentary history.',
       'Underlying plan-generation report and notes artifacts retained for workflow context, auditability, regenerate continuity, and raw attempt inspection.',
-      'Approval receipt confirming the reviewed setup plan was explicitly approved before execution setup begins.',
+      'Approval receipt confirming the reviewed setup plan was explicitly approved before execution setup begins, including `content_sha256` for the canonical serialized plan.',
+      'Append-only `user_edit_receipt:execution_setup_plan` artifacts for manual saves.',
     ],
     transitions: [
       'Approve → Preparing Workspace Runtime: The workflow advances to the execution setup phase, which verifies the approved readiness assessment, performs only the missing temporary setup, and writes the reusable runtime profile.',
@@ -717,6 +727,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This state is still pre-coding. No permanent repository files should be modified here.',
       'No AI execution proceeds past this gate until you approve the proposed setup plan.',
+      'Read APIs expose `contentSha256`; write APIs reject explicit archived phase attempts with 409 so previous setup-plan versions stay immutable.',
       'If setup-plan generation fails, rejected `modelOutput` is diagnostic-only: the structured details show failure state and errors, while full malformed output is available from Raw diagnostics.',
       'The approved setup plan is separate from the final execution setup profile. The profile is produced only after the next phase verifies readiness and runs any approved temporary setup inside LoopTroop-owned runtime paths, preferably under `.ticket/runtime/execution-setup/**` for execution-only toolchains and caches.',
       'Setup-plan generation owns its OpenCode session only while producing the draft: session creation uses the shared 1s/3s/7s OpenCode retry wrapper, ready reports complete the session, and invalid or failed reports abandon it so retry starts from clean durable context.',
@@ -752,7 +763,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   CODING: {
-    overview: 'LoopTroop runs the approved beads one at a time, selecting the next runnable bead by dependency order and priority, executing it with the coding agent, and recovering cleanly between failed iterations via checkpoint finalization or worktree reset. Each bead runs in an OpenCode session with its own context, bead retry budget, prompt-level OpenCode retry budget, and timeout. When an implementation iteration fails, the worktree is reset to the pre-bead git snapshot and the next attempt starts with an AI-generated diagnostic note as additional context. When OpenCode reports retryable provider stalls such as rate or usage limits past the configured prompt budget, LoopTroop blocks early with diagnostics and preserves the active session when Continue is possible. If a normal bead failure later blocks the ticket, the latest meaningful OpenCode provider/session diagnostic is still attached to the blocked error. On backend restart, a current matching execution checkpoint can be finalized without re-running the bead; stale or mismatched checkpoints are ignored and the bead is reset before retry. Successful beads are committed to git and their code diffs are captured as artifacts. The status label shows current bead progress (e.g., "Implementing (Bead 3/7)").',
+    overview: 'LoopTroop runs the approved beads one at a time, selecting the next runnable bead by dependency order and priority, executing it with the coding agent, and recovering cleanly between failed iterations via checkpoint finalization or worktree reset. Each bead runs in an OpenCode session with its own context, bead retry budget, prompt-level OpenCode retry budget, and timeout. When an implementation iteration fails, the worktree is reset to the pre-bead git snapshot and the next attempt starts with an AI-generated diagnostic note as additional context. When OpenCode reports retryable provider stalls such as rate or usage limits past the configured prompt budget, LoopTroop blocks early with diagnostics and preserves the active session when Continue is possible. If a normal bead failure later blocks the ticket, the latest meaningful OpenCode provider/session diagnostic is still attached to the blocked error. On backend restart, a current matching execution checkpoint can be finalized without re-running the bead; stale or mismatched checkpoints are ignored and the bead is reset before retry. Successful beads are marked done only after local finalization succeeds: changed work is committed, true no-op work may complete without a commit, and push failures are warnings after a successful local commit. The status label shows current bead progress (e.g., "Implementing (Bead 3/7)").',
     steps: [
       'Bead Selection and Tracker Update: LoopTroop reads the authoritative bead tracker, identifies all runnable beads (status `pending` with every entry in `blocked_by` present in the done-bead set), and sorts them by `priority` ascending. The first bead in that sorted list is selected. The selected bead is immediately marked `in_progress` in the tracker and ticket progress counters are updated so the UI progress ring reflects active work.',
       'Bead Start Commit Recording (Best Effort): Before the agent writes any files, LoopTroop attempts to record the current git HEAD SHA of the worktree as `beadStartCommit` and persists it in the bead tracker. This SHA is the worktree reset anchor — if a later iteration fails, the worktree can be rolled back to exactly this state. If recording fails (e.g., a git error), execution continues without it; context-wipe reset and bead-diff capture are simply disabled for this bead.',
@@ -763,23 +774,23 @@ const WORKFLOW_PHASE_DETAILS = {
       'Inner Response Loop — Completion Marker Evaluation: After each agent response, LoopTroop parses the `<BEAD_STATUS>...</BEAD_STATUS>` completion marker from the response text and branches into one of three paths. (1) Marker present and all gates passing (tests, lint, typecheck, qualitative all "pass", status "done") → success, exit the inner loop immediately. (2) Marker missing or has a validation error → within the ticket\'s configured Structured Output Retries count, a healthy session receives a continued session structured retry prompt; an unhealthy session is abandoned and the full original bead prompt is sent in a fresh session. (3) Marker found but gates not all passing → sends a continuation prompt in the same session, instructing the agent to inspect failures, keep working, and return the final marker only when done. This structured retry count is inside one coding iteration and does not change the bead iteration budget. A per-iteration timeout is tracked across all inner-loop steps; once remaining time drops to zero, the inner loop exits with a Timeout error.',
       'Live Streaming: High-signal execution events, prompt dispatches, visible agent responses, file modification events, test results, and session lifecycle events are emitted into the normal phase log in real time. Deeper forensic/debug details live in the debug log.',
       'Scoped Verification: During execution, LoopTroop prefers bead-specific test commands first, then impacted or package-scoped lint and typecheck commands. When command-family details are needed, the coding agent can read the setup profile file instead of receiving it inline. If coding discovers a missed toolchain, any execution-only tooling must stay under approved setup roots from the profile, and missing tooling without such a root is reported as an environment failure. This avoids failing beads solely because of pre-existing repository-wide baseline failures unrelated to this bead\'s work.',
-      'Success Path — Git Commit, Diff Capture, Artifacts, and Broadcast: When the inner loop exits successfully, LoopTroop marks the bead `done` in the tracker and updates progress counters. It then runs best-effort git side effects: (a) `commitBeadChanges` creates a per-bead git commit of all file changes except LoopTroop runtime paths, setup profile temp roots, setup reusable-artifact roots, and the legacy `.cache/project-tooling/**` cache, then optionally pushes to the remote branch — git failures are logged as warnings but do not un-mark the bead as done, and internal push logs avoid progress streams; (b) if `beadStartCommit` was recorded, `captureBeadDiff` generates a code-only diff from that SHA to the new HEAD (excluding `.ticket/**` metadata) and stores it as a `bead_diff:{beadId}` phase artifact. The full execution result (iteration count, response text, error history) is persisted as a `bead_execution:{beadId}` phase artifact on both success and failure, with checkpoint metadata tying it to the exact in-progress bead state that produced it. Finally, a `bead_complete` SSE event with progress counters (e.g., completed 3/7) is broadcast to the UI.',
+      'Success Path — Local Finalization, Diff Capture, Artifacts, and Broadcast: When the inner loop exits successfully, LoopTroop first persists the full execution result as a `bead_execution:{beadId}` checkpoint tied to the exact in-progress bead state. It then finalizes the local work: `commitBeadChanges` must create a local per-bead commit when code changes exist, a true no-op may complete without a commit, and a remote push failure after a successful local commit is logged as a warning. Only after local finalization succeeds does LoopTroop mark the bead `done`, update progress counters, capture a code-only `bead_diff:{beadId}` from `beadStartCommit` when available, and broadcast `bead_complete` with progress counters.',
       'Failure Path — Context Wipe Note Generation: When an iteration fails (timeout, uncaught error, or inner-loop exhaustion without a valid completion marker), LoopTroop attempts to generate an AI context wipe note by sending a context-capture prompt to the still-open failing session. The prompt asks the model to summarise what went wrong, what it tried, and what the next attempt should do differently — the session\'s accumulated tool calls, test output, and error traces make this note more informative than any static template. If the context-capture prompt itself fails (session error, timeout, parse failure), LoopTroop falls back to a deterministic note built from the recorded iteration errors and recent tool-failure excerpts. The note (AI-generated or fallback) is stamped with the iteration number and timestamp and appended to `bead.notes`, accumulating across iterations. These notes are included in the bead context on every subsequent attempt.',
       'Failure Path — Worktree Reset and Status Rollback: After the context wipe note is generated, LoopTroop resets the worktree back to `beadStartCommit` via `resetToBeadStart` (this step is skipped if `beadStartCommit` was not recorded). LoopTroop-owned ticket artifacts under `.ticket` survive the reset; uncommitted project file changes from the failed attempt are discarded. The bead\'s status is set back to `pending` in the tracker with the accumulated notes attached. The active session is abandoned after the note is generated, and the outer iteration counter increments.',
-      'Retry Budget Exhaustion and Loop Continuation: If the implementation iteration counter reaches `maxIterations`, the bead is marked `error` in the tracker with the `BEAD_RETRY_BUDGET_EXHAUSTED` error code attached, and a `BEAD_ERROR` event is sent — routing the ticket to Blocked Error. If OpenCode exposed a provider/session cause during the failed bead, that diagnostic is attached to the bead error without replacing the primary bead failure message. Continuable OpenCode retry-budget exhaustion uses the broader `ERROR` path instead, preserving provider diagnostics and the active session when Continue is eligible. From Blocked Error you can retry (re-enters CODING and re-attempts the failed bead using the accumulated iteration notes as context), continue when a preserved session is resumable, or cancel. After a successful bead, `isAllComplete` is checked: if every bead is done, `ALL_BEADS_DONE` is sent and the workflow advances to final testing; otherwise `BEAD_COMPLETE` is sent and the state stays in CODING, immediately picking the next runnable bead.',
+      'Retry Budget Exhaustion and Loop Continuation: If the implementation iteration counter reaches `maxIterations`, the bead is marked `error` in the tracker with the `BEAD_RETRY_BUDGET_EXHAUSTED` error code attached, and a `BEAD_ERROR` event is sent — routing the ticket to Blocked Error. If OpenCode exposed a provider/session cause during the failed bead, that diagnostic is attached to the bead error without replacing the primary bead failure message. Continuable OpenCode retry-budget exhaustion uses the broader `ERROR` path instead, preserving provider diagnostics and the active session when Continue is eligible. From Blocked Error you can retry (re-enters CODING and re-attempts the failed bead using the accumulated iteration notes as context), continue when a preserved session is resumable, or cancel. After a finalized successful bead, `isAllComplete` is checked: if every bead is done, `ALL_BEADS_DONE` is sent and the workflow advances to final testing; otherwise `BEAD_COMPLETE` is sent and the state stays in CODING, immediately picking the next runnable bead.',
     ],
     outputs: [
       'Updated bead statuses (pending → in_progress → done/error) and ticket progress counters visible in the UI progress ring.',
-      'Per-bead git commits (one per successfully completed bead) created on the ticket worktree branch and optionally pushed to remote (best-effort — git failures are logged as warnings but do not un-mark the bead as done).',
+      'Per-bead local git commits created when a successfully completed bead changes code, or a true no-op completion when there are no changes; remote push failures are reported as warnings after local success.',
       'Per-bead code-only diffs (`bead_diff:{beadId}`) capturing what each bead changed in the repository (excluding `.ticket/**` metadata), stored as phase artifacts — only produced when `beadStartCommit` was successfully recorded.',
       'Per-bead execution result artifacts (`bead_execution:{beadId}`) with full iteration history, response output, error details, and current-bead checkpoint metadata, written on both success and failure.',
       'Accumulated iteration notes in `bead.notes` for any bead that required context wipes — diagnostic context for retry attempts from Blocked Error.',
-      '`bead_complete` SSE broadcast events enabling real-time UI progress ring updates after each successful bead.',
+      '`bead_complete` SSE broadcast events enabling real-time UI progress ring updates after each finalized successful bead.',
     ],
     transitions: [
-      'Bead Success + More Remaining → Stays in Coding: After a successful bead, `BEAD_COMPLETE` is sent and the loop immediately selects the next runnable bead.',
+      'Bead Success + More Remaining → Stays in Coding: After a finalized successful bead, `BEAD_COMPLETE` is sent and the loop immediately selects the next runnable bead.',
       'All Beads Done → Testing Implementation: When every bead is marked `done`, `ALL_BEADS_DONE` is sent and the workflow advances to the final testing phase.',
-      'Bead Failure → Blocked Error: A bead that exhausts its iteration budget (`BEAD_RETRY_BUDGET_EXHAUSTED`) or hits an unrecoverable runtime error sends `BEAD_ERROR` and routes the ticket to Blocked Error with the latest underlying OpenCode diagnostic when one was observed. A continuable OpenCode retry-budget/provider stall routes through the normal `ERROR` transition with diagnostics instead, so Continue can resume the preserved session when available. Retry from there re-enters CODING and re-attempts the failed bead using accumulated iteration notes as additional context.',
+      'Bead Failure → Blocked Error: A bead that exhausts its iteration budget (`BEAD_RETRY_BUDGET_EXHAUSTED`), hits an unrecoverable runtime error, or fails local finalization after OpenCode success sends `BEAD_ERROR` and routes the ticket to Blocked Error with the latest underlying OpenCode diagnostic when one was observed. Finalization failures use `BEAD_FINALIZATION_FAILED`, do not broadcast `bead_complete`, and keep the bead retryable. A continuable OpenCode retry-budget/provider stall routes through the normal `ERROR` transition with diagnostics instead, so Continue can resume the preserved session when available. Retry from there re-enters CODING and re-attempts or re-finalizes the failed bead using accumulated iteration notes as additional context.',
     ],
     notes: [
       'Only runnable beads (status `pending` with all `blocked_by` dependencies in the done set) are eligible for new execution selection. Interrupted `in_progress` beads are handled by recovery first: current checkpoints are finalized, while stale or missing checkpoints reset the bead to `pending` before selection. Beads with status `error` are never selected until a retry moves them back into CODING.',
@@ -787,7 +798,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'The `beadStartCommit` is best-effort: if git fails to record it before execution starts, that bead cannot be reset on context wipe and its diff artifact cannot be captured, but execution still proceeds normally.',
       'Context wipe notes accumulate: each failed iteration appends a new stamped note to `bead.notes`. By iteration N the agent receives a progressive diagnostic history of everything that has been tried and what went wrong — this is the primary mechanism for conveying failure context across iterations.',
       'The context wipe note uses the failing session\'s full accumulated context (tool calls, test output, error traces) to generate an AI-authored diagnostic. If the context-capture prompt itself fails, a deterministic fallback note is built from recorded errors and recent tool-failure excerpts — the worktree reset always completes regardless of whether the AI note succeeds.',
-      'Each successful bead produces a separate per-bead git commit. The integration phase later squashes all bead commits into a single clean candidate commit for the pull request.',
+      'Each successful bead with code changes produces a separate local per-bead git commit. A successful no-op bead may complete without one. The integration phase later squashes all bead commits into a single clean candidate commit for the pull request.',
       'Internal git commands in this phase are logged to `SYS > CMD` after completion with concise summaries for quiet outcomes such as clean worktrees, empty diffs, completed pushes, and context-wipe cleanup.',
     ],
   },
@@ -897,38 +908,40 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   CLEANING_ENV: {
-    overview: 'LoopTroop removes temporary runtime resources created during the ticket run while carefully preserving the artifacts needed for audit, review, and historical reference. This phase is automatic — it runs immediately after verification and does not require user input.',
+    overview: 'LoopTroop removes temporary runtime resources created during the ticket run while carefully preserving the artifacts needed for audit, review, and historical reference. This phase is automatic — it runs immediately after verification and does not require user input. Cleanup errors are recorded as a visible warning summary but do not prevent the ticket from completing.',
     steps: [
       'Cleanup Scope Determination: LoopTroop identifies which runtime resources are transient (safe to remove) and which are permanent artifacts (must be preserved). The distinction is based on resource type: runtime state is transient, planning and audit artifacts are permanent.',
       'Transient Resource Removal: Lock files, active session folders, stream buffers, temporary files, and runtime state files are removed when present. These resources were needed during execution but have no long-term value.',
       'Artifact Preservation: Planning artifacts (interview, PRD, beads plan), normal and debug execution logs, test reports, integration reports, and phase log history are intentionally preserved. These remain accessible for review, audit, and reference long after the ticket is closed.',
-      'Cleanup Report: A cleanup report artifact is generated detailing what was removed, what was preserved, and whether any cleanup operations failed. This report is itself preserved as part of the ticket\'s permanent record.',
+      'Cleanup Report: A cleanup report artifact is generated detailing what was removed, what was preserved, and whether any cleanup operations failed. The report includes `status: clean` or `status: warning`; warnings are surfaced on the ticket while the workflow still completes.',
     ],
     outputs: [
-      'Cleanup report artifact listing all removed and preserved resources.',
+      'Cleanup report artifact listing all removed and preserved resources, with `status: clean` or `status: warning`.',
       'Freed disk space from transient runtime data (lock files, session folders, temp files).',
       'Intact planning and audit artifacts (interview, PRD, beads, test reports, logs) preserved for future reference.',
     ],
     transitions: [
-      'Success → Done: Successful cleanup advances the workflow to the terminal Done state.',
-      'Failure → Blocked Error: Cleanup failures (e.g., permission errors, locked files) route the ticket to Blocked Error. Retry will re-attempt the cleanup.',
+      'Cleanup Done → Done: Cleanup always advances the workflow to the terminal Done state after writing the report. Any removal failures remain visible as cleanup warnings.',
     ],
     notes: [
       'Context available: Ticket Details + Beads Plan.',
       'Cleanup is conservative — when in doubt, resources are preserved rather than deleted.',
       'The cleanup phase is automatic and does not require user interaction.',
+      'Cleanup warnings are housekeeping results, not delivery failures; the ticket status remains Completed.',
     ],
   },
   COMPLETED: {
-    overview: 'The ticket has finished its full workflow lifecycle and is now closed as a successful terminal state. All planning, execution, PR, testing, and cleanup artifacts remain accessible for review. The ticket records whether it completed via a merged PR or as a closed-unmerged finish while preserving the full implementation history.',
+    overview: 'The ticket has finished its full workflow lifecycle and is now closed as a successful terminal state. All planning, execution, PR, testing, and cleanup artifacts remain accessible for review. The ticket records whether it completed via a merged PR or as a closed-unmerged finish while preserving the full implementation history. Cleanup warnings, when present, are shown as a separate summary without changing the completed status.',
     steps: [
       'Terminal Status: LoopTroop marks the ticket status as "completed" after cleanup finishes. This is a final, irreversible state — the ticket cannot be restarted or modified.',
       'Read-Only Workspace: The workspace becomes read-only from a workflow perspective. No further AI phases will run, no artifacts will be modified, and no new planning or execution occurs.',
       'Full History Access: All lifecycle artifacts remain accessible through the navigator and artifact views — interview results, PRD, beads plan, per-bead execution logs, test reports, integration report, and cleanup report. You can review the entire journey from ticket creation to completion.',
+      'Cleanup Summary: The ticket detail payload exposes the latest cleanup status, warning count, and cleanup report artifact id so housekeeping issues remain visible after completion.',
     ],
     outputs: [
       'Terminal "completed" status — the successful end state of the workflow.',
       'Full lifecycle history preserved for review: interview, PRD, beads plan, execution logs, test reports, integration report, pull request report, merge report, and cleanup report.',
+      'Cleanup summary showing `clean`, `warning`, or `null` when no cleanup report exists.',
       'Completion metadata indicating whether the ticket finished as merged or closed unmerged.',
     ],
     transitions: [
@@ -1157,7 +1170,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_INTERVIEW_APPROVAL',
     label: 'Approving Interview',
-    description: 'Review and approve the final interview Q&A before PRD drafting starts. Edits are allowed; saving a post-approval edit archives the current version and restarts downstream PRD planning.',
+    description: 'Review and approve the final interview Q&A before PRD drafting starts. Approval requires the reviewed content hash; stale hashes return 409. Edits write user-edit receipts, and post-approval edits archive the current version before restarting downstream PRD planning.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_INTERVIEW_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'interview',
@@ -1219,7 +1232,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_PRD_APPROVAL',
     label: 'Approving Specs',
-    description: 'Review and approve the PRD candidate before architecture planning starts. The winning Full Answers artifact is available as reference context. Edits are allowed; saving a post-approval edit archives the current version and restarts beads planning.',
+    description: 'Review and approve the PRD candidate before architecture planning starts. Approval requires the reviewed content hash; stale hashes return 409. The winning Full Answers artifact is reference context, and edits write user-edit receipts before any downstream restart.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_PRD_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'prd',
@@ -1294,7 +1307,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_BEADS_APPROVAL',
     label: 'Approving Blueprint',
-    description: 'Review and approve the full execution-ready beads plan — task descriptions, acceptance criteria, dependency chain, and test commands. This is the last human gate before the coding agent begins.',
+    description: 'Review and approve the full execution-ready beads plan with content-hash protection. Bead edits are limited to this gate, write user-edit receipts, and approval records the reviewed JSONL hash before coding begins.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_BEADS_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'beads',
@@ -1319,7 +1332,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_EXECUTION_SETUP_APPROVAL',
     label: 'Approving Workspace Setup',
-    description: 'Review the readiness audit and approve any temporary workspace preparation, including missing toolchains or command launchers; failed setup-plan output stays in Raw attempt diagnostics, not the structured plan body.',
+    description: 'Review the readiness audit and approve any temporary workspace preparation with content-hash protection. Manual setup-plan edits write user-edit receipts, and archived versions are read-only.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_EXECUTION_SETUP_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'pre_implementation',
@@ -1344,7 +1357,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CODING',
     label: 'Implementing (Bead ?/?)',
-    description: 'AI coding agent executes beads one at a time; each bead has its own session, context-wipe recovery, OpenCode retry-budget blocking and retained provider diagnostics for transient stalls, concise internal CMD summaries, and a git commit after success that excludes LoopTroop runtime and setup-cache roots.',
+    description: 'AI coding agent executes beads one at a time; `done` means OpenCode success plus local finalization success, with required local commits for changed work, no-op completion support, push warnings, and retryable finalization failures.',
     details: WORKFLOW_PHASE_DETAILS.CODING,
     kanbanPhase: 'in_progress',
     groupId: 'implementation',
@@ -1405,7 +1418,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CLEANING_ENV',
     label: 'Cleaning Up',
-    description: 'Removes transient runtime resources (lock files, session folders, temp files) while preserving permanent artifacts (interview, PRD, beads, logs, test and integration reports) for long-term review and audit.',
+    description: 'Removes transient runtime resources while preserving permanent artifacts. Cleanup warnings are recorded in `cleanup.status` and surfaced on the ticket without blocking completion.',
     details: WORKFLOW_PHASE_DETAILS.CLEANING_ENV,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1417,7 +1430,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'COMPLETED',
     label: 'Done',
-    description: 'The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible. The ticket records whether it closed as a merged PR or finished without merge.',
+    description: 'The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible, and any cleanup warning summary stays visible without changing completion.',
     details: WORKFLOW_PHASE_DETAILS.COMPLETED,
     kanbanPhase: 'done',
     groupId: 'done',

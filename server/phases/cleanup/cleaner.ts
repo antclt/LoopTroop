@@ -3,6 +3,7 @@ import { resolve } from 'path'
 import { getTicketPaths } from '../../storage/tickets'
 
 export interface CleanupReport {
+  status: 'clean' | 'warning'
   removedDirs: string[]
   removedFiles: string[]
   errors: string[]
@@ -11,6 +12,7 @@ export interface CleanupReport {
 
 export function cleanupTicketResources(ticketId: string): CleanupReport {
   const report: CleanupReport = {
+    status: 'clean',
     removedDirs: [],
     removedFiles: [],
     errors: [],
@@ -20,6 +22,7 @@ export function cleanupTicketResources(ticketId: string): CleanupReport {
   const paths = getTicketPaths(ticketId)
   if (!paths) {
     report.errors.push('Ticket directory not found')
+    report.status = 'warning'
     return report
   }
 
@@ -27,6 +30,7 @@ export function cleanupTicketResources(ticketId: string): CleanupReport {
 
   if (!existsSync(ticketRoot)) {
     report.errors.push('Ticket directory not found')
+    report.status = 'warning'
     return report
   }
 
@@ -79,5 +83,6 @@ export function cleanupTicketResources(ticketId: string): CleanupReport {
     report.preservedPaths.push(paths.beadsPath)
   }
 
+  report.status = report.errors.length > 0 ? 'warning' : 'clean'
   return report
 }

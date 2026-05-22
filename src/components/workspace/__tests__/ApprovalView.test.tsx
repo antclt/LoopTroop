@@ -641,12 +641,20 @@ describe('Interview approval UI', () => {
     vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
       const url = String(input)
       if (url === `/api/tickets/${TEST.ticketId}/beads`) {
-        return createJsonResponse([
-          {
-            id: 'proj-1-coverage-warning',
-            title: 'Render coverage warning state',
-          },
-        ])
+        return Promise.resolve(
+          new Response(JSON.stringify([
+            {
+              id: 'proj-1-coverage-warning',
+              title: 'Render coverage warning state',
+            },
+          ]), {
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Content-Sha256': 'a'.repeat(64),
+            },
+          }),
+        )
       }
       if (url === `/api/tickets/${TEST.ticketId}/artifacts`) {
         return createJsonResponse([])

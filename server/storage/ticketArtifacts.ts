@@ -3,7 +3,7 @@ import { phaseArtifacts } from '../db/schema'
 import { broadcaster } from '../sse/broadcaster'
 import type { ArtifactSnapshot } from '../sse/eventTypes'
 import { getTicketContext } from './ticketQueries'
-import { resolvePhaseAttempt } from './ticketPhaseAttempts'
+import { assertCurrentEditablePhaseAttempt, resolvePhaseAttempt } from './ticketPhaseAttempts'
 
 type LocalPhaseArtifactRow = typeof phaseArtifacts.$inferSelect
 
@@ -104,6 +104,11 @@ export function countPhaseArtifacts(ticketRef: string, artifactType: string, pha
 export function insertPhaseArtifact(ticketRef: string, artifact: Omit<typeof phaseArtifacts.$inferInsert, 'ticketId'>): void {
   const context = getTicketContext(ticketRef)
   if (!context) throw new Error(`Ticket not found: ${ticketRef}`)
+  assertCurrentEditablePhaseAttempt({
+    ticketId: ticketRef,
+    phase: artifact.phase,
+    requestedPhaseAttempt: artifact.phaseAttempt,
+  })
   const phaseAttempt = resolvePhaseAttempt(ticketRef, artifact.phase, artifact.phaseAttempt)
   const timestamp = new Date().toISOString()
   const inserted = context.projectDb.insert(phaseArtifacts).values({
@@ -124,6 +129,11 @@ export function upsertLatestPhaseArtifact(
 ): void {
   const context = getTicketContext(ticketRef)
   if (!context) throw new Error(`Ticket not found: ${ticketRef}`)
+  assertCurrentEditablePhaseAttempt({
+    ticketId: ticketRef,
+    phase,
+    requestedPhaseAttempt: phaseAttempt,
+  })
   const resolvedPhaseAttempt = resolvePhaseAttempt(ticketRef, phase, phaseAttempt)
   const updatedAt = new Date().toISOString()
   const existing = context.projectDb.select().from(phaseArtifacts)

@@ -5891,7 +5891,7 @@ function CleanupReportView({ content }: { content: string }) {
   }
 
   const removedPathCount = parsed.removedDirs.length + parsed.removedFiles.length
-  const cleanupSucceeded = parsed.errors.length === 0
+  const cleanupSucceeded = parsed.status === 'clean'
 
   return (
     <WithRawTab
@@ -5912,7 +5912,7 @@ function CleanupReportView({ content }: { content: string }) {
               : <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />}
             <div className="min-w-0">
               <div className="text-sm font-semibold">
-                {cleanupSucceeded ? 'Cleanup completed cleanly' : 'Cleanup completed with errors'}
+                {cleanupSucceeded ? 'Cleanup completed cleanly' : 'Cleanup completed with warnings'}
               </div>
               <div className="mt-1 text-xs leading-5">
                 Removed {removedPathCount} runtime path{removedPathCount === 1 ? '' : 's'} and preserved {parsed.preservedPaths.length} audit artifact{parsed.preservedPaths.length === 1 ? '' : 's'}.

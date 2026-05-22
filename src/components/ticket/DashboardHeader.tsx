@@ -538,6 +538,21 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                 <p className="font-mono mt-0.5">{runtime.candidateCommitSha}</p>
               </div>
             )}
+            {ticket.cleanup?.status && (
+              <div>
+                <span className="text-xs font-medium text-muted-foreground">Cleanup</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <Badge variant={ticket.cleanup.status === 'warning' ? 'destructive' : 'outline'} className="capitalize">
+                    {ticket.cleanup.status}
+                  </Badge>
+                  {ticket.cleanup.status === 'warning' ? (
+                    <span className="text-xs text-muted-foreground">
+                      {ticket.cleanup.errorCount} warning{ticket.cleanup.errorCount === 1 ? '' : 's'}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            )}
             {ticket.errorMessage && (
               <ErrorBanner errorMessage={ticket.errorMessage} />
             )}

@@ -49,7 +49,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 | `.ticket/runtime/execution-log.ai.jsonl` | Persisted AI detail log stream for prompts, thinking, tool calls, and completed model rows | Read by `/api/files/:ticketId/logs?channel=ai`; folded into AI/model log views; live rows come from OpenCode global events filtered back to the owned session and broadcast as fast live-only upserts; finalized assistant message parts for each completed prompt are persisted and also backfilled from `session.messages()` so multi-message tool-use detail history does not depend on a browser or live SSE stream being open |
 | `.ticket/runtime/state.yaml` | Runtime state projection for the active execution | Used for restart and status projection |
 | `.ticket/runtime/execution-setup-profile.json` | Concrete execution environment profile | Separate from the reviewable setup plan artifact |
-| `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps |
+| `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps, approval receipts, user-edit receipts, cleanup reports, and content hashes for reviewed artifacts |
 
 > Note
 > SQLite and the filesystem are complementary, not redundant. The database is optimized for querying and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable.
@@ -85,6 +85,8 @@ The planning phases are not one long conversation. Each stage assembles a new co
 
 Only accepted, normalized planning outputs become artifact body content. Rejected or uncorrectable model responses are retained as diagnostics/raw attempts so downstream stages do not consume malformed text as if it were canonical planning state.
 
+Human approval gates are content-addressed. The API exposes the current artifact hash for interview, PRD, beads, and execution setup plan views; approval requests must send `expectedContentSha256`; stale approvals return `409` instead of approving bytes the user did not review. Approval snapshots and receipts keep the reviewed raw content plus `content_sha256`, and interview/PRD receipts also record the post-stamp stored hash when approval metadata changes the YAML.
+
 ## Execution Flow
 
 Execution is built around beads, not around one monolithic coding prompt.
@@ -96,7 +98,7 @@ Execution is built around beads, not around one monolithic coding prompt.
 5. `executeBead()` starts or reattaches to the owned OpenCode session for that bead attempt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path.
 7. If the attempt stalls or fails, LoopTroop generates a context wipe note, resets the worktree to the bead start commit, and retries in fresh context.
-8. When the bead succeeds, LoopTroop captures a diff artifact and advances scheduler state.
+8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
 9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery.
 
 See [Execution Loop](execution-loop.md) and [Beads](beads.md).
@@ -114,11 +116,14 @@ Recovery is a first-class architectural concern.
 | OpenCode reconnect gap | Validate owned session against remote sessions and recreate if needed |
 | Backend process restart | Validate or reconstruct serialized actor snapshots, start actors from durable ticket state, and immediately process restored active snapshots |
 | User edits approved planning artifact | Before `PRE_FLIGHT_CHECK`, archive the current approved planning version and downstream phase attempts, cancel active downstream sessions intentionally, save and approve the edit as the new active version, clear stale downstream artifacts/UI state, and restart from the next drafting phase |
+| Stale approval | Return `409` with the expected and current SHA-256 hashes, keeping the ticket at the approval gate |
+| Bead finalization failure | Keep the bead retryable, avoid `bead_complete`, send `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED`, and route to `BLOCKED_ERROR` |
+| Cleanup warning | Persist a `cleanup_report` with `status: warning`, expose the cleanup summary on the ticket, and still complete the ticket |
 | Terminal blockage | Enter `BLOCKED_ERROR` with persisted error occurrence history |
 
 LoopTroop tries hard to preserve the work product while discarding the bad conversational state that produced the failure.
 
-Planning edit restarts are intentionally cancellation-based. Editing an approved interview from later PRD or beads planning cancels active downstream planning sessions as intentional cancellation, archives the current approved interview version plus downstream PRD/beads phase attempts, removes stale PRD/beads artifacts and approval UI state, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`. Editing an approved PRD from beads planning applies the same rule to the current approved PRD version and downstream beads attempts, then starts `DRAFTING_BEADS`. Archived approved versions are read-only planning generations backed by phase attempts. These routes stop at the planning boundary: at `PRE_FLIGHT_CHECK` or later, interview and PRD edit saves return `409` instead of modifying execution readiness. Existing tickets and projects, including `PCKM-22`, are not migrated or repaired by this behavior.
+Planning edit restarts are intentionally cancellation-based. Editing an approved interview from later PRD or beads planning cancels active downstream planning sessions as intentional cancellation, archives the current approved interview version plus downstream PRD/beads phase attempts, removes stale PRD/beads artifacts and approval UI state, writes an append-only `user_edit_receipt:interview`, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`. Editing an approved PRD from beads planning applies the same rule to the current approved PRD version and downstream beads attempts, writes `user_edit_receipt:prd`, then starts `DRAFTING_BEADS`. Beads and execution setup plan manual edits write matching `user_edit_receipt:*` artifacts. Archived approved versions are read-only planning generations backed by phase attempts, and explicit writes to archived phase attempts return `409`. These routes stop at the planning boundary: at `PRE_FLIGHT_CHECK` or later, interview and PRD edit saves return `409` instead of modifying execution readiness. Existing tickets and projects, including `PCKM-22`, are not migrated or repaired by this behavior.
 
 If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`.
 

@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import { createHash } from 'node:crypto'
+import { contentSha256 } from '../lib/contentHash'
 import { LOG_TRUNCATION_LENGTH } from '../lib/constants'
 
 interface CommandLogContext {
@@ -84,7 +84,7 @@ const CMD_LOG_DEDUP_WINDOW_MS = 1000
 const COMMAND_LOG_OUTPUT_PREVIEW_LENGTH = 2500
 
 function hashCommandContent(content: string): string {
-  return createHash('sha256').update(content).digest('hex')
+  return contentSha256(content)
 }
 
 function emitCommandLog(

@@ -78,6 +78,11 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
   hasPastErrors: boolean
   errorSeenSignature: string | null
   completionDisposition: 'merged' | 'closed_unmerged' | null
+  cleanup: {
+    status: 'clean' | 'warning' | null
+    errorCount: number
+    latestReportArtifactId: number | null
+  }
   runtime: {
     baseBranch: string
     currentBead: number
@@ -461,6 +466,7 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     prHeadSha: null,
   }
   const completionDisposition = readCompletionDisposition(projectContext, ticket.id)
+  const cleanup = readCleanupSummary(projectContext, ticket.id)
 
   return {
     ...ticket,
@@ -479,7 +485,45 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     hasPastErrors: errorOccurrences.some((occurrence) => occurrence.resolvedAt !== null),
     errorSeenSignature,
     completionDisposition,
+    cleanup,
     runtime,
+  }
+}
+
+function readCleanupSummary(
+  projectContext: NonNullable<ReturnType<typeof getProjectContextById>> | null | undefined,
+  localTicketId: number,
+): PublicTicket['cleanup'] {
+  if (!projectContext) {
+    return { status: null, errorCount: 0, latestReportArtifactId: null }
+  }
+
+  const artifact = projectContext.projectDb.select().from(phaseArtifacts)
+    .where(and(
+      eq(phaseArtifacts.ticketId, localTicketId),
+      eq(phaseArtifacts.artifactType, 'cleanup_report'),
+    ))
+    .orderBy(desc(phaseArtifacts.id))
+    .get()
+
+  if (!artifact?.content) {
+    return { status: null, errorCount: 0, latestReportArtifactId: null }
+  }
+
+  const parsed = parseJsonObject<{ status?: unknown; errors?: unknown }>(artifact.content)
+  const errors = Array.isArray(parsed?.errors)
+    ? parsed.errors.filter((entry) => typeof entry === 'string')
+    : []
+  const status = parsed?.status === 'warning'
+    ? 'warning'
+    : parsed?.status === 'clean'
+      ? 'clean'
+      : errors.length > 0 ? 'warning' : 'clean'
+
+  return {
+    status,
+    errorCount: errors.length,
+    latestReportArtifactId: artifact.id,
   }
 }
 

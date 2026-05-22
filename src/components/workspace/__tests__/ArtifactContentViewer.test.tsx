@@ -3572,7 +3572,7 @@ describe('ArtifactContentViewer', () => {
     )
 
     expect(screen.getByText('Cleanup Report')).toBeInTheDocument()
-    expect(screen.getByText('Cleanup completed with errors')).toBeInTheDocument()
+    expect(screen.getByText('Cleanup completed with warnings')).toBeInTheDocument()
     expect(screen.getByText('Removed Dirs')).toBeInTheDocument()
     expect(screen.getAllByText('Removed Files').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Preserved Paths').length).toBeGreaterThan(0)

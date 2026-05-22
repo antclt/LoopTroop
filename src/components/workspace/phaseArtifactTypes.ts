@@ -484,6 +484,7 @@ export interface PullRequestReportData {
 }
 
 export interface CleanupReportData {
+  status: 'clean' | 'warning'
   removedDirs: string[]
   removedFiles: string[]
   preservedPaths: string[]
@@ -800,11 +801,16 @@ export function parseCleanupReport(content: string): CleanupReportData | null {
     return null
   }
 
+  const errors = normalizeStringArray(parsed.errors)
+  const parsedStatus = parsed.status === 'warning' || parsed.status === 'clean'
+    ? parsed.status
+    : null
   return {
+    status: parsedStatus ?? (errors.length > 0 ? 'warning' : 'clean'),
     removedDirs: normalizeStringArray(parsed.removedDirs),
     removedFiles: normalizeStringArray(parsed.removedFiles),
     preservedPaths: normalizeStringArray(parsed.preservedPaths),
-    errors: normalizeStringArray(parsed.errors),
+    errors,
   }
 }
 

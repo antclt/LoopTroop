@@ -53,6 +53,11 @@ interface PrdApprovalUiState {
   structuredDraft?: PrdApprovalDraft
 }
 
+interface PrdArtifactResponse {
+  content?: string
+  contentSha256?: string | null
+}
+
 type DiscardTarget =
   | { type: 'close' }
   | { type: 'switch-tab'; tab: EditTab }
@@ -133,25 +138,29 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
     [ticket.status, ticket.previousStatus],
   )
   const { data: persistedUiState } = useTicketUIState<PrdApprovalUiState>(ticket.id, uiStateScope, true)
-  const { data: fetchedContent, isLoading, isFetching } = useQuery({
-    queryKey: ['artifact', ticket.id, 'prd'],
+  const { data: fetchedPrd, isLoading, isFetching } = useQuery({
+    queryKey: ['artifact', ticket.id, 'prd', 'approval'],
     queryFn: async () => {
       const response = await fetch(`/api/files/${ticket.id}/prd`)
       if (!response.ok) {
         throw new Error('Failed to load PRD')
       }
-      const payload = await response.json() as { content?: string }
-      return payload.content ?? ''
+      const payload = await response.json() as PrdArtifactResponse
+      return {
+        content: payload.content ?? '',
+        contentSha256: payload.contentSha256 ?? null,
+      }
     },
     staleTime: QUERY_STALE_TIME_5M,
   })
   const { artifacts } = useTicketArtifacts(ticket.id)
 
+  const rawContent = fetchedPrd?.content ?? ''
+  const currentContentSha256 = fetchedPrd?.contentSha256 ?? null
   const prdDocument = useMemo(
-    () => normalizePrdDocumentLike(parsePrdDocument(fetchedContent) ?? parsePrdDocumentContent(fetchedContent ?? '').document),
-    [fetchedContent],
+    () => normalizePrdDocumentLike(parsePrdDocument(rawContent) ?? parsePrdDocumentContent(rawContent).document),
+    [rawContent],
   )
-  const rawContent = fetchedContent ?? ''
   const rawDisplayContent = useMemo(() => buildReadableRawDisplayContent(rawContent), [rawContent])
   const isPreparingStructuredPrd = !prdDocument && Boolean(rawContent) && isFetching
 
@@ -271,13 +280,18 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
         ),
       })
 
-      const payload = await response.json() as { content?: string; error?: string; details?: string }
+      const payload = await response.json() as PrdArtifactResponse & { error?: string; details?: string }
       if (!response.ok) {
         throw new Error(payload.details || payload.error || 'Save failed')
       }
 
       const nextRaw = payload.content ?? ''
+      queryClient.setQueryData(['artifact', ticket.id, 'prd', 'approval'], {
+        content: nextRaw,
+        contentSha256: payload.contentSha256 ?? null,
+      })
       queryClient.setQueryData(['artifact', ticket.id, 'prd'], nextRaw)
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'prd', 'approval'] })
       queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'prd'] })
       queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
       clearTicketArtifactsCache(ticket.id)
@@ -301,6 +315,8 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
     try {
       const response = await fetch(`/api/tickets/${ticket.id}/approve-prd`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expectedContentSha256: currentContentSha256 }),
       })
       const payload = await response.json() as { error?: string; details?: string }
       if (!response.ok) {
@@ -309,6 +325,7 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
 
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
       queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'prd', 'approval'] })
       queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'prd'] })
       clearTicketArtifactsCache(ticket.id)
       setIsEditMode(false)
@@ -463,7 +480,7 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
           <Button
             size="sm"
             onClick={handleApprove}
-            disabled={isApproving || isSaving || (isEditMode && (hasUnsavedChanges || structuredEditorUnavailable)) || !prdDocument || ticket.status !== phase}
+            disabled={isApproving || isSaving || (isEditMode && (hasUnsavedChanges || structuredEditorUnavailable)) || !prdDocument || !currentContentSha256 || ticket.status !== phase}
             className="text-xs shrink-0"
           >
             {isApproving ? 'Approving…' : 'Approve'}

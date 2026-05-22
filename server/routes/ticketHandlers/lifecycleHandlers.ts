@@ -33,6 +33,7 @@ import {
   readPullRequestReport,
 } from '../../workflow/phases/pullRequestPhase'
 import { recoverCodingBeadWithReset } from '../../workflow/phases/beadsPhase'
+import { recoverSuccessfulExecutionCheckpointForFinalization } from '../../workflow/phases/executionPhase'
 import { isExecutionBandStatus } from '../../workflow/executionBand'
 import { getErrorMessage } from '@shared/typeGuards'
 import {
@@ -444,10 +445,11 @@ export function handleRetryTicket(c: Context) {
       return c.json({ error: 'Retry is not available because the ticket workspace could not be resolved' }, 409)
     }
     try {
-      const recoveredBead = recoverCodingBeadWithReset(ticketId, {
-        worktreePath: paths.worktreePath,
-        requireReset: true,
-      })
+      const recoveredBead = recoverSuccessfulExecutionCheckpointForFinalization(ticketId)
+        ?? recoverCodingBeadWithReset(ticketId, {
+          worktreePath: paths.worktreePath,
+          requireReset: true,
+        })
       if (!recoveredBead) {
         return c.json({ error: 'Retry is not available because no failed bead could be restored' }, 409)
       }
