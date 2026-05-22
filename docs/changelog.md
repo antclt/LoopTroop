@@ -40,6 +40,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
+- Clarified the Configuration UI copy for OpenCode Provider Recovery so it explicitly mentions rate-limit, usage-limit, overload, timeout, and network retry events across phases.
 - Manual Retry from `BLOCKED_ERROR` now archives and creates fresh phase attempts for every non-implementation status, including runtime setup and post-implementation phases, while `CODING` keeps its existing failed-bead reset and retry history.
 - Wrapped the docs home-page screenshots in collapsed-by-default details sections so only each screenshot title is visible until expanded.
 - Made `docs/changelog.md` the canonical full changelog, including unreleased changes, and replaced the root `CHANGELOG.md` with a discoverability pointer.

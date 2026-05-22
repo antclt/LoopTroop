@@ -363,6 +363,9 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
 
           {/* ── OpenCode Provider Recovery ── */}
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">OpenCode Provider Recovery</div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            Handles OpenCode rate-limit, usage-limit, overload, timeout, and network retry events across all phases.
+          </p>
           <div className="grid grid-cols-2 gap-3">
             <NumericField fieldKey="opencodeRetryLimit" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Continuable OpenCode retry events before blocking any phase prompt (0–50)." />
             <NumericField fieldKey="opencodeRetryDelay" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum OpenCode retry grace window before blocking any phase prompt (0–3600s)." />
