@@ -864,13 +864,41 @@ export async function handleGetTicketSize(c: Context) {
     return size
   }
 
+  async function getFileSize(filePath: string): Promise<number> {
+    try {
+      const stats = await fsPromises.stat(filePath)
+      return stats.isFile() ? stats.size : 0
+    } catch {
+      return 0
+    }
+  }
+
   const exists = await fsPromises.stat(paths.worktreePath).then(() => true).catch(() => false)
   if (!exists) {
     return c.json({ size: 0, exists: false })
   }
 
-  const size = await getDirectorySize(paths.worktreePath)
-  return c.json({ size, exists: true })
+  const [totalSize, ticketDirSize, execLogSize, debugLogSize, aiLogSize] = await Promise.all([
+    getDirectorySize(paths.worktreePath),
+    paths.ticketDir ? getDirectorySize(paths.ticketDir) : Promise.resolve(0),
+    paths.executionLogPath ? getFileSize(paths.executionLogPath) : Promise.resolve(0),
+    paths.debugLogPath ? getFileSize(paths.debugLogPath) : Promise.resolve(0),
+    paths.aiLogPath ? getFileSize(paths.aiLogPath) : Promise.resolve(0),
+  ])
+
+  const logsSize = execLogSize + debugLogSize + aiLogSize
+  const artifactsSize = Math.max(0, ticketDirSize - logsSize)
+  const sourceSize = Math.max(0, totalSize - ticketDirSize)
+
+  return c.json({
+    size: totalSize,
+    exists: true,
+    breakdown: {
+      logs: logsSize,
+      artifacts: artifactsSize,
+      source: sourceSize,
+    },
+  })
 }
 
 

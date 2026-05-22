@@ -85,12 +85,30 @@ describe('ticketRouter GET /tickets/:id/size', () => {
     writeFileSync(file1, 'hello') // 5 bytes
     writeFileSync(file2, 'world!') // 6 bytes
 
+    // Create a mock log file inside .ticket/runtime to check logs breakdown
+    const ticketDir = join(init.worktreePath, '.ticket')
+    const runtimeDir = join(ticketDir, 'runtime')
+    mkdirSync(runtimeDir, { recursive: true })
+
+    const logFile = join(runtimeDir, 'execution-log.jsonl')
+    writeFileSync(logFile, 'logline') // 7 bytes
+
+    const artifactFile = join(runtimeDir, 'some-artifact.json')
+    writeFileSync(artifactFile, 'art') // 3 bytes
+
     const response = await app.request(`/api/tickets/${ticket.id}/size`)
     expect(response.status).toBe(200)
 
-    const payload = await response.json() as { size: number; exists: boolean }
+    const payload = await response.json() as {
+      size: number
+      exists: boolean
+      breakdown: { logs: number; artifacts: number; source: number }
+    }
     expect(payload.exists).toBe(true)
-    // The total size is at least 11 bytes plus whatever files git/initializeTicket created
-    expect(payload.size).toBeGreaterThanOrEqual(11)
+    // The total size is at least 21 bytes (5 + 6 + 7 + 3)
+    expect(payload.size).toBeGreaterThanOrEqual(21)
+    expect(payload.breakdown.logs).toBe(7)
+    expect(payload.breakdown.artifacts).toBeGreaterThanOrEqual(3)
+    expect(payload.breakdown.source).toBeGreaterThanOrEqual(11)
   })
 })

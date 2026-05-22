@@ -134,6 +134,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
 
   const [isCalculatingSize, setIsCalculatingSize] = useState(false)
   const [ticketSize, setTicketSize] = useState<number | null>(null)
+  const [sizeBreakdown, setSizeBreakdown] = useState<{ logs: number; artifacts: number; source: number } | null>(null)
   const [sizeError, setSizeError] = useState<string | null>(null)
 
   const handleCalculateSize = async () => {
@@ -144,6 +145,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
       if (!res.ok) throw new Error('Failed to calculate size')
       const data = await res.json()
       setTicketSize(data.size)
+      setSizeBreakdown(data.breakdown || null)
     } catch (err) {
       setSizeError(err instanceof Error ? err.message : 'Error calculating size')
     } finally {
@@ -157,6 +159,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
 
   useEffect(() => {
     setTicketSize(null)
+    setSizeBreakdown(null)
     setSizeError(null)
   }, [ticket.id])
 
@@ -512,23 +515,79 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                       </Button>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-4 py-0.5 animate-in fade-in slide-in-from-top-2 duration-300">
-                      <div className="p-2.5 bg-muted border border-border/80 rounded-lg shrink-0 flex items-center justify-center shadow-sm">
-                        <HardDrive className="h-5 w-5 text-foreground animate-pulse" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-xl font-extrabold text-foreground font-mono leading-none tracking-tight">
-                            {formatBytes(ticketSize)}
-                          </span>
-                          <span className="text-[9px] text-foreground bg-primary/10 border border-border px-1.5 py-0.5 rounded uppercase font-bold tracking-wider leading-none">
-                            Occupied
-                          </span>
+                    <div className="flex flex-col gap-3 py-0.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="flex items-center gap-4">
+                        <div className="p-2.5 bg-muted border border-border/80 rounded-lg shrink-0 flex items-center justify-center shadow-sm">
+                          <HardDrive className="h-5 w-5 text-foreground animate-pulse" />
                         </div>
-                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
-                          Includes repository code, phase artifacts, and execution logs.
-                        </p>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-1.5">
+                            <span className="text-xl font-extrabold text-foreground font-mono leading-none tracking-tight">
+                              {formatBytes(ticketSize)}
+                            </span>
+                            <span className="text-[9px] text-foreground bg-primary/10 border border-border px-1.5 py-0.5 rounded uppercase font-bold tracking-wider leading-none">
+                              Occupied
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                            Disk space occupied by worktree files, artifacts, and execution logs.
+                          </p>
+                        </div>
                       </div>
+
+                      {sizeBreakdown && (
+                        <div className="flex flex-col gap-2 mt-1 border-t border-border/40 pt-2.5">
+                          {/* Segmented Disk Allocation Bar */}
+                          <div className="h-2 w-full rounded-full bg-muted/60 overflow-hidden flex">
+                            <div
+                              style={{ width: `${Math.max(0.5, (sizeBreakdown.source / ticketSize) * 100)}%` }}
+                              className="bg-primary h-full transition-all duration-500"
+                              title={`Source Code: ${formatBytes(sizeBreakdown.source)}`}
+                            />
+                            <div
+                              style={{ width: `${Math.max(0.5, (sizeBreakdown.artifacts / ticketSize) * 100)}%` }}
+                              className="bg-muted-foreground/60 h-full transition-all duration-500"
+                              title={`Phase Artifacts: ${formatBytes(sizeBreakdown.artifacts)}`}
+                            />
+                            <div
+                              style={{ width: `${Math.max(0.5, (sizeBreakdown.logs / ticketSize) * 100)}%` }}
+                              className="bg-muted-foreground/25 h-full transition-all duration-500"
+                              title={`Execution Logs: ${formatBytes(sizeBreakdown.logs)}`}
+                            />
+                          </div>
+
+                          {/* Legend & Stat Breakdown */}
+                          <div className="grid grid-cols-3 gap-2 mt-1">
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-primary shrink-0" />
+                                Source Code
+                              </span>
+                              <span className="text-xs font-bold font-mono text-foreground mt-0.5">
+                                {formatBytes(sizeBreakdown.source)}
+                              </span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/60 shrink-0" />
+                                Phase Artifacts
+                              </span>
+                              <span className="text-xs font-bold font-mono text-foreground mt-0.5">
+                                {formatBytes(sizeBreakdown.artifacts)}
+                              </span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[9px] font-semibold text-muted-foreground flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/25 shrink-0" />
+                                Execution Logs
+                              </span>
+                              <span className="text-xs font-bold font-mono text-foreground mt-0.5">
+                                {formatBytes(sizeBreakdown.logs)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

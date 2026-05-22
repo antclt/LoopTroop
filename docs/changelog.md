@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Added a beautiful button and card to calculate and display ticket disk space usage under Artifacts Location.
+- Added a beautiful button and card to calculate and display ticket disk space usage with granular breakdown by logs, artifacts, and source code.
 - Made manual Retry preserve versioned logs and artifacts for every non-implementation failed status while keeping CODING bead-scoped.
 - Made documentation screenshots collapsible and clickable, with expanded bead error screenshots on the docs home page.
 - Consolidated changelog maintenance into the docs changelog while keeping a root pointer for discoverability.
@@ -25,9 +25,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added a ticket disk space calculation card under the Artifacts Location in details view with a premium themed button, interactive hover effects, live loading state, error alert banner, and on-demand recursive disk size computation.
-- Added a `GET /tickets/:id/size` route to Hono backend for recursively measuring ticket worktree folders using safe non-symlink-following `lstat` concurrency.
-- Added a robust integration test `server/routes/__tests__/tickets.size.test.ts` verifying exact and recursive file size aggregation.
+- Added a ticket disk space calculation card under the Artifacts Location in details view with a premium themed button, interactive hover effects, live loading state, error alert banner, and on-demand recursive disk size computation broken down by Source Code, Phase Artifacts, and Execution Logs.
+- Added a `GET /tickets/:id/size` route to Hono backend for recursively measuring ticket worktree folders using safe non-symlink-following `lstat` concurrency, computing precise space breakdowns for logs, artifacts, and source files.
+- Added a robust integration test `server/routes/__tests__/tickets.size.test.ts` verifying exact and recursive file size aggregation and granular category splits.
 - Added two bead error screenshots to the docs home page and a docs-wide image lightbox so screenshots can be opened nearly full screen with a top-right close button.
 - Added a dedicated `Changelog` documentation page (`docs/changelog.md`) detailing LoopTroop's official release history starting from release `0.1.0`.
 - Integrated `/changelog` route into both VitePress sidebar and top navbar navigation.
