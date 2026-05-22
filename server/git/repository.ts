@@ -21,14 +21,28 @@ function logCmd(
   }
 }
 
+const GIT_TIMEOUT_MS = 30_000
+
+const GIT_ENV = {
+  ...process.env,
+  // Prevent git from blocking on credential prompts or interactive input
+  GIT_TERMINAL_PROMPT: '0',
+  GIT_ASKPASS: 'echo',
+}
+
 function runGit(
   projectPath: string,
   args: string[],
 ): string {
   const fullArgs = ['-C', projectPath, ...args]
-  const result = spawnSync('git', fullArgs, { encoding: 'utf8' })
+  const result = spawnSync('git', fullArgs, { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: GIT_ENV })
   const stdout = (result.stdout ?? '').trim()
   const stderr = (result.stderr ?? '').trim()
+  if (result.signal === 'SIGTERM') {
+    const detail = `git command timed out after ${GIT_TIMEOUT_MS / 1000}s: git ${args.join(' ')}`
+    logCmd('git', fullArgs, { ok: false, error: detail })
+    throw new Error(detail)
+  }
   if (result.status !== 0 || result.error) {
     const detail = result.error?.message ?? ([stdout, stderr].filter(Boolean).join(' | ') || `exit code ${result.status ?? '?'}`)
     logCmd('git', fullArgs, {
@@ -45,16 +59,19 @@ function runGit(
 
 function gitCommandSucceeds(projectPath: string, args: string[]) {
   const fullArgs = ['-C', projectPath, ...args]
-  const result = spawnSync('git', fullArgs, { encoding: 'utf8' })
-  const ok = result.status === 0 && !result.error
+  const result = spawnSync('git', fullArgs, { encoding: 'utf8', timeout: GIT_TIMEOUT_MS, env: GIT_ENV })
+  const ok = result.status === 0 && !result.error && result.signal !== 'SIGTERM'
   const stdout = (result.stdout ?? '').trim()
   const stderr = (result.stderr ?? '').trim()
   if (ok) {
     logCmd('git', fullArgs, { ok: true, stdout: stdout || undefined, stderr: stderr || undefined })
   } else {
+    const error = result.signal === 'SIGTERM'
+      ? `git command timed out after ${GIT_TIMEOUT_MS / 1000}s`
+      : result.error?.message ?? `exit code ${result.status ?? '?'}`
     logCmd('git', fullArgs, {
       ok: false,
-      error: result.error?.message ?? `exit code ${result.status ?? '?'}`,
+      error,
       stdout: stdout || undefined,
       stderr: stderr || undefined,
     })

@@ -185,6 +185,9 @@ export async function handleAnswerBatch(c: Context) {
     const needsAsyncProcessing = !isMockOpenCodeMode() && !isCoverageBatch
 
     if (needsAsyncProcessing) {
+      if (!session) {
+        return c.json({ error: 'No interview session found' }, 404)
+      }
       // ASYNC path: return 202 immediately, process AI call in background.
       // handleInterviewQABatch persists the intermediate state (answers saved,
       // currentBatch cleared) synchronously before its first await, so the
@@ -202,7 +205,7 @@ export async function handleAnswerBatch(c: Context) {
       })
 
       Promise.race([
-        processInterviewBatchAsync(ticketId, parsed.data.answers, session!, parsed.data.selectedOptions),
+        processInterviewBatchAsync(ticketId, parsed.data.answers, session, parsed.data.selectedOptions),
         timeoutPromise,
       ])
         .finally(() => {

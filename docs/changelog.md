@@ -28,6 +28,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added an opt-in `npm run dev --opencode-logs=all` mode for full managed OpenCode DEBUG logs in the terminal.
 - Audited and corrected all user-facing status descriptions, Details content, and documentation for accuracy and consistency.
 - Added a high-priority roadmap item for a Context Slimming Pipeline that audits per-phase input/output fields, strips unused data from canonical context while preserving it in companion artifacts, and classifies every field by downstream consumption.
+- Applied targeted reliability and safety fixes from an external audit: atomic write durability, git timeout hardening, ticket cancel race, interview null guard, and bead schema validation.
 
 ### Detailed Changes
 
@@ -83,6 +84,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Full Answers normalization now restores canonical `follow_up_rounds` when a model emits malformed round metadata and repairs common multiline `free_text` YAML formatting without changing answer text.
 - Bead commits now exclude execution setup temp roots, reusable setup artifact roots, and legacy `.cache/project-tooling/**` files so temporary toolchains cannot be recorded as implementation work.
 - OpenCode session creation now retries the initial attempt up to three times with bounded backoff, collecting lightweight health diagnostics after failures while preserving cancellation and timeout behavior.
+
+#### Security & Reliability
+- Ticket cancel now awaits active OpenCode session abort before executing destructive cleanup, eliminating the race where cleanup could run while sessions were still writing.
+- Interview batch async path now explicitly returns 404 when no session artifact is found, replacing the non-null assertion that could crash at runtime.
+- Bead plan PUT endpoint now validates each bead against a required-field schema (id, title, status, priority, dependencies) and rejects duplicate IDs, preventing malformed execution plans from being written.
+- Git operations now include a 30-second timeout and `GIT_TERMINAL_PROMPT=0`/`GIT_ASKPASS=echo` environment guards so locked repositories, credential prompts, or network filesystems cannot hang the server process; push operations use a 120-second timeout.
+- Atomic write helper now cleans up the `.tmp` file in all failure paths and fsyncs the parent directory after rename for crash-durable artifact persistence.
 
 ---
 

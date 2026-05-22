@@ -83,7 +83,15 @@ describe('beadsRouter flow validation', () => {
   it('writes a user edit receipt when beads are saved during approval', async () => {
     const { ticket } = createBeadsRouteTicket()
     patchTicket(ticket.id, { status: 'WAITING_BEADS_APPROVAL' })
-    const beads = [{ id: 'B-1', title: 'Editable bead' }]
+    const beads = [
+      {
+        id: 'B-1',
+        title: 'Editable bead',
+        status: 'pending',
+        priority: 1,
+        dependencies: { blocked_by: [], blocks: [] },
+      },
+    ]
     const raw = `${beads.map((item) => JSON.stringify(item)).join('\n')}\n`
 
     const response = await app.request(`/api/tickets/${encodeURIComponent(ticket.id)}/beads`, {

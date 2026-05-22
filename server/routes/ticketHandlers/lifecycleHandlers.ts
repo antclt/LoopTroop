@@ -303,9 +303,7 @@ export async function handleCancelTicket(c: Context) {
     ensureActorForTicket(ticketId)
     sendTicketEvent(ticketId, { type: 'CANCEL' })
     cancelTicket(ticketId)
-    abortTicketSessions(ticketId).catch(err => {
-      console.error(`[tickets] Failed to abort sessions for ticket ${ticketId}:`, err)
-    })
+    await abortTicketSessions(ticketId)
   } catch (err) {
     console.error(`[tickets] Failed to send CANCEL to ticket ${ticketId}:`, err)
     return c.json({ error: 'Failed to cancel ticket', details: String(err) }, 500)

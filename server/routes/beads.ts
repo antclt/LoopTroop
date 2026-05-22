@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
+import { z } from 'zod'
 import { getTicketByRef, getTicketPaths, getLatestPhaseArtifact } from '../storage/tickets'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { syncTicketRuntimeProjection } from '../storage/ticketRuntimeProjection'
@@ -8,6 +9,19 @@ import { clearExecutionSetupState } from '../phases/executionSetup/storage'
 import { upsertBeadsApprovalSnapshot } from '../phases/beads/document'
 import { contentSha256 } from '../lib/contentHash'
 import { writeUserEditReceipt } from '../workflow/artifactEditReceipts'
+
+// Minimum schema for fields required by the scheduler and execution engine.
+// Other fields pass through without strict validation for forward-compatibility.
+const beadItemSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  status: z.enum(['pending', 'in_progress', 'done', 'error']),
+  priority: z.number().int().min(1),
+  dependencies: z.object({
+    blocked_by: z.array(z.string()),
+    blocks: z.array(z.string()),
+  }),
+})
 
 const beadsRouter = new Hono()
 const FLOW_NAME_PATTERN = /^[A-Za-z0-9._/-]+$/
@@ -77,6 +91,25 @@ beadsRouter.put('/tickets/:id/beads', async (c) => {
   const body = await c.req.json()
   if (!Array.isArray(body)) {
     return c.json({ error: 'Request body must be a JSON array' }, 400)
+  }
+
+  // Validate each bead item has the fields required by the scheduler/execution engine
+  const validationErrors: Array<{ index: number; issues: z.ZodIssue[] }> = []
+  for (let i = 0; i < body.length; i++) {
+    const result = beadItemSchema.safeParse(body[i])
+    if (!result.success) {
+      validationErrors.push({ index: i, issues: result.error.issues })
+    }
+  }
+  if (validationErrors.length > 0) {
+    return c.json({ error: 'Invalid bead item(s)', details: validationErrors }, 400)
+  }
+
+  // Check for duplicate IDs
+  const ids = body.map((item: { id: string }) => item.id)
+  const duplicateIds = ids.filter((id: string, index: number) => ids.indexOf(id) !== index)
+  if (duplicateIds.length > 0) {
+    return c.json({ error: 'Duplicate bead IDs', details: [...new Set(duplicateIds)] }, 400)
   }
 
   const resolved = resolveBeadsPath(ticketId, flow)

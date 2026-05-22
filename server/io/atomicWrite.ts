@@ -1,21 +1,38 @@
-import { writeFileSync, renameSync, openSync, fsyncSync, closeSync, mkdirSync } from 'fs'
+import { writeFileSync, renameSync, openSync, fsyncSync, closeSync, mkdirSync, unlinkSync } from 'fs'
 import { dirname } from 'path'
 
 export function safeAtomicWrite(filePath: string, content: string): void {
   const tmpPath = `${filePath}.tmp`
   const dir = dirname(filePath)
 
-  // Ensure directory exists
   mkdirSync(dir, { recursive: true })
 
-  // Write to temp file
-  writeFileSync(tmpPath, content, 'utf-8')
+  let tmpCreated = false
+  try {
+    writeFileSync(tmpPath, content, 'utf-8')
+    tmpCreated = true
 
-  // Fsync the temp file
-  const fd = openSync(tmpPath, 'r')
-  fsyncSync(fd)
-  closeSync(fd)
+    const fd = openSync(tmpPath, 'r')
+    try {
+      fsyncSync(fd)
+    } finally {
+      closeSync(fd)
+    }
 
-  // Atomic rename
-  renameSync(tmpPath, filePath)
+    renameSync(tmpPath, filePath)
+    tmpCreated = false
+
+    // Best-effort parent-directory fsync for crash durability on Linux/macOS.
+    // Not all platforms support opening directories; failures are silently ignored.
+    try {
+      const dirFd = openSync(dir, 'r')
+      try { fsyncSync(dirFd) } finally { closeSync(dirFd) }
+    } catch {
+      // Ignored — not critical and not supported on all filesystems
+    }
+  } finally {
+    if (tmpCreated) {
+      try { unlinkSync(tmpPath) } catch { /* best-effort cleanup */ }
+    }
+  }
 }

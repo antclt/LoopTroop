@@ -51,7 +51,7 @@ describe('server/git/push', () => {
       'push',
       'origin',
       'HEAD:refs/heads/TEST-1',
-    ], { encoding: 'utf8' })
+    ], expect.objectContaining({ encoding: 'utf8' }))
     expect(spawnSyncMock.mock.calls[0]?.[1]).not.toContain('--progress')
   })
 })
