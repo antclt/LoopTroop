@@ -3,6 +3,7 @@ import { Folder, ArrowUp, CheckCircle2, XCircle, CircleDot } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { FullScreenModal } from '@/components/shared/FullScreenModal'
 import { cn } from '@/lib/utils'
+import { GIT_CHECK_DEBOUNCE_MS } from '@/lib/constants'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface DirItem {
@@ -69,7 +70,7 @@ export function FolderPicker({ open, onClose, onSelect, initialPath }: FolderPic
                 setGitMessage('Git check failed.')
                 setPerformanceWarning('')
             }
-        }, 300)
+        }, GIT_CHECK_DEBOUNCE_MS)
     }, [])
 
     const fetchLs = useCallback(async (pathStr: string) => {

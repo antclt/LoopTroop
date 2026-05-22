@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { Clock3 } from 'lucide-react'
+import { COUNTDOWN_TICK_MS } from '@/lib/constants'
 
 interface ActiveBeadCountdownProps {
   startedAt: string
@@ -26,7 +27,7 @@ export function ActiveBeadCountdown({ startedAt, perIterationTimeoutMs }: Active
       const startMs = new Date(startedAt).getTime()
       const now = Date.now()
       setRemainingMs(Math.max(0, perIterationTimeoutMs - (now - startMs)))
-    }, 1000)
+    }, COUNTDOWN_TICK_MS)
     return () => clearInterval(interval)
   }, [startedAt, perIterationTimeoutMs])
 

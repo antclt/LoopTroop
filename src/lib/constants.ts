@@ -1,5 +1,7 @@
 /** Delay before hiding copy-success indicator */
 export const COPY_SUCCESS_DISPLAY_MS = 2000
+/** Shorter copy-success delay for compact inline copy buttons */
+export const COPY_SUCCESS_DISPLAY_SHORT_MS = 1500
 /** SSE reconnection delay */
 export const SSE_RECONNECT_DELAY_MS = 3000
 /** Interval for polling backend health to detect server downtime */
@@ -28,3 +30,24 @@ export const OPENCODE_RETRY_COUNT = 8
 export const TOAST_DURATION_MS = 4000
 /** Interval for polling to recover unanswered AI questions */
 export const QUESTION_RECOVERY_INTERVAL_MS = 30_000
+
+/** Debounce delay for git-check triggered by folder input change */
+export const GIT_CHECK_DEBOUNCE_MS = 300
+/** Debounce delay for git-check in project form */
+export const PROJECT_GIT_CHECK_DEBOUNCE_MS = 500
+/** Tick interval for the active-bead countdown timer */
+export const COUNTDOWN_TICK_MS = 1_000
+
+/** z-index for absolutely positioned dropdowns above all other UI */
+export const DROPDOWN_Z_INDEX = 9999
+
+/** Seconds in one hour — used for time display formatting */
+export const SECONDS_PER_HOUR = 3_600
+/** Seconds in one day — used for time display formatting */
+export const SECONDS_PER_DAY = 86_400
+
+/** Bytes per kibibyte — used for file-size formatting */
+export const BYTES_PER_KIB = 1_024
+
+/** Maximum value (in seconds) for timeout configuration fields */
+export const MAX_TIMEOUT_SECONDS = 3_600

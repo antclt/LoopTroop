@@ -1,4 +1,5 @@
 import { PROFILE_DEFAULTS } from '@server/db/defaults'
+import { MAX_TIMEOUT_SECONDS } from '@/lib/constants'
 
 interface NumericFieldConfig {
   min: number
@@ -12,7 +13,7 @@ interface NumericFieldConfig {
 export const numericFields = {
   perIterationTimeout: {
     min: 0,
-    max: 3600,
+    max: MAX_TIMEOUT_SECONDS,
     label: 'Per-Iteration Timeout',
     docsPath: '/configuration#per-iteration-timeout',
     fromStore: (v: number) => String(Math.round(v / 1000)),
@@ -20,7 +21,7 @@ export const numericFields = {
   },
   executionSetupTimeout: {
     min: 0,
-    max: 3600,
+    max: MAX_TIMEOUT_SECONDS,
     label: 'Execution Setup Timeout',
     docsPath: '/configuration#execution-setup-timeout',
     fromStore: (v: number) => String(Math.round(v / 1000)),
@@ -28,7 +29,7 @@ export const numericFields = {
   },
   councilResponseTimeout: {
     min: 10,
-    max: 3600,
+    max: MAX_TIMEOUT_SECONDS,
     label: 'AI Response Timeout',
     docsPath: '/configuration#council-response-timeout',
     fromStore: (v: number) => String(Math.round(v / 1000)),
@@ -52,7 +53,7 @@ export const numericFields = {
   },
   opencodeRetryDelay: {
     min: 0,
-    max: 3600,
+    max: MAX_TIMEOUT_SECONDS,
     label: 'OpenCode Retry Grace Window',
     docsPath: '/configuration#opencode-retry-grace-window',
     fromStore: (v: number) => String(Math.round(v / 1000)),

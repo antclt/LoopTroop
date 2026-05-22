@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { ChevronDown, Search, Zap, Eye, Wrench, Brain, AlertCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { DROPDOWN_MAX_HEIGHT, DROPDOWN_OFFSET, DROPDOWN_PADDING, DROPDOWN_FOCUS_DELAY_MS } from '@/lib/constants'
+import { DROPDOWN_MAX_HEIGHT, DROPDOWN_OFFSET, DROPDOWN_PADDING, DROPDOWN_FOCUS_DELAY_MS, DROPDOWN_Z_INDEX } from '@/lib/constants'
 import { useOpenCodeModels, useAllOpenCodeModels } from '@/hooks/useOpenCodeModels'
 import type { OpenCodeModel } from '@/hooks/useOpenCodeModels'
 
@@ -209,7 +209,7 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
     node.style.position = 'fixed'
     node.style.left = `${rect.left}px`
     node.style.width = `${rect.width}px`
-    node.style.zIndex = '9999'
+    node.style.zIndex = String(DROPDOWN_Z_INDEX)
     if (spaceAbove > spaceBelow) {
       node.style.bottom = `${window.innerHeight - rect.top + DROPDOWN_OFFSET}px`
       node.style.top = ''

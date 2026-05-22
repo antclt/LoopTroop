@@ -1,7 +1,7 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { useLogs } from '@/context/useLogContext'
 import { useQuery } from '@tanstack/react-query'
-import { QUERY_STALE_TIME_5M } from '@/lib/constants'
+import { QUERY_STALE_TIME_5M, COPY_SUCCESS_DISPLAY_SHORT_MS } from '@/lib/constants'
 import { Loader2, CheckCircle2, Circle, Play, Eye, FileCode2, List, Brain, Clock, GitCommit, Tag, Link2, ArrowRight, ArrowUpToLine, ArrowDownToLine, Copy, Check } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -509,7 +509,7 @@ function BeadRefHoverCard({ beadId, beads, onSelectBead }: {
 }
 
 function TargetFileRow({ file }: { file: string }) {
-  const [copied, handleCopy] = useCopyToClipboard(1500)
+  const [copied, handleCopy] = useCopyToClipboard(COPY_SUCCESS_DISPLAY_SHORT_MS)
 
   return (
     <div className="group flex items-center gap-1">

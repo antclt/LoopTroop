@@ -10,6 +10,7 @@ import { FolderPicker } from '@/components/project/FolderPicker'
 import { EmojiPickerSection, ColorPickerSection } from './AppearancePickers'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DeleteWorktreesDialog } from './DeleteWorktreesDialog'
+import { PROJECT_GIT_CHECK_DEBOUNCE_MS, SECONDS_PER_HOUR, SECONDS_PER_DAY } from '@/lib/constants'
 
 interface ProjectFormProps {
   onClose: () => void
@@ -33,9 +34,9 @@ function formatRelativeTime(dateStr: string) {
   const diffInSeconds = Math.floor((Date.now() - date.getTime()) / 1000)
   
   if (diffInSeconds < 60) return 'Just now'
-  if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)} minutes ago`
-  if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)} hours ago`
-  const days = Math.floor(diffInSeconds / 86400)
+  if (diffInSeconds < SECONDS_PER_HOUR) return `${Math.floor(diffInSeconds / 60)} minutes ago`
+  if (diffInSeconds < SECONDS_PER_DAY) return `${Math.floor(diffInSeconds / SECONDS_PER_HOUR)} hours ago`
+  const days = Math.floor(diffInSeconds / SECONDS_PER_DAY)
   if (days === 1) return 'Yesterday'
   if (days < 30) return `${days} days ago`
   if (days < 365) return `${Math.floor(days / 30)} months ago`
@@ -91,7 +92,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
             message: 'Git check failed. Verify the absolute folder path and try again.',
           })
         })
-    }, 500)
+    }, PROJECT_GIT_CHECK_DEBOUNCE_MS)
     return () => {
       cancelled = true
       clearTimeout(timer)
