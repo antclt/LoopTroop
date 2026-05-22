@@ -4,6 +4,7 @@ import { PROFILE_DEFAULTS } from '../db/defaults'
 
 type TicketInput = Partial<TicketContext>
 
+/** Every non-terminal status that BLOCKED_ERROR can resume to via Retry or Continue. */
 const BLOCKED_ERROR_RESUME_STATUSES = [
   'DRAFT',
   'SCANNING_RELEVANT_FILES',
@@ -43,6 +44,12 @@ function buildBlockedErrorResumeTransitions() {
   }))
 }
 
+/**
+ * XState machine defining every ticket lifecycle state and its allowed transitions.
+ * States progress linearly through planning → execution → post-implementation,
+ * with BLOCKED_ERROR as the universal error‐recovery state and CANCELED / COMPLETED
+ * as terminal states.
+ */
 export const ticketMachine = setup({
   types: {
     context: {} as TicketContext,
@@ -93,6 +100,7 @@ export const ticketMachine = setup({
     }),
   },
   guards: {
+    // total > 0 prevents 0/0 from passing as "complete"
     allBeadsComplete: ({ context }) =>
       context.beadProgress.completed >= context.beadProgress.total &&
       context.beadProgress.total > 0,
@@ -275,6 +283,8 @@ export const ticketMachine = setup({
       ],
       on: {
         COVERAGE_CLEAN: { target: 'WAITING_PRD_APPROVAL' },
+        // Dead transition — PRD coverage loops internally via handlePrdCoverageVerificationLoop
+        // and only emits COVERAGE_CLEAN or COVERAGE_LIMIT_REACHED. Kept for defensive safety.
         GAPS_FOUND: { target: 'REFINING_PRD' },
         COVERAGE_LIMIT_REACHED: { target: 'WAITING_PRD_APPROVAL' },
         ERROR: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
@@ -330,6 +340,8 @@ export const ticketMachine = setup({
       ],
       on: {
         COVERAGE_CLEAN: { target: 'EXPANDING_BEADS' },
+        // Dead transition — beads coverage loops internally via handleBeadsCoverageVerificationLoop
+        // and only emits COVERAGE_CLEAN or COVERAGE_LIMIT_REACHED. Kept for defensive safety.
         GAPS_FOUND: { target: 'REFINING_BEADS' },
         COVERAGE_LIMIT_REACHED: { target: 'EXPANDING_BEADS' },
         ERROR: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
@@ -396,6 +408,8 @@ export const ticketMachine = setup({
         { type: 'updateStatus', params: { status: 'CODING' } },
       ],
       on: {
+        // Guard-first: if all beads are done, advance to final testing;
+        // otherwise stay in CODING and pick the next runnable bead.
         BEAD_COMPLETE: [
           { guard: 'allBeadsComplete', target: 'RUNNING_FINAL_TEST' },
           { target: 'CODING' },

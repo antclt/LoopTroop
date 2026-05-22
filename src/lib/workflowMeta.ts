@@ -9,6 +9,7 @@ import {
 export { WORKFLOW_GROUPS, WORKFLOW_PHASES, WORKFLOW_PHASE_MAP }
 export type { EditableArtifactType, KanbanPhase }
 
+/** Options for customising the user-facing status label (e.g., injecting bead progress or question counts). */
 export interface StatusLabelOptions {
   currentBead?: number | null
   totalBeads?: number | null
@@ -17,14 +18,17 @@ export interface StatusLabelOptions {
   errorMessage?: string | null
 }
 
+/** Maps every workflow status ID to its kanban column. */
 export const STATUS_TO_PHASE: Record<string, KanbanPhase> = Object.fromEntries(
   WORKFLOW_PHASES.map((phase) => [phase.id, phase.kanbanPhase]),
 ) as Record<string, KanbanPhase>
 
+/** Maps every workflow status ID to its short description (includes safe-resume suffix). */
 export const STATUS_DESCRIPTIONS: Record<string, string> = Object.fromEntries(
   WORKFLOW_PHASES.map((phase) => [phase.id, phase.description]),
 ) as Record<string, string>
 
+/** Linear ordering of all workflow status IDs — used for range checks and progression queries. */
 export const STATUS_ORDER: string[] = WORKFLOW_PHASES.map((phase) => phase.id)
 
 const BASE_STATUS_LABELS: Record<string, string> = Object.fromEntries(
@@ -41,6 +45,11 @@ function isStatusInRange(currentStatus: string, startStatus: string, endStatus: 
   return hasReachedStatus(currentStatus, startStatus) && !hasReachedStatus(currentStatus, endStatus)
 }
 
+/**
+ * Returns a warning message when saving a post-approval artifact edit would
+ * archive downstream planning and restart the next drafting phase, or `null`
+ * if no cascade warning is needed.
+ */
 export function getCascadeEditWarningMessage(
   currentStatus: string,
   artifactType: EditableArtifactType,
@@ -92,6 +101,10 @@ function formatBlockedErrorLabel(errorMessage?: string | null): string {
   return `Error (${shortReason})`
 }
 
+/**
+ * Returns the human-readable label for a workflow status, optionally enriched
+ * with dynamic data (bead progress, question index, error reason).
+ */
 export function getStatusUserLabel(status: string, options: StatusLabelOptions = {}): string {
   if (status === 'CODING') {
     const current = options.currentBead ?? null

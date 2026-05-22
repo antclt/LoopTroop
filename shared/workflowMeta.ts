@@ -1,3 +1,4 @@
+/** Kanban column a workflow phase maps to — drives the kanban board layout. */
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'
 type WorkflowGroupId =
   | 'todo'
@@ -11,7 +12,12 @@ type WorkflowGroupId =
   | 'done'
   | 'errors'
 type WorkflowUIView = 'draft' | 'council' | 'interview_qa' | 'approval' | 'coding' | 'error' | 'done' | 'canceled'
+/** Artifact types that support user editing from an approval gate. */
 export type EditableArtifactType = 'interview' | 'prd' | 'beads' | 'execution_setup_plan'
+/**
+ * Keys identifying the context data artifacts that each workflow phase receives.
+ * Each key maps to a labeled description shown in the Details dialog.
+ */
 export type WorkflowContextKey =
   | 'ticket_details'
   | 'relevant_files'
@@ -19,7 +25,7 @@ export type WorkflowContextKey =
   | 'interview'
   | 'full_answers'
   | 'user_answers'
-  | 'votes'
+  | 'votes' // Reserved — defined in CONTEXT_KEY_LABELS but not currently used in any phase's contextSummary
   | 'prd'
   | 'beads'
   | 'beads_draft'
@@ -33,6 +39,7 @@ export type WorkflowContextKey =
   | 'final_test_notes'
   | 'error_context'
 
+/** Content shown in the "Details" dialog for a workflow phase — overview, steps, outputs, transitions, notes, and cross-references to equivalent steps. */
 export interface WorkflowPhaseDetails {
   overview: string
   steps: readonly string[]
@@ -42,10 +49,13 @@ export interface WorkflowPhaseDetails {
   equivalents?: readonly string[]
 }
 
+/** Complete metadata for a single workflow phase — drives the status bar, Details dialog, kanban board, and context display. */
 export interface WorkflowPhaseMeta {
   id: string
   label: string
+  /** Short description shown below the phase label in the status bar. Safe-resume text is automatically appended at runtime. */
   description: string
+  /** Detailed breakdown shown in the "Details" dialog (overview, steps, outputs, transitions, notes, equivalents). */
   details: WorkflowPhaseDetails
   kanbanPhase: KanbanPhase
   groupId: WorkflowGroupId
@@ -54,15 +64,18 @@ export interface WorkflowPhaseMeta {
   multiModelLogs: boolean
   reviewArtifactType?: EditableArtifactType
   progressKind?: 'questions' | 'beads'
+  /** Context keys whose descriptions are shown in the "Context" section of the Details dialog. */
   contextSummary: WorkflowContextKey[]
   contextSections?: readonly WorkflowContextSection[]
 }
 
+/** Group header for workflow phases displayed in the navigator and Details dialog. */
 export interface WorkflowGroupMeta {
   id: WorkflowGroupId
   label: string
 }
 
+/** A labeled group of context keys shown in the Details dialog when a phase has multi-part context (e.g., PRD drafting Part 1 / Part 2). */
 export interface WorkflowContextSection {
   label: string
   description?: string
@@ -1193,7 +1206,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'VERIFYING_PRD_COVERAGE',
     label: 'Coverage Check (PRD)',
-    description: 'LoopTroop checks the current PRD against the winning model\'s Full Answers artifact. If something is missing, it updates the PRD and checks again.',
+    description: 'LoopTroop checks the current PRD candidate against the winning model\'s Full Answers artifact and revises it in-phase until clean or the configured cap is reached.',
     details: WORKFLOW_PHASE_DETAILS.VERIFYING_PRD_COVERAGE,
     kanbanPhase: 'in_progress',
     groupId: 'prd',
@@ -1293,7 +1306,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'PRE_FLIGHT_CHECK',
     label: 'Checking Readiness',
-    description: 'Validates the execution environment before coding begins: workspace health, coding-agent connectivity, an execution-mode session probe, bead artifact availability, and dependency-graph integrity. No AI context is passed.',
+    description: 'Validates the execution environment before coding begins: workspace health, coding-agent connectivity, an execution-mode session probe, bead artifact availability, and dependency-graph integrity. No ticket planning context is assembled — the only AI interaction is a minimal connectivity probe.',
     details: WORKFLOW_PHASE_DETAILS.PRE_FLIGHT_CHECK,
     kanbanPhase: 'in_progress',
     groupId: 'pre_implementation',
@@ -1446,12 +1459,14 @@ export const WORKFLOW_PHASE_MAP = Object.fromEntries(
   WORKFLOW_PHASES.map((phase) => [phase.id, phase]),
 ) as Record<string, WorkflowPhaseMeta>
 
+/** Returns the full phase metadata for a given status ID, or `undefined` if the status is unknown. */
 export function getWorkflowPhaseMeta(status: string): WorkflowPhaseMeta | undefined {
   return WORKFLOW_PHASE_MAP[status]
 }
 
 export type WorkflowAction = 'start' | 'approve' | 'cancel' | 'retry' | 'continue' | 'merge' | 'close_unmerged'
 
+/** Returns `true` when `status` precedes the execution band (before PRE_FLIGHT_CHECK). Resolves BLOCKED_ERROR via `previousStatus`. */
 export function isBeforeExecution(status: string, previousStatus?: string | null, depth?: number): boolean {
   if (status === 'BLOCKED_ERROR' && previousStatus) {
     // Guard against infinite recursion if both statuses are BLOCKED_ERROR
@@ -1463,12 +1478,20 @@ export function isBeforeExecution(status: string, previousStatus?: string | null
   return index >= 0 && executionIndex >= 0 && index < executionIndex
 }
 
+/** Returns `true` when `currentStatus` is at or past `targetStatus` in the linear workflow order. */
 export function isStatusAtOrPast(currentStatus: string, targetStatus: string): boolean {
   const currentIndex = WORKFLOW_PHASE_IDS.indexOf(currentStatus)
   const targetIndex = WORKFLOW_PHASE_IDS.indexOf(targetStatus)
   return currentIndex >= 0 && targetIndex >= 0 && currentIndex >= targetIndex
 }
 
+/**
+ * Returns the statically-known available workflow actions for a given status.
+ *
+ * NOTE: The server may dynamically add `'continue'` to BLOCKED_ERROR actions
+ * when a resumable OpenCode session is available — see `addContinueActionWhenAvailable`
+ * in `server/storage/ticketQueries.ts`.
+ */
 export function getAvailableWorkflowActions(status: string): WorkflowAction[] {
   switch (status) {
     case 'DRAFT':

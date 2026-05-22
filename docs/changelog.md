@@ -39,6 +39,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Replaced all opaque internal prompt IDs (`PROM4`, `PROM_CODING`, `PROM51`, `PROM25`) with plain English descriptions in `shared/workflowMeta.ts`, `docs/execution-loop.md`, `docs/ticket-flow.md`, and `docs/configuration.md`; replaced internal constant names (`BEAD_STATUS_SCHEMA_REMINDER`, `CONTINUE_CODING_SCHEMA_REMINDER`, `shouldUseStructuredRetry`, `buildContinuationPrompt`, `perIterationTimeoutMs`) with conceptual descriptions in the CODING Details steps.
 - Removed stale `COMPLETED` note that incorrectly implied the candidate branch had not yet been merged (the merge decision is finalized in `WAITING_PR_REVIEW` before `COMPLETED` is reached).
 - Synced all eight out-of-date rows in the `docs/state-machine.md` Phase Descriptions table with their canonical `description` fields in `shared/workflowMeta.ts`.
+- Refined PRD coverage status description to clarify in-phase revision loop instead of implying cross-state transitions.
+- Clarified PRE_FLIGHT_CHECK status description to note the minimal AI connectivity probe instead of broadly stating "No AI context is passed."
+- Annotated dead `GAPS_FOUND` state machine transitions for PRD and beads coverage phases as defensive-safety artifacts since coverage loops internally.
+- Added JSDoc to all exported types, interfaces, and functions across `shared/workflowMeta.ts`, `src/lib/workflowMeta.ts`, `WorkspacePhaseSummary.tsx`, `ticketMachine.ts`, and `ticketQueries.ts`.
+- Documented the dynamic `continue` action injection on `getAvailableWorkflowActions` with a reference to `addContinueActionWhenAvailable`.
+- Annotated the unused `votes` context key as reserved and added a note to `CONTEXT_KEY_LABELS`.
 
 #### Fixed
 - Left-panel blocked-error headers now stop appending active bead identifiers after the count and Active badge, preventing long bead names from overflowing the navigator while preserving details in the expanded error view.

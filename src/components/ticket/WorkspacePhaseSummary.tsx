@@ -14,6 +14,13 @@ import type { WorkflowContextKey } from '@shared/workflowMeta'
 import { getWorkflowPhaseMeta } from '@shared/workflowMeta'
 import { ActiveBeadCountdown } from '../navigator/ActiveBeadCountdown'
 
+/**
+ * Human-readable labels and tooltip descriptions for each workflow context key,
+ * shown in the "Context" section of the Details dialog.
+ *
+ * NOTE: `votes` is defined here for completeness but is not currently referenced
+ * by any phase’s `contextSummary` array.
+ */
 const CONTEXT_KEY_LABELS: Record<WorkflowContextKey, { label: string; description: string }> = {
   ticket_details: { label: 'Ticket Details', description: 'The ticket title, full description text, priority level, project metadata, and any user-supplied implementation notes. This is the root context that every planning phase receives.' },
   relevant_files: { label: 'Relevant Files', description: 'Source file contents identified as relevant by the AI scan phase. Includes file paths, content excerpts, relevance ratings, and rationales explaining why each file matters to this ticket.' },
@@ -51,6 +58,7 @@ interface WorkspacePhaseSummaryProps {
 
 type CoveragePhase = 'VERIFYING_PRD_COVERAGE' | 'VERIFYING_BEADS_COVERAGE'
 
+/** Phase-specific metadata for the two coverage phases that track versioned candidate revisions. */
 const COVERAGE_PHASE_META: Record<CoveragePhase, {
   coverageArtifactType: 'prd_coverage' | 'beads_coverage'
   coverageInputArtifactType: 'prd_coverage_input' | 'beads_coverage_input'
@@ -75,12 +83,14 @@ function isCoveragePhase(phase: string): phase is CoveragePhase {
   return phase === 'VERIFYING_PRD_COVERAGE' || phase === 'VERIFYING_BEADS_COVERAGE'
 }
 
+/** Normalises a candidate-version number: returns a positive integer or `null`. */
 function normalizeCandidateVersion(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   const normalized = Math.trunc(value)
   return normalized > 0 ? normalized : null
 }
 
+/** Returns `true` when `timestamp` is on or after `minimumTimestamp` (ISO-8601 strings). Falls back to `true` on parse errors. */
 function isTimestampOnOrAfter(timestamp: string | undefined, minimumTimestamp: string | undefined): boolean {
   if (!minimumTimestamp) return true
   if (!timestamp) return false
@@ -93,6 +103,7 @@ function isTimestampOnOrAfter(timestamp: string | undefined, minimumTimestamp: s
 
 type ArtifactContentSource = Pick<DBartifact, 'content'>
 
+/** Extracts a candidate version number from an artifact’s content or its companion payload. */
 function extractArtifactCandidateVersion(
   artifact: ArtifactContentSource | undefined,
   expectedBaseArtifactType?: string,
@@ -111,6 +122,7 @@ function extractArtifactCandidateVersion(
   }
 }
 
+/** Reads the highest candidate version from coverage, input, and revision artifacts for the current phase activation. */
 function extractCoverageVersionFromArtifacts(phase: CoveragePhase, artifacts: DBartifact[]): number | null {
   const meta = COVERAGE_PHASE_META[phase]
   const coverageArtifact = findLatestArtifactByType(artifacts, meta.coverageArtifactType, [phase])
@@ -138,6 +150,7 @@ function extractCoverageVersionFromArtifacts(phase: CoveragePhase, artifacts: DB
     .reduce<number | null>((highest, version) => (highest == null || version > highest ? version : highest), null)
 }
 
+/** Scans log lines (newest-first) for candidate-version patterns (e.g., "PRD Candidate v3") and returns the latest version found. */
 function extractCoverageVersionFromLogs(phase: CoveragePhase, lines: string[]): number | null {
   const candidateLabel = COVERAGE_PHASE_META[phase].candidateLabel
   const escapedCandidateLabel = candidateLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -169,6 +182,7 @@ function extractCoverageVersionFromLogs(phase: CoveragePhase, lines: string[]): 
   return null
 }
 
+/** Walks log entries backwards to find the timestamp when this phase was last activated (used to scope coverage-version queries to the current run). */
 function findLatestPhaseActivationTimestamp(phase: string, logLines: Array<{ line: string; timestamp?: string }>): string | undefined {
   for (let index = logLines.length - 1; index >= 0; index -= 1) {
     const entry = logLines[index]
@@ -190,6 +204,10 @@ function DetailsList({ items }: { items: readonly string[] }) {
   )
 }
 
+/**
+ * Collapsible status bar with phase label, description, "(details)" dialog trigger,
+ * and optional live coverage-version badge.
+ */
 export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: WorkspacePhaseSummaryProps) {
   const [open, setOpen] = useState(false)
   const [expanded, setExpanded] = useState(true)

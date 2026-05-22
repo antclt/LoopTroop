@@ -49,6 +49,7 @@ function warnInvalidDbJson(fieldName: string, raw: string, detail: string): void
 
 export type TicketErrorResolutionStatus = 'RETRIED' | 'CONTINUED' | 'CANCELED'
 
+/** An individual error occurrence recorded while a ticket was in BLOCKED_ERROR. */
 export interface TicketErrorOccurrence {
   id: number
   ticketId: number
@@ -63,6 +64,7 @@ export interface TicketErrorOccurrence {
   resumedToStatus: string | null
 }
 
+/** Full public projection of a ticket row, enriched with runtime data, error history, and available actions. */
 export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncilMembers' | 'lockedCouncilMemberVariants'> {
   id: string
   projectId: number
@@ -110,6 +112,7 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
 
 export type PublicPhaseArtifactRow = ArtifactSnapshot
 
+/** Resolved storage and database references for processing a ticket in API routes. */
 export interface TicketContext {
   ticketRef: string
   externalId: string
@@ -339,6 +342,11 @@ function resolveTicketContinuationCandidateFromRows(
   }
 }
 
+/**
+ * Injects `'continue'` into a ticket’s available actions when a resumable
+ * OpenCode session exists for the current BLOCKED_ERROR. Inserted right after
+ * `'retry'` so the UI shows them together.
+ */
 function addContinueActionWhenAvailable(
   actions: string[],
   candidate: TicketContinuationCandidate | null,
@@ -369,6 +377,11 @@ function readErrorSeenSignature(projectContext: NonNullable<ReturnType<typeof ge
   return typeof parsed?.data?.seenSignature === 'string' ? parsed.data.seenSignature : null
 }
 
+/**
+ * Determines the status a reviewer should scroll to when viewing a ticket’s
+ * artifact history. For BLOCKED_ERROR it returns the phase that was active when
+ * the error occurred; for CANCELED it unwinds through a possible double-error.
+ */
 export function resolveReviewCutoffStatus(
   ticketStatus: string,
   previousStatus: string | null,
@@ -401,6 +414,7 @@ function readReviewCutoffStatus(
   return resolveReviewCutoffStatus(ticket.status, previousStatus, latestBlockedErrorPreviousStatus)
 }
 
+/** Converts a raw database ticket row into a fully enriched public ticket with runtime data, actions, and error history. */
 export function toPublicTicket(projectId: number, ticket: LocalTicketRow): PublicTicket {
   const project = getProjectById(projectId)
   const projectContext = getProjectContextById(projectId)
@@ -620,6 +634,7 @@ export interface ExecutionBandConflict {
   status: string
 }
 
+/** Returns any ticket in the project that is currently in the execution band (coding/testing/integrating), excluding `excludeTicketRef`. */
 export function findProjectExecutionBandConflict(
   projectId: number,
   excludeTicketRef?: string,
@@ -650,6 +665,7 @@ export function findProjectExecutionBandConflict(
     : null
 }
 
+/** Lists all tickets across one or all projects, sorted by most recently updated. */
 export function listTickets(projectId?: number): PublicTicket[] {
   const projectsToRead = projectId != null
     ? [getProjectContextById(projectId)].filter(Boolean)
@@ -663,6 +679,7 @@ export function listTickets(projectId?: number): PublicTicket[] {
   return aggregated.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
 }
 
+/** Fetches a single ticket by its composite ref (`projectId:externalId`). */
 export function getTicketByRef(ticketRef: string): PublicTicket | undefined {
   const context = getTicketContext(ticketRef)
   if (!context) return undefined
@@ -681,6 +698,7 @@ export function findTicketRefByLocalId(localTicketId: number): string | undefine
   return undefined
 }
 
+/** Resolves full ticket context (database handles, paths, project metadata) from a composite ticket ref. */
 export function getTicketContext(ticketRef: string): TicketContext | undefined {
   const parsed = parseTicketRef(ticketRef)
   if (!parsed) return undefined

@@ -94,7 +94,7 @@ describe.concurrent('workflow metadata', () => {
     const prdCoveragePhase = WORKFLOW_PHASES.find((phase) => phase.id === 'VERIFYING_PRD_COVERAGE')
 
     expect(prdCoveragePhase?.description).toContain(
-      'LoopTroop checks the current PRD against the winning model\'s Full Answers artifact. If something is missing, it updates the PRD and checks again.',
+      'LoopTroop checks the current PRD candidate against the winning model\'s Full Answers artifact and revises it in-phase until clean or the configured cap is reached.',
     )
     expect(prdCoveragePhase?.contextSummary).toEqual(['full_answers', 'prd'])
   })
