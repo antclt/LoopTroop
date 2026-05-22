@@ -2,6 +2,7 @@ import { Hono } from 'hono'
 import {
   handleListTickets,
   handleGetTicket,
+  handleGetTicketSize,
   handleGetUiState,
   handlePutUiState,
   handleCreateTicket,
@@ -42,6 +43,7 @@ const ticketRouter = new Hono()
 
 ticketRouter.get('/tickets', (c) => handleListTickets(c))
 ticketRouter.get('/tickets/:id', (c) => handleGetTicket(c))
+ticketRouter.get('/tickets/:id/size', async (c) => handleGetTicketSize(c))
 ticketRouter.get('/tickets/:id/ui-state', (c) => handleGetUiState(c))
 ticketRouter.put('/tickets/:id/ui-state', async (c) => handlePutUiState(c))
 ticketRouter.post('/tickets', async (c) => handleCreateTicket(c))

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
-import { FolderOpen, Copy, Check as CheckIcon, Pencil } from 'lucide-react'
+import { FolderOpen, Copy, Check as CheckIcon, Pencil, HardDrive, RotateCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -108,6 +108,15 @@ function CopyableDescription({ description }: { description: string }) {
   )
 }
 
+function formatBytes(bytes: number, decimals = 2) {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const dm = decimals < 0 ? 0 : decimals
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i]
+}
+
 export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const { dispatch } = useUI()
   const { isPending } = useTicketAction()
@@ -123,9 +132,33 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const [titleDraft, setTitleDraft] = useState(ticket.title)
   const inputRef = useRef<HTMLInputElement>(null)
 
+  const [isCalculatingSize, setIsCalculatingSize] = useState(false)
+  const [ticketSize, setTicketSize] = useState<number | null>(null)
+  const [sizeError, setSizeError] = useState<string | null>(null)
+
+  const handleCalculateSize = async () => {
+    setIsCalculatingSize(true)
+    setSizeError(null)
+    try {
+      const res = await fetch(`/api/tickets/${ticket.id}/size`)
+      if (!res.ok) throw new Error('Failed to calculate size')
+      const data = await res.json()
+      setTicketSize(data.size)
+    } catch (err) {
+      setSizeError(err instanceof Error ? err.message : 'Error calculating size')
+    } finally {
+      setIsCalculatingSize(false)
+    }
+  }
+
   useEffect(() => {
     setTitleDraft(ticket.title)
   }, [ticket.title])
+
+  useEffect(() => {
+    setTicketSize(null)
+    setSizeError(null)
+  }, [ticket.id])
 
   useEffect(() => {
     if (isEditingTitle && inputRef.current) {
@@ -432,8 +465,80 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
               <ErrorBanner errorMessage={ticket.errorMessage} />
             )}
             {project && ticket.status !== 'DRAFT' && (
-              <div className="col-span-2 border-t-[2px] border-border/70 pt-2 mt-1">
+              <div className="col-span-2 border-t-[2px] border-border/70 pt-2 mt-1 flex flex-col gap-2.5">
                 <CopyablePathRow label="Artifacts Location" path={runtime.artifactRoot || `${project.folderPath}/.looptroop/worktrees/${ticket.externalId}`} />
+                <div className="bg-muted/30 border border-border/50 rounded-lg p-3 mt-1 shadow-inner relative overflow-hidden group">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <HardDrive className="h-3.5 w-3.5 text-indigo-500" />
+                      Ticket Disk Space
+                    </span>
+                    {ticketSize !== null && (
+                      <button
+                        type="button"
+                        onClick={handleCalculateSize}
+                        disabled={isCalculatingSize}
+                        className="text-xs text-indigo-500 hover:text-indigo-400 font-medium transition-colors flex items-center gap-1.5 focus:outline-none"
+                      >
+                        <RotateCw className={`h-3 w-3 ${isCalculatingSize ? 'animate-spin' : ''}`} />
+                        Recalculate
+                      </button>
+                    )}
+                  </div>
+
+                  {ticketSize === null ? (
+                    <div className="flex items-center justify-between gap-4">
+                      <p className="text-[11px] text-muted-foreground leading-normal max-w-[340px]">
+                        Calculate the exact size occupied on disk by this ticket's isolated git worktree, branches, artifacts, and execution logs.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={isCalculatingSize}
+                        onClick={handleCalculateSize}
+                        className="bg-gradient-to-r from-violet-600 via-indigo-600 to-blue-600 hover:from-violet-500 hover:to-blue-500 text-white font-medium shadow-md shadow-indigo-500/10 hover:shadow-indigo-500/20 active:scale-[0.98] transition-all flex items-center gap-1.5 h-8 px-3.5 rounded-md text-xs shrink-0"
+                      >
+                        {isCalculatingSize ? (
+                          <>
+                            <RotateCw className="h-3.5 w-3.5 animate-spin" />
+                            Calculating...
+                          </>
+                        ) : (
+                          <>
+                            <HardDrive className="h-3.5 w-3.5" />
+                            Calculate Size
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4 py-0.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/20 rounded-lg shrink-0 flex items-center justify-center shadow-sm">
+                        <HardDrive className="h-5 w-5 text-indigo-500 animate-pulse" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-xl font-extrabold text-foreground font-mono leading-none tracking-tight">
+                            {formatBytes(ticketSize)}
+                          </span>
+                          <span className="text-[9px] text-indigo-500 bg-indigo-500/10 border border-indigo-500/20 px-1.5 py-0.5 rounded uppercase font-bold tracking-wider leading-none">
+                            Occupied
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-1 truncate">
+                          Includes repository code, phase artifacts, and execution logs.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {sizeError && (
+                    <div className="mt-2 text-xs text-red-500 border-t border-red-500/20 pt-1.5 flex items-center gap-1.5 animate-in fade-in duration-200">
+                      <span className="h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />
+                      {sizeError}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
             {ticket.description && (

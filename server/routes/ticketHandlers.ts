@@ -824,6 +824,56 @@ export function handleGetTicket(c: Context) {
   return c.json(ticket)
 }
 
+export async function handleGetTicketSize(c: Context) {
+  const ticketId = getRequiredRouteParam(c, 'id')
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+
+  const paths = getTicketPaths(ticketId)
+  if (!paths || !paths.worktreePath) {
+    return c.json({ size: 0, exists: false })
+  }
+
+  const fsPromises = await import('node:fs/promises')
+  const path = await import('node:path')
+
+  async function getDirectorySize(dirPath: string): Promise<number> {
+    let size = 0
+    try {
+      const entries = await fsPromises.readdir(dirPath, { withFileTypes: true })
+      const results = await Promise.all(
+        entries.map(async (entry) => {
+          const fullPath = path.join(dirPath, entry.name)
+          try {
+            const stats = await fsPromises.lstat(fullPath)
+            if (stats.isDirectory()) {
+              return getDirectorySize(fullPath)
+            } else if (stats.isFile()) {
+              return stats.size
+            }
+          } catch {
+            // Ignore individual file errors (permissions, broken symlinks)
+          }
+          return 0
+        })
+      )
+      size = results.reduce((acc, current) => acc + current, 0)
+    } catch {
+      // Ignore directory read errors
+    }
+    return size
+  }
+
+  const exists = await fsPromises.stat(paths.worktreePath).then(() => true).catch(() => false)
+  if (!exists) {
+    return c.json({ size: 0, exists: false })
+  }
+
+  const size = await getDirectorySize(paths.worktreePath)
+  return c.json({ size, exists: true })
+}
+
+
 export function handleGetUiState(c: Context) {
   const ticketId = getTicketParam(c)
   const parsed = uiStateScopeSchema.safeParse({ scope: c.req.query('scope') ?? '' })
