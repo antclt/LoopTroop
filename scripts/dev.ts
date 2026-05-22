@@ -180,14 +180,14 @@ function printAuditIssueDetails(report: NonNullable<ReturnType<typeof readDevPre
 
 function formatOpenCodeLogSummary(status: string) {
   if (opencodeLogMode.mode !== 'all') {
-    return 'Default WARN logs; use npm run dev --opencode-logs=all'
+    return 'Default WARN+ only. For full OpenCode DEBUG logs in this terminal, use npm run dev --opencode-logs=all'
   }
 
   if (status === 'ready-to-start') {
-    return 'Managed server will print DEBUG logs to stderr'
+    return 'Full OpenCode DEBUG logs enabled; managed server will print them to stderr'
   }
 
-  return 'DEBUG logs requested, but this start is not launching OpenCode'
+  return 'Full OpenCode DEBUG logs requested, but this start is reusing or skipping the managed server'
 }
 
 const services: DevService[] = [

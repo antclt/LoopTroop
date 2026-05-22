@@ -10,7 +10,7 @@ This guide covers the parts of LoopTroop you deal with after the first run: star
 | Start once without dependency/audit mutation | `LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev` |
 | Skip only the local OpenCode CLI upgrade | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev` |
 | Inherit your external OpenCode permission mode | `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit npm run dev` |
-| Print all managed OpenCode logs during dev | `npm run dev --opencode-logs=all` |
+| Print full managed OpenCode DEBUG logs in the terminal | `npm run dev --opencode-logs=all` |
 | Force all startup maintenance now | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
 | Diagnose slow UI or ticket refresh stalls | `npm run diagnose:stall` |
 | Clean tracked LoopTroop runtime paths from a project | `git rm --cached -r .looptroop` inside the attached project |
@@ -46,7 +46,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - **Reuse:** if the configured address is already responding to authenticated requests, `npm run dev` reuses that running instance.
 - **Port fallback:** if the default port (`4096`) is occupied by a non-OpenCode process, `npm run dev` scans for the next free port and starts OpenCode there instead.
 - **Permission mode:** when `npm run dev` starts the managed OpenCode server, it sets `OPENCODE_PERMISSION='"allow"'` by default so trusted LoopTroop sessions are not blocked by OpenCode approval prompts. Set `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` to leave any existing OpenCode permission environment untouched.
-- **Verbose OpenCode logs:** start with `npm run dev --opencode-logs=all` to run the managed OpenCode server with `--print-logs --log-level DEBUG`. This only affects servers started by the dev launcher; reused, remote, or mock OpenCode servers keep their own logging configuration. Treat DEBUG output as sensitive local troubleshooting data because it may include request or provider details.
+- **Verbose OpenCode logs:** start with `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs in your terminal via `--print-logs --log-level DEBUG`. This only affects servers started by the dev launcher; reused, remote, or mock OpenCode servers keep their own logging configuration. Treat DEBUG output as sensitive local troubleshooting data because it may include request or provider details.
 - **Ephemeral auth:** if `OPENCODE_SERVER_PASSWORD` is not set and a new local OpenCode server is about to start, `npm run dev` generates a random credential and sets `OPENCODE_SERVER_USERNAME` to `opencode`. This credential is propagated automatically to all child processes — backend and watcher — for the duration of the session.
 - **Ephemeral API token:** if `LOOPTROOP_API_TOKEN` is not set, `npm run dev` generates one for the backend and Vite dev proxy so local same-origin `/api/*` calls are protected without embedding the token in the frontend bundle.
 
