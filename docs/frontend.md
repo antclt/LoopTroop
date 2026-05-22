@@ -48,7 +48,7 @@ Additional routing rules:
 `NavigatorPanel.tsx` is more than a left rail. It combines several different navigation modes:
 
 - `PhaseTimeline` for the workflow spine
-- `ErrorOccurrencesPanel` for active and past failures; its compact header shows only count/state, while expanded coding-error rows use the ticket's runtime bead counters and leave deeper bead/error details to the workspace view
+- `ErrorOccurrencesPanel` for active and past failures; active or selected errors auto-expand as a starting state but remain user-collapsible, its compact header shows only count/state, and expanded coding-error rows use the ticket's runtime bead counters while leaving deeper bead/error details to the workspace view
 - `ApprovalNavigator` for interview, PRD, and beads approval context
 - `ContextTree` for context visibility
 - a full-log toggle that opens `FullLogView`

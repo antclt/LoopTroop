@@ -8,12 +8,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Let users collapse the left-panel Errors section even when a blocked ticket auto-opens it.
 - Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
 - Allow Continue for blocked `HTTP 402 Payment Required` OpenCode provider errors when the original session is still active.
 
 ### Detailed Changes
 
 #### Fixed
+- Let the ticket navigator's auto-expanded Errors section be collapsed and reopened by the user while preserving auto-open behavior for newly active or selected errors.
 - Enriched generic `Provider returned error` OpenCode failures by correlating the session with local OpenCode logs, surfacing sanitized HTTP/provider details while excluding prompts, request bodies, headers, credentials, cookies, and URL query strings.
 - Made `HTTP 402 Payment Required` OpenCode provider blocks eligible for same-session Continue after payment or workspace access is restored, while keeping permanent 4xx request, auth, permission, model-not-found, and request-size failures non-continuable.
 

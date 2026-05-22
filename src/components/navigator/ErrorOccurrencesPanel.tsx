@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
@@ -99,9 +99,19 @@ export function ErrorOccurrencesPanel({
   }, [activeOccurrence, currentStatusIsBlocked, occurrences])
 
   const shouldShowPanel = visibleOccurrences.length > 0 || Boolean(selectedOccurrence)
-  const shouldAutoExpand = currentStatusIsBlocked || Boolean(selectedOccurrence?.resolvedAt)
-  const [isUserToggled, setIsUserToggled] = useState(false)
-  const expanded = shouldAutoExpand || isUserToggled
+  const autoExpandKey = currentStatusIsBlocked
+    ? `blocked:${activeOccurrence?.id ?? ticket.activeErrorOccurrenceId ?? 'current'}`
+    : selectedOccurrence?.resolvedAt
+      ? `selected:${selectedOccurrence.id}`
+      : null
+  const [userExpandedOverride, setUserExpandedOverride] = useState<boolean | null>(null)
+  const lastAutoExpandKeyRef = useRef(autoExpandKey)
+  useEffect(() => {
+    if (lastAutoExpandKeyRef.current === autoExpandKey) return
+    lastAutoExpandKeyRef.current = autoExpandKey
+    setUserExpandedOverride(null)
+  }, [autoExpandKey])
+  const expanded = userExpandedOverride ?? Boolean(autoExpandKey)
   const statusLabelOptions = useMemo(() => ({
     currentBead: ticket.runtime.currentBead ?? ticket.currentBead,
     totalBeads: ticket.runtime.totalBeads ?? ticket.totalBeads,
@@ -113,7 +123,7 @@ export function ErrorOccurrencesPanel({
     <div className="space-y-1.5">
       <button
         type="button"
-        onClick={() => setIsUserToggled((v) => !v)}
+        onClick={() => setUserExpandedOverride(!expanded)}
         aria-expanded={expanded}
         className="flex w-full items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
       >

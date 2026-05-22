@@ -88,6 +88,49 @@ describe('ErrorOccurrencesPanel', () => {
     expect(onSelect).toHaveBeenCalledWith('error-1')
   })
 
+  it('lets auto-expanded active errors collapse and reopen', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      hasPastErrors: true,
+      errorOccurrences: [
+        {
+          id: 'error-1',
+          occurrenceNumber: 1,
+          blockedFromStatus: 'REFINING_PRD',
+          errorMessage: 'Active crash',
+          errorCodes: ['E1'],
+          occurredAt: '2026-03-11T10:15:00.000Z',
+          resolvedAt: null,
+          resolutionStatus: null,
+          resumedToStatus: null,
+        },
+      ],
+      activeErrorOccurrenceId: 'error-1',
+    })
+
+    render(
+      <ErrorOccurrencesPanel
+        ticket={ticket}
+        selectedErrorOccurrenceId={null}
+        onSelectErrorOccurrence={vi.fn()}
+      />,
+    )
+
+    const header = screen.getByRole('button', { name: /errors/i })
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /error 1/i })).toBeInTheDocument()
+
+    fireEvent.click(header)
+
+    expect(header).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('button', { name: /error 1/i })).not.toBeInTheDocument()
+
+    fireEvent.click(header)
+
+    expect(header).toHaveAttribute('aria-expanded', 'true')
+    expect(screen.getByRole('button', { name: /error 1/i })).toBeInTheDocument()
+  })
+
   it('keeps active coding bead identifiers out of the compact errors header', () => {
     const ticket = makeTicket({
       status: 'BLOCKED_ERROR',
