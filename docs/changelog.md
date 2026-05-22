@@ -8,6 +8,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+
+### Detailed Changes
+
+---
+
+## 0.2.2 (2026-05-22)
+
+### Summary
 - Extracted magic numbers into named constants, consolidated a repeated Tailwind label class, and standardised boolean variable naming across the codebase.
 - Hardened workflow approval, audit, bead-finalization, archived-version, and cleanup boundaries with content hashes and visible cleanup warnings.
 - Documented the ticket-handler route split from a single file into focused route modules without changing workflow behavior.
