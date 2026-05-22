@@ -231,8 +231,8 @@ All numeric fields are validated against min/max bounds defined in `numericField
 | Execution Setup Timeout | [Execution Loop](execution-loop.md#execution-setup-timeout) |
 | AI Response Timeout | [LLM Council](llm-council.md#council-response-timeout) |
 | Max Bead Retries | [Execution Loop](execution-loop.md#max-bead-retries) |
-| OpenCode Retry Limit | [Execution Loop](execution-loop.md#opencode-retry-limit) |
-| OpenCode Retry Grace Window | [Execution Loop](execution-loop.md#opencode-retry-grace-window) |
+| OpenCode Retry Limit | [Configuration Reference](configuration.md#opencode-retry-limit) |
+| OpenCode Retry Grace Window | [Configuration Reference](configuration.md#opencode-retry-grace-window) |
 | Min Council Quorum | [LLM Council](llm-council.md#min-council-quorum) |
 | Max Interview Questions | [Ticket Flow](ticket-flow.md#max-interview-questions) |
 | Structured Output Retries | [Configuration Reference](configuration.md#structured-output-retries) |

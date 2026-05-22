@@ -361,6 +361,15 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
 
           <Separator />
 
+          {/* ── OpenCode Provider Recovery ── */}
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">OpenCode Provider Recovery</div>
+          <div className="grid grid-cols-2 gap-3">
+            <NumericField fieldKey="opencodeRetryLimit" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Continuable OpenCode retry events before blocking any phase prompt (0–50)." />
+            <NumericField fieldKey="opencodeRetryDelay" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum OpenCode retry grace window before blocking any phase prompt (0–3600s)." />
+          </div>
+
+          <Separator />
+
           {/* ── AI Thinking ── */}
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">AI Thinking</div>
           <div className="grid grid-cols-2 gap-3">
@@ -394,10 +403,6 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
           <div className="grid grid-cols-2 gap-3">
             <NumericField fieldKey="maxIterations" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum automatic retries per bead during coding (0–20). Final test retries use the same limit." />
             <NumericField fieldKey="perIterationTimeout" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Timeout for each attempt (10–3600s)" />
-          </div>
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <NumericField fieldKey="opencodeRetryLimit" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Continuable OpenCode retry events before blocking (0–50)." />
-            <NumericField fieldKey="opencodeRetryDelay" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum OpenCode retry grace window before blocking (0–3600s)." />
           </div>
           <div className="mt-3">
             <NumericField

@@ -126,6 +126,7 @@ describe('ProfileSetup', () => {
 
     expect(screen.getByText('Minimum council votes required (1–4)')).toBeInTheDocument()
     expect(screen.getByText('Coverage')).toBeInTheDocument()
+    expect(screen.getByText('OpenCode Provider Recovery')).toBeInTheDocument()
     expect(screen.getByText('Coverage Follow-Up Budget (%)')).toBeInTheDocument()
     expect(screen.getByText('Interview Coverage Passes')).toBeInTheDocument()
     expect(screen.getByText('Structured Output Retries')).toBeInTheDocument()
