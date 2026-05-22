@@ -117,6 +117,6 @@ When documentation and behavior disagree, the current implementation wins. The m
 
 - `shared/workflowMeta.ts` for phase labels, groups, descriptions, UI mapping, and review metadata.
 - `server/machines/ticketMachine.ts` for state transitions and retry behavior.
-- `server/routes/ticketHandlers.ts` for user-triggered actions like start, approve, merge, close-unmerged, and retry.
+- `server/routes/ticketHandlers/` for user-triggered action modules like start, approve, merge, close-unmerged, and retry.
 
 For the broad runtime picture, start with [System Architecture](system-architecture.md). For the exact lifecycle, go to [Ticket Flow](ticket-flow.md).

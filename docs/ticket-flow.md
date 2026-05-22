@@ -6,7 +6,7 @@ The current truth for this page comes from:
 
 - `shared/workflowMeta.ts`
 - `server/machines/ticketMachine.ts`
-- `server/routes/ticketHandlers.ts`
+- `server/routes/ticketHandlers/`
 
 ## At A Glance
 

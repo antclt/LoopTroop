@@ -1,0 +1,534 @@
+import type { Context } from 'hono'
+import { PROFILE_DEFAULTS } from '../../db/defaults'
+import {
+  ensureActorForTicket,
+  getTicketState,
+  sendTicketEvent,
+  stopActor,
+} from '../../machines/persistence'
+import { abortTicketSessions } from '../../opencode/sessionManager'
+import { getOpenCodeAdapter } from '../../opencode/factory'
+import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
+import { cancelTicket } from '../../workflow/runner'
+import { TicketInitializationError, initializeTicket } from '../../ticket/initialize'
+import { withCommandLogging } from '../../log/commandLogger'
+import { validateModelSelection } from '../../opencode/modelValidation'
+import {
+  archiveActivePhaseAttempts,
+  cleanupCanceledTicketData,
+  createFreshPhaseAttempts,
+  ensureActivePhaseAttempt,
+  findProjectExecutionBandConflict,
+  getTicketByRef,
+  getTicketContext,
+  getTicketPaths,
+  isAttemptTrackedPhase,
+  lockTicketStartConfiguration,
+  patchTicket,
+  resolveTicketContinuationCandidate,
+} from '../../storage/tickets'
+import {
+  completeCloseUnmerged,
+  completeMergedPullRequest,
+  readPullRequestReport,
+} from '../../workflow/phases/pullRequestPhase'
+import { recoverCodingBeadWithReset } from '../../workflow/phases/beadsPhase'
+import { isExecutionBandStatus } from '../../workflow/executionBand'
+import { getErrorMessage } from '@shared/typeGuards'
+import {
+  clearSessionContinuation,
+  requestSessionContinuation,
+} from '../../opencode/sessionContinuation'
+import {
+  buildExecutionBandConflictMessage,
+  emitRoutePhaseLog,
+  getProfileDefaults,
+  getTicketParam,
+  respondWithState,
+} from './routeUtils'
+import { cancelTicketSchema } from './schemas'
+
+function rollbackTicketStartToDraft(ticketId: string): void {
+  patchTicket(ticketId, {
+    status: 'DRAFT',
+    xstateSnapshot: null,
+    errorMessage: null,
+    branchName: null,
+    startedAt: null,
+    lockedMainImplementer: null,
+    lockedMainImplementerVariant: null,
+    lockedCouncilMembers: null,
+    lockedCouncilMemberVariants: null,
+    lockedInterviewQuestions: null,
+    lockedCoverageFollowUpBudgetPercent: null,
+    lockedMaxCoveragePasses: null,
+    lockedMaxPrdCoveragePasses: null,
+    lockedMaxBeadsCoveragePasses: null,
+    lockedStructuredRetryCount: null,
+  })
+  stopActor(ticketId)
+}
+
+const startingTickets = new Set<string>()
+
+export async function handleStartTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticketContext = getTicketContext(ticketId)
+  if (!ticketContext) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticketContext.localTicket.status !== 'DRAFT') {
+    return c.json({ error: 'Ticket can only be started from DRAFT status' }, 409)
+  }
+
+  if (startingTickets.has(ticketId)) {
+    return c.json({ error: 'Ticket start is already in progress' }, 429)
+  }
+  startingTickets.add(ticketId)
+
+  try {
+  const startPhase = 'DRAFT'
+  emitRoutePhaseLog(ticketId, startPhase, 'info', 'Start requested.')
+
+  const profile = getProfileDefaults()
+  const councilRaw = ticketContext.localProject.councilMembers ?? profile?.councilMembers ?? null
+  emitRoutePhaseLog(ticketId, startPhase, 'info', 'Validating model availability.')
+  let modelSelection
+  try {
+    modelSelection = await validateModelSelection(profile?.mainImplementer, councilRaw)
+    emitRoutePhaseLog(
+      ticketId,
+      startPhase,
+      'info',
+      `✓ Model Availability: Main implementer ${modelSelection.mainImplementer}; council size ${modelSelection.councilMembers.length}.`,
+      {
+        mainImplementer: modelSelection.mainImplementer,
+        councilMembers: modelSelection.councilMembers,
+      },
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Invalid model configuration'
+    emitRoutePhaseLog(ticketId, startPhase, 'error', `✗ Model Availability: ${message}`, {
+      error: message,
+    })
+    return c.json({ error: message }, 400)
+  }
+
+  emitRoutePhaseLog(ticketId, startPhase, 'info', 'Initializing workspace and ticket directories.')
+  let init: ReturnType<typeof initializeTicket>
+  try {
+    init = withCommandLogging(
+      ticketId,
+      ticketContext.externalId,
+      startPhase,
+      () => initializeTicket({
+        externalId: ticketContext.externalId,
+        projectFolder: ticketContext.projectRoot,
+      }),
+      (phase, type, content) => emitRoutePhaseLog(ticketId, phase, type, content),
+    )
+    emitRoutePhaseLog(
+      ticketId,
+      startPhase,
+      'info',
+      init.reused
+        ? `✓ Workspace Init: Ready on branch ${init.branchName} (reused existing worktree).`
+        : `✓ Workspace Init: Ready on branch ${init.branchName} (new worktree and ticket directories created).`,
+      {
+        branchName: init.branchName,
+        baseBranch: init.baseBranch,
+        worktreePath: init.worktreePath,
+        reused: init.reused,
+      },
+    )
+  } catch (err) {
+    const initErr = err instanceof TicketInitializationError
+      ? err
+      : new TicketInitializationError('INIT_UNKNOWN', getErrorMessage(err))
+    emitRoutePhaseLog(ticketId, startPhase, 'error', `✗ Workspace Init: ${initErr.message}`, {
+      code: initErr.code,
+      error: initErr.message,
+    })
+
+    try {
+      ensureActorForTicket(ticketId)
+      sendTicketEvent(ticketId, {
+        type: 'INIT_FAILED',
+        message: initErr.message,
+        codes: [initErr.code],
+      })
+    } catch (sendErr) {
+      emitRoutePhaseLog(
+        ticketId,
+        startPhase,
+        'error',
+        `Failed to block ticket after initialization error: ${String(sendErr)}`,
+        {
+          code: initErr.code,
+          error: String(sendErr),
+        },
+      )
+      console.error(`[tickets] Failed to send INIT_FAILED to ticket ${ticketId}:`, sendErr)
+      return c.json({ error: 'Failed to block ticket after initialization error', details: String(sendErr) }, 500)
+    }
+
+    const updated = getTicketByRef(ticketId)
+    const state = getTicketState(ticketId)
+    return c.json({
+      message: 'Start blocked during initialization',
+      ticketId,
+      status: updated?.status,
+      state: state?.state,
+      details: initErr.message,
+      codes: [initErr.code],
+    })
+  }
+
+  const lockedInterviewQuestions = ticketContext.localProject.interviewQuestions
+    ?? profile?.interviewQuestions
+    ?? PROFILE_DEFAULTS.interviewQuestions
+  const lockedCoverageFollowUpBudgetPercent = profile?.coverageFollowUpBudgetPercent
+    ?? PROFILE_DEFAULTS.coverageFollowUpBudgetPercent
+  const lockedMaxCoveragePasses = profile?.maxCoveragePasses
+    ?? PROFILE_DEFAULTS.maxCoveragePasses
+  const lockedMaxPrdCoveragePasses = profile?.maxPrdCoveragePasses
+    ?? PROFILE_DEFAULTS.maxPrdCoveragePasses
+  const lockedMaxBeadsCoveragePasses = profile?.maxBeadsCoveragePasses
+    ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses
+  const lockedStructuredRetryCount = normalizeStructuredRetryCount(profile?.structuredRetryCount)
+  const lockedMainImplementerVariant = profile?.mainImplementerVariant ?? null
+  let lockedCouncilMemberVariants: Record<string, string> | null = null
+  if (profile?.councilMemberVariants) {
+    if (typeof profile.councilMemberVariants === 'string') {
+      try {
+        lockedCouncilMemberVariants = JSON.parse(profile.councilMemberVariants)
+      } catch (err) {
+        console.warn(`[tickets] Invalid councilMemberVariants configuration for ticket ${ticketId}:`, err)
+        return c.json({ error: 'Invalid configuration: malformed councilMemberVariants' }, 500)
+      }
+    } else {
+      lockedCouncilMemberVariants = profile.councilMemberVariants
+    }
+  }
+  const startedAt = new Date().toISOString()
+
+  emitRoutePhaseLog(ticketId, startPhase, 'info', 'Locking start configuration.')
+  // Note: The individual lock steps below use ✓/✗ formatting for consistency with pre-flight checks.
+  try {
+    const lockedTicket = lockTicketStartConfiguration(ticketId, {
+      branchName: init.branchName,
+      startedAt,
+      lockedMainImplementer: modelSelection.mainImplementer,
+      lockedMainImplementerVariant: lockedMainImplementerVariant,
+      lockedCouncilMembers: modelSelection.councilMembers,
+      lockedCouncilMemberVariants: lockedCouncilMemberVariants,
+      lockedInterviewQuestions,
+      lockedCoverageFollowUpBudgetPercent,
+      lockedMaxCoveragePasses,
+      lockedMaxPrdCoveragePasses,
+      lockedMaxBeadsCoveragePasses,
+      lockedStructuredRetryCount,
+    })
+    if (!lockedTicket) {
+      rollbackTicketStartToDraft(ticketId)
+      emitRoutePhaseLog(ticketId, startPhase, 'error', '✗ Start Config: Ticket not found.')
+      return c.json({ error: 'Ticket not found' }, 404)
+    }
+    emitRoutePhaseLog(ticketId, startPhase, 'info', '✓ Start Config: Configuration locked.', {
+      branchName: init.branchName,
+      startedAt,
+    })
+  } catch (err) {
+    const details = getErrorMessage(err)
+    rollbackTicketStartToDraft(ticketId)
+    emitRoutePhaseLog(ticketId, startPhase, 'error', `✗ Start Config: ${details}`, {
+      error: details,
+      rollback: 'preserved_worktree',
+    })
+    return c.json({
+      error: 'Failed to persist ticket start configuration',
+      details,
+    }, 500)
+  }
+
+  emitRoutePhaseLog(ticketId, startPhase, 'info', '✓ Workflow Dispatch: Start dispatched.')
+  try {
+    ensureActorForTicket(ticketId)
+    sendTicketEvent(ticketId, {
+      type: 'START',
+      lockedMainImplementer: modelSelection.mainImplementer,
+      lockedMainImplementerVariant: lockedMainImplementerVariant,
+      lockedCouncilMembers: modelSelection.councilMembers,
+      lockedCouncilMemberVariants: lockedCouncilMemberVariants,
+      lockedInterviewQuestions,
+      lockedCoverageFollowUpBudgetPercent,
+      lockedMaxCoveragePasses,
+      lockedMaxPrdCoveragePasses,
+      lockedMaxBeadsCoveragePasses,
+      lockedStructuredRetryCount,
+    })
+  } catch (err) {
+    rollbackTicketStartToDraft(ticketId)
+    emitRoutePhaseLog(ticketId, startPhase, 'error', `✗ Workflow Dispatch: ${String(err)}`, {
+      error: String(err),
+      rollback: 'preserved_worktree',
+    })
+    console.error(`[tickets] Failed to send START to ticket ${ticketId}:`, err)
+    return c.json({ error: 'Failed to start ticket', details: String(err) }, 500)
+  }
+
+  return respondWithState(c, ticketId, 'Start action accepted')
+  } finally {
+    startingTickets.delete(ticketId)
+  }
+}
+
+export async function handleCancelTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (['COMPLETED', 'CANCELED'].includes(ticket.status)) {
+    return c.json({ error: 'Cannot cancel a terminal ticket' }, 409)
+  }
+
+  let deleteContent = false
+  let deleteLog = false
+  const body = await c.req.json().catch(() => ({}))
+  const cancelOptions = cancelTicketSchema.safeParse(body)
+  if (cancelOptions.success) {
+    deleteContent = cancelOptions.data.deleteContent
+    deleteLog = cancelOptions.data.deleteLog
+  }
+
+  try {
+    ensureActorForTicket(ticketId)
+    sendTicketEvent(ticketId, { type: 'CANCEL' })
+    cancelTicket(ticketId)
+    abortTicketSessions(ticketId).catch(err => {
+      console.error(`[tickets] Failed to abort sessions for ticket ${ticketId}:`, err)
+    })
+  } catch (err) {
+    console.error(`[tickets] Failed to send CANCEL to ticket ${ticketId}:`, err)
+    return c.json({ error: 'Failed to cancel ticket', details: String(err) }, 500)
+  }
+
+  if (deleteContent || deleteLog) {
+    try {
+      cleanupCanceledTicketData(ticketId, { deleteContent, deleteLog })
+    } catch (err) {
+      console.error(`[tickets] Failed to cleanup canceled ticket ${ticketId}:`, err)
+    }
+  }
+
+  return respondWithState(c, ticketId, 'Cancel action accepted')
+}
+
+export function handleMergeTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticket.status !== 'WAITING_PR_REVIEW') {
+    return c.json({ error: 'Ticket is not waiting for pull request review' }, 409)
+  }
+
+  const ticketContext = getTicketContext(ticketId)
+  if (!ticketContext) return c.json({ error: 'Ticket not found' }, 404)
+  const prReport = readPullRequestReport(ticketId)
+  if (!prReport) {
+    return c.json({ error: 'Pull request report not found' }, 409)
+  }
+
+  const phase = 'WAITING_PR_REVIEW'
+
+  try {
+    const mergeReport = withCommandLogging(
+      ticketId,
+      ticket.externalId,
+      phase,
+      () => completeMergedPullRequest({
+        ticketId,
+        externalId: ticket.externalId,
+        projectPath: ticketContext.projectRoot,
+        baseBranch: ticket.runtime.baseBranch,
+        headBranch: ticket.branchName?.trim() || ticket.externalId,
+        candidateCommitSha: ticket.runtime.candidateCommitSha,
+        prReport,
+      }),
+      (cmdPhase, type, content) => emitRoutePhaseLog(ticketId, cmdPhase, type, content),
+    )
+
+    ensureActorForTicket(ticketId)
+    emitRoutePhaseLog(ticketId, phase, 'info', mergeReport.message, {
+      prNumber: mergeReport.prNumber,
+      prUrl: mergeReport.prUrl,
+      prState: mergeReport.prState,
+      localBaseHead: mergeReport.localBaseHead,
+      remoteBaseHead: mergeReport.remoteBaseHead,
+    })
+    sendTicketEvent(ticketId, { type: 'MERGE_COMPLETE' })
+  } catch (err) {
+    const details = getErrorMessage(err)
+    try {
+      ensureActorForTicket(ticketId)
+      emitRoutePhaseLog(ticketId, phase, 'error', `Pull request merge failed: ${details}`)
+      sendTicketEvent(ticketId, {
+        type: 'ERROR',
+        message: `Pull request merge failed: ${details}`,
+        codes: ['PULL_REQUEST_MERGE_FAILED'],
+      })
+      return respondWithState(c, ticketId, 'Merge failed and ticket was blocked')
+    } catch (dispatchErr) {
+      console.error(`[tickets] Failed to dispatch merge error for ticket ${ticketId}:`, dispatchErr)
+      return c.json({ error: 'Failed to merge pull request', details }, 500)
+    }
+  }
+
+  return respondWithState(c, ticketId, 'Merge complete')
+}
+
+export function handleCloseUnmergedTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticket.status !== 'WAITING_PR_REVIEW') {
+    return c.json({ error: 'Ticket is not waiting for pull request review' }, 409)
+  }
+
+  try {
+    const report = completeCloseUnmerged({
+      ticketId,
+      baseBranch: ticket.runtime.baseBranch,
+      headBranch: ticket.branchName?.trim() || ticket.externalId,
+      candidateCommitSha: ticket.runtime.candidateCommitSha,
+      prReport: readPullRequestReport(ticketId),
+    })
+
+    ensureActorForTicket(ticketId)
+    emitRoutePhaseLog(ticketId, 'WAITING_PR_REVIEW', 'info', report.message, {
+      disposition: report.disposition,
+      prNumber: report.prNumber,
+      prUrl: report.prUrl,
+    })
+    sendTicketEvent(ticketId, { type: 'CLOSE_UNMERGED_COMPLETE' })
+  } catch (err) {
+    console.error(`[tickets] Failed to close ticket ${ticketId} without merge:`, err)
+    return c.json({ error: 'Failed to finish ticket without merge', details: String(err) }, 500)
+  }
+
+  return respondWithState(c, ticketId, 'Finished without merge')
+}
+
+export function handleVerifyTicket(c: Context) {
+  return handleMergeTicket(c)
+}
+
+export function handleRetryTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticket.status !== 'BLOCKED_ERROR') {
+    return c.json({ error: 'Retry only works from BLOCKED_ERROR state' }, 409)
+  }
+  if (!ticket.previousStatus) {
+    return c.json({ error: 'Retry is not available because the failed status could not be recovered' }, 409)
+  }
+
+  if (isExecutionBandStatus(ticket.previousStatus)) {
+    const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
+    if (executionConflict) {
+      return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
+    }
+  }
+
+  if (ticket.previousStatus === 'CODING') {
+    const paths = getTicketPaths(ticketId)
+    if (!paths) {
+      return c.json({ error: 'Retry is not available because the ticket workspace could not be resolved' }, 409)
+    }
+    try {
+      const recoveredBead = recoverCodingBeadWithReset(ticketId, {
+        worktreePath: paths.worktreePath,
+        requireReset: true,
+      })
+      if (!recoveredBead) {
+        return c.json({ error: 'Retry is not available because no failed bead could be restored' }, 409)
+      }
+    } catch (err) {
+      return c.json({
+        error: 'Retry is not available because the failed bead could not be safely reset',
+        details: getErrorMessage(err),
+      }, 409)
+    }
+  }
+
+  try {
+    if (isAttemptTrackedPhase(ticket.previousStatus)) {
+      ensureActivePhaseAttempt(ticketId, ticket.previousStatus)
+      archiveActivePhaseAttempts(ticketId, [ticket.previousStatus], 'manual_retry_after_blocked_error')
+      createFreshPhaseAttempts(ticketId, [ticket.previousStatus])
+    }
+    ensureActorForTicket(ticketId)
+    sendTicketEvent(ticketId, { type: 'RETRY' })
+  } catch (err) {
+    console.error(`[tickets] Failed to send RETRY to ticket ${ticketId}:`, err)
+    return c.json({ error: 'Failed to retry ticket', details: String(err) }, 500)
+  }
+
+  return respondWithState(c, ticketId, 'Retry action accepted')
+}
+
+export async function handleContinueTicket(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (ticket.status !== 'BLOCKED_ERROR') {
+    return c.json({ error: 'Continue only works from BLOCKED_ERROR state' }, 409)
+  }
+  if (!ticket.previousStatus) {
+    return c.json({ error: 'Continue is not available because the failed status could not be recovered' }, 409)
+  }
+
+  const continuation = resolveTicketContinuationCandidate(ticketId)
+  if (!continuation) {
+    return c.json({ error: 'Continue is not available for this blocked error' }, 409)
+  }
+
+  if (isExecutionBandStatus(continuation.previousStatus)) {
+    const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
+    if (executionConflict) {
+      return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
+    }
+  }
+
+  let liveSessions
+  try {
+    liveSessions = await getOpenCodeAdapter().listSessions()
+  } catch (err) {
+    console.error(`[tickets] Failed to verify OpenCode session before continuing ticket ${ticketId}:`, err)
+    return c.json({
+      error: 'Continue is not available because the OpenCode session could not be verified',
+      details: getErrorMessage(err),
+    }, 500)
+  }
+
+  if (!liveSessions.some((session) => session.id === continuation.sessionId)) {
+    return c.json({
+      error: 'Continue is not available because the preserved OpenCode session is no longer active',
+    }, 409)
+  }
+
+  requestSessionContinuation({
+    ticketId,
+    phase: continuation.previousStatus,
+    sessionId: continuation.sessionId,
+  })
+
+  try {
+    ensureActorForTicket(ticketId)
+    sendTicketEvent(ticketId, { type: 'CONTINUE' })
+  } catch (err) {
+    clearSessionContinuation(continuation.sessionId)
+    console.error(`[tickets] Failed to send CONTINUE to ticket ${ticketId}:`, err)
+    return c.json({ error: 'Failed to continue ticket', details: String(err) }, 500)
+  }
+
+  return respondWithState(c, ticketId, 'Continue action accepted')
+}

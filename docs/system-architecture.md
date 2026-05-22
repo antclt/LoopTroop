@@ -163,7 +163,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | Area | Modules |
 | --- | --- |
 | App entry and route mounting | `server/index.ts` |
-| Ticket routes | `server/routes/tickets.ts`, `server/routes/ticketHandlers.ts` |
+| Ticket routes | `server/routes/tickets.ts`, `server/routes/ticketHandlers/` |
 | Files, beads, streaming | `server/routes/files.ts`, `beads.ts`, `stream.ts` |
 | Profile, projects, health, models, workflow meta | `server/routes/profiles.ts`, `projects.ts`, `health.ts`, `models.ts`, `workflow.ts` |
 

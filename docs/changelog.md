@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Documented the ticket-handler route split from a single file into focused route modules without changing workflow behavior.
 - Added profile-controlled OpenCode retry budgets so transient provider stalls block early with diagnostics and same-session Continue across OpenCode-backed phases.
 - Preserved underlying OpenCode provider/session causes on coding bead failures so parser or retry-budget wrappers no longer hide usage-limit style blockers.
 - Extended the ticket disk space card in the details view to allow expanding any category (Source Code, Phase Artifacts, or Execution Logs) to see which specific folders/files are occupying space, rendered in a beautiful HSL dark-mode monochrome interactive accordion.
@@ -41,6 +42,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs with `--print-logs --log-level DEBUG`, plus `LOOPTROOP_OPENCODE_LOGS=all` for direct watcher launches.
 
 #### Changed
+- Updated architecture and ticket-flow documentation to reference the focused `server/routes/ticketHandlers/` module directory for user-triggered ticket actions.
 - Clarified the Configuration UI copy for OpenCode Provider Recovery so it explicitly mentions rate-limit, usage-limit, overload, timeout, and network retry events across phases.
 - Manual Retry from `BLOCKED_ERROR` now archives and creates fresh phase attempts for every non-implementation status, including runtime setup and post-implementation phases, while `CODING` keeps its existing failed-bead reset and retry history.
 - Wrapped the docs home-page screenshots in collapsed-by-default details sections so only each screenshot title is visible until expanded.
