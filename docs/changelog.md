@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Added `npm run dev --host` for trusted local-network dashboard sharing with LAN URLs and a mobile QR code.
+- Added `npm run dev --lan` for trusted local-network dashboard sharing with LAN URLs and a mobile QR code.
 - Let users collapse the left-panel Errors section even when a blocked ticket auto-opens it.
 - Reload only after sustained dashboard reconnect/loading recovery so transient warning flickers do not refresh the page.
 - Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
@@ -19,7 +19,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added a LAN sharing mode for `npm run dev --host`, binding the frontend/docs dev servers to the local network, advertising reachable LAN URLs with a QR code, and keeping backend/OpenCode control-plane ports loopback-only behind the Vite proxy.
+- Added a LAN sharing mode for `npm run dev --lan`, binding the frontend/docs dev servers to the local network, advertising reachable LAN URLs with a QR code, and keeping backend/OpenCode control-plane ports loopback-only behind the Vite proxy.
 - Added a reload button with tooltip next to the "AI Models" heading in the Configuration panel. Clicking it clears the React Query cache and re-fetches the full model catalog from the OpenCode server, bypassing the 5-minute stale-time window.
 
 #### Fixed

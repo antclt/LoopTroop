@@ -4,7 +4,7 @@ import {
   getDevLanUrls,
   listLanAddresses,
   LOOPTROOP_DEV_HOST,
-  NPM_CONFIG_HOST,
+  NPM_CONFIG_LONG,
   resolveDevHostMode,
   type ResolvedDevHostMode,
 } from '../scripts/dev-host-mode'
@@ -23,7 +23,7 @@ describe('resolveDevHostMode', () => {
 
   it('supports npm run config flags without the argument forwarding separator', () => {
     expect(resolveDevHostMode({
-      env: { [NPM_CONFIG_HOST]: 'true' },
+      env: { [NPM_CONFIG_LONG]: 'true' },
     })).toEqual({
       enabled: true,
       bindHost: DEFAULT_DEV_BIND_HOST,
@@ -32,24 +32,13 @@ describe('resolveDevHostMode', () => {
     })
   })
 
-  it('supports an explicit npm host value for advanced binding', () => {
+  it('supports an environment fallback for explicit advanced binding', () => {
     expect(resolveDevHostMode({
-      env: { [NPM_CONFIG_HOST]: '192.168.1.50' },
+      env: { [LOOPTROOP_DEV_HOST]: '192.168.1.50' },
     })).toEqual({
       enabled: true,
       bindHost: '192.168.1.50',
       requestedValue: '192.168.1.50',
-      source: 'npm-config',
-    })
-  })
-
-  it('supports an environment fallback for direct watcher use', () => {
-    expect(resolveDevHostMode({
-      env: { [LOOPTROOP_DEV_HOST]: '1' },
-    })).toEqual({
-      enabled: true,
-      bindHost: DEFAULT_DEV_BIND_HOST,
-      requestedValue: '1',
       source: 'env',
     })
   })
@@ -57,7 +46,7 @@ describe('resolveDevHostMode', () => {
   it('lets npm config disable the environment fallback', () => {
     expect(resolveDevHostMode({
       env: {
-        [NPM_CONFIG_HOST]: '',
+        [NPM_CONFIG_LONG]: 'false',
         [LOOPTROOP_DEV_HOST]: '1',
       },
     })).toEqual({ enabled: false })
@@ -65,8 +54,8 @@ describe('resolveDevHostMode', () => {
 
   it('rejects invalid host values with a clear command hint', () => {
     expect(() => resolveDevHostMode({
-      env: { [NPM_CONFIG_HOST]: 'http://0.0.0.0:5173' },
-    })).toThrow('Invalid dev host "http://0.0.0.0:5173". Use npm run dev --host or npm run dev --host=0.0.0.0.')
+      env: { [NPM_CONFIG_LONG]: 'http://0.0.0.0:5173' },
+    })).toThrow('Invalid dev host "http://0.0.0.0:5173". Use npm run dev --lan.')
 
     expect(() => resolveDevHostMode({
       env: { [LOOPTROOP_DEV_HOST]: 'bad host' },

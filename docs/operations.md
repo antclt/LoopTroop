@@ -10,7 +10,7 @@ This guide covers the parts of LoopTroop you deal with after the first run: star
 | Start once without dependency/audit mutation | `LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev` |
 | Skip only the local OpenCode CLI upgrade | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev` |
 | Inherit your external OpenCode permission mode | `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit npm run dev` |
-| Share the dashboard on a trusted local network | `npm run dev --host` |
+| Share the dashboard on a trusted local network | `npm run dev --lan` |
 | Print full managed OpenCode DEBUG logs in the terminal | `npm run dev --opencode-logs=all` |
 | Force all startup maintenance now | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev` |
 | Diagnose slow UI or ticket refresh stalls | `npm run diagnose:stall` |
@@ -47,7 +47,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 - **Reuse:** if the configured address is already responding to authenticated requests, `npm run dev` reuses that running instance.
 - **Port fallback:** if the default port (`4096`) is occupied by a non-OpenCode process, `npm run dev` scans for the next free port and starts OpenCode there instead.
 - **Permission mode:** when `npm run dev` starts the managed OpenCode server, it sets `OPENCODE_PERMISSION='"allow"'` by default so trusted LoopTroop sessions are not blocked by OpenCode approval prompts. Set `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` to leave any existing OpenCode permission environment untouched.
-- **LAN sharing:** start with `npm run dev --host` to expose the frontend and docs servers on a trusted local network. The startup summary prints LAN URLs and a QR code for mobile testing, while backend API and OpenCode ports remain loopback-only behind the Vite dev proxy. Use `npm run dev --host=<host-or-ip>` when you need to bind a specific interface.
+- **LAN sharing:** start with `npm run dev --lan` to expose the frontend and docs servers on a trusted local network. The startup summary prints LAN URLs and a QR code for mobile testing, while backend API and OpenCode ports remain loopback-only behind the Vite dev proxy. Use `LOOPTROOP_DEV_HOST=<host-or-ip> npm run dev` when you need to bind a specific interface.
 - **Verbose OpenCode logs:** start with `npm run dev --opencode-logs=all` to print full managed OpenCode DEBUG logs in your terminal via `--print-logs --log-level DEBUG`. This only affects servers started by the dev launcher; reused, remote, or mock OpenCode servers keep their own logging configuration. Treat DEBUG output as sensitive local troubleshooting data because it may include request or provider details.
 - **Provider error enrichment:** if OpenCode reports only `Provider returned error`, LoopTroop scans the newest local OpenCode logs for the same session and records the exact sanitized provider cause when available. Set `LOOPTROOP_OPENCODE_LOG_DIR` when reusing an external OpenCode server whose logs are not in the default location.
 - **Ephemeral auth:** if `OPENCODE_SERVER_PASSWORD` is not set and a new local OpenCode server is about to start, `npm run dev` generates a random credential and sets `OPENCODE_SERVER_USERNAME` to `opencode`. This credential is propagated automatically to all child processes — backend and watcher — for the duration of the session.
@@ -73,7 +73,7 @@ Use one-run startup flags when you want to change `npm run dev` behavior:
 LOOPTROOP_DEV_SKIP_DEPS=1 npm run dev
 LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1 npm run dev
 LOOPTROOP_DEV_FORCE_MAINTENANCE=1 npm run dev
-npm run dev --host
+npm run dev --lan
 npm run dev --opencode-logs=all
 ```
 
@@ -150,7 +150,7 @@ The app database is runtime-bootstrapped by `server/db/init.ts`. The committed m
 | `LOOPTROOP_DEV_EVENT_TOKEN` | Required secret for the dev-event route when it is enabled |
 | `LOOPTROOP_DOCS_PORT` | Override docs port |
 | `LOOPTROOP_DOCS_ORIGIN` | Override full docs origin URL, for example `http://my-server:5174`; takes precedence over `LOOPTROOP_DOCS_PORT` |
-| `LOOPTROOP_DEV_HOST` | Direct watcher fallback for LAN sharing; set to `1`/`0.0.0.0` or a specific host/IP when not launching through `npm run dev --host` |
+| `LOOPTROOP_DEV_HOST` | Direct watcher fallback for LAN sharing; set to `1`/`0.0.0.0` or a specific host/IP when not launching through `npm run dev --lan` |
 | `LOOPTROOP_OPENCODE_BASE_URL` | Point LoopTroop at a specific OpenCode server |
 | `LOOPTROOP_CONFIG_DIR` | Override the app config directory |
 | `LOOPTROOP_APP_DB_PATH` | Override the app database path directly |

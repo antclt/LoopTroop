@@ -2,7 +2,7 @@ import net from 'node:net'
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os'
 
 export const LOOPTROOP_DEV_HOST = 'LOOPTROOP_DEV_HOST'
-export const NPM_CONFIG_HOST = 'npm_config_host'
+export const NPM_CONFIG_LONG = 'npm_config_long'
 export const DEFAULT_DEV_BIND_HOST = '0.0.0.0'
 
 export type DevHostModeSource = 'npm-config' | 'env'
@@ -35,7 +35,7 @@ function hasEnvValue(env: Env, key: string) {
 
 function getHostModeHint(source: DevHostModeSource) {
   return source === 'npm-config'
-    ? 'Use npm run dev --host or npm run dev --host=0.0.0.0.'
+    ? 'Use npm run dev --lan.'
     : `Use ${LOOPTROOP_DEV_HOST}=1 or ${LOOPTROOP_DEV_HOST}=0.0.0.0.`
 }
 
@@ -101,8 +101,8 @@ function resolveHostValue(value: string | undefined, source: DevHostModeSource):
 }
 
 export function resolveDevHostMode({ env = process.env }: { env?: Env } = {}): ResolvedDevHostMode {
-  if (hasEnvValue(env, NPM_CONFIG_HOST)) {
-    return resolveHostValue(env[NPM_CONFIG_HOST], 'npm-config')
+  if (hasEnvValue(env, NPM_CONFIG_LONG)) {
+    return resolveHostValue(env[NPM_CONFIG_LONG], 'npm-config')
   }
 
   if (hasEnvValue(env, LOOPTROOP_DEV_HOST)) {

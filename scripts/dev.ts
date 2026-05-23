@@ -219,7 +219,7 @@ function formatOpenCodeLogSummary(status: string) {
 
 function formatLanSharingSummary() {
   if (!devHostMode.enabled) {
-    return 'Disabled. Use npm run dev --host to share the app on your local network.'
+    return 'Disabled. Use npm run dev --lan to share the app on your local network.'
   }
 
   return `Enabled on ${devHostMode.bindHost}. Use only on trusted local networks.`
@@ -231,7 +231,7 @@ async function printLanSharingDetails() {
   printSummaryLine('LAN warning', 'Frontend/docs are visible to devices on your local network; backend/OpenCode stay loopback-only.')
 
   if (frontendLanUrls.length === 0) {
-    printSummaryLine('LAN URLs', 'No non-loopback IPv4 address detected; try npm run dev --host=<your LAN IP>.')
+    printSummaryLine('LAN URLs', `No non-loopback IPv4 address detected; try ${LOOPTROOP_DEV_HOST}=<your LAN IP> npm run dev.`)
     return
   }
 

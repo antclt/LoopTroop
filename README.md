@@ -183,7 +183,7 @@ npm run dev
 
 For full OpenCode DEBUG logs in your terminal, start with `npm run dev --opencode-logs=all`. This only affects the managed OpenCode server started by `npm run dev`; it maps to OpenCode's `--print-logs --log-level DEBUG`, and DEBUG output may include sensitive request or provider details.
 
-To test LoopTroop from another device on the same trusted network, start with `npm run dev --host`. The launcher exposes the frontend and docs servers on your LAN, prints reachable network URLs plus a mobile QR code, and keeps the backend API and OpenCode server bound to loopback behind the Vite dev proxy.
+To test LoopTroop from another device on the same trusted network, start with `npm run dev --lan`. The launcher exposes the frontend and docs servers on your LAN, prints reachable network URLs plus a mobile QR code, and keeps the backend API and OpenCode server bound to loopback behind the Vite dev proxy.
 
 When OpenCode reports only `Provider returned error`, LoopTroop checks local OpenCode logs for the matching session and shows a sanitized exact provider cause when it can. Set `LOOPTROOP_OPENCODE_LOG_DIR` when reusing an external OpenCode server with logs in a nonstandard directory.
 
