@@ -50,6 +50,10 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
     return []
   }
 
+  async getSession(_sessionId: string): Promise<Session | null> {
+    return null
+  }
+
   async getSessionMessages(): Promise<Message[]> {
     return []
   }

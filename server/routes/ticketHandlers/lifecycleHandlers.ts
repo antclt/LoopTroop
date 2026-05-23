@@ -498,9 +498,9 @@ export async function handleContinueTicket(c: Context) {
     }
   }
 
-  let liveSessions
+  let liveSession
   try {
-    liveSessions = await getOpenCodeAdapter().listSessions()
+    liveSession = await getOpenCodeAdapter().getSession(continuation.sessionId)
   } catch (err) {
     console.error(`[tickets] Failed to verify OpenCode session before continuing ticket ${ticketId}:`, err)
     return c.json({
@@ -509,7 +509,7 @@ export async function handleContinueTicket(c: Context) {
     }, 500)
   }
 
-  if (!liveSessions.some((session) => session.id === continuation.sessionId)) {
+  if (!liveSession) {
     return c.json({
       error: 'Continue is not available because the preserved OpenCode session is no longer active',
     }, 409)

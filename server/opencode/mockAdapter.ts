@@ -158,6 +158,10 @@ export class MockOpenCodeAdapter implements OpenCodeAdapter {
     return this.sessions
   }
 
+  async getSession(sessionId: string): Promise<Session | null> {
+    return this.sessions.find((session) => session.id === sessionId) ?? null
+  }
+
   async getSessionMessages(sessionId: string): Promise<Message[]> {
     return this.messages.get(sessionId) ?? []
   }

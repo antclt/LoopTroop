@@ -197,6 +197,10 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
     return this.options.listSessions?.() ?? this.sessions
   }
 
+  async getSession(sessionId: string): Promise<Session | null> {
+    return this.sessions.find((session) => session.id === sessionId) ?? null
+  }
+
   async getSessionMessages(sessionId: string): Promise<Message[]> {
     return this.sessionMessages.get(sessionId) ?? []
   }

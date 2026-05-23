@@ -21,6 +21,7 @@ The current `OpenCodeAdapter` interface exposes:
 | --- | --- |
 | `createSession()` | Create a new OpenCode session for a project path |
 | `promptSession()` | Send prompt parts into an existing session |
+| `getSession()` | Verify and read one remote session by exact id |
 | `listSessions()` | Enumerate remote sessions |
 | `getSessionMessages()` | Read session message history |
 | `subscribeToEvents()` | Stream OpenCode events |
@@ -32,7 +33,7 @@ The current `OpenCodeAdapter` interface exposes:
 | `assembleCouncilContext()` | Build council prompt parts |
 | `checkHealth()` | Health and availability check |
 
-Session creation, session listing, and message reads accept `AbortSignal`s and are wrapped with bounded SDK-operation timeouts. Session creation also runs through a shared retry wrapper: after the initial failure, LoopTroop waits 1s, 3s, and 7s before the three retry attempts. Each failed create attempt collects lightweight OpenCode health diagnostics, but health is diagnostic-only and does not replace the actual session creation result.
+Session creation, exact session lookup, session listing, and message reads accept `AbortSignal`s and are wrapped with bounded SDK-operation timeouts. Session creation also runs through a shared retry wrapper: after the initial failure, LoopTroop waits 1s, 3s, and 7s before the three retry attempts. Each failed create attempt collects lightweight OpenCode health diagnostics, but health is diagnostic-only and does not replace the actual session creation result.
 
 ## Base URL And Modes
 
@@ -125,9 +126,9 @@ If any of those checks fail, LoopTroop falls back to creating a fresh session th
 
 That means LoopTroop can survive restart and resume safely, but it does not try to magically continue any random broken stream from the past.
 
-If OpenCode cannot list sessions because the server is down or restarting, validation fails closed without abandoning the database record. The prompt runner then either creates a new owned session when OpenCode is reachable or lets the phase fail into the normal retry/block path. Owned same-session reuse is also revalidated immediately before prompting, so a stale session cannot be prompted after the ticket has moved phases.
+If OpenCode cannot verify an exact session because the server is down or restarting, validation fails closed without abandoning the database record. The prompt runner then either creates a new owned session when OpenCode is reachable or lets the phase fail into the normal retry/block path. Owned same-session reuse is also revalidated immediately before prompting, so a stale session cannot be prompted after the ticket has moved phases.
 
-For Continue, the route performs one extra live check: if the OpenCode server no longer lists the preserved session id, the request returns `409` and leaves the ticket in `BLOCKED_ERROR`.
+For Continue, the route performs one extra live check: if the OpenCode server can no longer read the preserved session by exact id, the request returns `409` and leaves the ticket in `BLOCKED_ERROR`.
 
 ## Streaming
 

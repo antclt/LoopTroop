@@ -100,6 +100,7 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   }
 
   async listSessions(): Promise<Session[]> { return this.sessions }
+  async getSession(sessionId: string): Promise<Session | null> { return this.sessions.find((session) => session.id === sessionId) ?? null }
   async getSessionMessages(sessionId: string): Promise<Message[]> { return this.messages.get(sessionId) ?? [] }
   async listPendingQuestions(): Promise<OpenCodeQuestionRequest[]> { return [] }
   async replyQuestion(_requestId: string, _answers: OpenCodeQuestionAnswer[]): Promise<void> { return undefined }

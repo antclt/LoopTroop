@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { AlertTriangle, CirclePlay, Clock3, Info, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -120,6 +121,7 @@ function normalizeErrorText(value: string): string {
 
 export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewProps) {
   const { mutate: performAction, isPending } = useTicketAction()
+  const [actionError, setActionError] = useState<string | null>(null)
   const logCtx = useLogs()
   const failedBead = ticket.runtime.lastFailedBeadId
     ? ticket.runtime.beads?.find((bead) => bead.id === ticket.runtime.lastFailedBeadId) ?? null
@@ -184,6 +186,17 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const hasDiagnosticSummary = diagnosticSummary.length > 0
     && normalizedPrimaryError.length > 0
     && !normalizedPrimaryError.includes(normalizedDiagnosticSummary)
+  const handleAction = (action: 'cancel' | 'continue' | 'retry') => {
+    setActionError(null)
+    performAction(
+      { id: ticket.id, action },
+      {
+        onError: (error: unknown) => {
+          setActionError(error instanceof Error ? error.message : `Failed to ${action} ticket`)
+        },
+      },
+    )
+  }
 
   return (
     <div className="h-full min-h-0 flex flex-col overflow-hidden">
@@ -292,7 +305,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => performAction({ id: ticket.id, action: 'cancel' })}
+                    onClick={() => handleAction('cancel')}
                     disabled={isPending}
                     className="h-7 text-xs"
                   >
@@ -304,7 +317,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => performAction({ id: ticket.id, action: 'continue' })}
+                          onClick={() => handleAction('continue')}
                           disabled={isPending}
                           className="h-7 text-xs border-amber-500/70 text-amber-700 hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/30"
                         >
@@ -319,13 +332,18 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                   )}
                   <Button
                     size="sm"
-                    onClick={() => performAction({ id: ticket.id, action: 'retry' })}
+                    onClick={() => handleAction('retry')}
                     disabled={isPending}
                     className="h-7 text-xs"
                   >
                     {retryActionLabel}
                   </Button>
                 </div>
+                {actionError && (
+                  <p role="alert" className="text-right text-[11px] leading-snug text-destructive">
+                    {actionError}
+                  </p>
+                )}
                 {canContinue && (
                   <p className="text-right text-[11px] leading-snug text-muted-foreground">
                     Continue keeps the current OpenCode session and sends only "continue please" after the temporary interruption clears.

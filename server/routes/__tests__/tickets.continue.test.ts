@@ -20,7 +20,8 @@ import {
   hasPendingSessionContinuationForTicketPhase,
 } from '../../opencode/sessionContinuation'
 
-const { listSessionsMock } = vi.hoisted(() => ({
+const { getSessionMock, listSessionsMock } = vi.hoisted(() => ({
+  getSessionMock: vi.fn(),
   listSessionsMock: vi.fn(),
 }))
 
@@ -29,6 +30,7 @@ vi.mock('../../opencode/factory', async (importOriginal) => {
   return {
     ...actual,
     getOpenCodeAdapter: vi.fn(() => ({
+      getSession: getSessionMock,
       listSessions: listSessionsMock,
     })),
   }
@@ -133,6 +135,7 @@ describe('ticketRouter POST /tickets/:id/continue', () => {
     clearAllPendingSessionContinuationsForTests()
     vi.clearAllMocks()
     listSessionsMock.mockResolvedValue([{ id: 'ses-continue', projectPath: '/tmp/project' }])
+    getSessionMock.mockResolvedValue({ id: 'ses-continue', projectPath: '/tmp/project' })
   })
 
   afterAll(() => {
@@ -155,6 +158,22 @@ describe('ticketRouter POST /tickets/:id/continue', () => {
     expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
       expect.objectContaining({ attemptNumber: 1, state: 'active' }),
     ])
+  })
+
+  it('continues when OpenCode list omits a preserved session that exact lookup can still read', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    ensureActivePhaseAttempt(ticket.id, 'PREPARING_EXECUTION_ENV')
+    blockTicketWithContinuableError(ticket.id, 'PREPARING_EXECUTION_ENV')
+    listSessionsMock.mockResolvedValue([])
+    getSessionMock.mockResolvedValue({ id: 'ses-continue', projectPath: '/tmp/project' })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(getSessionMock).toHaveBeenCalledWith('ses-continue')
+    expect(listSessionsMock).not.toHaveBeenCalled()
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'CONTINUE' })
+    expect(getTicketByRef(ticket.id)?.status).toBe('PREPARING_EXECUTION_ENV')
   })
 
   it('allows continue for HTTP 402 provider blocks with a preserved active session', async () => {
@@ -288,14 +307,29 @@ describe('ticketRouter POST /tickets/:id/continue', () => {
     expect(sendTicketEvent).not.toHaveBeenCalled()
   })
 
-  it('rejects continue when OpenCode no longer lists the preserved session', async () => {
+  it('rejects continue when exact OpenCode lookup says the preserved session is gone', async () => {
     const { app, ticket } = setupContinueTicketApp()
     blockTicketWithContinuableError(ticket.id, 'PREPARING_EXECUTION_ENV')
-    listSessionsMock.mockResolvedValue([])
+    getSessionMock.mockResolvedValue(null)
 
     const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
 
     expect(response.status).toBe(409)
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+  })
+
+  it('reports verification errors when exact OpenCode lookup fails', async () => {
+    const { app, ticket } = setupContinueTicketApp()
+    blockTicketWithContinuableError(ticket.id, 'PREPARING_EXECUTION_ENV')
+    getSessionMock.mockRejectedValue(new Error('OpenCode is unreachable'))
+
+    const response = await app.request(`/api/tickets/${ticket.id}/continue`, { method: 'POST' })
+    const body = await response.json() as { error?: string; details?: string }
+
+    expect(response.status).toBe(500)
+    expect(body.error).toBe('Continue is not available because the OpenCode session could not be verified')
+    expect(body.details).toContain('OpenCode is unreachable')
     expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
     expect(sendTicketEvent).not.toHaveBeenCalled()
   })

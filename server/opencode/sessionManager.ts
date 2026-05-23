@@ -195,16 +195,15 @@ export class SessionManager {
       : this.getActiveSession(ticketId, phase)
     if (!existing) return null
 
-    let sessions: Session[]
+    let found: Session | null
     try {
-      sessions = await this.adapter.listSessions(signal)
+      found = await this.adapter.getSession(existing.sessionId, signal)
     } catch (error) {
       if (signal?.aborted) throw error
-      // Transient failure listing sessions — return null so the caller
+      // Transient failure verifying the exact session — return null so the caller
       // creates a fresh session, but do NOT abandon the DB record.
       return null
     }
-    const found = sessions.find((s) => s.id === existing.sessionId)
 
     if (!found) {
       await this.abandonSession(existing.sessionId)

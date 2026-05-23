@@ -23,8 +23,10 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   public sessions: Session[] = []
   public createSignals: Array<AbortSignal | undefined> = []
   public listSignals: Array<AbortSignal | undefined> = []
+  public getSignals: Array<AbortSignal | undefined> = []
   public createFailures: unknown[] = []
   public healthCalls = 0
+  public exactSessionLookup?: (sessionId: string) => Session | null
   private sessionCounter = 0
 
   async createSession(
@@ -56,6 +58,12 @@ class TestOpenCodeAdapter implements OpenCodeAdapter {
   async listSessions(signal?: AbortSignal): Promise<Session[]> {
     this.listSignals.push(signal)
     return this.sessions
+  }
+
+  async getSession(sessionId: string, signal?: AbortSignal): Promise<Session | null> {
+    this.getSignals.push(signal)
+    if (this.exactSessionLookup) return this.exactSessionLookup(sessionId)
+    return this.sessions.find((session) => session.id === sessionId) ?? null
   }
 
   async getSessionMessages(_sessionId: string): Promise<Message[]> {
@@ -188,7 +196,83 @@ describe('SessionManager', () => {
     await sessionManager.validateAndReconnect(ticket.id, 'CODING', undefined, controller.signal)
 
     expect(adapter.createSignals).toEqual([controller.signal])
-    expect(adapter.listSignals).toEqual([controller.signal])
+    expect(adapter.getSignals).toEqual([controller.signal])
+    expect(adapter.listSignals).toEqual([])
+  })
+
+  it('reconnects a non-coding active session by exact id even when session lists omit it', async () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'LoopTroop',
+      shortname: 'LOOP',
+    })
+    const ticket = createTicket({
+      projectId: project.id,
+      title: 'Reconnect exact session',
+      description: 'Ensure list omissions do not lose preserved phase sessions.',
+    })
+    patchTicket(ticket.id, { status: 'VERIFYING_PRD_COVERAGE' })
+
+    const adapter = new TestOpenCodeAdapter()
+    const sessionManager = new SessionManager(adapter)
+    const created = await sessionManager.createSessionForPhase(
+      ticket.id,
+      'VERIFYING_PRD_COVERAGE',
+      1,
+      'model-a',
+      undefined,
+      undefined,
+      undefined,
+      repoDir,
+    )
+    adapter.sessions = []
+    adapter.exactSessionLookup = (sessionId) => sessionId === created.id ? created : null
+
+    await expect(sessionManager.validateAndReconnect(ticket.id, 'VERIFYING_PRD_COVERAGE', {
+      phaseAttempt: 1,
+      memberId: 'model-a',
+    })).resolves.toEqual(created)
+
+    expect(adapter.listSignals).toEqual([])
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['active']).map((session) => session.sessionId)).toEqual([created.id])
+  })
+
+  it('abandons an active session only when exact lookup confirms it is gone', async () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'LoopTroop',
+      shortname: 'LOOP',
+    })
+    const ticket = createTicket({
+      projectId: project.id,
+      title: 'Reconnect missing exact session',
+      description: 'Ensure missing exact lookup abandons stale active rows.',
+    })
+    patchTicket(ticket.id, { status: 'VERIFYING_PRD_COVERAGE' })
+
+    const adapter = new TestOpenCodeAdapter()
+    const sessionManager = new SessionManager(adapter)
+    const created = await sessionManager.createSessionForPhase(
+      ticket.id,
+      'VERIFYING_PRD_COVERAGE',
+      1,
+      'model-a',
+      undefined,
+      undefined,
+      undefined,
+      repoDir,
+    )
+    adapter.exactSessionLookup = () => null
+
+    await expect(sessionManager.validateAndReconnect(ticket.id, 'VERIFYING_PRD_COVERAGE', {
+      phaseAttempt: 1,
+      memberId: 'model-a',
+    })).resolves.toBeNull()
+
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['active']).map((session) => session.sessionId)).toEqual([])
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['abandoned']).map((session) => session.sessionId)).toEqual([created.id])
   })
 
   it('retries session creation and stores only the successful owned session', async () => {

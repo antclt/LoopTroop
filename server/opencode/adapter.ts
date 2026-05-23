@@ -61,6 +61,7 @@ export interface OpenCodeAdapter {
     signal?: AbortSignal,
     options?: PromptSessionOptions,
   ): Promise<string>
+  getSession(sessionId: string, signal?: AbortSignal): Promise<Session | null>
   listSessions(signal?: AbortSignal): Promise<Session[]>
   getSessionMessages(sessionId: string, signal?: AbortSignal): Promise<Message[]>
   subscribeToEvents(sessionId: string, signal?: AbortSignal, stepFinishSafetyMs?: number): AsyncGenerator<StreamEvent>
@@ -395,6 +396,22 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     return Array.isArray(res.data)
       ? res.data.map(session => this.mapSession(session as Record<string, unknown>))
       : []
+  }
+
+  async getSession(sessionId: string, signal?: AbortSignal): Promise<Session | null> {
+    try {
+      const res = await this.client.session.get(
+        { sessionID: sessionId },
+        this.requestOptions(this.withSdkOperationTimeout(signal)),
+      )
+      if (!res.data) return null
+      const session = this.mapSession(res.data as Record<string, unknown>)
+      if (session.directory) this.sessionDirectories.set(session.id, session.directory)
+      return session
+    } catch (err) {
+      if (this.isSessionNotFoundError(err)) return null
+      throw err
+    }
   }
 
   async getSessionMessages(sessionId: string, signal?: AbortSignal): Promise<Message[]> {
@@ -772,13 +789,7 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     if (cached) return cached
 
     try {
-      const res = await this.client.session.get(
-        { sessionID: sessionId },
-        this.requestOptions(this.withSdkOperationTimeout(signal)),
-      )
-      const directory = typeof res.data?.directory === 'string' ? res.data.directory : undefined
-      if (directory) this.sessionDirectories.set(sessionId, directory)
-      return directory
+      return (await this.getSession(sessionId, signal))?.directory
     } catch {
       return undefined
     }
@@ -1486,6 +1497,34 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
       }
     }
     return String(error)
+  }
+
+  private isSessionNotFoundError(error: unknown): boolean {
+    const record = this.getRecord(error)
+    const response = this.getRecord(record?.response)
+    const data = this.getRecord(record?.data)
+    const body = this.getRecord(response?.body) ?? this.getRecord(response?.data)
+    const status = [
+      record?.status,
+      record?.statusCode,
+      response?.status,
+      response?.statusCode,
+      data?.status,
+      data?.statusCode,
+      body?.status,
+      body?.statusCode,
+    ].find((value) => typeof value === 'number')
+
+    if (status === 404) return true
+
+    const message = [
+      typeof record?.message === 'string' ? record.message : '',
+      typeof data?.message === 'string' ? data.message : '',
+      typeof body?.message === 'string' ? body.message : '',
+      typeof body?.error === 'string' ? body.error : '',
+    ].join('\n').toLowerCase()
+
+    return /\b404\b/.test(message) || /\bsession\b.*\bnot found\b/.test(message)
   }
 
   private extractConnectedModelIds(data: unknown): string[] {

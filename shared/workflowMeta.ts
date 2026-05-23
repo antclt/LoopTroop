@@ -990,14 +990,14 @@ const WORKFLOW_PHASE_DETAILS = {
       'Retry, eligible same-session Continue, or cancel decision point for manual intervention, with non-implementation retry artifacts/logs separated by phase attempt.',
     ],
     transitions: [
-      'Retry → Previous Status: Retry archives the active phase attempt with `manual_retry_after_blocked_error`, creates the next active attempt, and returns the workflow to the previously blocked status for every non-implementation phase. CODING keeps its special failed-bead reset before re-entering and does not create phase versions; OpenCode retry-budget blocks may instead use Continue when the session remains active.',
-      'Continue → Previous Status: Continue is available only for eligible OpenCode/provider interruptions with a preserved active session, including transient provider stalls and `HTTP 402 Payment Required` blocks that can be cleared outside the session. It returns to the previous status without archiving or creating phase attempts and dispatches exactly `continue please` into that same session.',
+      'Retry → Previous Status: Retry archives the active phase attempt with `manual_retry_after_blocked_error`, creates the next active attempt, and returns the workflow to the previously blocked status for every non-implementation phase. CODING keeps its special failed-bead reset before re-entering and does not create phase versions; OpenCode retry-budget blocks may instead use Continue when the session remains addressable by exact id.',
+      'Continue → Previous Status: Continue is available only for eligible OpenCode/provider interruptions with a preserved active session addressable by exact id, including transient provider stalls and `HTTP 402 Payment Required` blocks that can be cleared outside the session. It returns to the previous status without archiving or creating phase attempts and dispatches exactly `continue please` into that same session.',
       'Cancel → Canceled: Cancel moves the ticket to the terminal Canceled state. Artifacts and error history are preserved by default; the cancellation dialog offers optional cleanup of AI-generated artifacts and/or the execution log.',
     ],
     notes: [
       'Past error occurrences remain reviewable even after the ticket moves on (via retry) or is canceled — the error history is never deleted.',
       'Manual retry versions for non-implementation phases are reviewed through the phase previous-version selector; automatic structured retries inside a version are reviewed through artifact Raw attempt tabs, with parser/retry intervention warnings summarized on the primary artifact tab. CODING retry history remains bead-scoped.',
-      'Continue is deliberately narrower than Retry: it is hidden unless the active error has a session id, the matching OpenCode session is still active, and diagnostics point to a continuable provider condition such as HTTP 402 Payment Required, transient limits, overload, timeout, or transport interruption rather than auth, non-402 quota, configuration, invalid-request, model-not-found, or request-size errors.',
+      'Continue is deliberately narrower than Retry: it is hidden unless the active error has a session id, the matching OpenCode session is preserved locally and addressable by exact id, and diagnostics point to a continuable provider condition such as HTTP 402 Payment Required, transient limits, overload, timeout, or transport interruption rather than auth, non-402 quota, configuration, invalid-request, model-not-found, or request-size errors.',
       'Context available: Current Bead Data (if the failure occurred during the coding phase) + Error Context (error message, codes, phase, timing).',
       'Common causes of blocked errors: provider or model failures, session interruptions, model timeouts, output-length truncation, rate-limit-style failures, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
       'Tip: Before retrying, check the error details. If the error is a transient issue (timeout, connectivity), retry is likely to succeed. If the error indicates a fundamental problem (malformed output, missing configuration), retry may fail again.',
@@ -1055,7 +1055,7 @@ function getSafeResumeDescription(phase: Pick<WorkflowPhaseMeta, 'id' | 'kanbanP
     return 'After backend or OpenCode restart, LoopTroop finalizes only a current matching in-progress bead checkpoint; otherwise it resets the bead to its bead start commit, preserves retry notes, and continues from the next runnable bead. If no reset anchor exists, it blocks instead of reusing dirty work.'
   }
   if (phase.id === 'BLOCKED_ERROR') {
-    return 'Retry is allowed only when the failed previous status is known from durable state. Continue is shown only when a matching active OpenCode session is preserved for a resumable interruption, including OpenCode retry-budget/provider stalls; otherwise the ticket stays blocked for retry/cancel review.'
+    return 'Retry is allowed only when the failed previous status is known from durable state. Continue is shown only when a matching active OpenCode session is preserved and addressable by exact id for a resumable interruption, including OpenCode retry-budget/provider stalls; otherwise the ticket stays blocked for retry/cancel review.'
   }
   if (phase.id === 'COMPLETED') {
     return 'This terminal result is read-only and reloads from stored artifacts after any restart.'
@@ -1454,7 +1454,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'BLOCKED_ERROR',
     label: 'Error (reason)',
-    description: 'A phase failure paused the workflow. Retry versions every failed non-implementation phase before re-entering it, while CODING keeps bead-scoped retry recovery except for preserved OpenCode retry-budget blocks. Eligible Continue re-enters without archiving attempts by sending exactly `continue please` to the preserved OpenCode session. Structured diagnostics include provider, model, session, timeout, OpenCode retry, rate-limit-style failures, and local-log-correlated provider causes when available.',
+    description: 'A phase failure paused the workflow. Retry versions every failed non-implementation phase before re-entering it, while CODING keeps bead-scoped retry recovery except for preserved OpenCode retry-budget blocks. Eligible Continue re-enters without archiving attempts by sending exactly `continue please` to a preserved OpenCode session addressable by exact id. Structured diagnostics include provider, model, session, timeout, OpenCode retry, rate-limit-style failures, and local-log-correlated provider causes when available.',
     details: WORKFLOW_PHASE_DETAILS.BLOCKED_ERROR,
     kanbanPhase: 'needs_input',
     groupId: 'errors',

@@ -178,7 +178,47 @@ describe('ErrorView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
 
     expect(screen.getByText(/sends only "continue please"/i)).toBeInTheDocument()
-    expect(mutate).toHaveBeenCalledWith({ id: ticket.id, action: 'continue' })
+    expect(mutate).toHaveBeenCalledWith(
+      { id: ticket.id, action: 'continue' },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    )
+  })
+
+  it('shows action errors inline when Continue is rejected', async () => {
+    const mutate = vi.fn((_: unknown, options?: { onError?: (error: Error) => void }) => {
+      options?.onError?.(new Error('Continue is not available because the preserved OpenCode session is no longer active'))
+    })
+    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'PREPARING_EXECUTION_ENV',
+      availableActions: ['retry', 'continue', 'cancel'],
+      activeErrorOccurrenceId: 'continue-rejected',
+      errorOccurrences: [{
+        id: 'continue-rejected',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'PREPARING_EXECUTION_ENV',
+        errorMessage: 'Usage limit reached.',
+        errorCodes: [],
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'usage limit reached',
+          sessionId: 'ses-continue',
+          statusCode: 429,
+          isRetryable: true,
+        },
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Continue is not available because the preserved OpenCode session is no longer active')
   })
 
   it('hides Continue when the live blocked ticket does not expose the continue action', () => {

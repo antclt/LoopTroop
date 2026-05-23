@@ -92,7 +92,7 @@ The phase header's `(details)` button opens the expanded metadata for the same s
 | `CLEANING_ENV` | Removes transient runtime resources (lock files, session folders, temp files) while preserving permanent artifacts (interview, PRD, beads, logs, test and integration reports) for long-term review and audit. |
 | `COMPLETED` | The workflow reached its successful terminal state. All planning, execution, PR, and cleanup artifacts remain accessible. The ticket records whether it closed as a merged PR or finished without merge. |
 | `CANCELED` | Ticket canceled by user action. Artifacts are preserved by default; optional cleanup is available at cancellation time. |
-| `BLOCKED_ERROR` | A phase failure paused the workflow. Retry versions every failed non-implementation phase before re-entering it, while CODING keeps bead-scoped retry recovery except for preserved OpenCode retry-budget blocks. Eligible Continue re-enters without archiving attempts by sending exactly `continue please` to the preserved OpenCode session. Structured diagnostics include provider, model, session, timeout, OpenCode retry, and rate-limit-style failures when available. |
+| `BLOCKED_ERROR` | A phase failure paused the workflow. Retry versions every failed non-implementation phase before re-entering it, while CODING keeps bead-scoped retry recovery except for preserved OpenCode retry-budget blocks. Eligible Continue re-enters without archiving attempts by sending exactly `continue please` to a preserved OpenCode session addressable by exact id. Structured diagnostics include provider, model, session, timeout, OpenCode retry, and rate-limit-style failures when available. |
 
 ## Transition Model
 
