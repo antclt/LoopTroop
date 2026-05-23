@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  BACKEND_HEALTH_RECONNECT_CONFIRMATION_PROBES,
   BACKEND_HEALTH_POLL_MS,
   BACKEND_HEALTH_RECONNECT_GRACE_MS,
 } from '@/lib/constants'
@@ -76,11 +77,14 @@ describe('useBackendHealth', () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
 
     const { result } = renderHook(() => useBackendHealth())
 
     await flushPromises()
     await advanceTimers(BACKEND_HEALTH_POLL_MS)
+    await advanceTimers(BACKEND_HEALTH_RECONNECT_GRACE_MS * (BACKEND_HEALTH_RECONNECT_CONFIRMATION_PROBES - 1))
+    expect(result.current.isOffline).toBe(false)
     await advanceTimers(BACKEND_HEALTH_RECONNECT_GRACE_MS)
 
     expect(result.current.isOffline).toBe(true)
@@ -91,13 +95,14 @@ describe('useBackendHealth', () => {
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(false)
+      .mockResolvedValueOnce(false)
       .mockResolvedValueOnce(true)
 
     const { result } = renderHook(() => useBackendHealth())
 
     await flushPromises()
     await advanceTimers(BACKEND_HEALTH_POLL_MS)
-    await advanceTimers(BACKEND_HEALTH_RECONNECT_GRACE_MS)
+    await advanceTimers(BACKEND_HEALTH_RECONNECT_GRACE_MS * BACKEND_HEALTH_RECONNECT_CONFIRMATION_PROBES)
     expect(result.current.isOffline).toBe(true)
 
     await advanceTimers(BACKEND_HEALTH_POLL_MS)

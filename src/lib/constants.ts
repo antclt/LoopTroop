@@ -7,11 +7,15 @@ export const SSE_RECONNECT_DELAY_MS = 3000
 /** Interval for polling backend health to detect server downtime */
 export const BACKEND_HEALTH_POLL_MS = 3000
 /** Delay before confirming a failed backend health probe */
-export const BACKEND_HEALTH_RECONNECT_GRACE_MS = 1000
+export const BACKEND_HEALTH_RECONNECT_GRACE_MS = 1500
+/** Consecutive confirmation probes required after the initial failed health probe */
+export const BACKEND_HEALTH_RECONNECT_CONFIRMATION_PROBES = 2
 /** Cooldown that prevents repeated automatic recovery reloads */
 export const RECOVERY_RELOAD_COOLDOWN_MS = 10_000
 /** Short delay before running an automatic recovery reload */
 export const RECOVERY_RELOAD_DELAY_MS = 50
+/** Minimum visible warning duration before an automatic recovery reload is armed */
+export const RECOVERY_RELOAD_MIN_ACTIVE_MS = 5000
 /** Default API call timeout */
 export const API_TIMEOUT_MS = 1000
 /** Model fetch timeout */

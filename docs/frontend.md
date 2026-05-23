@@ -11,7 +11,7 @@ The UI is data-driven from:
 
 In development, same-origin `/api/*` calls go through the Vite proxy. When `npm run dev` generates or receives `LOOPTROOP_API_TOKEN`, the proxy supplies the token to the backend server-side so the browser bundle does not contain the secret.
 
-The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by a second probe one second later before the banner appears. When reconnecting or post-initial loading banners clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so transient backend gaps recover the same way as a manual refresh without creating reload loops.
+The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by two more probes spaced 1.5 seconds apart before the banner appears. When reconnecting or post-initial loading banners remain visible for at least five seconds and then clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so real backend gaps recover the same way as a manual refresh without turning brief warning flickers into page reloads.
 
 ## Top-Level Composition
 

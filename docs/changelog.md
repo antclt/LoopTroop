@@ -9,7 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Let users collapse the left-panel Errors section even when a blocked ticket auto-opens it.
-- Reload once after dashboard reconnect/loading recovery so the first click after transient backend gaps uses a fresh UI bundle and cache.
+- Reload only after sustained dashboard reconnect/loading recovery so transient warning flickers do not refresh the page.
 - Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
 - Allow Continue for blocked `HTTP 402 Payment Required` OpenCode provider errors when the original session is still active.
 - Added a manual reload button next to "AI Models" in Configuration to force-refresh available OpenCode providers and models on demand.
@@ -21,7 +21,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Fixed
 - Let the ticket navigator's auto-expanded Errors section be collapsed and reopened by the user while preserving auto-open behavior for newly active or selected errors.
-- Added guarded full-page recovery reloads after backend reconnecting, live-update reconnecting, or post-initial ticket loading banners clear, with a 10-second session cooldown and a one-second backend health confirmation delay to avoid reload loops and transient false reconnect banners.
+- Added guarded full-page recovery reloads after sustained backend reconnecting, live-update reconnecting, or post-initial ticket loading banners clear, with a 10-second session cooldown, a five-second minimum visible warning duration, and two 1.5-second backend health confirmation probes to avoid reload loops and transient false reconnect banners.
 - Enriched generic `Provider returned error` OpenCode failures by correlating the session with local OpenCode logs, surfacing sanitized HTTP/provider details while excluding prompts, request bodies, headers, credentials, cookies, and URL query strings.
 - Made `HTTP 402 Payment Required` OpenCode provider blocks eligible for same-session Continue after payment or workspace access is restored, while keeping permanent 4xx request, auth, permission, model-not-found, and request-size failures non-continuable.
 

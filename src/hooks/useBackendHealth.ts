@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { pingDevBackend } from '@/lib/devApi'
 import {
+  BACKEND_HEALTH_RECONNECT_CONFIRMATION_PROBES,
   BACKEND_HEALTH_POLL_MS,
   BACKEND_HEALTH_RECONNECT_GRACE_MS,
 } from '@/lib/constants'
@@ -8,37 +9,48 @@ import {
 /**
  * Polls /api/health every BACKEND_HEALTH_POLL_MS ms.
  * Returns { isOffline: true } only after the backend was successfully reached
- * at least once and a failed probe is confirmed after a short grace delay,
+ * at least once and failed probes are confirmed after short grace delays,
  * preventing false-positive banners during startup and brief proxy stalls.
  */
 export function useBackendHealth(): { isOffline: boolean } {
   const [isOffline, setIsOffline] = useState(false)
   const hasConnectedRef = useRef(false)
+  const checkInFlightRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
 
     async function check() {
-      const ok = await pingDevBackend()
-      if (cancelled) return
-      if (ok) {
-        hasConnectedRef.current = true
-        setIsOffline(false)
-        return
-      }
+      if (checkInFlightRef.current) return
+      checkInFlightRef.current = true
 
-      if (!hasConnectedRef.current) return
+      try {
+        const ok = await pingDevBackend()
+        if (cancelled) return
+        if (ok) {
+          hasConnectedRef.current = true
+          setIsOffline(false)
+          return
+        }
 
-      await new Promise(resolve => window.setTimeout(resolve, BACKEND_HEALTH_RECONNECT_GRACE_MS))
-      if (cancelled) return
+        if (!hasConnectedRef.current) return
 
-      const confirmedOk = await pingDevBackend()
-      if (cancelled) return
-      if (confirmedOk) {
-        hasConnectedRef.current = true
-        setIsOffline(false)
-      } else {
+        for (let i = 0; i < BACKEND_HEALTH_RECONNECT_CONFIRMATION_PROBES; i += 1) {
+          await new Promise(resolve => window.setTimeout(resolve, BACKEND_HEALTH_RECONNECT_GRACE_MS))
+          if (cancelled) return
+
+          const confirmedOk = await pingDevBackend()
+          if (cancelled) return
+          if (confirmedOk) {
+            hasConnectedRef.current = true
+            setIsOffline(false)
+            return
+          }
+        }
+
         setIsOffline(true)
+      } finally {
+        checkInFlightRef.current = false
       }
     }
 

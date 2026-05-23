@@ -1,5 +1,6 @@
 import { renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { RECOVERY_RELOAD_MIN_ACTIVE_MS } from '@/lib/constants'
 import { useRecoveryAutoReload } from '../useRecoveryAutoReload'
 
 const requestRecoveryReloadMock = vi.hoisted(() => vi.fn())
@@ -9,8 +10,14 @@ vi.mock('@/lib/recoveryReload', () => ({
 }))
 
 describe('useRecoveryAutoReload', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(0)
+  })
+
   afterEach(() => {
     requestRecoveryReloadMock.mockReset()
+    vi.useRealTimers()
   })
 
   it('does not reload for an initially inactive recovery state', () => {
@@ -19,7 +26,20 @@ describe('useRecoveryAutoReload', () => {
     expect(requestRecoveryReloadMock).not.toHaveBeenCalled()
   })
 
-  it('reloads once when an active recovery episode clears', () => {
+  it('does not reload when a recovery episode clears before the minimum visible duration', () => {
+    const { rerender } = renderHook(
+      ({ active }) => useRecoveryAutoReload('live-updates-reconnect', active),
+      { initialProps: { active: false } },
+    )
+
+    rerender({ active: true })
+    vi.setSystemTime(RECOVERY_RELOAD_MIN_ACTIVE_MS - 1)
+    rerender({ active: false })
+
+    expect(requestRecoveryReloadMock).not.toHaveBeenCalled()
+  })
+
+  it('reloads once when a sustained active recovery episode clears', () => {
     const { rerender } = renderHook(
       ({ active }) => useRecoveryAutoReload('live-updates-reconnect', active),
       { initialProps: { active: true } },
@@ -27,6 +47,7 @@ describe('useRecoveryAutoReload', () => {
 
     expect(requestRecoveryReloadMock).not.toHaveBeenCalled()
 
+    vi.setSystemTime(RECOVERY_RELOAD_MIN_ACTIVE_MS)
     rerender({ active: false })
     rerender({ active: false })
 
@@ -41,8 +62,10 @@ describe('useRecoveryAutoReload', () => {
     )
 
     rerender({ active: true })
+    vi.setSystemTime(RECOVERY_RELOAD_MIN_ACTIVE_MS)
     rerender({ active: false })
     rerender({ active: true })
+    vi.setSystemTime(RECOVERY_RELOAD_MIN_ACTIVE_MS * 2)
     rerender({ active: false })
 
     expect(requestRecoveryReloadMock).toHaveBeenCalledTimes(2)
