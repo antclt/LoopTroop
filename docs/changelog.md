@@ -12,8 +12,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Reload once after dashboard reconnect/loading recovery so the first click after transient backend gaps uses a fresh UI bundle and cache.
 - Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
 - Allow Continue for blocked `HTTP 402 Payment Required` OpenCode provider errors when the original session is still active.
+- Added a manual reload button next to "AI Models" in Configuration to force-refresh available OpenCode providers and models on demand.
 
 ### Detailed Changes
+
+#### Added
+- Added a reload button with tooltip next to the "AI Models" heading in the Configuration panel. Clicking it clears the React Query cache and re-fetches the full model catalog from the OpenCode server, bypassing the 5-minute stale-time window.
 
 #### Fixed
 - Let the ticket navigator's auto-expanded Errors section be collapsed and reopened by the user while preserving auto-open behavior for newly active or selected errors.

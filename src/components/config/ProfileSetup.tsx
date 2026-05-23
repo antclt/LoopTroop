@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
@@ -7,14 +7,15 @@ import { ModelPicker } from './ModelPicker'
 import { EffortPicker } from './EffortPicker'
 import { useProfile, useCreateProfile, useUpdateProfile } from '@/hooks/useProfile'
 import type { CreateProfileInput } from '@/hooks/useProfile'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/shared/useToast'
 import { PROFILE_DEFAULTS } from '@server/db/defaults'
 import { useQueryClient } from '@tanstack/react-query'
-import { useOpenCodeModels, refetchOpenCodeModelsQuery } from '@/hooks/useOpenCodeModels'
+import { useOpenCodeModels, clearOpenCodeModelsQuery, refetchOpenCodeModelsQuery } from '@/hooks/useOpenCodeModels'
 import { numericFields, hasNumericErrors, buildInitialRawNumeric } from './numericFieldConfig'
 import { NumericField } from './profileNumericUtils'
 import { ConfigurationDocsLink } from './ConfigurationDocsLink'
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 
 interface ProfileSetupProps {
   onClose: () => void
@@ -178,6 +179,11 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
     return { dotClass: 'bg-green-500', label: 'OpenCode connected and working' }
   }, [isOpenCodeConnected, models, modelsError, modelsFetching, modelsLoading])
 
+  const handleReloadModels = useCallback(() => {
+    clearOpenCodeModelsQuery(queryClient)
+    void refetchOpenCodeModelsQuery(queryClient)
+  }, [queryClient])
+
   useEffect(() => {
     const err = createProfile.error || updateProfile.error
     if (!err) return
@@ -231,7 +237,24 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
         <CardHeader><CardTitle className="text-sm">Configuration</CardTitle></CardHeader>
         <CardContent className="space-y-5">
           {/* ── AI Models ── */}
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">AI Models</div>
+          <div className="flex items-center gap-1.5 mb-2">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">AI Models</div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  id="reload-opencode-models"
+                  onClick={handleReloadModels}
+                  disabled={modelsFetching}
+                  className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  aria-label="Reload OpenCode providers and models"
+                >
+                  <RefreshCw className={`h-3 w-3 ${modelsFetching ? 'animate-spin' : ''}`} />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Reload OpenCode providers and models</TooltipContent>
+            </Tooltip>
+          </div>
           <div>
             <label className="text-sm font-medium block mb-1" htmlFor="main-implementer">
               Main Implementer Model

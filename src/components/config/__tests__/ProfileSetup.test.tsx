@@ -222,4 +222,33 @@ describe('ProfileSetup', () => {
     expect(screen.getByText('Maximum is 3600')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
+
+  it('reload button clears cache and refetches models', async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: Infinity },
+        mutations: { retry: false, gcTime: Infinity },
+      },
+    })
+    const removeQueriesSpy = vi.spyOn(queryClient, 'removeQueries')
+    const refetchQueriesSpy = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
+    await renderProfileSetup(queryClient)
+
+    const reloadBtn = screen.getByRole('button', { name: 'Reload OpenCode providers and models' })
+    expect(reloadBtn).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(reloadBtn)
+    })
+
+    expect(removeQueriesSpy).toHaveBeenCalledWith({
+      queryKey: OPENCODE_MODELS_QUERY_KEY,
+      exact: true,
+    })
+    expect(refetchQueriesSpy).toHaveBeenCalledWith({
+      queryKey: OPENCODE_MODELS_QUERY_KEY,
+      exact: true,
+      type: 'active',
+    })
+  })
 })
