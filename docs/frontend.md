@@ -11,6 +11,8 @@ The UI is data-driven from:
 
 In development, same-origin `/api/*` calls go through the Vite proxy. When `npm run dev` generates or receives `LOOPTROOP_API_TOKEN`, the proxy supplies the token to the backend server-side so the browser bundle does not contain the secret.
 
+The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by a second probe one second later before the banner appears. When reconnecting or post-initial loading banners clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so transient backend gaps recover the same way as a manual refresh without creating reload loops.
+
 ## Top-Level Composition
 
 | Area | Purpose | Primary files |
@@ -118,6 +120,7 @@ Current behavior:
 - receives AI/model log detail as fast live-only `log` upserts plus persisted finalizations/backfills backed by `.ticket/runtime/execution-log.ai.jsonl`, so OpenCode thinking, tool calls, and model output can appear live without bloating durable logs and remain available after reconnect or tab close
 - invalidates or patches React Query caches in response
 - refetches ticket details, ticket lists, artifacts, interview state, setup-plan state, bead state, and server logs after a reconnect gap
+- lets the dashboard trigger the guarded recovery reload once the visible live-update reconnecting episode has cleared
 - returns `{ lastEventIdRef, connectionState }`
 
 Current `connectionState` values are:

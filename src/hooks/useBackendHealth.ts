@@ -1,11 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { pingDevBackend } from '@/lib/devApi'
-import { BACKEND_HEALTH_POLL_MS } from '@/lib/constants'
+import {
+  BACKEND_HEALTH_POLL_MS,
+  BACKEND_HEALTH_RECONNECT_GRACE_MS,
+} from '@/lib/constants'
 
 /**
  * Polls /api/health every BACKEND_HEALTH_POLL_MS ms.
  * Returns { isOffline: true } only after the backend was successfully reached
- * at least once, preventing a false-positive banner during initial startup.
+ * at least once and a failed probe is confirmed after a short grace delay,
+ * preventing false-positive banners during startup and brief proxy stalls.
  */
 export function useBackendHealth(): { isOffline: boolean } {
   const [isOffline, setIsOffline] = useState(false)
@@ -20,7 +24,20 @@ export function useBackendHealth(): { isOffline: boolean } {
       if (ok) {
         hasConnectedRef.current = true
         setIsOffline(false)
-      } else if (hasConnectedRef.current) {
+        return
+      }
+
+      if (!hasConnectedRef.current) return
+
+      await new Promise(resolve => window.setTimeout(resolve, BACKEND_HEALTH_RECONNECT_GRACE_MS))
+      if (cancelled) return
+
+      const confirmedOk = await pingDevBackend()
+      if (cancelled) return
+      if (confirmedOk) {
+        hasConnectedRef.current = true
+        setIsOffline(false)
+      } else {
         setIsOffline(true)
       }
     }

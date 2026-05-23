@@ -399,7 +399,7 @@ For `CODING`, pending continuation skips the interrupted-bead reset path so the 
 
 | Interruption | Expected resume behavior |
 | --- | --- |
-| Browser closes, reloads, or loses the SSE connection | The next workspace load uses REST state as truth. SSE reconnect sends the last event id when available, then refetches the ticket, artifacts, interview state, bead state, and server logs to cover replay gaps. |
+| Browser closes, reloads, or loses the SSE connection | The next workspace load uses REST state as truth. SSE reconnect sends the last event id when available, then refetches the ticket, artifacts, interview state, bead state, and server logs to cover replay gaps. When dashboard reconnecting or post-initial loading banners clear, the UI also performs one guarded full-page recovery reload with a short session cooldown. |
 | Frontend crashes or restarts | Draft interview answers and approval editor state are saved to ticket UI-state artifacts. Page unload uses a best-effort keepalive write for the latest unsaved snapshot. |
 | Backend process restarts | Startup validates or reconstructs non-terminal actor snapshots, starts actors from their stored state, and immediately processes the restored snapshot so active work continues. |
 | OpenCode server restarts or loses a session | Owned sessions are validated against the remote OpenCode session list. Missing remote sessions are abandoned and a fresh owned session is created when the phase can safely continue. |

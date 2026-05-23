@@ -1,11 +1,17 @@
 import { screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../AppShell'
 import { UIContext, type UIContextValue } from '@/context/uiContextDef'
 import { renderWithProviders } from '@/test/renderHelpers'
 
 vi.mock('@/hooks/useBackendHealth', () => ({
   useBackendHealth: vi.fn(() => ({ isOffline: false })),
+}))
+
+const useRecoveryAutoReloadMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/hooks/useRecoveryAutoReload', () => ({
+  useRecoveryAutoReload: useRecoveryAutoReloadMock,
 }))
 
 import { useBackendHealth } from '@/hooks/useBackendHealth'
@@ -28,6 +34,10 @@ const uiValue: UIContextValue = {
 }
 
 describe('AppShell', () => {
+  beforeEach(() => {
+    useRecoveryAutoReloadMock.mockReset()
+  })
+
   it('renders a docs link that opens in a new tab', () => {
     renderWithProviders(
       <UIContext.Provider value={uiValue}>
@@ -55,6 +65,7 @@ describe('AppShell', () => {
     )
 
     expect(screen.queryByTestId('backend-reconnecting-banner')).not.toBeInTheDocument()
+    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('backend-reconnect', false)
   })
 
   it('shows the reconnecting banner when backend is unreachable', () => {
@@ -70,5 +81,6 @@ describe('AppShell', () => {
 
     expect(screen.getByTestId('backend-reconnecting-banner')).toBeInTheDocument()
     expect(screen.getByText(/reconnecting to server/i)).toBeInTheDocument()
+    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('backend-reconnect', true)
   })
 })

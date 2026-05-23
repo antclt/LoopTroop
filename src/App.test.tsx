@@ -11,6 +11,7 @@ const mockState = vi.hoisted(() => ({
   startupStatus: null as StartupStatus | null,
   tickets: [] as Array<{ id: string; externalId: string }>,
   ticketsFetched: true,
+  ticketsLoading: false,
   dismissMutation: {
     mutate: vi.fn(),
     isPending: false,
@@ -52,7 +53,18 @@ vi.mock('@/components/shared/KeyboardShortcuts', () => ({
 }))
 
 vi.mock('@/hooks/useTickets', () => ({
-  useTickets: () => ({ data: mockState.tickets, isFetched: mockState.ticketsFetched, isSuccess: true }),
+  useTickets: () => ({
+    data: mockState.tickets,
+    isFetched: mockState.ticketsFetched,
+    isLoading: mockState.ticketsLoading,
+    isSuccess: mockState.ticketsFetched && !mockState.ticketsLoading,
+  }),
+}))
+
+const useRecoveryAutoReloadMock = vi.hoisted(() => vi.fn())
+
+vi.mock('@/hooks/useRecoveryAutoReload', () => ({
+  useRecoveryAutoReload: useRecoveryAutoReloadMock,
 }))
 
 vi.mock('@/hooks/useProfile', () => ({
@@ -96,14 +108,16 @@ function makeStartupStatus(overrides: Partial<StartupStatus['storage']> = {}): S
   }
 }
 
-function renderApp() {
-  const queryClient = new QueryClient({
+function createTestQueryClient() {
+  return new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
       mutations: { retry: false, gcTime: Infinity },
     },
   })
+}
 
+function renderAppElement(queryClient: QueryClient = createTestQueryClient()) {
   return render(
     <QueryClientProvider client={queryClient}>
       <UIProvider>
@@ -113,12 +127,18 @@ function renderApp() {
   )
 }
 
+function renderApp() {
+  return renderAppElement()
+}
+
 describe('App startup notices', () => {
   beforeEach(() => {
     mockState.tickets = []
     mockState.ticketsFetched = true
+    mockState.ticketsLoading = false
     mockState.dismissMutation.isPending = false
     mockState.dismissMutation.mutate.mockReset()
+    useRecoveryAutoReloadMock.mockReset()
     localStorage.clear()
   })
 
@@ -323,5 +343,48 @@ describe('App startup notices', () => {
       expect(screen.getByText('Kanban Board')).toBeInTheDocument()
     })
     expect(screen.queryByText('Ticket Dashboard')).not.toBeInTheDocument()
+  })
+
+  it('arms ticket-list recovery reloads only after the initial ticket list has loaded once', async () => {
+    localStorage.setItem(WELCOME_DISCLAIMER_STORAGE_KEY, 'true')
+    mockState.startupStatus = makeStartupStatus({
+      kind: 'fresh',
+      profileRestored: false,
+      restoredProjectCount: 0,
+      restoredProjects: [],
+    })
+    mockState.startupStatus.ui.restoreNotice.shouldShow = false
+    mockState.ticketsFetched = false
+    mockState.ticketsLoading = true
+    const queryClient = createTestQueryClient()
+    const { rerender } = renderAppElement(queryClient)
+
+    expect(useRecoveryAutoReloadMock).toHaveBeenLastCalledWith('tickets-loading', false)
+
+    mockState.ticketsFetched = true
+    mockState.ticketsLoading = false
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <UIProvider>
+          <App />
+        </UIProvider>
+      </QueryClientProvider>,
+    )
+
+    await waitFor(() => {
+      expect(useRecoveryAutoReloadMock).toHaveBeenLastCalledWith('tickets-loading', false)
+    })
+
+    mockState.ticketsFetched = false
+    mockState.ticketsLoading = true
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <UIProvider>
+          <App />
+        </UIProvider>
+      </QueryClientProvider>,
+    )
+
+    expect(useRecoveryAutoReloadMock).toHaveBeenLastCalledWith('tickets-loading', true)
   })
 })

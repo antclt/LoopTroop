@@ -17,6 +17,10 @@ const dispatchMock = vi.fn()
 const mockSSEState = vi.hoisted(() => ({
   connectionState: 'connected' as 'connecting' | 'connected' | 'reconnecting',
 }))
+const mockTicketQuery = vi.hoisted(() => ({
+  override: null as null | { data: Ticket | undefined },
+}))
+const useRecoveryAutoReloadMock = vi.hoisted(() => vi.fn())
 let latestSSEOptions: {
   ticketId: string | null
   onEvent?: (event: { type: string; data: Record<string, unknown> }) => void
@@ -58,9 +62,17 @@ vi.mock('@/hooks/useTickets', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTickets')>('@/hooks/useTickets')
   return {
     ...actual,
+    useTicket: (id: string | null) => {
+      const result = actual.useTicket(id)
+      return mockTicketQuery.override ?? result
+    },
     useSaveTicketUIState: () => ({ mutate: vi.fn() }),
   }
 })
+
+vi.mock('@/hooks/useRecoveryAutoReload', () => ({
+  useRecoveryAutoReload: useRecoveryAutoReloadMock,
+}))
 
 vi.mock('../DashboardHeader', () => ({
   DashboardHeader: ({ ticket }: { ticket: Ticket }) => <div data-testid="dashboard-header">{ticket.status}</div>,
@@ -150,14 +162,18 @@ function simulateSSE(from: string, to: string) {
   })
 }
 
-function renderDashboard() {
-  return render(
+function renderDashboardElement() {
+  return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <TicketDashboard />
       </TooltipProvider>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
+}
+
+function renderDashboard() {
+  return render(renderDashboardElement())
 }
 
 beforeAll(() => {
@@ -179,6 +195,8 @@ beforeEach(() => {
   dispatchMock.mockReset()
   latestSSEOptions = null
   mockSSEState.connectionState = 'connected'
+  mockTicketQuery.override = null
+  useRecoveryAutoReloadMock.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -186,6 +204,8 @@ afterEach(() => {
   queryClient.clear()
   latestSSEOptions = null
   mockSSEState.connectionState = 'connected'
+  mockTicketQuery.override = null
+  useRecoveryAutoReloadMock.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -304,13 +324,62 @@ describe('TicketDashboard', () => {
       throw new Error(`Unhandled fetch: ${url}`)
     })
 
-    renderDashboard()
+    const { rerender } = renderDashboard()
 
     expect(await screen.findByText('Live updates reconnecting...')).toBeInTheDocument()
     expect(
       screen.getByText('LoopTroop is refetching the latest ticket state and will reconnect automatically.'),
     ).toBeInTheDocument()
     expect(screen.getByTestId('live-updates-reconnecting-overlay')).toBeInTheDocument()
+    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('live-updates-reconnect', true)
+
+    mockSSEState.connectionState = 'connected'
+    rerender(renderDashboardElement())
+
+    await waitFor(() => {
+      expect(useRecoveryAutoReloadMock).toHaveBeenLastCalledWith(`ticket-loading:${selectedTicketId}`, false)
+    })
+    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('live-updates-reconnect', false)
+  })
+
+  it('arms ticket loading recovery only after the selected ticket rendered once', async () => {
+    const initialTicket = makeTicket({ status: 'CODING', id: selectedTicketId })
+    mockTicketQuery.override = { data: undefined }
+
+    queryClient.setQueryData(['ticket', selectedTicketId], initialTicket)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${selectedTicketId}/logs`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}`)) {
+        return createJsonResponse(initialTicket)
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    const { rerender } = renderDashboard()
+
+    expect(await screen.findByText('Loading ticket...')).toBeInTheDocument()
+    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith(`ticket-loading:${selectedTicketId}`, false)
+
+    mockTicketQuery.override = null
+    rerender(renderDashboardElement())
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-header')).toHaveTextContent('CODING')
+    })
+
+    mockTicketQuery.override = { data: undefined }
+    rerender(renderDashboardElement())
+
+    await waitFor(() => {
+      expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith(`ticket-loading:${selectedTicketId}`, true)
+    })
   })
 
   it('renders SSE log events in the active ticket without reopening it', async () => {

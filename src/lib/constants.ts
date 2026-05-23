@@ -6,6 +6,12 @@ export const COPY_SUCCESS_DISPLAY_SHORT_MS = 1500
 export const SSE_RECONNECT_DELAY_MS = 3000
 /** Interval for polling backend health to detect server downtime */
 export const BACKEND_HEALTH_POLL_MS = 3000
+/** Delay before confirming a failed backend health probe */
+export const BACKEND_HEALTH_RECONNECT_GRACE_MS = 1000
+/** Cooldown that prevents repeated automatic recovery reloads */
+export const RECOVERY_RELOAD_COOLDOWN_MS = 10_000
+/** Short delay before running an automatic recovery reload */
+export const RECOVERY_RELOAD_DELAY_MS = 50
 /** Default API call timeout */
 export const API_TIMEOUT_MS = 1000
 /** Model fetch timeout */

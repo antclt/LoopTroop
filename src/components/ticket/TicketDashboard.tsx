@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { useSaveTicketUIState, useTicket } from '@/hooks/useTickets'
 import { useSSE, type SSEConnectionState } from '@/hooks/useSSE'
 import { useUI } from '@/context/useUI'
@@ -22,6 +22,7 @@ import { WORKSPACE_PHASE_NAVIGATE_EVENT, type WorkspacePhaseNavigateDetail } fro
 import { normalizeTicketForRender } from '@/lib/ticketNormalization'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useRecoveryAutoReload } from '@/hooks/useRecoveryAutoReload'
 
 function toDebugJson(data: Record<string, unknown>) {
   if (import.meta.env.PROD) return '[debug]'
@@ -165,6 +166,7 @@ export function TicketDashboard() {
   const ticketId = state.selectedTicketId
   const { data: ticket } = useTicket(ticketId)
   const { mutate: saveTicketUiState } = useSaveTicketUIState()
+  const renderedTicketIdsRef = useRef(new Set<string>())
   const [navWidth, setNavWidth] = useState(280)
   const [isFullLogOpen, setIsFullLogOpen] = useState(false)
   const [phaseSelection, setPhaseSelection] = useState<{ ticketId: string | null; phase: string | null }>({
@@ -193,6 +195,15 @@ export function TicketDashboard() {
   })
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [liveUpdatesState, setLiveUpdatesState] = useState<SSEConnectionState>('connecting')
+  const isRecoverableTicketLoading = Boolean(ticketId && !ticket && renderedTicketIdsRef.current.has(ticketId))
+  useRecoveryAutoReload('live-updates-reconnect', ticketId !== null && liveUpdatesState === 'reconnecting')
+  useRecoveryAutoReload(`ticket-loading:${ticketId ?? 'none'}`, isRecoverableTicketLoading)
+
+  useEffect(() => {
+    if (ticketId && ticket) {
+      renderedTicketIdsRef.current.add(ticketId)
+    }
+  }, [ticket, ticketId])
 
   const snapshotPreviousStatus = useMemo(
     () => ticket?.previousStatus ?? undefined,

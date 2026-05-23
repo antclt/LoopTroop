@@ -7,6 +7,7 @@ import { useUI } from '@/context/useUI'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useBackendHealth } from '@/hooks/useBackendHealth'
+import { useRecoveryAutoReload } from '@/hooks/useRecoveryAutoReload'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -23,6 +24,7 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
   const [isRefreshing, setIsRefreshing] = useState(false)
   const docsOrigin = __LOOPTROOP_DOCS_ORIGIN__
   const { isOffline } = useBackendHealth()
+  useRecoveryAutoReload('backend-reconnect', isOffline)
 
   const handleRefresh = async () => {
     setIsRefreshing(true)

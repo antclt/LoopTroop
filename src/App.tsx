@@ -22,6 +22,7 @@ import { useProfile } from '@/hooks/useProfile'
 import { useStartupStatus } from '@/hooks/useStartupStatus'
 import { useQueryClient } from '@tanstack/react-query'
 import { clearOpenCodeModelsQuery } from '@/hooks/useOpenCodeModels'
+import { useRecoveryAutoReload } from '@/hooks/useRecoveryAutoReload'
 
 const ROUTE_ROOT = '/'
 const ROUTE_CONFIG = '/config'
@@ -45,6 +46,10 @@ function App() {
   const tickets = ticketsQuery.data
   const ticketsRef = useRef(tickets)
   useEffect(() => { ticketsRef.current = tickets }, [tickets])
+  const hasCompletedInitialTicketListLoadRef = useRef(false)
+  const isRecoverableTicketListLoading = ticketsQuery.isLoading === true
+    && hasCompletedInitialTicketListLoadRef.current
+  useRecoveryAutoReload('tickets-loading', isRecoverableTicketListLoading)
   const initialUrlProcessed = useRef(false)
   const [isProfileOpen, setIsProfileOpen] = useState(() => initialModal === 'profile')
   const [isProjectOpen, setIsProjectOpen] = useState(() => initialModal === 'project')
@@ -67,6 +72,12 @@ function App() {
       clearOpenCodeModelsQuery(queryClient)
     }
   }, [initialModal, queryClient])
+
+  useEffect(() => {
+    if (ticketsQuery.isFetched || ticketsQuery.isSuccess) {
+      hasCompletedInitialTicketListLoadRef.current = true
+    }
+  }, [ticketsQuery.isFetched, ticketsQuery.isSuccess])
 
   useEffect(() => {
     if (!state.selectedTicketId || !ticketsQuery.isSuccess || !Array.isArray(tickets)) return
