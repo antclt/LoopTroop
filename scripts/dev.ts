@@ -20,7 +20,7 @@ import {
 import { getDevLanUrls, LOOPTROOP_DEV_HOST, resolveDevHostMode } from './dev-host-mode'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
 import { LOOPTROOP_OPENCODE_LOGS, resolveOpenCodeLogMode } from './opencode-log-mode'
-import { startWslLanRelay } from './wsl-lan-relay'
+import { getWslLanAccessPlan } from './wsl-lan-access'
 import { getErrorMessage } from '../shared/typeGuards'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -64,20 +64,16 @@ const devHostMode = (() => {
   }
 })()
 
-const wslLanRelay = await startWslLanRelay({ hostMode: devHostMode, frontendPort, docsPort })
+const wslLanAccess = getWslLanAccessPlan({ hostMode: devHostMode, frontendPort, docsPort })
 const directFrontendLanUrls = getDevLanUrls({ hostMode: devHostMode, port: frontendPort })
 const directDocsLanUrls = getDevLanUrls({ hostMode: devHostMode, port: docsPort })
-const isWslRelayRelevant = devHostMode.enabled && wslLanRelay.reason !== 'Runtime is not WSL.'
-const frontendLanUrls = wslLanRelay.enabled && wslLanRelay.frontendUrls.length > 0
-  ? wslLanRelay.frontendUrls
-  : isWslRelayRelevant
-    ? []
-    : directFrontendLanUrls
-const docsLanUrls = wslLanRelay.enabled && wslLanRelay.docsUrls.length > 0
-  ? wslLanRelay.docsUrls
-  : isWslRelayRelevant
-    ? []
-    : directDocsLanUrls
+const isWslAccessRelevant = devHostMode.enabled && wslLanAccess.reason !== 'Runtime is not WSL.'
+const frontendLanUrls = isWslAccessRelevant
+  ? []
+  : directFrontendLanUrls
+const docsLanUrls = isWslAccessRelevant
+  ? []
+  : directDocsLanUrls
 const configuredDocsOrigin = process.env.LOOPTROOP_DOCS_ORIGIN?.trim()
 const effectiveDocsOrigin = configuredDocsOrigin || docsLanUrls[0] || getDocsOrigin()
 
@@ -242,14 +238,19 @@ async function printLanSharingDetails() {
   if (!devHostMode.enabled) return
 
   printSummaryLine('LAN warning', 'Frontend/docs are visible to devices on your local network; backend/OpenCode stay loopback-only.')
-  if (wslLanRelay.enabled) {
-    printSummaryLine('WSL relay', `Active on Windows LAN; forwarding to WSL ${wslLanRelay.targetAddress ?? 'target'}.`)
-    printSummaryLine('WSL note', 'Use the Windows LAN URL below, not the WSL 172.x address. Allow PowerShell through Windows Firewall if prompted.')
-  } else if (isWslRelayRelevant) {
-    printSummaryLine('WSL relay', `${wslLanRelay.reason ?? 'Unavailable.'} WSL 172.x URLs are usually not reachable from other devices.`)
-  }
-  for (const warning of wslLanRelay.warnings) {
-    printSummaryLine('WSL warning', warning)
+  if (wslLanAccess.enabled) {
+    printSummaryLine('WSL mode', `Detected. WSL ${wslLanAccess.wslTargetAddress ?? '172.x'} is private to Windows; other devices need Windows portproxy.`)
+    printSummaryLine('WSL setup', 'Run these in Windows PowerShell as Administrator, then open the After setup URL:')
+    printSummaryBlock('', wslLanAccess.setupCommands)
+    printSummaryBlock('After setup', wslLanAccess.frontendUrls)
+    if (wslLanAccess.docsUrls.length > 0) {
+      printSummaryBlock('Docs setup', wslLanAccess.docsUrls)
+    }
+    printSummaryLine('WSL cleanup', 'To remove the portproxy later:')
+    printSummaryBlock('', wslLanAccess.cleanupCommands)
+    return
+  } else if (isWslAccessRelevant) {
+    printSummaryLine('WSL mode', `${wslLanAccess.reason ?? 'Unavailable.'} WSL 172.x URLs are usually not reachable from other devices.`)
   }
 
   if (frontendLanUrls.length === 0) {
@@ -496,7 +497,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     shutdownStartedAtMs = Date.now()
     printDivider('Shutdown')
     console.log(`[dev] Received ${signal}; stopping dev services...`)
-    wslLanRelay.dispose()
     for (const command of commands) {
       try {
         command.kill(signal)
@@ -509,7 +509,6 @@ for (const signal of ['SIGINT', 'SIGTERM'] as const) {
 
 try {
   await result
-  wslLanRelay.dispose()
   if (shutdownSignal) {
     const shutdownDuration = shutdownStartedAtMs == null
       ? '0s'
@@ -518,7 +517,6 @@ try {
   }
   process.exit(0)
 } catch {
-  wslLanRelay.dispose()
   if (shutdownSignal) {
     const shutdownDuration = shutdownStartedAtMs == null
       ? '0s'

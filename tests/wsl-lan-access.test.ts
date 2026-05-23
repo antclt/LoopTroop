@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { DEFAULT_DEV_BIND_HOST, type ResolvedDevHostMode } from '../scripts/dev-host-mode'
-import { buildWslLanRelayPlan, isWslRuntime } from '../scripts/wsl-lan-relay'
+import { buildWslLanAccessPlan, isWslRuntime } from '../scripts/wsl-lan-access'
 
 const enabledWildcardHostMode: ResolvedDevHostMode = {
   enabled: true,
@@ -18,9 +18,9 @@ describe('isWslRuntime', () => {
   })
 })
 
-describe('buildWslLanRelayPlan', () => {
-  it('builds Windows LAN relay URLs for WSL wildcard LAN sharing', () => {
-    const plan = buildWslLanRelayPlan({
+describe('buildWslLanAccessPlan', () => {
+  it('builds Windows LAN URLs and explicit portproxy guidance for WSL wildcard LAN sharing', () => {
+    const plan = buildWslLanAccessPlan({
       hostMode: enabledWildcardHostMode,
       frontendPort: 5173,
       docsPort: 5174,
@@ -30,7 +30,7 @@ describe('buildWslLanRelayPlan', () => {
     })
 
     expect(plan.enabled).toBe(true)
-    expect(plan.targetAddress).toBe('172.25.190.136')
+    expect(plan.wslTargetAddress).toBe('172.25.190.136')
     expect(plan.frontendUrls).toEqual([
       'http://192.168.1.40:5173',
       'http://10.0.0.4:5173',
@@ -39,11 +39,24 @@ describe('buildWslLanRelayPlan', () => {
       'http://192.168.1.40:5174',
       'http://10.0.0.4:5174',
     ])
-    expect(plan.endpoints).toHaveLength(4)
+    expect(plan.setupCommands).toContain(
+      'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5173 connectaddress=172.25.190.136 connectport=5173',
+    )
+    expect(plan.setupCommands).toContain(
+      'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
+    )
+    expect(plan.setupCommands.at(-1)).toBe(
+      'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5173,5174 -Profile Private',
+    )
+    expect(plan.cleanupCommands).toEqual([
+      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5173',
+      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5174',
+      'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
+    ])
   })
 
-  it('does not relay outside WSL or when explicit host binding is already configured', () => {
-    expect(buildWslLanRelayPlan({
+  it('does not apply outside WSL or when explicit host binding is already configured', () => {
+    expect(buildWslLanAccessPlan({
       hostMode: enabledWildcardHostMode,
       frontendPort: 5173,
       docsPort: 5174,
@@ -52,7 +65,7 @@ describe('buildWslLanRelayPlan', () => {
       windowsAddresses: ['192.168.1.40'],
     })).toMatchObject({ enabled: false, reason: 'Runtime is not WSL.' })
 
-    expect(buildWslLanRelayPlan({
+    expect(buildWslLanAccessPlan({
       hostMode: { enabled: true, bindHost: '192.168.1.40', requestedValue: '192.168.1.40', source: 'env' },
       frontendPort: 5173,
       docsPort: 5174,
@@ -62,8 +75,8 @@ describe('buildWslLanRelayPlan', () => {
     })).toMatchObject({ enabled: false, reason: 'Explicit host binding is already configured.' })
   })
 
-  it('does not advertise WSL NAT addresses when no Windows LAN address is detected', () => {
-    expect(buildWslLanRelayPlan({
+  it('does not advertise WSL NAT addresses as directly reachable LAN URLs', () => {
+    expect(buildWslLanAccessPlan({
       hostMode: enabledWildcardHostMode,
       frontendPort: 5173,
       docsPort: 5174,
