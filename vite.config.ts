@@ -5,11 +5,13 @@ import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { getBackendOrigin, getDocsOrigin, getFrontendPort } from './shared/appConfig'
+import { resolveDevHostMode } from './scripts/dev-host-mode'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const backendOrigin = getBackendOrigin()
 const apiToken = process.env.LOOPTROOP_API_TOKEN?.trim() ?? ''
 const apiTokenHeader = 'X-LoopTroop-Token'
+const devHostMode = resolveDevHostMode()
 
 function isBackendHealthProbe(req: IncomingMessage) {
   if ((req.method ?? 'GET').toUpperCase() !== 'GET') return false
@@ -108,6 +110,7 @@ export default defineConfig({
   },
   appType: 'spa',
   server: {
+    host: devHostMode.enabled ? devHostMode.bindHost : undefined,
     port: getFrontendPort(),
     strictPort: true,
     watch: {

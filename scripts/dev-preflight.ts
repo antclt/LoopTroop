@@ -3,6 +3,7 @@ import net from 'node:net'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { getBackendPort, getDocsPort, getFrontendPort } from '../shared/appConfig'
+import { resolveDevHostMode } from './dev-host-mode'
 import {
   decideDailyMaintenanceTask,
   ensureInstallIfNeeded,
@@ -38,6 +39,16 @@ const packageLockPath = resolve(repoRoot, 'package-lock.json')
 const shouldSkipDependencyMaintenance = process.env.LOOPTROOP_DEV_SKIP_DEPS === '1'
 const shouldSkipOpenCodeUpgrade = process.env.LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE === '1'
 const shouldForceDailyMaintenance = process.env.LOOPTROOP_DEV_FORCE_MAINTENANCE === '1'
+const devHostMode = (() => {
+  try {
+    return resolveDevHostMode()
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    console.error(`[dev-preflight] ${message}`)
+    process.exit(1)
+  }
+})()
+const portAvailabilityHost = devHostMode.enabled ? devHostMode.bindHost : '127.0.0.1'
 
 const configuredPorts = [
   { label: 'frontend', port: getFrontendPort() },
@@ -90,14 +101,14 @@ async function sleep(ms: number) {
   await new Promise((resolvePromise) => setTimeout(resolvePromise, ms))
 }
 
-async function ensurePortFree(port: number) {
+async function ensurePortFree(port: number, host = '127.0.0.1') {
   await new Promise<void>((resolvePromise, rejectPromise) => {
     const server = net.createServer()
     server.once('error', (error) => {
       server.close()
       rejectPromise(error)
     })
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, host, () => {
       server.close((closeError) => {
         if (closeError) {
           rejectPromise(closeError)
@@ -382,7 +393,7 @@ if (!reclaimed) {
 
 for (const { label, port } of configuredPorts) {
   try {
-    await ensurePortFree(port)
+    await ensurePortFree(port, portAvailabilityHost)
   } catch (error) {
     const inspection = inspectPortOccupants(port)
     const occupantPids = inspection.occupants
@@ -401,7 +412,7 @@ for (const { label, port } of configuredPorts) {
     }
 
     try {
-      await ensurePortFree(port)
+      await ensurePortFree(port, portAvailabilityHost)
     } catch (retryError) {
       const updatedInspection = inspectPortOccupants(port)
       const message = retryError instanceof Error ? retryError.message : String(retryError)

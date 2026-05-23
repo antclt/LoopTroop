@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto'
 import concurrently from 'concurrently'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getFrontendPort } from '../shared/appConfig'
+import QRCode from 'qrcode'
+import { DEFAULT_OPENCODE_BASE_URL, getBackendPort, getDocsOrigin, getDocsPort, getFrontendPort } from '../shared/appConfig'
 import {
   formatAuditPackageUpdate,
   formatDependencyReleasePolicySummaryLines,
@@ -16,6 +17,7 @@ import {
   readDevPreflightReport,
   type DependencySyncReport,
 } from './dev-maintenance'
+import { getDevLanUrls, LOOPTROOP_DEV_HOST, resolveDevHostMode } from './dev-host-mode'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
 import { LOOPTROOP_OPENCODE_LOGS, resolveOpenCodeLogMode } from './opencode-log-mode'
 import { getErrorMessage } from '../shared/typeGuards'
@@ -26,6 +28,9 @@ const requestedBaseUrl = process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim() || DEFA
 const hasExplicitBaseUrl = Boolean(process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim())
 const childEnv = { ...process.env }
 const preflightReport = readDevPreflightReport()
+const frontendPort = getFrontendPort()
+const backendPort = getBackendPort()
+const docsPort = getDocsPort()
 let shutdownSignal: NodeJS.Signals | null = null
 let shutdownStartedAtMs: number | null = null
 
@@ -49,8 +54,30 @@ const opencodeLogMode = (() => {
   }
 })()
 
+const devHostMode = (() => {
+  try {
+    return resolveDevHostMode()
+  } catch (error) {
+    console.error(`[dev] ${getErrorMessage(error)}`)
+    process.exit(1)
+  }
+})()
+
+const frontendLanUrls = getDevLanUrls({ hostMode: devHostMode, port: frontendPort })
+const docsLanUrls = getDevLanUrls({ hostMode: devHostMode, port: docsPort })
+const configuredDocsOrigin = process.env.LOOPTROOP_DOCS_ORIGIN?.trim()
+const effectiveDocsOrigin = configuredDocsOrigin || docsLanUrls[0] || getDocsOrigin()
+
 if (opencodeLogMode.mode === 'all') {
   childEnv[LOOPTROOP_OPENCODE_LOGS] = 'all'
+}
+
+if (devHostMode.enabled) {
+  childEnv[LOOPTROOP_DEV_HOST] = devHostMode.bindHost
+}
+
+if (devHostMode.enabled && !configuredDocsOrigin && docsLanUrls[0]) {
+  childEnv.LOOPTROOP_DOCS_ORIGIN = docsLanUrls[0]
 }
 
 const { baseUrl, note, status } = await resolveOpenCodeBaseUrl({
@@ -190,6 +217,46 @@ function formatOpenCodeLogSummary(status: string) {
   return 'Full OpenCode DEBUG logs requested, but this start is reusing or skipping the managed server'
 }
 
+function formatLanSharingSummary() {
+  if (!devHostMode.enabled) {
+    return 'Disabled. Use npm run dev --host to share the app on your local network.'
+  }
+
+  return `Enabled on ${devHostMode.bindHost}. Use only on trusted local networks.`
+}
+
+async function printLanSharingDetails() {
+  if (!devHostMode.enabled) return
+
+  printSummaryLine('LAN warning', 'Frontend/docs are visible to devices on your local network; backend/OpenCode stay loopback-only.')
+
+  if (frontendLanUrls.length === 0) {
+    printSummaryLine('LAN URLs', 'No non-loopback IPv4 address detected; try npm run dev --host=<your LAN IP>.')
+    return
+  }
+
+  const primaryFrontendLanUrl = frontendLanUrls[0]
+  if (!primaryFrontendLanUrl) return
+
+  printSummaryBlock('LAN URLs', frontendLanUrls)
+  if (docsLanUrls.length > 0) {
+    printSummaryBlock('Docs LAN', docsLanUrls)
+  }
+
+  try {
+    const qrCode = await QRCode.toString(primaryFrontendLanUrl, {
+      type: 'terminal',
+      small: true,
+      margin: 1,
+    })
+
+    console.log(`[dev] Mobile QR     Scan to open ${primaryFrontendLanUrl}`)
+    console.log(qrCode.trimEnd())
+  } catch (error) {
+    console.warn(`[dev] Mobile QR     Failed to render QR code: ${getErrorMessage(error)}`)
+  }
+}
+
 const services: DevService[] = [
   {
     name: 'OPEN',
@@ -222,10 +289,12 @@ const services: DevService[] = [
 ]
 
 printDivider('Startup Summary')
-printSummaryLine('Frontend', `http://localhost:${getFrontendPort()}`)
-printSummaryLine('Backend', `http://localhost:${getBackendPort()}`)
-printSummaryLine('Docs', getDocsOrigin())
+printSummaryLine('Frontend', `http://localhost:${frontendPort}`)
+printSummaryLine('Backend', `http://localhost:${backendPort}`)
+printSummaryLine('Docs', effectiveDocsOrigin)
 printSummaryLine('OpenCode', baseUrl)
+printSummaryLine('LAN sharing', formatLanSharingSummary())
+await printLanSharingDetails()
 printSummaryLine('OpenCode logs', formatOpenCodeLogSummary(status))
 printSummaryBlock('Package gate', formatDependencyReleasePolicySummaryLines())
 
