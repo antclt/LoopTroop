@@ -9,12 +9,13 @@ import { safeAtomicWrite } from '../io/atomicWrite'
 import { foldPersistedLogEntries } from '../log/readDedupe'
 import { handlePutInterview, handlePutPrd } from './ticketHandlers'
 import { contentSha256 } from '../lib/contentHash'
+import { readOpenCodeNativeLogs } from '../opencode/logDiagnostics'
 
 const filesRouter = new Hono()
 
 const VALID_FILES = ['interview', 'prd'] as const
 type ValidFile = typeof VALID_FILES[number]
-type LogChannel = 'normal' | 'debug' | 'ai'
+type LogChannel = 'normal' | 'debug' | 'ai' | 'all'
 
 function isValidFile(file: string): file is ValidFile {
   return VALID_FILES.includes(file as ValidFile)
@@ -27,7 +28,8 @@ function resolveTicketFilePath(ticketId: string, file: ValidFile): string | null
 }
 
 function normalizeLogChannel(channel?: string): LogChannel {
-  return channel === 'debug' || channel === 'ai' ? channel : 'normal'
+  if (channel === 'debug' || channel === 'ai' || channel === 'all') return channel
+  return 'normal'
 }
 
 function normalizeLogEntry(entry: unknown): Record<string, unknown> | null {
@@ -103,6 +105,60 @@ function logEntryMatchesFilters(
   return true
 }
 
+async function extractTicketSessionIds(logPath: string): Promise<string[]> {
+  const ids = new Set<string>()
+  try {
+    await fs.promises.access(logPath)
+  } catch {
+    return []
+  }
+  const rl = readline.createInterface({
+    input: fs.createReadStream(logPath, { encoding: 'utf-8' }),
+    crlfDelay: Infinity,
+  })
+  for await (const line of rl) {
+    if (!line.trim()) continue
+    try {
+      const parsed = JSON.parse(line)
+      if (parsed && typeof parsed === 'object' && typeof parsed.sessionId === 'string' && parsed.sessionId.trim()) {
+        ids.add(parsed.sessionId.trim())
+      }
+    } catch {
+      // Skip malformed lines.
+    }
+  }
+  return Array.from(ids)
+}
+
+async function readLogFileEntries(logPath: string, filters: {
+  status?: string
+  phase?: string
+  phaseAttempt?: number
+}): Promise<Record<string, unknown>[]> {
+  try {
+    await fs.promises.access(logPath)
+  } catch {
+    return []
+  }
+  const entries: Record<string, unknown>[] = []
+  const rl = readline.createInterface({
+    input: fs.createReadStream(logPath, { encoding: 'utf-8' }),
+    crlfDelay: Infinity,
+  })
+  for await (const line of rl) {
+    if (!line.trim()) continue
+    try {
+      const normalized = normalizeLogEntry(JSON.parse(line))
+      if (normalized && logEntryMatchesFilters(normalized, filters)) {
+        entries.push(normalized)
+      }
+    } catch {
+      // Skip malformed lines.
+    }
+  }
+  return entries
+}
+
 filesRouter.get('/files/:ticketId/logs', async (c) => {
   const ticketId = c.req.param('ticketId')
   const ticket = getTicketByRef(ticketId)
@@ -111,16 +167,7 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
   const paths = getTicketPaths(ticketId)
   if (!paths) return c.json({ error: 'Ticket not found' }, 404)
   const channel = normalizeLogChannel(c.req.query('channel'))
-  const logPath = channel === 'debug'
-    ? paths.debugLogPath
-    : channel === 'ai'
-      ? paths.aiLogPath
-      : paths.executionLogPath
-  try {
-    await fs.promises.access(logPath)
-  } catch {
-    return c.json([])
-  }
+
   const statusFilter = c.req.query('status')
   const phaseFilter = c.req.query('phase')
   const phaseAttemptFilterRaw = c.req.query('phaseAttempt')
@@ -132,6 +179,35 @@ filesRouter.get('/files/:ticketId/logs', async (c) => {
     ...(statusFilter ? { status: statusFilter } : {}),
     ...(phaseFilter ? { phase: phaseFilter } : {}),
     ...(typeof phaseAttemptFilter === 'number' && Number.isFinite(phaseAttemptFilter) ? { phaseAttempt: phaseAttemptFilter } : {}),
+  }
+
+  if (channel === 'all') {
+    const [normalEntries, debugEntries, aiEntries] = await Promise.all([
+      readLogFileEntries(paths.executionLogPath, filters),
+      readLogFileEntries(paths.debugLogPath, filters),
+      readLogFileEntries(paths.aiLogPath, filters),
+    ])
+    const sessionIds = await extractTicketSessionIds(paths.aiLogPath)
+    const ocNativeEntries = readOpenCodeNativeLogs(sessionIds) as unknown as Record<string, unknown>[]
+    const allEntries = [...normalEntries, ...debugEntries, ...aiEntries, ...ocNativeEntries]
+    const foldedEntries = foldPersistedLogEntries(allEntries)
+    foldedEntries.sort((a, b) => {
+      const at = typeof a.timestamp === 'string' ? Date.parse(a.timestamp) : 0
+      const bt = typeof b.timestamp === 'string' ? Date.parse(b.timestamp) : 0
+      return at - bt
+    })
+    return c.json(foldedEntries)
+  }
+
+  const logPath = channel === 'debug'
+    ? paths.debugLogPath
+    : channel === 'ai'
+      ? paths.aiLogPath
+      : paths.executionLogPath
+  try {
+    await fs.promises.access(logPath)
+  } catch {
+    return c.json([])
   }
 
   const entries: Record<string, unknown>[] = []

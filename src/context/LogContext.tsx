@@ -65,7 +65,9 @@ function mergeLogBuckets(
 
 function normalizeScope(scope: ServerLogScope = {}): ServerLogScope {
   const normalized: ServerLogScope = {
-    channel: scope.channel === 'debug' || scope.channel === 'ai' ? scope.channel : 'normal',
+    channel: scope.channel === 'debug' || scope.channel === 'ai' || scope.channel === 'all'
+      ? scope.channel
+      : 'normal',
   }
 
   if (scope.status) {
@@ -104,6 +106,7 @@ function entryMatchesScope(rawEntry: Record<string, unknown>, entry: LogEntry, s
 
 function shouldIncludeEntryForScope(entry: LogEntry, scope: ServerLogScope): boolean {
   const isDebug = isDebugLogEntry(entry)
+  if (scope.channel === 'all') return true
   if (scope.channel === 'debug') return isDebug
   if (scope.channel === 'ai') return !isDebug && entry.audience === 'ai'
   return !isDebug

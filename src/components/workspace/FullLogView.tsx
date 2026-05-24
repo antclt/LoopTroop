@@ -29,7 +29,7 @@ const TAB_TOOLTIPS: Record<string, string> = {
   SYS: 'System background events and milestones for the orchestrator.',
   AI: 'Raw inputs (prompts), outputs, reasoning, and tool executions from AI models.',
   ERROR: 'Errors and exceptions encountered during execution.',
-  DEBUG: 'Verbose internal debugging events and data.',
+  DEBUG: 'Every log line from LoopTroop and OpenCode — system, AI, debug, and native OpenCode server logs. Loaded on demand.',
 }
 
 interface PhaseGroup {
@@ -251,7 +251,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
 
   useEffect(() => {
     if (activeTab !== 'DEBUG') return
-    loadAllLogs?.({ channel: 'debug' })
+    loadAllLogs?.({ channel: 'all' })
   }, [activeTab, loadAllLogs])
 
   const hasCmdLogs = useMemo(() => {
@@ -312,7 +312,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
   }, [effectiveTab, loadAllLogs])
 
   const isLoadingLogs = effectiveTab === 'DEBUG'
-    ? (isLoadingLogScope?.({ lifecycle: true, channel: 'debug' }) ?? false)
+    ? (isLoadingLogScope?.({ lifecycle: true, channel: 'all' }) ?? false)
     : isAiLogTab(effectiveTab)
       ? ((isLoadingLogScope?.({ lifecycle: true }) ?? false) || (isLoadingLogScope?.({ lifecycle: true, channel: 'ai' }) ?? false))
       : (isLoadingLogScope?.({ lifecycle: true }) ?? (logCtx?.isLoadingLogs ?? false))

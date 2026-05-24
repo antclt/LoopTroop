@@ -265,7 +265,7 @@ export function filterEntries(entries: LogEntry[], tab: string): LogEntry[] {
     case 'ERROR':
       return canonicalEntries.filter(isError)
     case 'DEBUG':
-      return canonicalEntries.filter(isDebug)
+      return canonicalEntries
     default:
       return canonicalEntries.filter(entry => entry.modelId === tab)
   }

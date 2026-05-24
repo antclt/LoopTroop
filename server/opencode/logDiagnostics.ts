@@ -13,7 +13,7 @@ export const LOOPTROOP_OPENCODE_LOG_DIR = 'LOOPTROOP_OPENCODE_LOG_DIR'
 const DEFAULT_MAX_LOG_FILES = 10
 const DEFAULT_MAX_LOG_BYTES = 5 * 1024 * 1024
 const GENERIC_PROVIDER_ERROR = 'Provider returned error'
-const TROUBLESHOOTING_HINT = 'No matching local OpenCode provider log was found. For future runs, start managed OpenCode with `npm run dev --opencode-logs=all` or set `LOOPTROOP_OPENCODE_LOG_DIR` for an external OpenCode server.'
+const TROUBLESHOOTING_HINT = 'No matching local OpenCode provider log was found. Set `LOOPTROOP_OPENCODE_LOG_DIR` for an external OpenCode server.'
 
 export interface OpenCodeLogDiagnosticOptions {
   env?: Partial<Record<string, string | undefined>>
@@ -168,6 +168,79 @@ function parseLogLineError(line: string, sessionId: string): ModelErrorInfo | un
     providerId: info.providerId ?? cleanString(readField(line, 'providerID')),
     providerModelId: info.providerModelId ?? cleanString(readField(line, 'modelID')),
   }
+}
+
+function readLogfmtValue(line: string, key: string): string | undefined {
+  const quotedMatch = line.match(new RegExp(`(?:^|\\s)${key}="((?:[^"\\\\]|\\\\.)*)"`) )
+  if (quotedMatch) return (quotedMatch[1] ?? '').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+  return readField(line, key)
+}
+
+export interface OpenCodeNativeLogEntry {
+  timestamp: string
+  type: 'debug'
+  source: 'debug'
+  audience: 'debug'
+  kind: 'session'
+  op: 'append'
+  phase: string
+  phaseAttempt: number
+  status: string
+  message: string
+  content: string
+  sessionId: string
+  data: Record<string, unknown>
+}
+
+export function readOpenCodeNativeLogs(
+  sessionIds: string[],
+  options: OpenCodeLogDiagnosticOptions = {},
+): OpenCodeNativeLogEntry[] {
+  if (sessionIds.length === 0) return []
+  const sessionIdSet = new Set(sessionIds)
+  const results: OpenCodeNativeLogEntry[] = []
+
+  for (const filePath of readCandidateLogFiles(options)) {
+    let content
+    try {
+      content = readFileSync(filePath, 'utf8')
+    } catch {
+      continue
+    }
+
+    for (const line of content.split('\n')) {
+      if (!line.trim()) continue
+      const rawSessionId = readField(line, 'session.id')
+      if (!rawSessionId || !sessionIdSet.has(rawSessionId)) continue
+
+      const time = readField(line, 'time')
+      const level = readLogfmtValue(line, 'level') ?? 'INFO'
+      const service = readField(line, 'service')
+      const msg = readLogfmtValue(line, 'msg') ?? readLogfmtValue(line, 'message') ?? line.trim()
+
+      const timestamp = time ? (new Date(time).toISOString()) : new Date().toISOString()
+      const serviceTag = service ? `[opencode:${service}]` : '[opencode]'
+      const content = `[DEBUG] [${level}] ${serviceTag} ${msg}`
+
+      results.push({
+        timestamp,
+        type: 'debug',
+        source: 'debug',
+        audience: 'debug',
+        kind: 'session',
+        op: 'append',
+        phase: 'opencode_native',
+        phaseAttempt: 1,
+        status: 'opencode_native',
+        message: content,
+        content,
+        sessionId: rawSessionId,
+        data: { level, service: service ?? null, ocNativeLog: true },
+      })
+    }
+  }
+
+  return results
 }
 
 export function findOpenCodeLogErrorDetails(

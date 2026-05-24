@@ -1106,6 +1106,7 @@ export function emitOpenCodeStreamEvent(
   if (event.type === 'part_removed') {
     const partId = event.partId
     if (partId) {
+      emitDebugLog(ticketId, phase, `opencode.part_removed partId=${partId}`, { partId, sessionId, source }, false)
       removeLiveTextPart(state, partId)
       state.liveKinds.delete(partId)
       state.liveContents.delete(partId)

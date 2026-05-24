@@ -17,7 +17,7 @@ export interface LogEntry {
   op: 'append' | 'upsert' | 'finalize'
 }
 
-export type LogChannel = 'normal' | 'debug' | 'ai'
+export type LogChannel = 'normal' | 'debug' | 'ai' | 'all'
 
 export interface ServerLogScope {
   channel?: LogChannel
@@ -98,7 +98,7 @@ export function getServerLogsUrl(ticketId: string, scope: ServerLogScope = {}): 
   if (typeof scope.phaseAttempt === 'number' && Number.isFinite(scope.phaseAttempt)) {
     params.set('phaseAttempt', String(scope.phaseAttempt))
   }
-  if (scope.channel === 'debug' || scope.channel === 'ai') params.set('channel', scope.channel)
+  if (scope.channel === 'debug' || scope.channel === 'ai' || scope.channel === 'all') params.set('channel', scope.channel)
 
   const query = params.toString()
   return `/api/files/${ticketId}/logs${query ? `?${query}` : ''}`

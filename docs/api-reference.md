@@ -481,10 +481,11 @@ These routes are intentionally narrow.
 | `GET` | `/api/files/:ticketId/logs` | Read folded normal execution logs from `.ticket/runtime/execution-log.jsonl` |
 | `GET` | `/api/files/:ticketId/logs?channel=debug` | Read folded debug/forensic execution logs from `.ticket/runtime/execution-log.debug.jsonl`; the same `status`, `phase`, and `phaseAttempt` filters apply |
 | `GET` | `/api/files/:ticketId/logs?channel=ai` | Read folded AI detail logs from `.ticket/runtime/execution-log.ai.jsonl`; loaded by AI/model log views |
+| `GET` | `/api/files/:ticketId/logs?channel=all` | Merge all three LoopTroop log files plus OpenCode native server log lines filtered by the ticket's session IDs; used by the DEBUG tab to show every log line |
 | `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd`; existing file responses include `contentSha256` |
 | `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 
-Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry.
+Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. The `channel=all` endpoint merges and deduplicates entries from all channels server-side, then sorts by timestamp; phase/status filters still apply to LoopTroop log entries but OpenCode native log entries (which have no ticket phase) are always included. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry.
 
 There is no generic filesystem browser or arbitrary file read route under `/api/files`.
 

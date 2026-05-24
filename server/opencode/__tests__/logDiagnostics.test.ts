@@ -86,7 +86,6 @@ describe('OpenCode log diagnostics', () => {
     expect(enrichment).toMatchObject({
       source: 'troubleshooting_hint',
     })
-    expect(enrichment?.message).toContain('npm run dev --opencode-logs=all')
     expect(enrichment?.message).toContain(LOOPTROOP_OPENCODE_LOG_DIR)
   })
 

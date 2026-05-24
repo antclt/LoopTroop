@@ -317,7 +317,7 @@ describe('FullLogView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'DEBUG' }))
 
-    expect(loadAllLogsMock).toHaveBeenCalledWith({ channel: 'debug' })
+    expect(loadAllLogsMock).toHaveBeenCalledWith({ channel: 'all' })
   })
 
   it('filters logs when a tab is selected', () => {
