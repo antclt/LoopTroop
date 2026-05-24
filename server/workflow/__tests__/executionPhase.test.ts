@@ -88,7 +88,7 @@ function makePendingBead(id: string, priority: number, extra: Partial<Bead> = {}
     targetFiles: [],
     notes: '',
     iteration: 1,
-    createdAt: '2026-01-01T00:00:00.000Z',
+    createdAt: '',
     updatedAt: '2026-01-01T00:00:00.000Z',
     completedAt: '',
     startedAt: '',
@@ -233,8 +233,9 @@ describe('handleCoding', () => {
       await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
 
       const finalBead = readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-1')
-      expect(finalBead?.startedAt).toBe('2026-02-02T03:04:05.000Z')
+      expect(finalBead?.startedAt).toBe('2026-01-01T00:00:00.000Z')
       expect(finalBead?.iteration).toBe(2)
+      expect(finalBead?.updatedAt).toBe('2026-02-02T03:04:05.000Z')
       expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
     } finally {
       vi.useRealTimers()

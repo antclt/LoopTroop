@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Fixed bead `startedAt` to preserve the first iteration's start time across retries instead of overwriting it on each attempt; changed bead `createdAt` to be set at approval time instead of expansion time.
 - Added and hardened `npm run dev --lan` for trusted local-network dashboard sharing with LAN URLs, a mobile QR code, and WSL-aware Windows portproxy diagnostics.
 - Let users collapse the left-panel Errors section even when a blocked ticket auto-opens it.
 - Reload only after sustained dashboard reconnect/loading recovery so transient warning flickers do not refresh the page.
@@ -18,6 +19,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level to the log directory. Use `npm run dev --opencode-logs=all` to additionally print them to the console.
 
 ### Detailed Changes
+
+#### Changed
+- Bead `startedAt` now preserves the first iteration's start timestamp across retries instead of being overwritten on each attempt. Only `updatedAt` reflects the latest attempt start time.
+- Bead `createdAt` is now stamped at approval time (or when the user saves edits during `WAITING_BEADS_APPROVAL`) instead of at expansion time. Beads start with `createdAt: ''` and receive their timestamp when the user approves or edits them.
 
 #### Added
 - Added a LAN sharing mode for `npm run dev --lan`, binding the frontend/docs dev servers to the local network, advertising reachable LAN URLs with a QR code, and keeping backend/OpenCode control-plane ports loopback-only behind the Vite proxy.

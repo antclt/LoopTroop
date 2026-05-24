@@ -341,7 +341,7 @@ describe('ticketRouter beads approval routes', () => {
     expect(payload.details).toContain('Invalid JSON at bead line 2')
   })
 
-  it('preserves beads file content after approval (no mutation)', async () => {
+  it('stamps createdAt on beads during approval', async () => {
     const { app, ticket, paths, beadsContent } = setupBeadsApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
@@ -351,9 +351,14 @@ describe('ticketRouter beads approval routes', () => {
 
     expect(response.status).toBe(200)
 
-    // Beads JSONL file should remain unchanged
+    // Approval should stamp createdAt on beads that don't have one
     const afterContent = readFileSync(paths.beadsPath, 'utf-8')
-    expect(afterContent).toBe(beadsContent)
+    const afterLines = afterContent.split('\n').filter(l => l.trim())
+    for (const line of afterLines) {
+      const parsed = JSON.parse(line) as Record<string, unknown>
+      expect(typeof parsed.createdAt).toBe('string')
+      expect(parsed.createdAt).not.toBe('')
+    }
   })
 
   it('handles empty beads file gracefully', async () => {

@@ -36,10 +36,10 @@ LoopTroop plans features as a bead graph and executes the graph in dependency or
 | `targetFiles` | `string[]` | Expected file touch set |
 | `notes` | `string` | Durable notes string carried across attempts |
 | `iteration` | `number` | Current attempt count for the bead |
-| `createdAt` | `string` | ISO timestamp |
+| `createdAt` | `string` | ISO timestamp — set when beads are approved |
 | `updatedAt` | `string` | ISO timestamp |
 | `completedAt` | `string` | Completion timestamp |
-| `startedAt` | `string` | Start timestamp |
+| `startedAt` | `string` | Start timestamp — set on first iteration, preserved across retries |
 | `beadStartCommit` | `string \| null` | Git snapshot used for reset and retry |
 
 ## Example Bead
@@ -82,7 +82,7 @@ This example matches the current stored shape.
   ],
   "notes": "",
   "iteration": 1,
-  "createdAt": "2026-04-23T09:00:00.000Z",
+  "createdAt": "",
   "updatedAt": "2026-04-23T09:00:00.000Z",
   "completedAt": "",
   "startedAt": "",

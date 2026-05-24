@@ -90,6 +90,7 @@ describe('beadsRouter flow validation', () => {
         status: 'pending',
         priority: 1,
         dependencies: { blocked_by: [], blocks: [] },
+        createdAt: '2026-01-01T00:00:00.000Z',
       },
     ]
     const raw = `${beads.map((item) => JSON.stringify(item)).join('\n')}\n`

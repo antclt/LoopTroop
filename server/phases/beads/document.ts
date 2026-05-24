@@ -1,4 +1,4 @@
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { getTicketPaths } from '../../storage/tickets'
 import { upsertLatestPhaseArtifact } from '../../storage/ticketArtifacts'
 import { assertExpectedContentSha256 } from '../../lib/artifactApproval'
@@ -71,8 +71,26 @@ export function approveBeadsDocument(ticketId: string, expectedContentSha256: st
     }
   }
 
-  upsertBeadsApprovalSnapshot(ticketId, content)
+  // Stamp createdAt on any bead that doesn't have one yet (approval time)
   const approvedAt = nowIso()
+  let needsRewrite = false
+  const updatedLines = lines.map((line) => {
+    const parsed = JSON.parse(line) as Record<string, unknown>
+    if (!parsed.createdAt || (typeof parsed.createdAt === 'string' && parsed.createdAt.trim() === '')) {
+      parsed.createdAt = approvedAt
+      needsRewrite = true
+    }
+    return JSON.stringify(parsed)
+  })
+
+  if (needsRewrite) {
+    const updatedContent = updatedLines.join('\n') + '\n'
+    writeFileSync(beadsPath, updatedContent, 'utf-8')
+  }
+
+  // Re-read content after potential rewrite for the snapshot
+  const snapshotContent = needsRewrite ? readFileSync(beadsPath, 'utf-8') : content
+  upsertBeadsApprovalSnapshot(ticketId, snapshotContent)
   const approvalReceipt = JSON.stringify({
     approved_by: 'user',
     approved_at: approvedAt,

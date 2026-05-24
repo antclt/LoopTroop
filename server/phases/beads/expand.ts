@@ -57,7 +57,7 @@ export function expandBeads(subsetBeads: BeadSubset[], externalRef: string = '')
       targetFiles: [],
       notes: '',
       iteration: 1,
-      createdAt: now,
+      createdAt: '',
       updatedAt: now,
       completedAt: '',
       startedAt: '',

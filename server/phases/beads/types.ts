@@ -29,10 +29,10 @@ export interface Bead {
   targetFiles: string[]                   // Field 13
   notes: string                           // Field 16 — append-only, empty on first attempt
   iteration: number                       // Field 17 — starts at 1 for the first execution attempt
-  createdAt: string                       // Field 18
+  createdAt: string                       // Field 18 — set when beads are approved
   updatedAt: string                       // Field 19
   completedAt: string                     // Field 20 — filled when status=done
-  startedAt: string                       // Field 21 — filled when status=in_progress
+  startedAt: string                       // Field 21 — set on first iteration, preserved across retries
   beadStartCommit: string | null          // Field 22 — git SHA for worktree reset
 }
 

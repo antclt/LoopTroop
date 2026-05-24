@@ -347,7 +347,7 @@ export async function handleCoding(
 
       const now = new Date().toISOString()
       const inProgressBeads = beads.map(bead => bead.id === nextBead.id
-        ? { ...bead, status: 'in_progress' as const, updatedAt: now, startedAt: now }
+        ? { ...bead, status: 'in_progress' as const, updatedAt: now, startedAt: bead.startedAt || now }
         : bead)
       writeTicketBeads(ticketId, inProgressBeads)
       updateTicketProgressFromBeads(ticketId, inProgressBeads)
@@ -402,7 +402,7 @@ export async function handleCoding(
                 ...bead,
                 status: 'in_progress' as const,
                 iteration,
-                startedAt: attemptStartedAt,
+                startedAt: bead.startedAt || attemptStartedAt,
                 updatedAt: attemptStartedAt,
               }
             : bead)
