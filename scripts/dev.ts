@@ -246,6 +246,10 @@ async function printLanSharingDetails() {
     if (wslLanAccess.docsUrls.length > 0) {
       printSummaryBlock('Docs setup', wslLanAccess.docsUrls)
     }
+    const primaryWslFrontendUrl = wslLanAccess.frontendUrls[0]
+    if (primaryWslFrontendUrl) {
+      await printMobileQr(primaryWslFrontendUrl)
+    }
     printSummaryLine('WSL cleanup', 'Remove it later with this Admin PowerShell one-liner:')
     printSummaryBlock('', wslLanAccess.cleanupCommands)
     return
@@ -266,14 +270,18 @@ async function printLanSharingDetails() {
     printSummaryBlock('Docs LAN', docsLanUrls)
   }
 
+  await printMobileQr(primaryFrontendLanUrl)
+}
+
+async function printMobileQr(url: string) {
   try {
-    const qrCode = await QRCode.toString(primaryFrontendLanUrl, {
+    const qrCode = await QRCode.toString(url, {
       type: 'terminal',
       small: true,
       margin: 1,
     })
 
-    console.log(`[dev] Mobile QR     Scan to open ${primaryFrontendLanUrl}`)
+    console.log(`[dev] Mobile QR     Scan to open ${url}`)
     console.log(qrCode.trimEnd())
   } catch (error) {
     console.warn(`[dev] Mobile QR     Failed to render QR code: ${getErrorMessage(error)}`)
