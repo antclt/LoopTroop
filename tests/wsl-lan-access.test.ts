@@ -47,6 +47,8 @@ describe('buildWslLanAccessPlan', () => {
     expect(setupCommand).toContain('$ports=@(5173,5174)')
     expect(setupCommand).toContain('LoopTroop Dev LAN profile check')
     expect(setupCommand).toContain('NetworkCategory -ne \'Private\'')
+    expect(setupCommand).toContain('Set-NetConnectionProfile -InterfaceIndex $($_.InterfaceIndex) -NetworkCategory Private')
+    expect(setupCommand).toContain('Settings > Network & internet > Wi-Fi/Ethernet > your connected network > Network profile type > Private')
     expect(setupCommand).toContain('netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0')
     expect(setupCommand).toContain('netsh interface portproxy add v4tov4 listenaddress=$ip listenport=$port connectaddress=127.0.0.1 connectport=$port')
     expect(setupCommand).toContain('New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ips -LocalPort $ports -Profile Private')

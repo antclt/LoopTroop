@@ -21,7 +21,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 #### Added
 - Added a LAN sharing mode for `npm run dev --lan`, binding the frontend/docs dev servers to the local network, advertising reachable LAN URLs with a QR code, and keeping backend/OpenCode control-plane ports loopback-only behind the Vite proxy.
 - Replaced automatic WSL relay startup with a safe Windows portproxy one-liner for `npm run dev --lan`, avoiding suspicious PowerShell listener processes while explaining why WSL `172.x` addresses are not directly reachable from other LAN devices and keeping the mobile QR code for the after-setup URL.
-- Added WSL LAN setup diagnostics that check whether the matching Windows network profile is Private, run a Windows-side reachability self-test for the forwarded frontend/docs URLs, and explain that router/AP client isolation cannot be reliably detected from the dev machine.
+- Added WSL LAN setup diagnostics that check whether the matching Windows network profile is Private, print the exact `Set-NetConnectionProfile` command when the profile is Public, run a Windows-side reachability self-test for the forwarded frontend/docs URLs, and explain that router/AP client isolation cannot be reliably detected from the dev machine.
 - Added a reload button with tooltip next to the "AI Models" heading in the Configuration panel. Clicking it clears the React Query cache and re-fetches the full model catalog from the OpenCode server, bypassing the 5-minute stale-time window.
 
 #### Fixed
