@@ -215,11 +215,15 @@ function printAuditIssueDetails(report: NonNullable<ReturnType<typeof readDevPre
 }
 
 function formatOpenCodeLogSummary(status: string) {
+  const consoleNote = opencodeLogMode.mode === 'all'
+    ? 'also printing to console'
+    : 'console-quiet; use --opencode-logs=all to print to console too'
+
   if (status === 'ready-to-start') {
-    return 'Full OpenCode DEBUG logs always enabled; managed server will print them to the OpenCode log directory'
+    return `Full OpenCode DEBUG logs written to log directory (${consoleNote})`
   }
 
-  return 'Full OpenCode DEBUG logs enabled; this start is reusing or skipping the managed server'
+  return `Full OpenCode DEBUG logs enabled; reusing or skipping managed server (${consoleNote})`
 }
 
 function formatLanSharingSummary() {

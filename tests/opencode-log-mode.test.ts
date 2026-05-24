@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest'
 import { LOOPTROOP_OPENCODE_LOGS, NPM_CONFIG_OPENCODE_LOGS, resolveOpenCodeLogMode } from '../scripts/opencode-log-mode'
 
 describe('resolveOpenCodeLogMode', () => {
-  it('uses full DEBUG OpenCode serve args by default', () => {
+  it('uses full DEBUG OpenCode serve args by default (no console printing)', () => {
     expect(resolveOpenCodeLogMode({ env: {} })).toEqual({
       mode: 'default',
       requested: false,
-      serveArgs: ['--print-logs', '--log-level', 'DEBUG'],
+      serveArgs: ['--log-level', 'DEBUG'],
     })
   })
 

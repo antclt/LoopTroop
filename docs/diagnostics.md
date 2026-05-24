@@ -53,7 +53,7 @@ OpenCode sometimes streams only `Provider returned error` even though its local 
 
 The enrichment records only compact diagnostic fields such as HTTP status, retryability, provider/model identity, request model, provider error type/title/message, and a short response-body preview. It does not persist prompt bodies, raw request payloads, headers, cookies, authorization values, or URL query strings. For managed local servers, the default OpenCode log directory is used. For external or nonstandard servers, set `LOOPTROOP_OPENCODE_LOG_DIR` to the directory containing OpenCode's log files.
 
-If no matching local log exists, the ticket keeps the generic error and includes a hint to start future local runs with `npm run dev --opencode-logs=all` or configure `LOOPTROOP_OPENCODE_LOG_DIR`.
+If no matching local log exists, the ticket keeps the generic error and includes a hint to configure `LOOPTROOP_OPENCODE_LOG_DIR` for external or nonstandard OpenCode servers.
 
 ## Useful Options
 

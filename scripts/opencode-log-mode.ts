@@ -64,6 +64,6 @@ export function resolveOpenCodeLogMode({
   return {
     mode: 'default',
     requested: false,
-    serveArgs: ['--print-logs', '--log-level', 'DEBUG'],
+    serveArgs: ['--log-level', 'DEBUG'],
   }
 }

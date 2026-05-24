@@ -15,7 +15,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Make Continue recovery use exact OpenCode session lookup and show failed action reasons inline.
 - Allow Continue for blocked `HTTP 402 Payment Required` OpenCode provider errors when the original session is still active.
 - Added a manual reload button next to "AI Models" in Configuration to force-refresh available OpenCode providers and models on demand.
-- The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level.
+- The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level to the log directory. Use `npm run dev --opencode-logs=all` to additionally print them to the console.
 
 ### Detailed Changes
 
@@ -27,7 +27,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - The DEBUG tab now loads `channel=all`, which merges all three LoopTroop log files (`execution-log.jsonl`, `execution-log.debug.jsonl`, `execution-log.ai.jsonl`) plus OpenCode native server log lines filtered by the ticket's session IDs. Every LoopTroop log entry and every OpenCode SDK stream event is visible in a single chronological view. All content is loaded lazily on tab open; no other tabs are affected.
 - Added `channel=all` to the log API (`GET /api/files/:ticketId/logs?channel=all`). The server merges and deduplicates entries from all three LoopTroop log channels server-side, appends OpenCode native log entries (parsed from logfmt and tagged `source: 'debug'`), sorts by timestamp, and returns a single list. Phase/status filters still apply to LoopTroop entries but OpenCode native entries are always included.
 - Logged the previously-silent `part_removed` OpenCode SDK stream event to the debug channel, completing 100% SDK stream event coverage in logs.
-- OpenCode managed server is now always started with `--print-logs --log-level DEBUG`, making its native log files always available at full verbosity. The `--opencode-logs=all` CLI flag remains accepted for backwards compatibility but is now a no-op.
+- OpenCode managed server is now always started with `--log-level DEBUG`, writing native logs at full verbosity to the OpenCode log directory so they are always available in the DEBUG tab. Use `npm run dev --opencode-logs=all` to additionally print them to the terminal. The `--opencode-logs=all` flag adds `--print-logs` to the OpenCode serve args.
 
 #### Fixed
 - Hardened the WSL LAN sharing one-liner so it listens on detected Windows LAN addresses, clears stale wildcard `0.0.0.0` portproxy entries, starts the Windows IP Helper service, and forwards through Windows localhost into WSL instead of depending on a fragile current WSL NAT address.
