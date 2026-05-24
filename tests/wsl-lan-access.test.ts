@@ -41,16 +41,40 @@ describe('buildWslLanAccessPlan', () => {
     ])
     expect(plan.setupCommands).toHaveLength(1)
     expect(plan.setupCommands[0]).toBe(
-      'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5173 connectaddress=172.25.190.136 connectport=5173; ' +
-      'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5174 connectaddress=172.25.190.136 connectport=5174; ' +
+      'Set-Service iphlpsvc -StartupType Automatic; ' +
+      'Start-Service iphlpsvc; ' +
+      "$ips=@('192.168.1.40','10.0.0.4'); " +
+      '$ports=@(5173,5174); ' +
+      'foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$port 2>$null | Out-Null }; ' +
+      'foreach ($ip in $ips) { foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=$ip listenport=$port 2>$null | Out-Null; netsh interface portproxy add v4tov4 listenaddress=$ip listenport=$port connectaddress=127.0.0.1 connectport=$port } }; ' +
       'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue; ' +
-      'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5173,5174 -Profile Private',
+      'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ips -LocalPort $ports -Profile Private',
     )
     expect(plan.cleanupCommands).toEqual([
-      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5173; ' +
-      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5174; ' +
+      "$ips=@('192.168.1.40','10.0.0.4'); " +
+      '$ports=@(5173,5174); ' +
+      'foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$port 2>$null | Out-Null }; ' +
+      'foreach ($ip in $ips) { foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=$ip listenport=$port 2>$null | Out-Null } }; ' +
       'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
     ])
+  })
+
+  it('builds WSL guidance even when only the Windows LAN address is detected', () => {
+    const plan = buildWslLanAccessPlan({
+      hostMode: enabledWildcardHostMode,
+      frontendPort: 5173,
+      docsPort: 5174,
+      isWsl: true,
+      wslAddresses: [],
+      windowsAddresses: ['192.168.1.40'],
+    })
+
+    expect(plan.enabled).toBe(true)
+    expect(plan.wslTargetAddress).toBeUndefined()
+    expect(plan.frontendUrls).toEqual(['http://192.168.1.40:5173'])
+    expect(plan.setupCommands[0]).toContain("$ips=@('192.168.1.40')")
+    expect(plan.setupCommands[0]).toContain('listenaddress=$ip')
+    expect(plan.setupCommands[0]).toContain('connectaddress=127.0.0.1')
   })
 
   it('does not apply outside WSL or when explicit host binding is already configured', () => {

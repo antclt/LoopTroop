@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Added `npm run dev --lan` for trusted local-network dashboard sharing with LAN URLs, a mobile QR code, and a WSL-aware Windows portproxy one-liner.
+- Added and hardened `npm run dev --lan` for trusted local-network dashboard sharing with LAN URLs, a mobile QR code, and a WSL-aware Windows portproxy one-liner.
 - Let users collapse the left-panel Errors section even when a blocked ticket auto-opens it.
 - Reload only after sustained dashboard reconnect/loading recovery so transient warning flickers do not refresh the page.
 - Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
@@ -24,6 +24,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a reload button with tooltip next to the "AI Models" heading in the Configuration panel. Clicking it clears the React Query cache and re-fetches the full model catalog from the OpenCode server, bypassing the 5-minute stale-time window.
 
 #### Fixed
+- Hardened the WSL LAN sharing one-liner so it listens on detected Windows LAN addresses, clears stale wildcard `0.0.0.0` portproxy entries, starts the Windows IP Helper service, and forwards through Windows localhost into WSL instead of depending on a fragile current WSL NAT address.
 - Let the ticket navigator's auto-expanded Errors section be collapsed and reopened by the user while preserving auto-open behavior for newly active or selected errors.
 - Added guarded full-page recovery reloads after sustained backend reconnecting, live-update reconnecting, or post-initial ticket loading banners clear, with a 10-second session cooldown, a five-second minimum visible warning duration, and two 1.5-second backend health confirmation probes to avoid reload loops and transient false reconnect banners.
 - Enriched generic `Provider returned error` OpenCode failures by correlating the session with local OpenCode logs, surfacing sanitized HTTP/provider details while excluding prompts, request bodies, headers, credentials, cookies, and URL query strings.

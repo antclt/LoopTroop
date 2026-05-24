@@ -85,19 +85,33 @@ function disabled(reason: string): WslLanAccessPlan {
   }
 }
 
-function buildPortProxyCommands(wslTargetAddress: string, frontendPort: number, docsPort: number) {
+function quotePowerShellString(value: string) {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+function buildPowerShellArray(values: string[]) {
+  return `@(${values.map(quotePowerShellString).join(',')})`
+}
+
+function buildPortProxyCommands(listenAddresses: string[], frontendPort: number, docsPort: number) {
   const ports = [frontendPort, docsPort]
+  const windowsAddressArray = buildPowerShellArray(listenAddresses)
+  const portArray = `@(${ports.join(',')})`
   const setupCommands = [[
-    ...ports.map((port) => (
-      `netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=${port} connectaddress=${wslTargetAddress} connectport=${port}`
-    )),
+    'Set-Service iphlpsvc -StartupType Automatic',
+    'Start-Service iphlpsvc',
+    `$ips=${windowsAddressArray}`,
+    `$ports=${portArray}`,
+    'foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$port 2>$null | Out-Null }',
+    'foreach ($ip in $ips) { foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=$ip listenport=$port 2>$null | Out-Null; netsh interface portproxy add v4tov4 listenaddress=$ip listenport=$port connectaddress=127.0.0.1 connectport=$port } }',
     'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
-    `New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${ports.join(',')} -Profile Private`,
+    'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ips -LocalPort $ports -Profile Private',
   ].join('; ')]
   const cleanupCommands = [[
-    ...ports.map((port) => (
-      `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=${port}`
-    )),
+    `$ips=${windowsAddressArray}`,
+    `$ports=${portArray}`,
+    'foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$port 2>$null | Out-Null }',
+    'foreach ($ip in $ips) { foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=$ip listenport=$port 2>$null | Out-Null } }',
     'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
   ].join('; ')]
 
@@ -158,10 +172,6 @@ export function buildWslLanAccessPlan({
   }
 
   const wslTargetAddress = wslAddresses.find(isUsableIpv4Address)
-  if (!wslTargetAddress) {
-    return disabled('No WSL IPv4 target address was detected.')
-  }
-
   const usableWindowsAddresses = unique(windowsAddresses.filter(isUsableIpv4Address))
     .filter((address) => address !== wslTargetAddress)
 
@@ -169,7 +179,7 @@ export function buildWslLanAccessPlan({
     return disabled('No Windows LAN address was detected.')
   }
 
-  const { setupCommands, cleanupCommands } = buildPortProxyCommands(wslTargetAddress, frontendPort, docsPort)
+  const { setupCommands, cleanupCommands } = buildPortProxyCommands(usableWindowsAddresses, frontendPort, docsPort)
 
   return {
     enabled: true,

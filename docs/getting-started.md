@@ -104,7 +104,7 @@ npm run dev
 
 For full managed OpenCode DEBUG logs in your terminal, use `npm run dev --opencode-logs=all`. This maps to OpenCode's `--print-logs --log-level DEBUG` flags and may expose sensitive request or provider details in the terminal.
 
-For mobile, tablet, or another computer on the same trusted local network, use `npm run dev --lan`. LoopTroop binds the frontend and docs servers to the network, prints LAN URLs and a QR code, and still keeps backend/OpenCode control-plane ports on loopback so browser traffic goes through the normal Vite proxy. On WSL, LoopTroop explains that WSL uses a private `172.x` network behind Windows and prints one Windows PowerShell Administrator portproxy command instead of starting a suspicious relay process.
+For mobile, tablet, or another computer on the same trusted local network, use `npm run dev --lan`. LoopTroop binds the frontend and docs servers to the network, prints LAN URLs and a QR code, and still keeps backend/OpenCode control-plane ports on loopback so browser traffic goes through the normal Vite proxy. On WSL, LoopTroop explains that WSL uses a private `172.x` network behind Windows and prints one Windows PowerShell Administrator portproxy command that listens on the Windows LAN IP, removes stale wildcard forwarding entries, and forwards through Windows localhost into WSL instead of starting a suspicious relay process.
 
 If a ticket shows only `Provider returned error`, LoopTroop automatically checks local OpenCode logs for the matching session and displays a sanitized exact provider cause when available. Set `LOOPTROOP_OPENCODE_LOG_DIR` when using an external OpenCode server with logs outside the default directory.
 
