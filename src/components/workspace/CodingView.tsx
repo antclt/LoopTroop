@@ -13,7 +13,8 @@ import { CollapsiblePhaseLogSection } from './CollapsiblePhaseLogSection'
 import { PhaseAttemptSelector } from './PhaseAttemptSelector'
 import { BeadDiffViewer } from './BeadDiffViewer'
 import { LogEntryRow } from './LogLine'
-import { filterBeadLogEntries } from './logFormat'
+import { filterBeadLogEntries, formatLogLine } from './logFormat'
+import { LogColorLegend } from './LogColorLegend'
 import { VerificationSummaryPanel } from './VerificationSummaryPanel'
 import type { Ticket } from '@/hooks/useTickets'
 import { useTicketAction } from '@/hooks/useTickets'
@@ -787,6 +788,16 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
     const beadLogs = phaseLogs.filter((entry) => entry.beadId === viewedBead.id)
     return filterBeadLogEntries(beadLogs)
   }, [logCtx, phaseForView, viewedBead])
+
+  const [copied, copyToClipboard] = useCopyToClipboard()
+  const handleCopyLogs = useCallback(() => {
+    if (!beadLogEntries.length) return
+    const textToCopy = beadLogEntries.map((entry) => {
+      const ts = entry.timestamp ? `[${entry.timestamp}] ` : ''
+      return `${ts}${formatLogLine(entry, true).copyText}`
+    }).join('\n')
+    copyToClipboard(textToCopy)
+  }, [beadLogEntries, copyToClipboard])
   
   useEffect(() => {
     if (detailTab === 'model' && autoScrollEnabledRef.current) {
@@ -919,6 +930,38 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                 <Brain className="h-3 w-3" />
                 Log
               </button>
+
+              {detailTab === 'model' && (
+                <div className="ml-auto flex items-center pr-2 gap-2 text-xs text-muted-foreground">
+                  <Tooltip delayDuration={200}>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        className="flex items-center cursor-help px-1 py-0.5 rounded hover:bg-muted transition-colors border-none bg-transparent m-0 focus:outline-none focus:ring-1 focus:ring-ring"
+                      >
+                        <span>{beadLogEntries.length} entries</span>
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="end" className="flex flex-col gap-1.5 p-2 bg-popover text-popover-foreground border border-border font-medium shadow-md">
+                      <LogColorLegend />
+                    </TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="Copy bead logs"
+                        onClick={handleCopyLogs}
+                        disabled={beadLogEntries.length === 0}
+                        className="flex items-center justify-center p-1 rounded hover:bg-muted hover:text-foreground transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {copied ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs text-center text-balance">Copy bead logs</TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
             </div>
 
             {detailTab === 'model' ? (

@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Show line count, interactive color legend, and copy button in the per-bead model log view.
 - Show index-based bead numbers next to bead titles and IDs in the beads details view (blocked by, blocks, and label matching lists) and draft views.
 - Fixed bead `startedAt` to preserve the first iteration's start time across retries instead of overwriting it on each attempt; changed bead `createdAt` to be set at approval time instead of expansion time.
 - Added and hardened `npm run dev --lan` for trusted local-network dashboard sharing with LAN URLs, a mobile QR code, and WSL-aware Windows portproxy diagnostics.
@@ -28,6 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Bead `createdAt` is now stamped at approval time (or when the user saves edits during `WAITING_BEADS_APPROVAL`) instead of at expansion time. Beads start with `createdAt: ''` and receive their timestamp when the user approves or edits them.
 
 #### Added
+- Added entry count, interactive color legend tooltip, and copy-to-clipboard button to the per-bead Log view (in the bead details pane) matching the standard dashboard phase/full log view headers.
 - Added a LAN sharing mode for `npm run dev --lan`, binding the frontend/docs dev servers to the local network, advertising reachable LAN URLs with a QR code, and keeping backend/OpenCode control-plane ports loopback-only behind the Vite proxy.
 - Replaced automatic WSL relay startup with a safe Windows portproxy one-liner for `npm run dev --lan`, avoiding suspicious PowerShell listener processes while explaining why WSL `172.x` addresses are not directly reachable from other LAN devices and keeping the mobile QR code for the after-setup URL.
 - Added WSL LAN setup diagnostics that check whether the matching Windows network profile is Private, print the exact `Set-NetConnectionProfile` command when the profile is Public, run a Windows-side reachability self-test for the forwarded frontend/docs URLs, and explain that router/AP client isolation cannot be reliably detected from the dev machine.

@@ -568,6 +568,13 @@ describe('CodingView', () => {
       },
     ]
 
+    const writeTextMock = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+      writable: true,
+    })
+
     const logContext: LogContextValue = {
       logsByPhase: { CODING: beadLogs },
       activePhase: 'CODING',
@@ -591,6 +598,18 @@ describe('CodingView', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /Logged bead/ }))
     fireEvent.click(screen.getByRole('button', { name: 'Log' }))
+
+    // Should show line count and copy button
+    expect(screen.getByText('3 entries')).toBeTruthy()
+    const copyBtn = screen.getByRole('button', { name: 'Copy bead logs' })
+    expect(copyBtn).toBeInTheDocument()
+
+    // Test copy function
+    fireEvent.click(copyBtn)
+    expect(writeTextMock).toHaveBeenCalled()
+    const copiedText = writeTextMock.mock.calls[0][0]
+    expect(copiedText).toContain('[CMD] $ git status')
+    expect(copiedText).toContain('[PROMPT] openai/gpt-5.4 prompt #1')
 
     expect(screen.getByText((content) => content.includes('git status') && content.includes('ok'))).toBeTruthy()
     expect(screen.getByText((content) => content.includes('prompt #1'))).toBeTruthy()
