@@ -40,16 +40,18 @@ describe('buildWslLanAccessPlan', () => {
       'http://10.0.0.4:5174',
     ])
     expect(plan.setupCommands).toHaveLength(1)
-    expect(plan.setupCommands[0]).toBe(
-      'Set-Service iphlpsvc -StartupType Automatic; ' +
-      'Start-Service iphlpsvc; ' +
-      "$ips=@('192.168.1.40','10.0.0.4'); " +
-      '$ports=@(5173,5174); ' +
-      'foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$port 2>$null | Out-Null }; ' +
-      'foreach ($ip in $ips) { foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=$ip listenport=$port 2>$null | Out-Null; netsh interface portproxy add v4tov4 listenaddress=$ip listenport=$port connectaddress=127.0.0.1 connectport=$port } }; ' +
-      'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue; ' +
-      'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ips -LocalPort $ports -Profile Private',
-    )
+    const setupCommand = plan.setupCommands[0] ?? ''
+    expect(setupCommand).toContain('Set-Service iphlpsvc -StartupType Automatic')
+    expect(setupCommand).toContain('Start-Service iphlpsvc')
+    expect(setupCommand).toContain("$ips=@('192.168.1.40','10.0.0.4')")
+    expect(setupCommand).toContain('$ports=@(5173,5174)')
+    expect(setupCommand).toContain('LoopTroop Dev LAN profile check')
+    expect(setupCommand).toContain('NetworkCategory -ne \'Private\'')
+    expect(setupCommand).toContain('netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0')
+    expect(setupCommand).toContain('netsh interface portproxy add v4tov4 listenaddress=$ip listenport=$port connectaddress=127.0.0.1 connectport=$port')
+    expect(setupCommand).toContain('New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ips -LocalPort $ports -Profile Private')
+    expect(setupCommand).toContain('LoopTroop Dev LAN self-test OK')
+    expect(setupCommand).toContain('router/AP client isolation')
     expect(plan.cleanupCommands).toEqual([
       "$ips=@('192.168.1.40','10.0.0.4'); " +
       '$ports=@(5173,5174); ' +

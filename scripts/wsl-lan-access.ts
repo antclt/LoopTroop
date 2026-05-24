@@ -97,15 +97,20 @@ function buildPortProxyCommands(listenAddresses: string[], frontendPort: number,
   const ports = [frontendPort, docsPort]
   const windowsAddressArray = buildPowerShellArray(listenAddresses)
   const portArray = `@(${ports.join(',')})`
+  const profileCheckCommand = "$profiles=Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $ips -contains $_.IPAddress } | ForEach-Object { Get-NetConnectionProfile -InterfaceIndex $_.InterfaceIndex -ErrorAction SilentlyContinue } | Sort-Object InterfaceIndex -Unique; if (-not $profiles) { Write-Warning 'LoopTroop Dev LAN profile check: no Windows network profile was found for the detected LAN IP.' } else { $nonPrivate=@($profiles | Where-Object { $_.NetworkCategory -ne 'Private' }); if ($nonPrivate.Count -gt 0) { $summary=($nonPrivate | ForEach-Object { \"$($_.Name) interface $($_.InterfaceIndex) is $($_.NetworkCategory)\" }) -join ', '; Write-Warning \"LoopTroop Dev LAN profile check: Windows Firewall rule is Private-only, but $summary. If this is a trusted network, set it to Private in Windows Settings before testing from your phone.\" } else { Write-Host 'LoopTroop Dev LAN profile check: Windows network profile is Private.' } }"
+  const selfTestCommand = 'foreach ($ip in $ips) { foreach ($port in $ports) { $ok=Test-NetConnection -ComputerName $ip -Port $port -InformationLevel Quiet -WarningAction SilentlyContinue; if ($ok) { Write-Host "LoopTroop Dev LAN self-test OK: Windows can reach http://${ip}:${port}" } else { Write-Warning "LoopTroop Dev LAN self-test failed: Windows cannot reach http://${ip}:${port}. Keep npm run dev --lan running until Vite is ready, then rerun this one-liner." } } }'
   const setupCommands = [[
     'Set-Service iphlpsvc -StartupType Automatic',
     'Start-Service iphlpsvc',
     `$ips=${windowsAddressArray}`,
     `$ports=${portArray}`,
+    profileCheckCommand,
     'foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=$port 2>$null | Out-Null }',
     'foreach ($ip in $ips) { foreach ($port in $ports) { netsh interface portproxy delete v4tov4 listenaddress=$ip listenport=$port 2>$null | Out-Null; netsh interface portproxy add v4tov4 listenaddress=$ip listenport=$port connectaddress=127.0.0.1 connectport=$port } }',
     'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
     'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalAddress $ips -LocalPort $ports -Profile Private',
+    selfTestCommand,
+    "Write-Host 'LoopTroop Dev LAN isolation note: Windows cannot reliably detect router/AP client isolation. If the self-test is OK but your phone still cannot open the URL, make sure the phone is on the same non-guest Wi-Fi and disable AP/client isolation in the router.'",
   ].join('; ')]
   const cleanupCommands = [[
     `$ips=${windowsAddressArray}`,

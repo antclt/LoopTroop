@@ -250,7 +250,7 @@ async function printLanSharingDetails() {
     if (primaryWslFrontendUrl) {
       await printMobileQr(primaryWslFrontendUrl)
     }
-    printSummaryLine('WSL tip', 'If the Windows URL still does not load, confirm the Windows network profile is Private and router client isolation is off.')
+    printSummaryLine('WSL tip', 'The PowerShell command checks the Windows profile and self-tests the forwarded URLs; router isolation can only be inferred.')
     printSummaryLine('WSL cleanup', 'Remove it later with this Admin PowerShell one-liner:')
     printSummaryBlock('', wslLanAccess.cleanupCommands)
     return
