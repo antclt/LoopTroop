@@ -607,7 +607,7 @@ describe('CodingView', () => {
     // Test copy function
     fireEvent.click(copyBtn)
     expect(writeTextMock).toHaveBeenCalled()
-    const copiedText = writeTextMock.mock.calls[0][0]
+    const copiedText = writeTextMock.mock.calls[0]?.[0]
     expect(copiedText).toContain('[CMD] $ git status')
     expect(copiedText).toContain('[PROMPT] openai/gpt-5.4 prompt #1')
 

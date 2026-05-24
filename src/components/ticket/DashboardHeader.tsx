@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react'
-import { FolderOpen, Copy, Check as CheckIcon, Pencil, HardDrive, RotateCw, ChevronDown, ChevronRight, File, Folder } from 'lucide-react'
+import { FolderOpen, Copy, Check as CheckIcon, Pencil, HardDrive, RotateCw, ChevronDown, ChevronRight, File, Folder, ExternalLink } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -53,6 +53,29 @@ const NON_CANCELABLE = ['COMPLETED', 'CANCELED']
 
 function CopyablePathRow({ label, path }: { label: string; path: string }) {
   const [copied, handleCopy] = useCopyToClipboard()
+  const [isOpening, setIsOpening] = useState(false)
+
+  const handleOpenPath = async () => {
+    setIsOpening(true)
+    try {
+      const response = await fetch('/api/files/open-path', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ path }),
+      })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        console.error('Failed to open path:', data.error || response.statusText)
+      }
+    } catch (err) {
+      console.error('Error opening path:', err)
+    } finally {
+      setIsOpening(false)
+    }
+  }
+
   return (
     <div className="col-span-2">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -68,8 +91,23 @@ function CopyablePathRow({ label, path }: { label: string; path: string }) {
                 <TooltipTrigger asChild>
                   <button
                         type="button"
+                        onClick={handleOpenPath}
+                        disabled={isOpening}
+                        className="shrink-0 p-0.5 rounded hover:bg-muted disabled:opacity-50 transition-colors"
+                      >
+                        <ExternalLink className={`h-3 w-3 text-muted-foreground ${isOpening ? 'animate-pulse' : ''}`} />
+                      </button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-center text-balance">
+                  {isOpening ? 'Opening folder...' : 'Reveal in File Explorer'}
+                </TooltipContent>
+              </Tooltip>
+        <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                        type="button"
                         onClick={() => handleCopy(path)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-muted"
+                        className="shrink-0 p-0.5 rounded hover:bg-muted transition-colors"
                       >
                         {copied ? <CheckIcon className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3 text-muted-foreground" />}
                       </button>
@@ -80,6 +118,7 @@ function CopyablePathRow({ label, path }: { label: string; path: string }) {
     </div>
   )
 }
+
 
 function CopyableDescription({ description }: { description: string }) {
   const [copied, handleCopy] = useCopyToClipboard()

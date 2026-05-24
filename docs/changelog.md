@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Make the ticket location copy path button permanently visible in the ticket details view, and add an OS-agnostic 'Reveal in File Explorer' button next to it.
 - Show line count, interactive color legend, and copy button in the per-bead model log view.
 - Show index-based bead numbers next to bead titles and IDs in the beads details view (blocked by, blocks, and label matching lists) and draft views.
 - Fixed bead `startedAt` to preserve the first iteration's start time across retries instead of overwriting it on each attempt; changed bead `createdAt` to be set at approval time instead of expansion time.
@@ -23,12 +24,15 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Changed
+- Removed the hover-only opacity constraint from the copy path button in the ticket details view, making it permanently visible.
 - Show the 1-based index (bead number) next to dependency references (Blocked By, Blocks) and label matching lists in the bead details view trigger and hover cards to easily locate them in the main bead list.
 - Display index-based bead numbers next to dependencies (Blocked By, Blocks) in the collapsible Beads draft artifact details view.
 - Bead `startedAt` now preserves the first iteration's start timestamp across retries instead of being overwritten on each attempt. Only `updatedAt` reflects the latest attempt start time.
 - Bead `createdAt` is now stamped at approval time (or when the user saves edits during `WAITING_BEADS_APPROVAL`) instead of at expansion time. Beads start with `createdAt: ''` and receive their timestamp when the user approves or edits them.
 
 #### Added
+- Added a 'Reveal in File Explorer' button next to the copy path button in the ticket details view.
+- Added a POST `/api/files/open-path` API endpoint that safely reveals files/folders in the user's native file explorer, supporting Windows, macOS, Linux, and WSL (including WSL path to Windows host conversion).
 - Added entry count, interactive color legend tooltip, and copy-to-clipboard button to the per-bead Log view (in the bead details pane) matching the standard dashboard phase/full log view headers.
 - Added a LAN sharing mode for `npm run dev --lan`, binding the frontend/docs dev servers to the local network, advertising reachable LAN URLs with a QR code, and keeping backend/OpenCode control-plane ports loopback-only behind the Vite proxy.
 - Replaced automatic WSL relay startup with a safe Windows portproxy one-liner for `npm run dev --lan`, avoiding suspicious PowerShell listener processes while explaining why WSL `172.x` addresses are not directly reachable from other LAN devices and keeping the mobile QR code for the after-setup URL.

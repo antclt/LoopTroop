@@ -2,6 +2,8 @@ import { Hono } from 'hono'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import * as readline from 'node:readline'
+import { execFile } from 'node:child_process'
+import { promisify } from 'node:util'
 import { extractLogFingerprint } from '@shared/logIdentity'
 import { getTicketByRef, getTicketPaths } from '../storage/tickets'
 import { resolvePhaseAttempt } from '../storage/ticketPhaseAttempts'
@@ -318,4 +320,58 @@ filesRouter.put('/files/:ticketId/:file', async (c) => {
   return c.json({ success: true })
 })
 
+const execFileAsync = promisify(execFile)
+
+async function revealFolderInExplorer(targetPath: string) {
+  let resolvedPath = path.resolve(targetPath)
+  try {
+    const stats = await fs.promises.stat(resolvedPath)
+    if (!stats.isDirectory()) {
+      resolvedPath = path.dirname(resolvedPath)
+    }
+  } catch {
+    // If the path doesn't exist, try its parent
+    try {
+      resolvedPath = path.dirname(resolvedPath)
+    } catch {}
+  }
+
+  const isWsl = process.platform === 'linux' && (
+    !!process.env.WSL_DISTRO_NAME ||
+    !!process.env.WSL_INTEROP ||
+    await fs.promises.readFile('/proc/version', 'utf8').then(v => v.toLowerCase().includes('microsoft')).catch(() => false)
+  )
+
+  if (isWsl) {
+    try {
+      const { stdout } = await execFileAsync('wslpath', ['-w', resolvedPath])
+      const winPath = stdout.trim()
+      await execFileAsync('explorer.exe', [winPath])
+    } catch {
+      await execFileAsync('explorer.exe', [resolvedPath])
+    }
+  } else if (process.platform === 'win32') {
+    await execFileAsync('explorer.exe', [resolvedPath])
+  } else if (process.platform === 'darwin') {
+    await execFileAsync('open', [resolvedPath])
+  } else {
+    await execFileAsync('xdg-open', [resolvedPath])
+  }
+}
+
+filesRouter.post('/files/open-path', async (c) => {
+  try {
+    const body = await c.req.json()
+    if (!body || typeof body.path !== 'string' || !body.path.trim()) {
+      return c.json({ error: 'A valid "path" parameter is required.' }, 400)
+    }
+    await revealFolderInExplorer(body.path.trim())
+    return c.json({ success: true })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    return c.json({ error: 'Failed to open path', details: message }, 500)
+  }
+})
+
 export { filesRouter }
+
