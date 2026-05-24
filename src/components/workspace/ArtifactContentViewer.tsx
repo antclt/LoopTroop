@@ -3096,7 +3096,11 @@ export function BeadsDraftView({ content }: { content: string }) {
                         <div className="space-y-1">
                           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Blocked By</div>
                           <div className="flex flex-wrap gap-1">
-                            {blockedBy.map((dependency) => <BeadChip key={dependency} value={dependency} tone="rose" mono />)}
+                            {blockedBy.map((dependency) => {
+                              const depIndex = beadsArray.findIndex((b) => b.id === dependency)
+                              const displayVal = depIndex !== -1 ? `${dependency} (#${depIndex + 1})` : dependency
+                              return <BeadChip key={dependency} value={displayVal} tone="rose" mono />
+                            })}
                           </div>
                         </div>
                       )}
@@ -3104,7 +3108,11 @@ export function BeadsDraftView({ content }: { content: string }) {
                         <div className="space-y-1">
                           <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Blocks</div>
                           <div className="flex flex-wrap gap-1">
-                            {blocks.map((dependency) => <BeadChip key={dependency} value={dependency} tone="rose" mono />)}
+                            {blocks.map((dependency) => {
+                              const depIndex = beadsArray.findIndex((b) => b.id === dependency)
+                              const displayVal = depIndex !== -1 ? `${dependency} (#${depIndex + 1})` : dependency
+                              return <BeadChip key={dependency} value={displayVal} tone="rose" mono />
+                            })}
                           </div>
                         </div>
                       )}

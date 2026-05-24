@@ -418,30 +418,35 @@ function LabelHoverCard({ label, beads, currentBeadId, onSelectBead }: {
           </div>
           {matching.length > 0 ? (
             <div className="space-y-1 max-h-[200px] overflow-y-auto">
-              {matching.map((bead) => (
-                <button
-                  key={bead.id}
-                  type="button"
-                  onClick={() => onSelectBead(bead.id)}
-                  className="w-full text-left rounded-md border border-border/70 bg-background px-2 py-1 transition-colors hover:bg-accent/30"
-                >
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    {statusIcon(bead.status)}
-                    <span className="text-[11px] truncate flex-1">{bead.title}</span>
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        'text-[9px] h-3.5 px-1 shrink-0',
-                        bead.status === 'completed' && 'border-green-600/40 text-green-700 dark:text-green-400',
-                        bead.status === 'in_progress' && 'border-primary/40 text-primary',
-                        bead.status === 'failed' && 'border-red-600/40 text-red-700 dark:text-red-400',
-                      )}
-                    >
-                      {bead.status.replace('_', ' ')}
-                    </Badge>
-                  </div>
-                </button>
-              ))}
+              {matching.map((bead) => {
+                const beadIndex = beads.findIndex((b) => b.id === bead.id)
+                return (
+                  <button
+                    key={bead.id}
+                    type="button"
+                    onClick={() => onSelectBead(bead.id)}
+                    className="w-full text-left rounded-md border border-border/70 bg-background px-2 py-1 transition-colors hover:bg-accent/30"
+                  >
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      {statusIcon(bead.status)}
+                      <span className="text-[11px] truncate flex-1">
+                        {bead.title}{beadIndex !== -1 ? ` (#${beadIndex + 1})` : ''}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-[9px] h-3.5 px-1 shrink-0',
+                          bead.status === 'completed' && 'border-green-600/40 text-green-700 dark:text-green-400',
+                          bead.status === 'in_progress' && 'border-primary/40 text-primary',
+                          bead.status === 'failed' && 'border-red-600/40 text-red-700 dark:text-red-400',
+                        )}
+                      >
+                        {bead.status.replace('_', ' ')}
+                      </Badge>
+                    </div>
+                  </button>
+                )
+              })}
             </div>
           ) : (
             <div className="text-[11px] text-muted-foreground italic">No other beads share this label.</div>
@@ -458,6 +463,7 @@ function BeadRefHoverCard({ beadId, beads, onSelectBead }: {
   onSelectBead: (id: string) => void
 }) {
   const bead = useMemo(() => beads.find((b) => b.id === beadId), [beads, beadId])
+  const beadIndex = useMemo(() => beads.findIndex((b) => b.id === beadId), [beads, beadId])
 
   return (
     <HoverCard openDelay={300} closeDelay={100}>
@@ -465,7 +471,7 @@ function BeadRefHoverCard({ beadId, beads, onSelectBead }: {
         <code
           className="text-[10px] bg-orange-500/10 text-orange-700 dark:text-orange-300 px-1.5 py-0.5 rounded font-mono mr-1 cursor-help"
         >
-          {beadId}
+          {beadId}{beadIndex !== -1 ? ` (#${beadIndex + 1})` : ''}
         </code>
       </HoverCardTrigger>
       <HoverCardContent side="top" className="w-72">
@@ -473,7 +479,9 @@ function BeadRefHoverCard({ beadId, beads, onSelectBead }: {
           <div className="space-y-1.5">
             <div className="flex items-center gap-1.5">
               {statusIcon(bead.status)}
-              <span className="text-xs font-medium truncate flex-1">{bead.title}</span>
+              <span className="text-xs font-medium truncate flex-1">
+                {bead.title}{beadIndex !== -1 ? ` (#${beadIndex + 1})` : ''}
+              </span>
               <Badge
                 variant="outline"
                 className={cn(

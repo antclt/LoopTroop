@@ -131,9 +131,10 @@ describe('CodingView hover cards', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Test Bead/ }))
 
-      const depCode = screen.getByText('bead-2')
+      const depCode = screen.getByText(/bead-2/)
       expect(depCode.tagName).toBe('CODE')
       expect(depCode.className).toContain('cursor-help')
+      expect(depCode.textContent).toBe('bead-2 (#2)')
     })
 
     it('renders blocks dependency IDs as well', () => {
@@ -148,9 +149,10 @@ describe('CodingView hover cards', () => {
 
       fireEvent.click(screen.getByRole('button', { name: /Test Bead/ }))
 
-      const depCode = screen.getByText('bead-3')
+      const depCode = screen.getByText(/bead-3/)
       expect(depCode.tagName).toBe('CODE')
       expect(depCode.className).toContain('cursor-help')
+      expect(depCode.textContent).toBe('bead-3 (#2)')
     })
   })
 
