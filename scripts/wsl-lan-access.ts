@@ -87,19 +87,19 @@ function disabled(reason: string): WslLanAccessPlan {
 
 function buildPortProxyCommands(wslTargetAddress: string, frontendPort: number, docsPort: number) {
   const ports = [frontendPort, docsPort]
-  const setupCommands = [
+  const setupCommands = [[
     ...ports.map((port) => (
       `netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=${port} connectaddress=${wslTargetAddress} connectport=${port}`
     )),
     'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
     `New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalPort ${ports.join(',')} -Profile Private`,
-  ]
-  const cleanupCommands = [
+  ].join('; ')]
+  const cleanupCommands = [[
     ...ports.map((port) => (
       `netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=${port}`
     )),
     'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
-  ]
+  ].join('; ')]
 
   return { setupCommands, cleanupCommands }
 }

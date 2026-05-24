@@ -39,18 +39,16 @@ describe('buildWslLanAccessPlan', () => {
       'http://192.168.1.40:5174',
       'http://10.0.0.4:5174',
     ])
-    expect(plan.setupCommands).toContain(
-      'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5173 connectaddress=172.25.190.136 connectport=5173',
-    )
-    expect(plan.setupCommands).toContain(
-      'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
-    )
-    expect(plan.setupCommands.at(-1)).toBe(
+    expect(plan.setupCommands).toHaveLength(1)
+    expect(plan.setupCommands[0]).toBe(
+      'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5173 connectaddress=172.25.190.136 connectport=5173; ' +
+      'netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5174 connectaddress=172.25.190.136 connectport=5174; ' +
+      'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue; ' +
       'New-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5173,5174 -Profile Private',
     )
     expect(plan.cleanupCommands).toEqual([
-      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5173',
-      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5174',
+      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5173; ' +
+      'netsh interface portproxy delete v4tov4 listenaddress=0.0.0.0 listenport=5174; ' +
       'Remove-NetFirewallRule -DisplayName "LoopTroop Dev LAN" -ErrorAction SilentlyContinue',
     ])
   })

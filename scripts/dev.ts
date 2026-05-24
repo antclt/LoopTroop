@@ -239,14 +239,14 @@ async function printLanSharingDetails() {
 
   printSummaryLine('LAN warning', 'Frontend/docs are visible to devices on your local network; backend/OpenCode stay loopback-only.')
   if (wslLanAccess.enabled) {
-    printSummaryLine('WSL mode', `Detected. WSL ${wslLanAccess.wslTargetAddress ?? '172.x'} is private to Windows; other devices need Windows portproxy.`)
-    printSummaryLine('WSL setup', 'Run these in Windows PowerShell as Administrator, then open the After setup URL:')
+    printSummaryLine('WSL note', `WSL uses a private ${wslLanAccess.wslTargetAddress ?? '172.x'} network behind Windows, so other LAN devices cannot reach it directly.`)
+    printSummaryLine('WSL command', 'Run this one-liner in Windows PowerShell as Administrator:')
     printSummaryBlock('', wslLanAccess.setupCommands)
     printSummaryBlock('After setup', wslLanAccess.frontendUrls)
     if (wslLanAccess.docsUrls.length > 0) {
       printSummaryBlock('Docs setup', wslLanAccess.docsUrls)
     }
-    printSummaryLine('WSL cleanup', 'To remove the portproxy later:')
+    printSummaryLine('WSL cleanup', 'Remove it later with this Admin PowerShell one-liner:')
     printSummaryBlock('', wslLanAccess.cleanupCommands)
     return
   } else if (isWslAccessRelevant) {
