@@ -346,7 +346,7 @@ async function revealFolderInExplorer(targetPath: string) {
     try {
       const { stdout } = await execFileAsync('wslpath', ['-w', resolvedPath])
       const winPath = stdout.trim()
-      await execFileAsync('explorer.exe', [winPath])
+      await execFileAsync('powershell.exe', ['-NoProfile', '-Command', `Invoke-Item '${winPath.replace(/'/g, "''")}'`])
     } catch {
       await execFileAsync('explorer.exe', [resolvedPath])
     }
