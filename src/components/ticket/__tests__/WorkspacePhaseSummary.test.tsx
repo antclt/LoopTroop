@@ -43,6 +43,7 @@ function renderWithLogContext(ui: ReactElement, logsByPhase: Record<string, LogE
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 describe('WorkspacePhaseSummary', () => {
@@ -108,6 +109,64 @@ describe('WorkspacePhaseSummary', () => {
 
     expect(screen.getByRole('button', { name: 'Implementing (Bead 2/4)' })).toBeInTheDocument()
     expect(screen.getByText(/AI coding agent executes beads one at a time/)).toBeInTheDocument()
+  })
+
+  it('shows the bead countdown only while CODING is the live ticket status', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:02:00.000Z'))
+    const runtime = {
+      ...makeTicket().runtime,
+      activeBeadId: 'bead-1',
+      perIterationTimeoutMs: 8 * 60 * 1000,
+      beads: [{
+        id: 'bead-1',
+        title: 'Active bead',
+        status: 'in_progress',
+        iteration: 1,
+        startedAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: null,
+      }],
+    }
+    const liveTicket = makeTicket({
+      status: 'CODING',
+      runtime,
+    })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="CODING" ticket={liveTicket} />,
+    )
+
+    expect(screen.getByText('06:00')).toBeInTheDocument()
+    expect(screen.getByText('08:00')).toBeInTheDocument()
+  })
+
+  it('does not show a live bead countdown when reviewing CODING from a blocked ticket', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-01-01T00:02:00.000Z'))
+    const blockedTicket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'CODING',
+      runtime: {
+        ...makeTicket().runtime,
+        activeBeadId: 'bead-1',
+        perIterationTimeoutMs: 8 * 60 * 1000,
+        beads: [{
+          id: 'bead-1',
+          title: 'Paused bead',
+          status: 'in_progress',
+          iteration: 1,
+          startedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: null,
+        }],
+      },
+    })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="CODING" ticket={blockedTicket} />,
+    )
+
+    expect(screen.queryByText('06:00')).not.toBeInTheDocument()
+    expect(screen.queryByText('08:00')).not.toBeInTheDocument()
   })
 
   it('shows the next live PRD coverage version in the main title when revision work starts', async () => {

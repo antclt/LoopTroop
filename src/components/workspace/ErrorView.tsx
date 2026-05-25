@@ -126,6 +126,9 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const failedBead = ticket.runtime.lastFailedBeadId
     ? ticket.runtime.beads?.find((bead) => bead.id === ticket.runtime.lastFailedBeadId) ?? null
     : null
+  const activeRuntimeBead = ticket.runtime.activeBeadId
+    ? ticket.runtime.beads?.find((bead) => bead.id === ticket.runtime.activeBeadId) ?? null
+    : null
   const failedBeadNotes = typeof failedBead?.notes === 'string'
     ? failedBead.notes
         .split(/\n\s*---\s*\n/g)
@@ -173,6 +176,11 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && Boolean(visibleOccurrence)
     && visibleOccurrence?.resolvedAt === null
   const canContinue = isLiveError && ticket.availableActions.includes('continue')
+  const pausedCodingBead = isLiveError
+    && visibleOccurrence?.blockedFromStatus === 'CODING'
+    && activeRuntimeBead?.status === 'in_progress'
+    ? activeRuntimeBead
+    : null
   const diagnostics = visibleOccurrence?.diagnostics ?? null
   const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
   const primaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
@@ -275,13 +283,29 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                   </div>
                 </div>
               )}
-              {(failedBead || ticket.runtime.activeBeadIteration) && (
+              {(failedBead || pausedCodingBead || ticket.runtime.activeBeadIteration) && (
                 <div className="rounded border border-border bg-background/70 px-2 py-1.5 text-[11px] text-muted-foreground space-y-1">
                   {failedBead && (
                     <div>
                       Failed bead <span className="font-mono text-foreground">{failedBead.id}</span>
                       {ticket.runtime.activeBeadIteration ? ` on iteration ${ticket.runtime.activeBeadIteration}` : ''}
                     </div>
+                  )}
+                  {!failedBead && pausedCodingBead && (
+                    <>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <Badge variant="outline" className="text-[10px]">Paused</Badge>
+                        <span>
+                          Bead <span className="font-mono text-foreground">{pausedCodingBead.id}</span>
+                          {ticket.runtime.activeBeadIteration ? ` on iteration ${ticket.runtime.activeBeadIteration}` : ''}
+                        </span>
+                      </div>
+                      <div>
+                        Timer paused while the ticket is blocked. {canContinue
+                          ? 'Continue resumes the preserved OpenCode session with a fresh bead timer.'
+                          : 'Retry starts a fresh coding recovery attempt.'}
+                      </div>
+                    </>
                   )}
                   <div>
                     Retryable: {ticket.availableActions.includes('retry') ? 'yes' : 'no'}

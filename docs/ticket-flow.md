@@ -393,7 +393,7 @@ Before dispatching `RETRY`, every non-implementation phase archives the active p
 continue please
 ```
 
-For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. OpenCode rate/usage limit retry-budget blocks and provider/session timeouts use this path when the session is preserved. LoopTroop-owned per-iteration timeouts do not use Continue; they consume the bead attempt, capture context-wipe notes when possible, reset the worktree, abandon the timed-out session, and retry in a fresh owned session until `BEAD_RETRY_BUDGET_EXHAUSTED`.
+For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. OpenCode rate/usage limit retry-budget blocks and provider/session timeouts use this path when the session is preserved. While the ticket is blocked, the coding bead is shown as paused rather than as an actively counting-down iteration; after Continue, LoopTroop starts a fresh per-iteration timeout window while sending `continue please` into the same OpenCode session. LoopTroop-owned per-iteration timeouts do not use Continue; they consume the bead attempt, capture context-wipe notes when possible, reset the worktree, abandon the timed-out session, and retry in a fresh owned session until `BEAD_RETRY_BUDGET_EXHAUSTED`.
 
 ## Safe Resume By Interruption Type
 

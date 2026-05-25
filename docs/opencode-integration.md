@@ -109,7 +109,7 @@ The public Continue action records a pending continuation keyed by OpenCode `ses
 continue please
 ```
 
-Continue does not archive the active phase attempt or create a fresh attempt. Retry still keeps the fresh-attempt behavior.
+Continue does not archive the active phase attempt or create a fresh attempt. Retry still keeps the fresh-attempt behavior. For CODING provider interruptions, the blocked UI marks the bead as paused instead of showing a live iteration countdown; when Continue re-enters CODING, LoopTroop sends `continue please` to the preserved session with a fresh per-iteration timeout window.
 
 ## Reconnect Behavior
 

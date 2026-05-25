@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Render bead separators in the per-phase normal log view for CODING phase, matching the existing Full Log bead grouping behavior.
 - Resume execution-setup and final-test attempt counters correctly after an app restart, so logs show the true attempt number and the maxIterations guard is respected across restarts.
 - Fixed bead iteration countdown timer showing 00:00 on iteration 2+ by anchoring to the current iteration's start time (`updatedAt`) instead of the first iteration's start time (`startedAt`).
+- Pause the CODING bead countdown while a ticket is blocked by a continuable provider interruption, and show a paused-session cue instead.
 - Repair bare structured YAML list item keys before parsing so compatible model outputs no longer retry when they emitted an existing id/path as a scalar.
 - Show a live Current Activity strip above log views so model stalls, empty outputs, trusted timeout causes, and near-deadline warnings are visible while waiting.
 - Apply AI Response Timeout consistently to model-output waits across scan, planning, final-test generation, and PR drafting phases while keeping CODING on its bead iteration timeout.
@@ -68,6 +69,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 #### Fixed
 - Fixed execution-setup and final-test attempt counters resetting to 1 after an app restart; both phases now resume from the correct attempt number derived from persisted retry notes, so the `maxIterations` guard is honoured across restarts.
 - Fixed bead iteration countdown timer showing 00:00 on iteration 2+ beads; the timer now anchors to `updatedAt` (updated at the start of each iteration session) instead of `startedAt` (frozen at the first iteration), so the remaining time is accurate across all iterations.
+- Fixed blocked CODING provider interruptions showing a live bead countdown while the ticket was paused; the header now hides the timer outside live CODING, and the error panel shows that the preserved session will resume with a fresh bead timer when Continue is available.
 - Repaired opt-in structured YAML lists when a model emits an existing bead/PRD id or relevant-file path as a bare sequence item followed by object fields, with dynamic parser warnings that name the affected parent list, line, scalar value, and primary key.
 - Hardened the WSL LAN sharing one-liner so it listens on detected Windows LAN addresses, clears stale wildcard `0.0.0.0` portproxy entries, starts the Windows IP Helper service, and forwards through Windows localhost into WSL instead of depending on a fragile current WSL NAT address.
 - Let the ticket navigator's auto-expanded Errors section be collapsed and reopened by the user while preserving auto-open behavior for newly active or selected errors.

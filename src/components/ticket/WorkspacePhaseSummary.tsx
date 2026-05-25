@@ -247,6 +247,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
   const phaseLabel = shouldTrackCoverageVersion && coverageVersion
     ? `${basePhaseLabel} · ${ticket.status === phase ? 'Live ' : ''}v${coverageVersion}`
     : basePhaseLabel
+  const showLiveCodingCountdown = ticket.status === 'CODING' && phase === 'CODING'
 
   if (!phaseMeta) return null
 
@@ -263,7 +264,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
         >
           <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', isExpanded && 'rotate-90')} />
           <span>{phaseLabel}</span>
-          {phase === 'CODING' && runtime.activeBeadId && runtime.perIterationTimeoutMs ? (() => {
+          {showLiveCodingCountdown && runtime.activeBeadId && runtime.perIterationTimeoutMs ? (() => {
             const activeBead = runtime.beads?.find(b => b.id === runtime.activeBeadId)
             if (activeBead?.status === 'in_progress' && activeBead.startedAt) {
               return (

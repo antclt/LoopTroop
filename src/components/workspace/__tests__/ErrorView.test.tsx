@@ -184,6 +184,56 @@ describe('ErrorView', () => {
     )
   })
 
+  it('shows a paused coding bead cue for continuable provider interruptions', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'CODING',
+      availableActions: ['retry', 'continue', 'cancel'],
+      activeErrorOccurrenceId: 'coding-paused',
+      errorOccurrences: [{
+        id: 'coding-paused',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'CODING',
+        errorMessage: 'OpenCode retry grace window expired.',
+        errorCodes: ['OPENCODE_PROVIDER_ERROR'],
+        diagnostics: {
+          kind: 'opencode_provider',
+          source: 'provider',
+          summary: 'usage limit reached',
+          sessionId: 'ses-coding',
+          statusCode: 429,
+          isRetryable: true,
+        },
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+      runtime: {
+        ...makeTicket().runtime,
+        activeBeadId: 'bead-9',
+        activeBeadIteration: 6,
+        beads: [{
+          id: 'bead-9',
+          title: 'Provider-limited bead',
+          status: 'in_progress',
+          iteration: 6,
+          startedAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:01:00.000Z',
+        }],
+      },
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('Paused')).toBeInTheDocument()
+    expect(screen.getByText('bead-9')).toBeInTheDocument()
+    expect(screen.getByText(/Timer paused while the ticket is blocked/)).toHaveTextContent(
+      'Continue resumes the preserved OpenCode session with a fresh bead timer.',
+    )
+    expect(screen.queryByText(/Failed bead/)).not.toBeInTheDocument()
+  })
+
   it('shows action errors inline when Continue is rejected', async () => {
     const mutate = vi.fn((_: unknown, options?: { onError?: (error: Error) => void }) => {
       options?.onError?.(new Error('Continue is not available because the preserved OpenCode session is no longer active'))
