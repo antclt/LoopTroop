@@ -646,4 +646,27 @@ describe('FullLogView', () => {
     expect(copiedText).toContain('[CODING]')
     expect(copiedText).toContain('[SYS] Start')
   })
+
+  it('shows the current activity strip below the toolbar and above the full log body', () => {
+    getAllLogsMock.mockReturnValue([
+      makeLog('prompt-1', '[PROMPT] openai/gpt-5-codex prompt #1\nImplement bead 2.', 'CODING', {
+        source: 'model:openai/gpt-5-codex',
+        audience: 'ai',
+        kind: 'prompt',
+        modelId: 'openai/gpt-5-codex',
+        sessionId: 'ses_full_current',
+        beadId: 'bead-2',
+      }),
+    ])
+
+    renderWithTooltipProvider(<FullLogView ticket={makeTicket()} />)
+
+    const strip = screen.getByRole('status', { name: 'Current activity' })
+    const viewport = screen.getByTestId('log-viewport')
+
+    expect(strip).toHaveTextContent(/Waiting for first model activity/i)
+    expect(strip).toHaveTextContent(/session ses_full_current/i)
+    expect(strip).toHaveTextContent(/bead bead-2/i)
+    expect(Boolean(strip.compareDocumentPosition(viewport) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
 })

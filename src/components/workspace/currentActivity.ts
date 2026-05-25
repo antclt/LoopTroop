@@ -1,0 +1,260 @@
+import type { LogEntry } from '@/context/LogContext'
+
+export type CurrentActivityDiagnostic =
+  | 'provider_retry_timeout'
+  | 'model_no_activity_timeout'
+  | 'empty_model_output'
+  | 'workflow_timeout'
+
+export type CurrentActivityKind =
+  | 'waiting_first_model_activity'
+  | 'provider_retrying'
+  | CurrentActivityDiagnostic
+
+export interface CurrentActivity {
+  kind: CurrentActivityKind
+  label: string
+  diagnostic?: CurrentActivityDiagnostic
+  active: boolean
+  severity: 'info' | 'warning' | 'error'
+  elapsedMs?: number
+  modelId?: string
+  sessionId?: string
+  beadId?: string
+}
+
+interface IndexedEntry {
+  entry: LogEntry
+  index: number
+  timeMs: number
+}
+
+interface DiagnosticCandidate {
+  kind: CurrentActivityDiagnostic
+  indexedEntry: IndexedEntry
+}
+
+const FIRST_ACTIVITY_KINDS = new Set([
+  'reasoning',
+  'text',
+  'model_output',
+  'tool',
+  'step',
+  'question',
+  'todo',
+  'part_summary',
+  'file_edit',
+  'file-edited',
+  'file_edited',
+  'done',
+])
+
+function parseTimeMs(timestamp?: string): number {
+  if (!timestamp) return Number.NaN
+  const timeMs = Date.parse(timestamp)
+  return Number.isFinite(timeMs) ? timeMs : Number.NaN
+}
+
+function compareIndexedEntries(a: IndexedEntry, b: IndexedEntry): number {
+  const aHasTime = Number.isFinite(a.timeMs)
+  const bHasTime = Number.isFinite(b.timeMs)
+  if (aHasTime && bHasTime && a.timeMs !== b.timeMs) return a.timeMs - b.timeMs
+  if (aHasTime !== bHasTime) return aHasTime ? -1 : 1
+  return a.index - b.index
+}
+
+function sortEntries(entries: LogEntry[]): IndexedEntry[] {
+  return entries
+    .map((entry, index) => ({ entry, index, timeMs: parseTimeMs(entry.timestamp) }))
+    .sort(compareIndexedEntries)
+}
+
+function getModelId(entry: LogEntry): string | undefined {
+  if (entry.modelId) return entry.modelId
+  if (entry.source.startsWith('model:')) return entry.source.slice('model:'.length)
+  return undefined
+}
+
+function isPromptEntry(entry: LogEntry): boolean {
+  return entry.kind === 'prompt' || entry.line.includes('[PROMPT]')
+}
+
+function isFirstActivityEntry(entry: LogEntry): boolean {
+  const normalizedLine = entry.line.toLowerCase()
+  if (normalizedLine.includes('first ai activity observed')) return true
+  if (isPromptEntry(entry)) return false
+  if (FIRST_ACTIVITY_KINDS.has(entry.kind)) return true
+  return entry.audience === 'ai'
+    && entry.kind !== 'session'
+    && entry.kind !== 'error'
+    && entry.kind !== 'prompt'
+}
+
+function isProviderRetryEntry(entry: LogEntry): boolean {
+  return /\bsession retry\b/i.test(entry.line) || /\bsession status:\s*retry\b/i.test(entry.line)
+}
+
+function isProviderRetryTimeoutEntry(entry: LogEntry): boolean {
+  return /\bopencode retry (?:budget exhausted|grace window expired)\b/i.test(entry.line)
+}
+
+function isEmptyModelOutputEntry(entry: LogEntry): boolean {
+  return /\bresponseChars=0\b/i.test(entry.line)
+}
+
+function isGenericTimeoutEntry(entry: LogEntry): boolean {
+  if (isProviderRetryTimeoutEntry(entry)) return false
+  return /\b(?:timed out|timeout|deadline exceeded)\b/i.test(entry.line)
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function entryMentionsSession(entry: LogEntry, sessionId: string): boolean {
+  return new RegExp(`\\bsession\\s*[=:]\\s*${escapeRegExp(sessionId)}\\b`).test(entry.line)
+    || entry.line.includes(`(${sessionId})`)
+}
+
+function entryRelatesToPrompt(entry: LogEntry, prompt: LogEntry): boolean {
+  if (!prompt.sessionId) return true
+  if (entry.sessionId) return entry.sessionId === prompt.sessionId
+  if (entryMentionsSession(entry, prompt.sessionId)) return true
+  return entry.audience === 'all' || entry.source === 'system' || entry.source === 'error'
+}
+
+function buildDiagnosticActivity(
+  kind: CurrentActivityDiagnostic,
+  prompt: LogEntry,
+  nowMs: number,
+): CurrentActivity {
+  const elapsedMs = Number.isFinite(parseTimeMs(prompt.timestamp))
+    ? Math.max(0, nowMs - parseTimeMs(prompt.timestamp))
+    : undefined
+
+  switch (kind) {
+    case 'provider_retry_timeout':
+      return {
+        kind,
+        diagnostic: kind,
+        active: false,
+        severity: 'error',
+        label: 'Provider retry timeout',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
+    case 'model_no_activity_timeout':
+      return {
+        kind,
+        diagnostic: kind,
+        active: false,
+        severity: 'error',
+        label: 'Timed out before first model activity',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
+    case 'empty_model_output':
+      return {
+        kind,
+        diagnostic: kind,
+        active: false,
+        severity: 'warning',
+        label: 'Model returned no visible output',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
+    case 'workflow_timeout':
+      return {
+        kind,
+        diagnostic: kind,
+        active: false,
+        severity: 'error',
+        label: 'Workflow timeout',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
+  }
+}
+
+function pickLatestDiagnostic(candidates: DiagnosticCandidate[]): DiagnosticCandidate | null {
+  if (candidates.length === 0) return null
+  return candidates.reduce((latest, candidate) => (
+    compareIndexedEntries(candidate.indexedEntry, latest.indexedEntry) > 0 ? candidate : latest
+  ))
+}
+
+export function formatElapsedDuration(elapsedMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(elapsedMs / 1000))
+  const seconds = totalSeconds % 60
+  const totalMinutes = Math.floor(totalSeconds / 60)
+  if (totalMinutes === 0) return `${seconds}s`
+
+  const minutes = totalMinutes % 60
+  const hours = Math.floor(totalMinutes / 60)
+  if (hours === 0) return `${totalMinutes}m ${seconds}s`
+
+  return `${hours}h ${minutes}m`
+}
+
+export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): CurrentActivity | null {
+  const orderedEntries = sortEntries(entries)
+  const latestPromptIndex = orderedEntries.findLastIndex(({ entry }) => isPromptEntry(entry))
+  if (latestPromptIndex < 0) return null
+
+  const prompt = orderedEntries[latestPromptIndex]!.entry
+  const promptTimeMs = orderedEntries[latestPromptIndex]!.timeMs
+  const entriesAfterPrompt = orderedEntries
+    .slice(latestPromptIndex + 1)
+    .filter(({ entry }) => entryRelatesToPrompt(entry, prompt))
+
+  const firstActivityIndex = entriesAfterPrompt.findIndex(({ entry }) => isFirstActivityEntry(entry))
+  const firstActivityEntry = firstActivityIndex >= 0 ? entriesAfterPrompt[firstActivityIndex]! : null
+  const hasFirstActivity = firstActivityEntry !== null
+  const diagnosticCandidates: DiagnosticCandidate[] = []
+
+  for (const indexedEntry of entriesAfterPrompt) {
+    const { entry } = indexedEntry
+    if (isProviderRetryTimeoutEntry(entry)) {
+      diagnosticCandidates.push({ kind: 'provider_retry_timeout', indexedEntry })
+    } else if (isEmptyModelOutputEntry(entry)) {
+      diagnosticCandidates.push({ kind: 'empty_model_output', indexedEntry })
+    } else if (isGenericTimeoutEntry(entry)) {
+      const activityStartedBeforeTimeout = firstActivityEntry
+        ? compareIndexedEntries(firstActivityEntry, indexedEntry) < 0
+        : false
+      diagnosticCandidates.push({
+        kind: activityStartedBeforeTimeout ? 'workflow_timeout' : 'model_no_activity_timeout',
+        indexedEntry,
+      })
+    }
+  }
+
+  const latestDiagnostic = pickLatestDiagnostic(diagnosticCandidates)
+  if (latestDiagnostic) {
+    return buildDiagnosticActivity(latestDiagnostic.kind, prompt, nowMs)
+  }
+
+  if (hasFirstActivity) return null
+
+  const elapsedMs = Number.isFinite(promptTimeMs) ? Math.max(0, nowMs - promptTimeMs) : undefined
+  const latestRetry = entriesAfterPrompt.findLast(({ entry }) => isProviderRetryEntry(entry))
+
+  return {
+    kind: latestRetry ? 'provider_retrying' : 'waiting_first_model_activity',
+    active: true,
+    severity: latestRetry ? 'warning' : 'info',
+    label: latestRetry ? 'Provider retrying before first model activity' : 'Waiting for first model activity',
+    elapsedMs,
+    modelId: getModelId(prompt),
+    sessionId: prompt.sessionId,
+    beadId: prompt.beadId,
+  }
+}

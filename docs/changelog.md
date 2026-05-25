@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Show a live Current Activity strip above log views so model stalls, empty outputs, and timeout causes are visible while waiting.
 - Make the ticket location copy path button permanently visible in the ticket details view, and add an OS-agnostic 'Reveal in File Explorer' button next to it.
 - Show line count, interactive color legend, and copy button in the per-bead model log view.
 - Show index-based bead numbers next to bead titles and IDs in the beads details view (blocked by, blocks, and label matching lists) and draft views.
@@ -34,6 +35,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Ticket worktree artifacts under `.ticket/**` now stay local: project attach installs `/.ticket/` in `.git/info/exclude`, and bead finalization excludes those files from commit capture while still preserving them across execution resets.
 
 #### Added
+- Added a compact Current Activity strip to phase and full log views, deriving waiting-for-first-model, provider retry timeout, empty-output, and workflow timeout states from existing log events.
 - Added a 'Reveal in File Explorer' button next to the copy path button in the ticket details view.
 - Added a POST `/api/files/open-path` API endpoint that safely reveals files/folders in the user's native file explorer, supporting Windows, macOS, Linux, and WSL (including WSL path to Windows host conversion).
 - Added entry count, interactive color legend tooltip, and copy-to-clipboard button to the per-bead Log view (in the bead details pane) matching the standard dashboard phase/full log view headers.

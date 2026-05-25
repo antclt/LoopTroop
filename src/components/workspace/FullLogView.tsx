@@ -14,6 +14,7 @@ import { LogColorLegend } from './LogColorLegend'
 import { ModelBadge } from '@/components/shared/ModelBadge'
 import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { CurrentActivityStrip } from './CurrentActivityStrip'
 
 type LogTab = 'ALL' | 'SYS' | 'AI' | 'ERROR' | 'DEBUG'
 
@@ -343,6 +344,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
   )
 
   const hasLogs = renderedEntries.length > 0
+  const isTerminalTicket = ticket?.status === 'COMPLETED' || ticket?.status === 'CANCELED'
 
   const beadLabelOptions: StatusLabelOptions | undefined = useMemo(() => {
     if (!ticket) return undefined
@@ -677,6 +679,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
       </div>
 
       {/* Log content */}
+      <CurrentActivityStrip entries={allLogs} enabled={!isTerminalTicket} />
       <div className="relative flex-1 min-h-0 flex flex-col">
         <ScrollArea className="h-full flex-1 min-h-0" viewportRef={viewportRef} type="always">
           <div ref={contentRef} className="font-mono text-xs bg-muted rounded-md p-3 min-h-[100px] w-full max-w-full">

@@ -14,6 +14,7 @@ import type { Ticket } from '@/hooks/useTickets'
 import { filterEntries, formatLogLine, MULTI_MODEL_PHASES, isSystem, isCommand } from './logFormat'
 import { LogEntryRow } from './LogLine'
 import { LogColorLegend } from './LogColorLegend'
+import { CurrentActivityStrip } from './CurrentActivityStrip'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 
 interface PhaseLogPanelProps {
@@ -658,6 +659,7 @@ export function PhaseLogPanel({
                   </Tooltip>
         </div>
       </div>
+      <CurrentActivityStrip entries={phaseLogs} enabled={!shouldLoadArchivedLogs} />
       <div className="relative flex-1 min-h-0 flex flex-col">
         <ScrollArea className="flex-1 min-h-0 h-full" viewportRef={viewportRef}>
           <div ref={contentRef} className="font-mono text-xs bg-muted rounded-md p-3 min-h-[100px] w-full max-w-full">
