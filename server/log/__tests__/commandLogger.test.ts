@@ -74,6 +74,56 @@ describe('commandLogger', () => {
     ])
   })
 
+  it('summarizes git push with informational remote stderr as compact push completed', () => {
+    const logs: Array<{ type: string; content: string }> = []
+    withCommandLogging(
+      'test-ticket', 'TEST-1', 'CODING',
+      () => {
+        logCommand('git', ['-C', '/tmp/worktrees/SYTH-10', 'push', 'origin', 'HEAD:refs/heads/SYTH-10'], {
+          ok: true,
+          stderr: [
+            'remote: ',
+            'remote: Create a pull request for \'SYTH-10\' on GitHub by visiting:',
+            'remote:      https://github.com/org/repo/pull/new/SYTH-10',
+            'remote: ',
+            'To github.com:org/repo.git',
+            ' * [new branch]      HEAD -> SYTH-10',
+          ].join('\n'),
+        })
+      },
+      (_phase, type, content) => { logs.push({ type, content }) },
+    )
+
+    expect(logs).toEqual([
+      {
+        type: 'info',
+        content: '[CMD] $ git -C worktrees/SYTH-10 push origin HEAD:refs/heads/SYTH-10  →  push completed',
+      },
+    ])
+  })
+
+  it('summarizes git push with stdout and stderr as compact push completed', () => {
+    const logs: Array<{ type: string; content: string }> = []
+    withCommandLogging(
+      'test-ticket', 'TEST-1', 'CODING',
+      () => {
+        logCommand('git', ['push', 'origin', 'HEAD:refs/heads/SYTH-10'], {
+          ok: true,
+          stdout: '',
+          stderr: 'To github.com:org/repo.git\n   d9c79cc..2a383e0  HEAD -> SYTH-10',
+        })
+      },
+      (_phase, type, content) => { logs.push({ type, content }) },
+    )
+
+    expect(logs).toEqual([
+      {
+        type: 'info',
+        content: '[CMD] $ git push origin HEAD:refs/heads/SYTH-10  →  push completed',
+      },
+    ])
+  })
+
   it('emits stderr-only output as a structured command section', () => {
     const logs: string[] = []
     withCommandLogging(

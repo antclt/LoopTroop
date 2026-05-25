@@ -178,6 +178,14 @@ export function logCommand(
   const shouldUseStructuredOutput = shouldRenderStructuredCommandOutput(result)
 
   if (result.ok) {
+    const compactOutcome = formatKnownCompactSuccessWithStderr(bin, args, result)
+    if (compactOutcome !== null) {
+      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(compactOutcome, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`
+      type = 'info'
+      emitCommandLog(ctx, type, content)
+      return
+    }
+
     const probeOutcome = shouldUseStructuredOutput
       ? null
       : formatKnownGitProbeSuccess(commandText, result.stdout, result.stderr)
@@ -311,6 +319,25 @@ function shouldIncludeErrorSection(detail: string, stdout: string, stderr: strin
 function isLikelyBenignGitProbeFailure(error: string): boolean {
   const normalized = error.trim()
   return normalized === 'exit code 1' || normalized === 'command returned non-zero'
+}
+
+/**
+ * Returns a compact summary for successful commands where STDERR output is
+ * expected and purely informational (e.g. git push remote progress messages).
+ * Returning a non-null value skips the structured output path entirely.
+ */
+function formatKnownCompactSuccessWithStderr(
+  bin: string,
+  args: string[],
+  result: LoggedCommandResult,
+): string | null {
+  if (!result.ok || result.stdin) return null
+  if (bin !== 'git') return null
+
+  const command = getGitSubcommand(args)
+  if (command?.name === 'push') return 'push completed'
+
+  return null
 }
 
 function formatKnownGitProbeSuccess(commandText: string, stdout?: string, stderr?: string): string | null {
