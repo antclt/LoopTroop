@@ -121,6 +121,7 @@ async function generateExecutionSetupRetryNote(input: {
     parts: [{ type: 'text', content: prompt }],
     signal: input.signal,
     timeoutMs: 60000,
+    timeoutKind: 'execution_setup',
     model: input.model,
     variant: input.variant,
     erroredSessionPolicy: 'discard_errored_session_output',

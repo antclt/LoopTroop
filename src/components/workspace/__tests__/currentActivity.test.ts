@@ -190,4 +190,99 @@ describe('deriveCurrentActivity', () => {
     expect(activity?.kind).toBe('workflow_timeout')
     expect(activity?.diagnostic).toBe('workflow_timeout')
   })
+
+  it('ignores timeout words inside model tool output', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt(),
+      makeLog('tool-output', [
+        '[TOOL] grep completed',
+        'Output:',
+        '<fsWatcherTimeoutS>0</fsWatcherTimeoutS>',
+        '/rest/events [timeout]',
+        'ErrTimeout expectTimeout',
+      ].join('\n'), {
+        timestamp: timestamp(2_000),
+        source: 'model:openai/gpt-5-codex',
+        audience: 'ai',
+        kind: 'tool',
+        modelId: 'openai/gpt-5-codex',
+        sessionId: 'ses_waiting',
+      }),
+    ], BASE_TIME_MS + 86_000)
+
+    expect(activity).toBeNull()
+  })
+
+  it('ignores timeout words inside debug raw messages', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt(),
+      makeLog('debug-raw', 'opencode.raw_message {"content":"/rest/events [timeout] ErrTimeout expectTimeout"}', {
+        timestamp: timestamp(2_000),
+        source: 'debug',
+        audience: 'debug',
+        kind: 'milestone',
+      }),
+    ], BASE_TIME_MS + 86_000)
+
+    expect(activity?.kind).toBe('waiting_first_model_activity')
+    expect(activity?.diagnostic).toBeUndefined()
+  })
+
+  it('does not warn near timeout at 1m 26s into a 20 minute prompt', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({
+        timeoutMs: 1_200_000,
+        deadlineAt: timestamp(1_200_000),
+        timeoutKind: 'council_response',
+      }),
+    ], BASE_TIME_MS + 86_000)
+
+    expect(activity?.kind).toBe('waiting_first_model_activity')
+    expect(activity?.diagnostic).toBeUndefined()
+  })
+
+  it('warns near timeout in the final 2 minutes of a 20 minute prompt', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({
+        timeoutMs: 1_200_000,
+        deadlineAt: timestamp(1_200_000),
+        timeoutKind: 'council_response',
+      }),
+    ], BASE_TIME_MS + 1_080_000)
+
+    expect(activity?.kind).toBe('near_timeout')
+    expect(activity?.label).toBe('Approaching timeout')
+    expect(activity?.diagnostic).toBe('near_timeout')
+    expect(activity?.active).toBe(true)
+  })
+
+  it('uses the 30 second minimum near-timeout window for short prompts', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({
+        timeoutMs: 100_000,
+        deadlineAt: timestamp(100_000),
+        timeoutKind: 'opencode_prompt',
+      }),
+    ], BASE_TIME_MS + 70_000)
+
+    expect(activity?.kind).toBe('near_timeout')
+  })
+
+  it('lets terminal timeout diagnostics override near-timeout warnings', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({
+        timeoutMs: 120_000,
+        deadlineAt: timestamp(120_000),
+        timeoutKind: 'opencode_prompt',
+      }),
+      makeLog('timeout', '[ERROR] OpenCode prompt timed out after 120000ms.', {
+        timestamp: timestamp(120_000),
+        source: 'error',
+        kind: 'error',
+      }),
+    ], BASE_TIME_MS + 121_000)
+
+    expect(activity?.kind).toBe('model_no_activity_timeout')
+    expect(activity?.diagnostic).toBe('model_no_activity_timeout')
+  })
 })

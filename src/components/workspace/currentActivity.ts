@@ -5,6 +5,7 @@ export type CurrentActivityDiagnostic =
   | 'provider_timeout_preserved'
   | 'iteration_timeout'
   | 'model_no_activity_timeout'
+  | 'near_timeout'
   | 'empty_model_output'
   | 'workflow_timeout'
 
@@ -51,6 +52,12 @@ const FIRST_ACTIVITY_KINDS = new Set([
   'done',
 ])
 
+const TRUSTED_DIAGNOSTIC_SOURCES = new Set(['error', 'system', 'opencode', 'workflow'])
+const TRUSTED_DIAGNOSTIC_KINDS = new Set(['error', 'milestone', 'session'])
+const NEAR_TIMEOUT_MIN_MS = 30_000
+const NEAR_TIMEOUT_MAX_MS = 120_000
+const NEAR_TIMEOUT_RATIO = 0.1
+
 function parseTimeMs(timestamp?: string): number {
   if (!timestamp) return Number.NaN
   const timeMs = Date.parse(timestamp)
@@ -96,27 +103,58 @@ function isProviderRetryEntry(entry: LogEntry): boolean {
   return /\bsession retry\b/i.test(entry.line) || /\bsession status:\s*retry\b/i.test(entry.line)
 }
 
+function isTrustedDiagnosticEntry(entry: LogEntry): boolean {
+  return entry.audience !== 'ai'
+    && TRUSTED_DIAGNOSTIC_SOURCES.has(entry.source)
+    && TRUSTED_DIAGNOSTIC_KINDS.has(entry.kind)
+}
+
 function isProviderRetryTimeoutEntry(entry: LogEntry): boolean {
-  return /\bopencode retry (?:budget exhausted|grace window expired)\b/i.test(entry.line)
+  return isTrustedDiagnosticEntry(entry)
+    && /\bopencode retry (?:budget exhausted|grace window expired)\b/i.test(entry.line)
 }
 
 function isProviderTimeoutPreservedEntry(entry: LogEntry): boolean {
-  return /\bopencode\/provider timeout for session \S+;\s*preserving session for continue\b/i.test(entry.line)
+  return isTrustedDiagnosticEntry(entry)
+    && /\bopencode\/provider timeout for session \S+;\s*preserving session for continue\b/i.test(entry.line)
 }
 
 function isEmptyModelOutputEntry(entry: LogEntry): boolean {
-  return /\bresponseChars=0\b/i.test(entry.line)
+  return isTrustedDiagnosticEntry(entry) && /\bresponseChars=0\b/i.test(entry.line)
 }
 
 function isIterationTimeoutEntry(entry: LogEntry): boolean {
-  return /\biteration timeout for bead \S+ attempt \d+;\s*resetting for attempt \d+(?: of \d+)?\b/i.test(entry.line)
+  return isTrustedDiagnosticEntry(entry)
+    && /\biteration timeout for bead \S+ attempt \d+;\s*resetting for attempt \d+(?: of \d+)?\b/i.test(entry.line)
 }
 
-function isGenericTimeoutEntry(entry: LogEntry): boolean {
+function isTrustedPromptTimeoutEntry(entry: LogEntry): boolean {
+  if (!isTrustedDiagnosticEntry(entry)) return false
   if (isProviderRetryTimeoutEntry(entry)) return false
   if (isProviderTimeoutPreservedEntry(entry)) return false
   if (isIterationTimeoutEntry(entry)) return false
-  return /\b(?:timed out|timeout|deadline exceeded)\b/i.test(entry.line)
+  return /\bopencode prompt timed out after \d+ms\b/i.test(entry.line)
+    || /\bworkflow(?: deadline)? timeout(?:\b| after\b)/i.test(entry.line)
+    || /\bdeadline exceeded\b/i.test(entry.line)
+}
+
+function parseDeadlineMs(deadlineAt?: string): number {
+  if (!deadlineAt) return Number.NaN
+  const deadlineMs = Date.parse(deadlineAt)
+  return Number.isFinite(deadlineMs) ? deadlineMs : Number.NaN
+}
+
+function getNearTimeoutWindowMs(timeoutMs: number): number {
+  return Math.min(NEAR_TIMEOUT_MAX_MS, Math.max(NEAR_TIMEOUT_MIN_MS, timeoutMs * NEAR_TIMEOUT_RATIO))
+}
+
+function isNearTimeoutPrompt(prompt: LogEntry, nowMs: number): boolean {
+  if (typeof prompt.timeoutMs !== 'number' || !Number.isFinite(prompt.timeoutMs) || prompt.timeoutMs <= 0) {
+    return false
+  }
+  const deadlineMs = parseDeadlineMs(prompt.deadlineAt)
+  if (!Number.isFinite(deadlineMs)) return false
+  return nowMs >= deadlineMs - getNearTimeoutWindowMs(prompt.timeoutMs)
 }
 
 function escapeRegExp(value: string): string {
@@ -202,6 +240,18 @@ function buildDiagnosticActivity(
         sessionId: prompt.sessionId,
         beadId: prompt.beadId,
       }
+    case 'near_timeout':
+      return {
+        kind,
+        diagnostic: kind,
+        active: true,
+        severity: 'warning',
+        label: 'Approaching timeout',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
     case 'empty_model_output':
       return {
         kind,
@@ -275,7 +325,7 @@ export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): 
       diagnosticCandidates.push({ kind: 'empty_model_output', indexedEntry })
     } else if (isIterationTimeoutEntry(entry)) {
       diagnosticCandidates.push({ kind: 'iteration_timeout', indexedEntry })
-    } else if (isGenericTimeoutEntry(entry)) {
+    } else if (isTrustedPromptTimeoutEntry(entry)) {
       const activityStartedBeforeTimeout = firstActivityEntry
         ? compareIndexedEntries(firstActivityEntry, indexedEntry) < 0
         : false
@@ -289,6 +339,10 @@ export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): 
   const latestDiagnostic = pickLatestDiagnostic(diagnosticCandidates)
   if (latestDiagnostic) {
     return buildDiagnosticActivity(latestDiagnostic.kind, prompt, nowMs)
+  }
+
+  if (isNearTimeoutPrompt(prompt, nowMs)) {
+    return buildDiagnosticActivity('near_timeout', prompt, nowMs)
   }
 
   if (hasFirstActivity) return null

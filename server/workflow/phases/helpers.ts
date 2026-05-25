@@ -484,6 +484,9 @@ export function emitOpenCodePromptLog(
       modelId: memberId || undefined,
       sessionId: event.session.id,
       ...(beadId ? { beadId } : {}),
+      ...(event.timeoutMs !== undefined ? { timeoutMs: event.timeoutMs } : {}),
+      ...(event.deadlineAt ? { deadlineAt: event.deadlineAt } : {}),
+      timeoutKind: event.timeoutKind,
       streaming: false,
     },
   )

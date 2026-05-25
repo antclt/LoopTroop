@@ -46,11 +46,16 @@ export interface OpenCodeRunCallbacks {
   onPromptCompleted?: (event: OpenCodePromptCompletedEvent) => void
 }
 
+export type PromptTimeoutKind = 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
+
 export interface OpenCodePromptDispatchEvent {
   session: Session
   parts: PromptPart[]
   promptText: string
   promptNumber: number
+  timeoutKind: PromptTimeoutKind
+  timeoutMs?: number
+  deadlineAt?: string
   model?: string
   agent?: string
   variant?: string
@@ -80,6 +85,7 @@ export interface OpenCodeRunOptions extends OpenCodeRunCallbacks {
   parts: PromptPart[]
   signal?: AbortSignal
   timeoutMs?: number
+  timeoutKind?: PromptTimeoutKind
   deadlineScope?: DeadlineScope
   model?: string
   agent?: string
@@ -113,6 +119,23 @@ export interface OpenCodeAttemptMeta {
 }
 
 const TIMEOUT_ERROR_MESSAGE = 'Timeout'
+const COUNCIL_RESPONSE_TIMEOUT_PHASES = new Set([
+  'SCANNING_RELEVANT_FILES',
+  'COUNCIL_DELIBERATING',
+  'COUNCIL_VOTING_INTERVIEW',
+  'COMPILING_INTERVIEW',
+  'VERIFYING_INTERVIEW_COVERAGE',
+  'DRAFTING_PRD',
+  'COUNCIL_VOTING_PRD',
+  'REFINING_PRD',
+  'VERIFYING_PRD_COVERAGE',
+  'DRAFTING_BEADS',
+  'COUNCIL_VOTING_BEADS',
+  'REFINING_BEADS',
+  'VERIFYING_BEADS_COVERAGE',
+  'EXPANDING_BEADS',
+  'WAITING_EXECUTION_SETUP_APPROVAL',
+])
 
 interface TimeoutSignalState {
   signal?: AbortSignal
@@ -254,6 +277,24 @@ function getRemainingTimeoutMs(timeoutDeadline: number | undefined): number | un
   return timeoutDeadline === undefined ? undefined : timeoutDeadline - Date.now()
 }
 
+function formatTimeoutDeadline(timeoutDeadline: number | undefined): string | undefined {
+  return timeoutDeadline === undefined || !Number.isFinite(timeoutDeadline)
+    ? undefined
+    : new Date(timeoutDeadline).toISOString()
+}
+
+function resolvePromptTimeoutKind(
+  timeoutKind: PromptTimeoutKind | undefined,
+  deadlineScope: DeadlineScope | undefined,
+  sessionOwnership: OpenCodeSessionOwnership | undefined,
+): PromptTimeoutKind {
+  if (timeoutKind) return timeoutKind
+  if (sessionOwnership?.phase === 'CODING' && deadlineScope === 'workflow') return 'per_iteration'
+  if (sessionOwnership?.phase === 'PREPARING_EXECUTION_ENV') return 'execution_setup'
+  if (sessionOwnership?.phase && COUNCIL_RESPONSE_TIMEOUT_PHASES.has(sessionOwnership.phase)) return 'council_response'
+  return 'opencode_prompt'
+}
+
 function buildDeadlineTimeoutError(
   deadlineScope: DeadlineScope | undefined,
   timeoutMs: number | undefined,
@@ -309,6 +350,7 @@ export async function runOpenCodePrompt({
   parts,
   signal,
   timeoutMs,
+  timeoutKind,
   deadlineScope,
   model,
   agent,
@@ -395,6 +437,7 @@ export async function runOpenCodePrompt({
       parts: promptParts,
       signal,
       timeoutMs,
+      timeoutKind,
       deadlineScope,
       model,
       agent,
@@ -442,6 +485,7 @@ export async function runOpenCodeSessionPrompt({
   parts,
   signal,
   timeoutMs,
+  timeoutKind,
   deadlineScope,
   model,
   agent,
@@ -583,11 +627,16 @@ export async function runOpenCodeSessionPrompt({
   try {
     const promptNumber = (sessionPromptDispatchCounts.get(resolvedSession.id) ?? 0) + 1
     sessionPromptDispatchCounts.set(resolvedSession.id, promptNumber)
+    const dispatchTimeoutKind = resolvePromptTimeoutKind(timeoutKind, deadlineScope, sessionOwnership)
+    const dispatchDeadlineAt = formatTimeoutDeadline(resolvedTimeoutDeadline)
     onPromptDispatched?.({
       session: resolvedSession,
       parts,
       promptText: formatPromptText(parts),
       promptNumber,
+      timeoutKind: dispatchTimeoutKind,
+      ...(timeoutMs !== undefined && timeoutMs > 0 ? { timeoutMs } : {}),
+      ...(dispatchDeadlineAt ? { deadlineAt: dispatchDeadlineAt } : {}),
       ...(model ? { model } : {}),
       ...(agent ? { agent } : {}),
       ...(variant ? { variant } : {}),

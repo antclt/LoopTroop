@@ -1,5 +1,7 @@
 import { extractLogFingerprint, hasMatchingLogFingerprint } from '@shared/logIdentity'
 
+export type PromptTimeoutKind = 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
+
 export interface LogEntry {
   id: string
   entryId: string
@@ -13,6 +15,9 @@ export interface LogEntry {
   modelId?: string
   sessionId?: string
   beadId?: string
+  timeoutMs?: number
+  deadlineAt?: string
+  timeoutKind?: PromptTimeoutKind
   streaming: boolean
   op: 'append' | 'upsert' | 'finalize'
 }
@@ -35,6 +40,9 @@ export interface PlainLogOptions {
   kind?: string
   modelId?: string
   sessionId?: string
+  timeoutMs?: number
+  deadlineAt?: string
+  timeoutKind?: PromptTimeoutKind
   entryId?: string
   fingerprint?: string
   op?: LogEntry['op']
@@ -203,6 +211,18 @@ function deriveOperation(data: Record<string, unknown>): LogEntry['op'] {
   return 'append'
 }
 
+function deriveTimeoutKind(data: Record<string, unknown>): PromptTimeoutKind | undefined {
+  if (
+    data.timeoutKind === 'council_response' ||
+    data.timeoutKind === 'per_iteration' ||
+    data.timeoutKind === 'execution_setup' ||
+    data.timeoutKind === 'opencode_prompt'
+  ) {
+    return data.timeoutKind
+  }
+  return undefined
+}
+
 function formatLine(type: string, kind: string, content: string, fallback: unknown): string {
   if (kind === 'reasoning' && content) {
     return content
@@ -233,6 +253,13 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
   const modelId = deriveModelId(data, source)
   const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined
   const beadId = typeof data.beadId === 'string' ? data.beadId : undefined
+  const timeoutMs = typeof data.timeoutMs === 'number' && Number.isFinite(data.timeoutMs)
+    ? data.timeoutMs
+    : undefined
+  const deadlineAt = typeof data.deadlineAt === 'string' && data.deadlineAt
+    ? data.deadlineAt
+    : undefined
+  const timeoutKind = deriveTimeoutKind(data)
   const op = deriveOperation(data)
   const streaming = typeof data.streaming === 'boolean' ? data.streaming : op !== 'append'
 
@@ -249,6 +276,9 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
     ...(modelId ? { modelId } : {}),
     ...(sessionId ? { sessionId } : {}),
     ...(beadId ? { beadId } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(deadlineAt ? { deadlineAt } : {}),
+    ...(timeoutKind ? { timeoutKind } : {}),
     streaming,
     op,
   }
@@ -263,6 +293,13 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
   const line = String(entry.line ?? '')
   const timestamp = entry.timestamp ? String(entry.timestamp) : undefined
   const fingerprint = extractLogFingerprint(entry as Record<string, unknown>)
+  const timeoutMs = typeof entry.timeoutMs === 'number' && Number.isFinite(entry.timeoutMs)
+    ? entry.timeoutMs
+    : undefined
+  const deadlineAt = typeof entry.deadlineAt === 'string' && entry.deadlineAt
+    ? entry.deadlineAt
+    : undefined
+  const timeoutKind = deriveTimeoutKind(entry as Record<string, unknown>)
   const audience = entry.audience === 'all' || entry.audience === 'ai' || entry.audience === 'debug'
     ? entry.audience
     : source === 'debug'
@@ -287,6 +324,9 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
     ...(entry.modelId ? { modelId: String(entry.modelId) } : {}),
     ...(entry.sessionId ? { sessionId: String(entry.sessionId) } : {}),
     ...(entry.beadId ? { beadId: String(entry.beadId) } : {}),
+    ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    ...(deadlineAt ? { deadlineAt } : {}),
+    ...(timeoutKind ? { timeoutKind } : {}),
     streaming: Boolean(entry.streaming),
     op: entry.op === 'upsert' || entry.op === 'finalize' ? entry.op : 'append',
   }

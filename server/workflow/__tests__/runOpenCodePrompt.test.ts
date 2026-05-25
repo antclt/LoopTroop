@@ -366,6 +366,8 @@ describe('runOpenCodePrompt', () => {
       adapter,
       projectPath: '/tmp/project',
       parts: [{ type: 'text', content: 'PROM1 body' }],
+      timeoutMs: 1_000,
+      timeoutKind: 'council_response',
       model: 'openai/gpt-5-mini',
       onSessionCreated: () => {
         callbackOrder.push('session')
@@ -384,8 +386,11 @@ describe('runOpenCodePrompt', () => {
       session: { id: 'ses-1' },
       promptText: 'PROM1 body',
       promptNumber: 1,
+      timeoutKind: 'council_response',
+      timeoutMs: 1_000,
       model: 'openai/gpt-5-mini',
     })
+    expect((dispatchedEvent as OpenCodePromptDispatchEvent | null)?.deadlineAt).toEqual(expect.any(String))
 
     deferredResponse.resolve('assistant response')
     await expect(runPromise).resolves.toMatchObject({

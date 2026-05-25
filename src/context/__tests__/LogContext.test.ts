@@ -1,7 +1,7 @@
 import { createElement, useEffect } from 'react'
 import { act, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { formatLogLine, LOG_STORAGE_PREFIX, mergeEntry, normalizeStoredEntry, serverLogCache, SERVER_LOG_REFRESH_EVENT, type LogEntry } from '@/context/logUtils'
+import { formatLogLine, LOG_STORAGE_PREFIX, mergeEntry, normalizeLogRecord, normalizeStoredEntry, serverLogCache, SERVER_LOG_REFRESH_EVENT, type LogEntry } from '@/context/logUtils'
 import { LogProvider } from '@/context/LogContext'
 import { useLogs } from '@/context/useLogContext'
 import { createJsonResponse } from '@/test/renderHelpers'
@@ -90,6 +90,32 @@ describe('normalizeStoredEntry', () => {
       audience: 'all',
       kind: 'milestone',
       modelId: 'openai/gpt-5.4',
+    })
+  })
+
+  it('preserves structured prompt timeout metadata from server records and cache', () => {
+    const deadlineAt = '2026-05-25T10:20:00.000Z'
+    const normalized = normalizeLogRecord({
+      type: 'info',
+      phase: 'SCANNING_RELEVANT_FILES',
+      entryId: 'prompt-timeout-metadata',
+      content: '[PROMPT] openai/gpt-5.2 prompt #1',
+      source: 'model:openai/gpt-5.2',
+      audience: 'ai',
+      kind: 'prompt',
+      modelId: 'openai/gpt-5.2',
+      sessionId: 'ses_timeout_metadata',
+      timeoutMs: 1_200_000,
+      deadlineAt,
+      timeoutKind: 'council_response',
+      streaming: false,
+    }, 'SCANNING_RELEVANT_FILES')
+    const restored = normalizeStoredEntry(normalized, 'SCANNING_RELEVANT_FILES')
+
+    expect(restored).toMatchObject({
+      timeoutMs: 1_200_000,
+      deadlineAt,
+      timeoutKind: 'council_response',
     })
   })
 })

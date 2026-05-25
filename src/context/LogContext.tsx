@@ -420,6 +420,9 @@ export function LogProvider({
       ...(options?.op ? { op: options.op } : {}),
       ...(options?.modelId ? { modelId: options.modelId } : {}),
       ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(typeof options?.timeoutMs === 'number' ? { timeoutMs: options.timeoutMs } : {}),
+      ...(options?.deadlineAt ? { deadlineAt: options.deadlineAt } : {}),
+      ...(options?.timeoutKind ? { timeoutKind: options.timeoutKind } : {}),
       ...(typeof options?.streaming === 'boolean' ? { streaming: options.streaming } : {}),
     }
     const entry = normalizeLogRecord(raw, phase)

@@ -141,6 +141,9 @@ describe('appendLogEvent', () => {
         sessionId: 's1',
         source: 'opencode',
         modelId: 'm1',
+        timeoutMs: 1_200_000,
+        deadlineAt: '2026-03-13T12:20:00.000Z',
+        timeoutKind: 'council_response',
         streaming: false,
         audience: 'all',
         kind: 'milestone',
@@ -160,11 +163,17 @@ describe('appendLogEvent', () => {
     expect(written.data?.entryId).toBeUndefined()
     expect(written.data?.sessionId).toBeUndefined()
     expect(written.data?.source).toBeUndefined()
+    expect(written.data?.timeoutMs).toBeUndefined()
+    expect(written.data?.deadlineAt).toBeUndefined()
+    expect(written.data?.timeoutKind).toBeUndefined()
     // Custom fields should be preserved
     expect(written.data?.customField).toBe('keep-this')
     // Structured fields should be at top level
     expect(written.entryId).toBe('e1')
     expect(written.sessionId).toBe('s1')
+    expect(written.timeoutMs).toBe(1_200_000)
+    expect(written.deadlineAt).toBe('2026-03-13T12:20:00.000Z')
+    expect(written.timeoutKind).toBe('council_response')
   })
 
   it('persists normal append events', () => {
