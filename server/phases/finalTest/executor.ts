@@ -98,6 +98,7 @@ export async function executeFinalTestWithRetries(
     timeoutMs: number
     aiResponseTimeoutMs?: number
     structuredRetryCount?: number
+    initialAttempt?: number
   },
   callbacks: {
     executePlan: (input: { attempt: number; generation: FinalTestGenerationResult }) => Promise<FinalTestExecutionReport>
@@ -147,7 +148,7 @@ export async function executeFinalTestWithRetries(
   const generatePlan = deps?.generatePlan ?? generateFinalTests
   const notes: string[] = []
   const attemptHistory: FinalTestAttemptHistoryEntry[] = []
-  let attempt = 0
+  let attempt = (options.initialAttempt ?? 1) - 1
 
   while (options.maxIterations <= 0 || attempt < options.maxIterations) {
     attempt += 1

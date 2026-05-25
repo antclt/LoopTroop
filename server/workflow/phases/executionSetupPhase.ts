@@ -188,6 +188,7 @@ export async function handleExecutionSetup(
           timeoutMs: runtimeSettings.timeoutMs,
           structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
           initialRetryNotes: retryNotes,
+          initialAttempt: retryNotes.length + 1,
         },
         {
           evaluateGeneration: async ({ generation }) => {

@@ -3765,6 +3765,7 @@ export async function handleFinalTest(
       timeoutMs: executionSettings.perIterationTimeoutMs,
       aiResponseTimeoutMs: aiResponseSettings.timeoutMs,
       structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
+      initialAttempt: ticketState.finalTestNotes.length + 1,
     },
     {
       executePlan: async ({ attempt, generation }) => {

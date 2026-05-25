@@ -116,6 +116,7 @@ export async function executeExecutionSetupWithRetries(
     timeoutMs: number
     structuredRetryCount?: number
     initialRetryNotes?: string[]
+    initialAttempt?: number
   },
   callbacks: {
     evaluateGeneration: (input: {
@@ -166,7 +167,7 @@ export async function executeExecutionSetupWithRetries(
   const notes: string[] = [...(options.initialRetryNotes ?? [])]
   const attemptHistory: ExecutionSetupAttemptHistoryEntry[] = []
   const toolingFailureSignatures: string[] = []
-  let attempt = 0
+  let attempt = (options.initialAttempt ?? 1) - 1
 
   while (options.maxIterations <= 0 || attempt < options.maxIterations) {
     attempt += 1
