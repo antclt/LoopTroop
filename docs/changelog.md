@@ -25,6 +25,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a manual reload button next to "AI Models" in Configuration to force-refresh available OpenCode providers and models on demand.
 - Keep future `.ticket/**` metadata local to LoopTroop so ticket artifacts no longer get committed or pushed to target repository branches.
 - The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level to the log directory. Use `npm run dev --opencode-logs=all` to additionally print them to the console.
+- Added a high-priority roadmap item for an AI Gap-Fix Button on coverage warnings during approval statuses, letting the main AI implementer resolve unresolved coverage gaps in-place.
 
 ### Detailed Changes
 
