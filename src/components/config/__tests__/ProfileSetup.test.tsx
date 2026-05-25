@@ -165,7 +165,7 @@ describe('ProfileSetup', () => {
 
     expect(screen.getByRole('link', { name: 'Open documentation for AI Response Timeout' })).toHaveAttribute(
       'href',
-      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#council-response-timeout`,
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#ai-response-timeout`,
     )
     expect(screen.getByRole('link', { name: 'Open documentation for Interview Coverage Passes' })).toHaveAttribute(
       'href',

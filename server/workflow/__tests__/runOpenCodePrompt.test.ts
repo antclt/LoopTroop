@@ -367,7 +367,7 @@ describe('runOpenCodePrompt', () => {
       projectPath: '/tmp/project',
       parts: [{ type: 'text', content: 'PROM1 body' }],
       timeoutMs: 1_000,
-      timeoutKind: 'council_response',
+      timeoutKind: 'ai_response',
       model: 'openai/gpt-5-mini',
       onSessionCreated: () => {
         callbackOrder.push('session')
@@ -386,7 +386,7 @@ describe('runOpenCodePrompt', () => {
       session: { id: 'ses-1' },
       promptText: 'PROM1 body',
       promptNumber: 1,
-      timeoutKind: 'council_response',
+      timeoutKind: 'ai_response',
       timeoutMs: 1_000,
       model: 'openai/gpt-5-mini',
     })
@@ -397,6 +397,36 @@ describe('runOpenCodePrompt', () => {
       response: 'assistant response',
       session: { id: 'ses-1' },
     })
+  })
+
+  it('classifies planning-phase prompt metadata as AI response timeout by default', async () => {
+    resetTestDb()
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'AI response timeout metadata',
+    })
+    patchTicket(ticket.id, { status: 'CREATING_PULL_REQUEST' })
+    const adapter = new TestOpenCodeAdapter(['assistant response'])
+    let dispatchedEvent: OpenCodePromptDispatchEvent | null = null
+
+    await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'PR draft body' }],
+      timeoutMs: 2_000,
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'CREATING_PULL_REQUEST',
+      },
+      onPromptDispatched: (event) => {
+        dispatchedEvent = event
+      },
+    })
+
+    expect(dispatchedEvent).toMatchObject({
+      timeoutKind: 'ai_response',
+      timeoutMs: 2_000,
+    })
+    expect((dispatchedEvent as OpenCodePromptDispatchEvent | null)?.deadlineAt).toEqual(expect.any(String))
   })
 
   it('blocks after 10 continuable OpenCode retry events by default and preserves the session for Continue', async () => {

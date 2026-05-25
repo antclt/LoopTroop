@@ -4,7 +4,7 @@ export type LogSource = 'system' | 'opencode' | 'error' | 'debug' | `model:${str
 type LogAudience = 'all' | 'ai' | 'debug'
 type LogEntryOperation = 'append' | 'upsert' | 'finalize'
 export type LogKind = 'milestone' | 'reasoning' | 'text' | 'tool' | 'step' | 'session' | 'prompt' | 'error' | 'test'
-export type PromptTimeoutKind = 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
+export type PromptTimeoutKind = 'ai_response' | 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
 
 export interface LogEvent {
   timestamp: string

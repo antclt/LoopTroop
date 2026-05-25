@@ -122,7 +122,7 @@ const WORKFLOW_PHASE_DETAILS = {
     overview: 'LoopTroop performs a focused codebase scan before any council work starts, so later phases can reference the actual source files instead of guessing about your codebase structure. This is a single-model phase using the locked main implementer — not a multi-council step. The scan output becomes a reusable context artifact that every subsequent phase (interview, PRD, beads) can draw from.',
     steps: [
       'Prompt Assembly: LoopTroop builds a minimal prompt from the ticket title and description (the Ticket Details context). The prompt instructs the model to identify source files that are likely relevant to implementing this ticket — including files that would need modification, files that provide important interfaces or types, and files that contain related logic.',
-      'Model Execution: The locked main implementer model processes the prompt and returns a structured response listing relevant files with their paths, content excerpts, relevance ratings (e.g., high/medium/low), and natural-language rationales explaining why each file matters to this ticket.',
+      'Model Execution: The locked main implementer model processes the prompt under the configured AI Response Timeout and returns a structured response listing relevant files with their paths, content excerpts, relevance ratings (e.g., high/medium/low), and natural-language rationales explaining why each file matters to this ticket.',
       'Output Validation: LoopTroop validates the structured output against the expected schema (correct field types, non-empty file paths, valid relevance levels). Provider, session, and OpenCode failures are correlated with empty or discarded validation failures so transient infrastructure errors are not mistaken for ordinary malformed output. If validation fails, LoopTroop may use the ticket\'s configured Structured Output Retries count, either with a continued session repair prompt or by starting a fresh session, and records rejected/accepted raw attempts on the scan artifact.',
       'Artifact Persistence: On success, LoopTroop writes the canonical `relevant-files.yaml` artifact into the ticket workspace directory. This YAML file becomes the reusable file-context artifact that all downstream phases can reference without needing to re-scan the codebase.',
       'Summarized Scan Artifact: A companion summarized scan artifact is also stored for UI review, giving you a quick overview of what files were identified and why.',
@@ -706,7 +706,7 @@ const WORKFLOW_PHASE_DETAILS = {
   WAITING_EXECUTION_SETUP_APPROVAL: {
     overview: 'LoopTroop audits the current workspace, drafts only the temporary setup that is still missing, and pauses for your review before any execution setup commands run. This gate keeps environment preparation separate from the beads blueprint: beads approval decides what to build, while setup-plan approval decides whether anything must be prepared and, if so, how LoopTroop may prepare the worktree for coding. The review artifact now includes an explicit readiness assessment, so it can cleanly say "already ready, no actions required" without forcing placeholder setup steps.',
     steps: [
-      'Automatic Readiness Audit On Entry: When this state is entered, LoopTroop asks the locked main implementer to inspect the approved ticket details, relevant files, PRD, beads, the current worktree, and any prior reusable setup profile, then decide whether temporary setup is actually needed. The draft is created automatically if no current setup-plan artifact exists.',
+      'Automatic Readiness Audit On Entry: When this state is entered, LoopTroop asks the locked main implementer to inspect the approved ticket details, relevant files, PRD, beads, the current worktree, and any prior reusable setup profile under the configured AI Response Timeout, then decide whether temporary setup is actually needed. The draft is created automatically if no current setup-plan artifact exists.',
       'Structured Setup Plan: The draft plan captures an explicit readiness assessment (`ready`, `partial`, or `missing`), whether actions are required, the evidence gathered, unresolved gaps, any ordered setup steps that remain necessary, the allowed temp roots, discovered project-wide command families, and the default quality-gate policy later coding beads should follow. Manifests alone do not prove readiness: missing command launchers or toolchains for required checks are setup gaps that must be planned or surfaced before coding. Structured retries are captured as Raw attempt variants on the generation report.',
       'No-Action Cases Are First-Class: If the audit finds that the environment already has everything needed, the plan stays reviewable but contains no setup steps. You can still approve it as-is or edit it to add commands if you want LoopTroop to do additional temporary preparation.',
       'User Review And Editing: The approval UI lets you review the readiness assessment and setup steps in structured form, edit commands or descriptions, add or remove steps, and fall back to raw YAML/JSON editing when you need full control over the current artifact. Manual saves record user-edit receipts with old/new content hashes; archived versions remain read-only.',
@@ -730,7 +730,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Read APIs expose `contentSha256`; write APIs reject explicit archived phase attempts with 409 so previous setup-plan versions stay immutable.',
       'If setup-plan generation fails, rejected `modelOutput` is diagnostic-only: the structured details show failure state and errors, while full malformed output is available from Raw diagnostics.',
       'The approved setup plan is separate from the final execution setup profile. The profile is produced only after the next phase verifies readiness and runs any approved temporary setup inside LoopTroop-owned runtime paths, preferably under `.ticket/runtime/execution-setup/**` for execution-only toolchains and caches.',
-      'Setup-plan generation owns its OpenCode session only while producing the draft: session creation uses the shared 1s/3s/7s OpenCode retry wrapper, ready reports complete the session, and invalid or failed reports abandon it so retry starts from clean durable context.',
+      'Setup-plan generation owns its OpenCode session only while producing the draft: AI Response Timeout bounds the draft/regenerate prompt, session creation uses the shared 1s/3s/7s OpenCode retry wrapper, ready reports complete the session, and invalid or failed reports abandon it so retry starts from clean durable context.',
     ],
   },
   PREPARING_EXECUTION_ENV: {
@@ -806,8 +806,8 @@ const WORKFLOW_PHASE_DETAILS = {
     overview: 'After all beads finish successfully, LoopTroop runs a ticket-level final test to verify the complete implementation as a whole — not just individual beads in isolation. The main implementer generates a comprehensive test plan based on focused implementation context (ticket details, PRD, beads, and any final-test retry notes), and then the generated test commands are executed on the current ticket branch. This catches integration issues that individual bead tests might miss.',
     steps: [
       'Context Assembly: LoopTroop loads ticket details, the approved PRD, the beads plan, and any final-test retry notes. The interview and Full Answers artifacts are intentionally not fed because the PRD and beads already carry the approved implementation intent.',
-      'Test Plan Generation: The locked main implementer analyzes the full context and generates a structured final-test plan. This plan includes test commands to execute, expected outcomes, and what each test is verifying. Tests may include unit tests, integration tests, build verification, and acceptance criteria validation. Malformed final-test plan responses use the ticket\'s configured Structured Output Retries count and are preserved as Raw attempt variants.',
-      'Test Execution: LoopTroop executes the generated test commands in the ticket worktree under the configured timeout budget. Tests run on the actual branch state produced by the coding phase.',
+      'Test Plan Generation: The locked main implementer analyzes the full context and generates a structured final-test plan under the configured AI Response Timeout. This plan includes test commands to execute, expected outcomes, and what each test is verifying. Tests may include unit tests, integration tests, build verification, and acceptance criteria validation. Malformed final-test plan responses use the ticket\'s configured Structured Output Retries count and are preserved as Raw attempt variants.',
+      'Test Execution: LoopTroop executes the generated test commands in the ticket worktree under the execution/final-test command timeout budget. Tests run on the actual branch state produced by the coding phase.',
       'Retry Reset: Between failed final-test attempts, LoopTroop resets project files back to the final-test start commit while preserving LoopTroop-owned ticket artifacts under `.ticket`.',
       'Result Recording: A final test report artifact is written whether tests pass or fail. The report includes the generated test plan, actual command output, pass/fail status for each test, and any error messages or stack traces from failures.',
       'Phase Logging: The normal phase log captures the test lifecycle — plan generation, command execution, output streams, and final results — for review and diagnosis. LoopTroop-owned reset and git inspection commands are logged as completed-command summaries rather than recurring progress rows.',
@@ -824,7 +824,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Context available: Ticket Details + PRD + Beads Plan + Final Test Retry Notes.',
       'This phase tests the complete implementation holistically — it catches integration issues between beads that individual bead-level tests might miss.',
-      'The test budget (timeout) prevents infinite-running tests from blocking the workflow.',
+      'AI Response Timeout bounds final-test model prompts; command execution remains governed by the execution/final-test command timeout so long-running shell commands are handled separately.',
       'Why generate tests dynamically? The main implementer can create tests tailored to what was actually implemented, rather than relying on pre-written tests that might not exist for new features.',
     ],
   },
@@ -857,7 +857,7 @@ const WORKFLOW_PHASE_DETAILS = {
   CREATING_PULL_REQUEST: {
     overview: 'LoopTroop pushes the final candidate SHA to the remote ticket branch and creates or updates a draft pull request on GitHub. This is an automatic GitHub-sync phase: it packages the final diff, the ticket intent, and the validation results into a reviewer-facing draft PR without merging anything yet.',
     steps: [
-      'PR Drafting: Before any git or GitHub side effects, the locked main implementer generates a draft PR title and body in a fresh session using only ticket details and PRD as context, with integration report, final test report, diff stat, changed-file status, and diff patch appended as explicit prompt sections. The interview and beads artifacts are not fed to PR drafting.',
+      'PR Drafting: Before any git or GitHub side effects, the locked main implementer generates a draft PR title and body in a fresh session under the configured AI Response Timeout using only ticket details and PRD as context, with integration report, final test report, diff stat, changed-file status, and diff patch appended as explicit prompt sections. The interview and beads artifacts are not fed to PR drafting.',
       'PR Draft Validation: The draft title/body response is parsed as structured output before branch push or PR create/update. If parsing fails, the ticket\'s configured Structured Output Retries count applies; validation errors may use a continued session prompt, while empty/provider/session failures use a fresh session. If parsing still fails, LoopTroop records diagnostics/raw attempts and falls back to the deterministic title/body instead of blocking the ticket.',
       'Remote Candidate Push: LoopTroop force-pushes the final candidate SHA to the remote ticket branch using a lease, replacing the bead-level backup branch state with the single reviewable candidate commit. Internal push logging records the final result without progress output.',
       'PR Upsert: LoopTroop creates a new draft PR when none exists, or updates the existing PR title/body and metadata when one already exists for the ticket branch.',
@@ -875,7 +875,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'Context available: Ticket Details + PRD, plus explicit integration report, final test report, diff stat, diff name/status, and diff patch sections.',
-      'PR drafting starts in a fresh session. If a matching active CREATING_PULL_REQUEST session exists, LoopTroop aborts and abandons it before creating the first draft session; the draft session stays active only across structured parse retries and is completed before remote side effects begin.',
+      'PR drafting starts in a fresh session. If a matching active CREATING_PULL_REQUEST session exists, LoopTroop aborts and abandons it before creating the first draft session; AI Response Timeout bounds both the initial draft and structured retry prompts, and the draft session is completed before remote side effects begin.',
       'Structured PR draft retries happen before the remote branch push and before PR creation/update. PR draft parse exhaustion records diagnostics and uses fallback text; git/GitHub failures still route to Blocked Error without auto retry.',
       'This is the GitHub-native handoff point between execution and review.',
       'The PR is draft-first by design so later automated review or human review can happen before merge.',
@@ -1097,7 +1097,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'SCANNING_RELEVANT_FILES',
     label: 'Scanning Relevant Files',
-    description: 'The locked main implementer scans the codebase and extracts relevant file paths, excerpts, and rationales. Configured structured scan retries are preserved in Raw attempts, while retry warnings remain on the Files tab and the shared context artifact contains only accepted normalized files.',
+    description: 'The locked main implementer scans the codebase under AI Response Timeout and extracts relevant file paths, excerpts, and rationales. Configured structured scan retries are preserved in Raw attempts, while retry warnings remain on the Files tab and the shared context artifact contains only accepted normalized files.',
     details: WORKFLOW_PHASE_DETAILS.SCANNING_RELEVANT_FILES,
     kanbanPhase: 'in_progress',
     groupId: 'discovery',
@@ -1332,7 +1332,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_EXECUTION_SETUP_APPROVAL',
     label: 'Approving Workspace Setup',
-    description: 'Review the readiness audit and approve any temporary workspace preparation with content-hash protection. Manual setup-plan edits write user-edit receipts, and archived versions are read-only.',
+    description: 'Review the AI Response Timeout-bound readiness audit and approve any temporary workspace preparation with content-hash protection. Manual setup-plan edits write user-edit receipts, and archived versions are read-only.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_EXECUTION_SETUP_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'pre_implementation',
@@ -1370,7 +1370,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'RUNNING_FINAL_TEST',
     label: 'Testing Implementation',
-    description: 'The main implementer generates a comprehensive test plan from ticket details, PRD, beads, and retry notes, preserves final-test generation retries in Raw attempts, then runs the accepted commands against the ticket branch.',
+    description: 'The main implementer generates a comprehensive test plan under AI Response Timeout, preserves final-test generation retries in Raw attempts, then runs the accepted commands against the ticket branch under the execution command timeout.',
     details: WORKFLOW_PHASE_DETAILS.RUNNING_FINAL_TEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1394,7 +1394,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CREATING_PULL_REQUEST',
     label: 'Creating Pull Request',
-    description: 'Drafting and validating PR title/body before any remote side effects, then pushing the final candidate branch and creating or updating the draft PR without retrying git/GitHub operations.',
+    description: 'Drafting and validating PR title/body under AI Response Timeout before any remote side effects, then pushing the final candidate branch and creating or updating the draft PR without retrying git/GitHub operations.',
     details: WORKFLOW_PHASE_DETAILS.CREATING_PULL_REQUEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',

@@ -202,6 +202,7 @@ export async function startInterviewSession(
       parts: [{ type: 'text', content: fullPrompt }] as PromptPart[],
       signal,
       timeoutMs,
+      timeoutKind: 'ai_response',
       model: winnerId,
       toolPolicy: PROM4.toolPolicy,
       ...(ticketId
@@ -258,6 +259,7 @@ export async function startInterviewSession(
         parts: [{ type: 'text', content: fullPrompt }] as PromptPart[],
         signal,
         timeoutMs,
+        timeoutKind: 'ai_response',
         model: winnerId,
         toolPolicy: PROM4.toolPolicy,
         ...(ticketId
@@ -336,6 +338,7 @@ export async function submitBatchToSession(
       parts: [{ type: 'text', content: message }] as PromptPart[],
       signal,
       timeoutMs,
+      timeoutKind: 'ai_response',
       model,
       toolPolicy: PROM4.toolPolicy,
       onStreamEvent: (event) => {
@@ -380,6 +383,7 @@ export async function submitBatchToSession(
             parts: buildInterviewResumePrompt(restartOptions.ticketState, restartOptions.snapshot),
             signal,
             timeoutMs,
+            timeoutKind: 'ai_response',
             model,
             toolPolicy: PROM4.toolPolicy,
             ...(ticketId
@@ -517,6 +521,7 @@ async function parseBatchResponseWithRetry(input: {
         parts: retryParts,
         signal: input.signal,
         timeoutMs: input.timeoutMs ?? COUNCIL_RESPONSE_TIMEOUT_MS,
+        timeoutKind: 'ai_response',
         model: input.model,
         toolPolicy: PROM4.toolPolicy,
         onStreamEvent: (event) => {

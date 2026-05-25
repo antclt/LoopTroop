@@ -46,7 +46,7 @@ export interface OpenCodeRunCallbacks {
   onPromptCompleted?: (event: OpenCodePromptCompletedEvent) => void
 }
 
-export type PromptTimeoutKind = 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
+export type PromptTimeoutKind = 'ai_response' | 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
 
 export interface OpenCodePromptDispatchEvent {
   session: Session
@@ -119,11 +119,12 @@ export interface OpenCodeAttemptMeta {
 }
 
 const TIMEOUT_ERROR_MESSAGE = 'Timeout'
-const COUNCIL_RESPONSE_TIMEOUT_PHASES = new Set([
+const AI_RESPONSE_TIMEOUT_PHASES = new Set([
   'SCANNING_RELEVANT_FILES',
   'COUNCIL_DELIBERATING',
   'COUNCIL_VOTING_INTERVIEW',
   'COMPILING_INTERVIEW',
+  'WAITING_INTERVIEW_ANSWERS',
   'VERIFYING_INTERVIEW_COVERAGE',
   'DRAFTING_PRD',
   'COUNCIL_VOTING_PRD',
@@ -135,6 +136,8 @@ const COUNCIL_RESPONSE_TIMEOUT_PHASES = new Set([
   'VERIFYING_BEADS_COVERAGE',
   'EXPANDING_BEADS',
   'WAITING_EXECUTION_SETUP_APPROVAL',
+  'RUNNING_FINAL_TEST',
+  'CREATING_PULL_REQUEST',
 ])
 
 interface TimeoutSignalState {
@@ -291,7 +294,7 @@ function resolvePromptTimeoutKind(
   if (timeoutKind) return timeoutKind
   if (sessionOwnership?.phase === 'CODING' && deadlineScope === 'workflow') return 'per_iteration'
   if (sessionOwnership?.phase === 'PREPARING_EXECUTION_ENV') return 'execution_setup'
-  if (sessionOwnership?.phase && COUNCIL_RESPONSE_TIMEOUT_PHASES.has(sessionOwnership.phase)) return 'council_response'
+  if (sessionOwnership?.phase && AI_RESPONSE_TIMEOUT_PHASES.has(sessionOwnership.phase)) return 'ai_response'
   return 'opencode_prompt'
 }
 

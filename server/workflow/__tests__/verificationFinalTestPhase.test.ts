@@ -73,6 +73,7 @@ describe('handleFinalTest', () => {
     updateProject(project.id, {
       maxIterations: 2,
       perIterationTimeout: 12345,
+      councilResponseTimeout: 67890,
     })
 
     writeFileSync(`${paths.ticketDir}/interview.yaml`, makeInterviewYaml())
@@ -91,10 +92,11 @@ describe('handleFinalTest', () => {
       contextParts: () => Promise<Array<{ source?: string; content: string }>>,
       _projectPath: string,
       _signal: AbortSignal,
-      options: { timeoutMs: number; maxIterations: number; model: string },
+      options: { timeoutMs: number; aiResponseTimeoutMs?: number; maxIterations: number; model: string },
     ) => {
       capturedContextParts = await contextParts()
       expect(options.timeoutMs).toBe(12345)
+      expect(options.aiResponseTimeoutMs).toBe(67890)
       expect(options.maxIterations).toBe(2)
       expect(options.model).toBe(TEST.implementer)
 

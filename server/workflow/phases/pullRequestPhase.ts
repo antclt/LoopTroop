@@ -35,6 +35,7 @@ import {
   emitOpenCodeStreamEvent,
   emitPhaseLog,
   loadTicketDirContext,
+  resolveAiResponseRuntimeSettings,
   resolveStructuredRetryRuntimeSettings,
 } from './helpers'
 import { adapter } from './state'
@@ -404,6 +405,7 @@ export async function handleCreatePullRequest(
 
       const streamState = createOpenCodeStreamState()
       const draftSessionManager = new SessionManager(adapter)
+      const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
       let sessionId = ''
       let draftSessionOpen = false
 
@@ -412,6 +414,8 @@ export async function handleCreatePullRequest(
         projectPath: worktreePath,
         parts: [{ type: 'text', content: prompt }],
         signal,
+        timeoutMs: aiResponseSettings.timeoutMs,
+        timeoutKind: 'ai_response',
         model: mainImplementer,
         variant: context.lockedMainImplementerVariant ?? undefined,
         toolPolicy: 'disabled',
@@ -571,6 +575,8 @@ export async function handleCreatePullRequest(
                   schemaReminder: PULL_REQUEST_DRAFT_SCHEMA_REMINDER,
                 }),
                 signal,
+                timeoutMs: aiResponseSettings.timeoutMs,
+                timeoutKind: 'ai_response',
                 model: mainImplementer,
                 variant: context.lockedMainImplementerVariant ?? undefined,
                 toolPolicy: 'disabled',

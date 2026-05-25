@@ -3,6 +3,7 @@ import { MockOpenCodeAdapter } from '../../../opencode/adapter'
 import { listOpenCodeSessionsForTicket } from '../../../opencode/sessionManager'
 import { patchTicket } from '../../../storage/tickets'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../../test/integration'
+import type { OpenCodePromptDispatchEvent } from '../../../workflow/runOpenCodePrompt'
 import { generateExecutionSetupPlan } from '../generator'
 
 class SequencedMockOpenCodeAdapter extends MockOpenCodeAdapter {
@@ -109,6 +110,7 @@ describe('generateExecutionSetupPlan', () => {
     patchTicket(ticket.id, { status: 'WAITING_EXECUTION_SETUP_APPROVAL' })
     const adapter = new SequencedMockOpenCodeAdapter()
     adapter.mockResponses.set('mock-session-1#1', buildReadyPlanResponse())
+    const dispatched: OpenCodePromptDispatchEvent[] = []
 
     await generateExecutionSetupPlan(
       adapter,
@@ -118,9 +120,20 @@ describe('generateExecutionSetupPlan', () => {
       {
         ticketId: ticket.id,
         model: 'mock-model',
+        timeoutMs: 234_000,
+        onPromptDispatched: ({ event }) => {
+          dispatched.push(event)
+        },
       },
     )
 
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0]).toMatchObject({
+      timeoutKind: 'ai_response',
+      timeoutMs: 234_000,
+      model: 'mock-model',
+    })
+    expect(dispatched[0]?.deadlineAt).toEqual(expect.any(String))
     expect(listOpenCodeSessionsForTicket(ticket.id, ['active'])).toHaveLength(0)
     expect(listOpenCodeSessionsForTicket(ticket.id, ['completed'])).toHaveLength(1)
   })

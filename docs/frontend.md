@@ -236,7 +236,7 @@ All numeric fields are validated against min/max bounds defined in `numericField
 | --- | --- |
 | Per-Iteration Timeout | [Execution Loop](execution-loop.md#per-iteration-timeout) |
 | Execution Setup Timeout | [Execution Loop](execution-loop.md#execution-setup-timeout) |
-| AI Response Timeout | [LLM Council](llm-council.md#council-response-timeout) |
+| AI Response Timeout | [LLM Council](llm-council.md#ai-response-timeout) |
 | Max Bead Retries | [Execution Loop](execution-loop.md#max-bead-retries) |
 | OpenCode Retry Limit | [Configuration Reference](configuration.md#opencode-retry-limit) |
 | OpenCode Retry Grace Window | [Configuration Reference](configuration.md#opencode-retry-grace-window) |

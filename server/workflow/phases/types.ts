@@ -19,7 +19,7 @@ export interface PhaseIntermediateData {
 export type StructuredLogAudience = 'all' | 'ai' | 'debug'
 export type StructuredLogKind = 'milestone' | 'reasoning' | 'text' | 'tool' | 'step' | 'session' | 'prompt' | 'error' | 'test'
 export type StructuredLogOp = 'append' | 'upsert' | 'finalize'
-export type PromptTimeoutKind = 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
+export type PromptTimeoutKind = 'ai_response' | 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
 
 export interface StructuredLogFields extends Record<string, unknown> {
   entryId: string

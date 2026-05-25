@@ -4,6 +4,7 @@ import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../../opencode/perm
 import { patchTicket } from '../../../storage/tickets'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../../test/integration'
 import { generateFinalTests } from '../generator'
+import type { OpenCodePromptDispatchEvent } from '../../../workflow/runOpenCodePrompt'
 
 class SequencedMockOpenCodeAdapter extends MockOpenCodeAdapter {
   private promptCounts = new Map<string, number>()
@@ -27,6 +28,22 @@ class SequencedMockOpenCodeAdapter extends MockOpenCodeAdapter {
     }
 
     return await super.promptSession(...args)
+  }
+}
+
+class HangingPromptAdapter extends MockOpenCodeAdapter {
+  override async promptSession(...args: Parameters<MockOpenCodeAdapter['promptSession']>): Promise<string> {
+    const [sessionId, parts, signal, options] = args
+    this.promptCalls.push({ sessionId, parts, options })
+
+    return await new Promise<string>((_, reject) => {
+      const timeoutError = new Error('Timeout')
+      if (signal?.aborted) {
+        reject(timeoutError)
+        return
+      }
+      signal?.addEventListener('abort', () => reject(timeoutError), { once: true })
+    })
   }
 }
 
@@ -236,5 +253,73 @@ describe('generateFinalTests', () => {
     expect(adapter.sessionCreateCalls.every((call) => (
       JSON.stringify(call.options?.permission) === JSON.stringify(OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS)
     ))).toBe(true)
+  })
+
+  it('dispatches final-test generation prompts with AI response timeout metadata', async () => {
+    resetTestDb()
+    const { ticket, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Final test AI timeout metadata',
+    })
+    patchTicket(ticket.id, { status: 'RUNNING_FINAL_TEST' })
+
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.mockResponses.set('mock-session-1#1', [
+      '<FINAL_TEST_COMMANDS>',
+      'commands:',
+      '  - npm run test:server',
+      'summary: verify end-to-end ticket coverage',
+      '</FINAL_TEST_COMMANDS>',
+    ].join('\n'))
+    const dispatched: OpenCodePromptDispatchEvent[] = []
+
+    await generateFinalTests(
+      adapter,
+      [{ type: 'text', content: 'Ticket context' }],
+      paths.worktreePath,
+      undefined,
+      {
+        ticketId: ticket.id,
+        model: 'model-a',
+        timeoutMs: 321_000,
+        onPromptDispatched: ({ event }) => {
+          dispatched.push(event)
+        },
+      },
+    )
+
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0]).toMatchObject({
+      timeoutKind: 'ai_response',
+      timeoutMs: 321_000,
+      model: 'model-a',
+    })
+    expect(dispatched[0]?.deadlineAt).toEqual(expect.any(String))
+  })
+
+  it('times out hung final-test generation prompts on the AI response deadline', async () => {
+    const adapter = new HangingPromptAdapter()
+    const dispatched: OpenCodePromptDispatchEvent[] = []
+
+    await expect(generateFinalTests(
+      adapter,
+      [{ type: 'text', content: 'Ticket context' }],
+      '/tmp/test',
+      undefined,
+      {
+        model: 'model-a',
+        timeoutMs: 20,
+        onPromptDispatched: ({ event }) => {
+          dispatched.push(event)
+        },
+      },
+    )).rejects.toThrow('Timeout')
+
+    expect(dispatched).toHaveLength(1)
+    expect(dispatched[0]).toMatchObject({
+      timeoutKind: 'ai_response',
+      timeoutMs: 20,
+      model: 'model-a',
+    })
+    expect(adapter.promptCalls).toHaveLength(1)
   })
 })

@@ -17,6 +17,8 @@ The workflow-side orchestration that resumes interrupted coding work lives in `s
 | Post-Implementation | `RUNNING_FINAL_TEST` | Validate the full result after all beads are done |
 | Post-Implementation | `INTEGRATING_CHANGES` | Prepare the final change set |
 | Post-Implementation | `CREATING_PULL_REQUEST` | Publish the delivery artifact |
+
+`RUNNING_FINAL_TEST` and `CREATING_PULL_REQUEST` both include model-output prompts. Those prompt waits use AI Response Timeout, while final-test shell commands and coding work remain governed by the execution-band timeout controls below.
 | Post-Implementation | `WAITING_PR_REVIEW` | Wait for merge or close-unmerged outcome |
 | Post-Implementation | `CLEANING_ENV` | Remove temporary execution state |
 

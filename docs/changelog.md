@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Show a live Current Activity strip above log views so model stalls, empty outputs, trusted timeout causes, and near-deadline warnings are visible while waiting.
+- Apply AI Response Timeout consistently to model-output waits across scan, planning, final-test generation, and PR drafting phases while keeping CODING on its bead iteration timeout.
 - Separate CODING iteration timeouts from OpenCode/provider interruptions so owned bead deadlines reset and retry while resumable provider stalls can still Continue.
 - Make the ticket location copy path button permanently visible in the ticket details view, and add an OS-agnostic 'Reveal in File Explorer' button next to it.
 - Show line count, interactive color legend, and copy button in the per-bead model log view.
@@ -28,6 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Changed
+- Broadened the existing `councilResponseTimeout` setting into the user-facing AI Response Timeout, covering non-coding model-output prompts including relevant-files scanning, setup-plan drafting, final-test generation, and PR drafting; CODING and execution setup keep their dedicated timeout behavior.
 - Removed the hover-only opacity constraint from the copy path button in the ticket details view, making it permanently visible.
 - Show the 1-based index (bead number) next to dependency references (Blocked By, Blocks) and label matching lists in the bead details view trigger and hover cards to easily locate them in the main bead list.
 - Display index-based bead numbers next to dependencies (Blocked By, Blocks) in the collapsible Beads draft artifact details view.

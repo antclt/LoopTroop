@@ -233,7 +233,7 @@ describe('deriveCurrentActivity', () => {
       makePrompt({
         timeoutMs: 1_200_000,
         deadlineAt: timestamp(1_200_000),
-        timeoutKind: 'council_response',
+        timeoutKind: 'ai_response',
       }),
     ], BASE_TIME_MS + 86_000)
 
@@ -246,7 +246,7 @@ describe('deriveCurrentActivity', () => {
       makePrompt({
         timeoutMs: 1_200_000,
         deadlineAt: timestamp(1_200_000),
-        timeoutKind: 'council_response',
+        timeoutKind: 'ai_response',
       }),
     ], BASE_TIME_MS + 1_080_000)
 

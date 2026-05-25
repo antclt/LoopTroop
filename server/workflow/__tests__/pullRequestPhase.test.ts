@@ -7,6 +7,7 @@ import {
 } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
 import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
+import { updateProject } from '../../storage/projects'
 import {
   buildPullRequestContext,
   buildPullRequestPrompt,
@@ -173,8 +174,9 @@ describe('pull request drafting context', () => {
 
   it('retries malformed PR drafts before push and PR side effects', async () => {
     resetTestDb()
-    const { ticket, context } = createPullRequestReadyTicket({ structuredRetryCount: 1 })
+    const { ticket, context, project } = createPullRequestReadyTicket({ structuredRetryCount: 1 })
     const sendEvent = vi.fn()
+    updateProject(project.id, { councilResponseTimeout: 456_000 })
 
     mocks.runOpenCodePrompt.mockResolvedValueOnce({
       session: { id: 'pr-draft-1' },
@@ -202,6 +204,17 @@ describe('pull request drafting context', () => {
 
     expect(mocks.runOpenCodePrompt).toHaveBeenCalledTimes(1)
     expect(mocks.runOpenCodeSessionPrompt).toHaveBeenCalledTimes(1)
+    expect(mocks.runOpenCodePrompt).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 456_000,
+      timeoutKind: 'ai_response',
+      sessionOwnership: expect.objectContaining({
+        phase: 'CREATING_PULL_REQUEST',
+      }),
+    }))
+    expect(mocks.runOpenCodeSessionPrompt).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 456_000,
+      timeoutKind: 'ai_response',
+    }))
     expect(mocks.runOpenCodeSessionPrompt.mock.invocationCallOrder[0]!).toBeLessThan(
       mocks.pushBranchRef.mock.invocationCallOrder[0]!,
     )

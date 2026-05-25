@@ -23,7 +23,7 @@ import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnost
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../lib/structuredRetryPolicy'
 import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../lib/structuredRawAttempts'
-import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError } from './draftUtils'
+import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, isAiResponseTimeoutError } from './draftUtils'
 import { getErrorMessage } from '@shared/typeGuards'
 
 function buildStrictVoteSchemaReminder(rubric: typeof VOTING_RUBRIC): string {
@@ -251,11 +251,20 @@ export async function conductVoting(
       const retryDiagnostics: NonNullable<DraftStructuredOutputMeta['retryDiagnostics']> = []
 
       while (true) {
+        const remainingTimeoutMs = deadlineAt === null
+          ? undefined
+          : deadlineAt - Date.now()
+        if (deadlineAt !== null && (remainingTimeoutMs ?? 0) <= 0) {
+          throw new Error(PHASE_DEADLINE_ERROR)
+        }
+
         result = await runOpenCodePrompt({
           adapter,
           projectPath,
           parts: promptParts,
           signal,
+          timeoutMs: remainingTimeoutMs,
+          timeoutKind: 'ai_response',
           model: voter.modelId,
           variant: voter.variant,
           toolPolicy,
@@ -419,7 +428,11 @@ export async function conductVoting(
       }
 
       const errorDetail = getErrorMessage(error)
-      const outcome: MemberOutcome = isPhaseDeadlineError(error) || closed
+      const timedOut = isPhaseDeadlineError(error) || isAiResponseTimeoutError(error) || closed
+      if (timedOut) {
+        deadlineReached = true
+      }
+      const outcome: MemberOutcome = timedOut
         ? 'timed_out'
         : 'failed'
       recordOutcome(voter.modelId, outcome, [], outcome === 'timed_out'

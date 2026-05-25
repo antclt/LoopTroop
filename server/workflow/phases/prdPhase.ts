@@ -310,7 +310,7 @@ export async function handlePrdDraft(
     `PRD council drafting started. Context: ${ticketContext.length} parts, interview=loaded.`)
   const councilSettings = resolveCouncilRuntimeSettings(context)
   emitPhaseLog(ticketId, context.externalId, phase, 'info',
-    `PRD draft settings: council_response_timeout=${councilSettings.draftTimeoutMs}ms, min_council_quorum=${councilSettings.minQuorum}.`)
+    `PRD draft settings: ai_response_timeout=${councilSettings.draftTimeoutMs}ms, min_council_quorum=${councilSettings.minQuorum}.`)
   emitPhaseLog(ticketId, context.externalId, phase, 'info', `Dispatching PRD draft requests to ${members.length} council members.`)
 
   if (signal.aborted) throw new CancelledError(ticketId)

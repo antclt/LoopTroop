@@ -272,7 +272,7 @@ The UI and API both group workflow states:
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `SCANNING_RELEVANT_FILES` | The locked main implementer scans the repo context from ticket details and identifies likely files, interfaces, and related logic. This is single-model groundwork before any council phase starts. | `relevant-files.yaml`, scan artifact, scan logs. | `cancel` | Success advances to interview drafting; failures block. |
+| `SCANNING_RELEVANT_FILES` | The locked main implementer scans the repo context from ticket details under AI Response Timeout and identifies likely files, interfaces, and related logic. This is single-model groundwork before any council phase starts. | `relevant-files.yaml`, scan artifact, scan logs. | `cancel` | Success advances to interview drafting; failures block. |
 
 ### Interview
 
@@ -341,7 +341,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
 | `PRE_FLIGHT_CHECK` | LoopTroop runs deterministic readiness checks: workspace health, OpenCode reachability, execution-mode probe, bead availability, and dependency-graph sanity. | Pre-flight report. | `cancel` | Passing checks move to setup-plan approval. |
-| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. The plan includes an explicit readiness assessment, no-action cases are valid, regenerated drafts archive the current version, archived versions are read-only, and approval includes the reviewed plan hash with stale hashes returning `409`. | `execution_setup_plan` with `contentSha256`, generation report, raw setup diagnostics, approval receipt, and user-edit receipts. | `approve`, `cancel` | Approved plan advances to execution setup. |
+| `WAITING_EXECUTION_SETUP_APPROVAL` | LoopTroop audits the workspace under AI Response Timeout, drafts only the temporary setup still needed, and pauses for you to review the setup plan before any setup commands run. The plan includes an explicit readiness assessment, no-action cases are valid, regenerated drafts archive the current version, archived versions are read-only, and approval includes the reviewed plan hash with stale hashes returning `409`. | `execution_setup_plan` with `contentSha256`, generation report, raw setup diagnostics, approval receipt, and user-edit receipts. | `approve`, `cancel` | Approved plan advances to execution setup. |
 | `PREPARING_EXECUTION_ENV` | The approved setup plan is executed in a constrained way. Missing required tooling is provisioned under ticket-owned temp roots before blocking, and the goal is a reusable runtime profile rather than general project mutation. | Execution setup profile, runtime wrapper artifacts, setup logs, setup diagnostics. | `cancel` | Success enters `CODING`. |
 
 ### Implementation
@@ -354,9 +354,9 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `RUNNING_FINAL_TEST` | The main implementer verifies the whole ticket result holistically, beyond individual bead success. | Final test artifact, test results, retry diagnostics if needed. | `cancel` | Passing tests advance to integration. |
+| `RUNNING_FINAL_TEST` | The main implementer generates the final-test plan under AI Response Timeout, then verifies the whole ticket result holistically with command execution governed by the execution timeout. | Final test artifact, test results, retry diagnostics if needed. | `cancel` | Passing tests advance to integration. |
 | `INTEGRATING_CHANGES` | The ticket branch is squashed into a single clean candidate commit for human review, while preserving the bead-level history in audit artifacts. | Integration report and candidate commit metadata. | `cancel` | Success advances to PR creation. |
-| `CREATING_PULL_REQUEST` | The candidate branch is pushed and a draft PR is created or updated on GitHub using the ticket intent, diff, and verification results. | Pull request report with URL, number, head SHA, generated title/body. | `cancel` | Success advances to PR review waiting state. |
+| `CREATING_PULL_REQUEST` | The PR title/body is drafted under AI Response Timeout before any remote side effects, then the candidate branch is pushed and a draft PR is created or updated on GitHub using the ticket intent, diff, and verification results. | Pull request report with URL, number, head SHA, generated title/body. | `cancel` | Success advances to PR review waiting state. |
 | `WAITING_PR_REVIEW` | Automation stops while you review the draft PR and decide whether to merge it or finish without merging. External merges can also be detected and synchronized from here. | Stable review gate, merge report after decision. | `merge`, `close_unmerged`, `cancel` | Merge or close-unmerged both advance to cleanup. |
 | `CLEANING_ENV` | LoopTroop removes transient runtime state but preserves planning artifacts, execution logs, reports, and audit history. Cleanup warnings are recorded but non-blocking. | Cleanup report with `clean` or `warning` status and preserved history. | `cancel` | Cleanup completion moves to `COMPLETED` even when warnings exist. |
 

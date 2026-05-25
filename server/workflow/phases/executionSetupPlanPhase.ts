@@ -13,7 +13,7 @@ import {
   emitOpenCodeStreamEvent,
   emitPhaseLog,
   createOpenCodeStreamState,
-  resolveExecutionSetupRuntimeSettings,
+  resolveAiResponseRuntimeSettings,
   resolveStructuredRetryRuntimeSettings,
 } from './helpers'
 import type { OpenCodeStreamState } from './types'
@@ -124,7 +124,7 @@ async function generateAndPersistExecutionSetupPlan(input: {
     throw new Error('No locked main implementer is configured for execution setup planning')
   }
 
-  const runtimeSettings = resolveExecutionSetupRuntimeSettings(input.context)
+  const aiResponseSettings = resolveAiResponseRuntimeSettings(input.context)
   const streamStates = new Map<string, OpenCodeStreamState>()
   const baseContext = await adapter.assembleCouncilContext(input.ticketId, 'execution_setup_plan')
   const notes = input.note
@@ -155,7 +155,7 @@ async function generateAndPersistExecutionSetupPlan(input: {
       ticketId: input.ticketId,
       model: planModelId,
       variant: input.context.lockedMainImplementerVariant ?? undefined,
-      timeoutMs: runtimeSettings.timeoutMs,
+      timeoutMs: aiResponseSettings.timeoutMs,
       structuredRetryCount: resolveStructuredRetryRuntimeSettings(input.context).structuredRetryCount,
       phaseAttempt,
       promptTemplate: input.source === 'regenerate'

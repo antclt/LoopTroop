@@ -97,7 +97,7 @@ Important controls include:
 - the chosen main implementer
 - council member list
 - per-project or profile quorum settings
-- council response timeout
+- AI response timeout
 
 > [!TIP]
 > For the full reference including defaults, ranges, and practical guidance for all of these settings, see the [Configuration Reference](/configuration).
@@ -114,9 +114,9 @@ Council members are the additional models that participate in independent drafti
 
 Minimum council quorum is the smallest number of valid council outputs LoopTroop requires before it trusts a draft or vote phase. If the configured quorum is not met, the workflow blocks or retries instead of silently accepting a weak result.
 
-### Council Response Timeout
+### AI Response Timeout
 
-Council response timeout is the per-model wait budget for council drafting and voting calls. Longer values tolerate slower providers, while shorter values fail faster when a provider is stalled or unavailable.
+AI response timeout is the per-model wait budget for planning and review prompts that expect model output, including relevant-files scanning, council drafting and voting, coverage/refinement, setup-plan drafting, final-test model prompts, and PR drafting. Longer values tolerate slower providers, while shorter values fail faster when a provider is stalled or unavailable.
 
 If too few valid drafts or votes arrive to satisfy quorum, the pipeline does not pretend the result is trustworthy. It fails into `BLOCKED_ERROR` or a phase-specific retry path instead of silently advancing.
 

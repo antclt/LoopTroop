@@ -1008,10 +1008,10 @@ search: false
     *   Persist retry/rotation timeline in logs (`attempt`, `delay_ms`, `pattern`, `action_taken`, `model_used`, `rotation_index`).
     *   Persist provider command failure evidence in `.looptroop/tickets/<ticket-id>/provider-failures.jsonl` with `provider_id`, `command_id`, `exit_code`, `stderr_tail`, `stdout_tail`, and `classifier_result` (bounded tails: max 30 lines each).
 *   **Timeout + Inactivity Watchdog + Stagnation Heuristics:**
-    *   Add phase-timeout + quorum policy for council/planning phases (defaults: `council response timeout = 15 minutes`, `minimum council quorum = 2`):
-        *   `council response timeout` is a hard wall-clock deadline per council member during drafting and voting phases.
+    *   Add phase-timeout + quorum policy for council/planning phases (defaults: `AI response timeout = 15 minutes`, `minimum council quorum = 2`):
+        *   `AI response timeout` is a hard wall-clock deadline per model-output prompt during scan, planning, drafting, voting, coverage, review, final-test generation, and PR-drafting phases.
         *   `minimum council quorum` defines the minimum number of valid council responses required to proceed with voting; if not met, ticket transitions to `BLOCKED_ERROR`.
-        *   start a per-member timer when the council request is dispatched to that model; timeout value comes from `council_response_timeout`.
+        *   start a per-prompt timer when the AI request is dispatched to that model; timeout value comes from `council_response_timeout`.
         *   `first-N-complete`: complete the phase early when `min_completed_votes` is reached and quorum criteria are satisfied.
         *   hard-timeout enforcement: wrap each member dispatch in an abortable deadline; when timeout is reached, force-cancel the active SDK request/stream, mark that member `timed_out`, and emit timeout evidence (`phase`, `member_id`, `elapsed_ms`).
         *   if a member does not respond before timeout, or is force-aborted at deadline, mark that member `timed_out` for the active phase.

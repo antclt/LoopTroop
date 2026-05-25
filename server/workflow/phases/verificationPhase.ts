@@ -70,6 +70,7 @@ import {
   emitOpenCodePromptLog,
   createOpenCodeStreamState,
   resolveCouncilRuntimeSettings,
+  resolveAiResponseRuntimeSettings,
   resolveCoverageRuntimeSettings,
   resolveStructuredRetryRuntimeSettings,
   resolveInterviewDraftSettings,
@@ -2290,7 +2291,7 @@ export async function handleRelevantFilesScan(
       parts: [{ type: 'text' as const, content: prompt }],
       signal,
       timeoutMs: draftTimeoutMs,
-      timeoutKind: 'council_response',
+      timeoutKind: 'ai_response',
       model: codingModelId,
       variant: 'relevant_files_scan',
       erroredSessionPolicy: 'discard_errored_session_output',
@@ -2404,7 +2405,7 @@ export async function handleRelevantFilesScan(
           parts: retryParts,
           signal,
           timeoutMs: draftTimeoutMs,
-          timeoutKind: 'council_response',
+          timeoutKind: 'ai_response',
           model: codingModelId,
           erroredSessionPolicy: 'discard_errored_session_output',
           toolPolicy: PROM0.toolPolicy,
@@ -2455,7 +2456,7 @@ export async function handleRelevantFilesScan(
           parts: [{ type: 'text' as const, content: prompt }],
           signal,
           timeoutMs: draftTimeoutMs,
-          timeoutKind: 'council_response',
+          timeoutKind: 'ai_response',
           model: codingModelId,
           variant: 'relevant_files_scan',
           erroredSessionPolicy: 'discard_errored_session_output',
@@ -3630,6 +3631,7 @@ async function generateFinalTestRetryNote(input: {
       parts: [{ type: 'text', content: promptContent }],
       signal: input.signal,
       timeoutMs: input.timeoutMs,
+      timeoutKind: 'ai_response',
       model: input.model,
       variant: input.variant,
       toolPolicy: PROM53.toolPolicy,
@@ -3747,6 +3749,7 @@ export async function handleFinalTest(
     throw new Error('No locked main implementer is configured for final tests')
   }
   const executionSettings = resolveExecutionRuntimeSettings(context)
+  const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
   const phaseStartCommit = recordWorktreeStartCommit(worktreePath)
   const streamStates = new Map<string, OpenCodeStreamState>()
   const report = await executeFinalTestWithRetries(
@@ -3760,6 +3763,7 @@ export async function handleFinalTest(
       variant: context.lockedMainImplementerVariant ?? undefined,
       maxIterations: executionSettings.maxIterations,
       timeoutMs: executionSettings.perIterationTimeoutMs,
+      aiResponseTimeoutMs: aiResponseSettings.timeoutMs,
       structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
     },
     {
@@ -3870,7 +3874,7 @@ export async function handleFinalTest(
           signal,
           model: finalTestModelId,
           variant: context.lockedMainImplementerVariant ?? undefined,
-          timeoutMs: executionSettings.perIterationTimeoutMs,
+          timeoutMs: aiResponseSettings.timeoutMs,
           onPromptDispatched: (event) => {
             emitOpenCodePromptLog(
               ticketId,

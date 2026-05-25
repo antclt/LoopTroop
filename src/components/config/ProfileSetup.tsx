@@ -399,7 +399,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
           {/* ── AI Thinking ── */}
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">AI Thinking</div>
           <div className="grid grid-cols-2 gap-3">
-            <NumericField fieldKey="councilResponseTimeout" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Wait time for council responses (10–3600s)" />
+            <NumericField fieldKey="councilResponseTimeout" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Wait time for AI model responses (10–3600s)" />
             <NumericField fieldKey="minCouncilQuorum" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Minimum council votes required (1–4)" />
           </div>
           <div className="mt-3">

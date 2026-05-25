@@ -1,6 +1,6 @@
 import { extractLogFingerprint, hasMatchingLogFingerprint } from '@shared/logIdentity'
 
-export type PromptTimeoutKind = 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
+export type PromptTimeoutKind = 'ai_response' | 'council_response' | 'per_iteration' | 'execution_setup' | 'opencode_prompt'
 
 export interface LogEntry {
   id: string
@@ -213,6 +213,7 @@ function deriveOperation(data: Record<string, unknown>): LogEntry['op'] {
 
 function deriveTimeoutKind(data: Record<string, unknown>): PromptTimeoutKind | undefined {
   if (
+    data.timeoutKind === 'ai_response' ||
     data.timeoutKind === 'council_response' ||
     data.timeoutKind === 'per_iteration' ||
     data.timeoutKind === 'execution_setup' ||

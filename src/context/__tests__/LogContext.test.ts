@@ -107,7 +107,7 @@ describe('normalizeStoredEntry', () => {
       sessionId: 'ses_timeout_metadata',
       timeoutMs: 1_200_000,
       deadlineAt,
-      timeoutKind: 'council_response',
+      timeoutKind: 'ai_response',
       streaming: false,
     }, 'SCANNING_RELEVANT_FILES')
     const restored = normalizeStoredEntry(normalized, 'SCANNING_RELEVANT_FILES')
@@ -115,7 +115,7 @@ describe('normalizeStoredEntry', () => {
     expect(restored).toMatchObject({
       timeoutMs: 1_200_000,
       deadlineAt,
-      timeoutKind: 'council_response',
+      timeoutKind: 'ai_response',
     })
   })
 })

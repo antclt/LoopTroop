@@ -10,7 +10,7 @@ All configuration lives in your profile, accessible via the **Configuration** bu
 | [Council Members](#council-members) | _(required, 1–3 additional)_ | any available models | AI Models |
 | [OpenCode Retry Limit](#opencode-retry-limit) | 10 | 0–50 | OpenCode Provider Recovery |
 | [OpenCode Retry Grace Window](#opencode-retry-grace-window) | 60 s | 0–3600 s | OpenCode Provider Recovery |
-| [Council Response Timeout](#council-response-timeout) | 1200 s | 10–3600 s | AI Thinking |
+| [AI Response Timeout](#ai-response-timeout) | 1200 s | 10–3600 s | AI Thinking |
 | [Min Council Quorum](#min-council-quorum) | 2 | 1–4 | AI Thinking |
 | [Max Interview Questions](#max-interview-questions) | 50 | 0–50 | AI Thinking |
 | [Structured Output Retries](#structured-output-retries) | 1 | 0–5 | AI Thinking |
@@ -102,7 +102,7 @@ The selected variant is passed as part of the model configuration when LoopTroop
 
 - For the main implementer on complex or large-scope tickets, prefer a higher-effort variant.
 - For council members, a balance of one high-effort and one lower-effort member often gives diverse results without making every planning phase slow.
-- If a council member times out repeatedly under `Council Response Timeout`, lower its effort variant before increasing the timeout.
+- If a model times out repeatedly under `AI Response Timeout`, lower its effort variant before increasing the timeout.
 
 ---
 
@@ -158,17 +158,17 @@ The timer starts when OpenCode reports a matching retry status and is cleared by
 
 ## AI Thinking
 
-### Council Response Timeout
+### AI Response Timeout
 
 **Type:** integer (seconds)  
 **Default:** 1200 s (20 minutes)  
 **Range:** 10–3600 s
 
-The maximum time LoopTroop will wait for a single model to return a response during any council phase (drafting, voting, coverage, or refinement).
+The maximum time LoopTroop will wait for a model response in non-coding model-output phases. It covers relevant-files scanning, council drafting/voting/refinement, coverage and expansion prompts, interview QA prompts, execution setup-plan drafting/regeneration, final-test model prompts, and PR title/body drafting.
 
 **What happens when it expires:**
 
-The request is abandoned. If this causes the valid response count to drop below `Min Council Quorum`, the phase enters `BLOCKED_ERROR` rather than silently proceeding with an incomplete council.
+The request is abandoned and the active phase handles the timeout according to its workflow. In council phases, timed-out responses do not count toward `Min Council Quorum`; if quorum is no longer met, the phase enters `BLOCKED_ERROR`. In single-model planning phases, the ticket blocks with timeout diagnostics. In `RUNNING_FINAL_TEST`, only model prompt waits use this setting; shell command execution remains governed by the execution/final-test timeout budget.
 
 **Trade-offs:**
 
@@ -183,7 +183,7 @@ The request is abandoned. If this causes the valid response count to drop below 
 - Increase if your OpenCode provider has high network latency or rate-limited batches.
 - Decrease if you want fast failure feedback when a model is unavailable instead of waiting 20 minutes.
 
-**See also:** [LLM Council → Council Response Timeout](/llm-council#council-response-timeout)
+**See also:** [LLM Council → AI Response Timeout](/llm-council#ai-response-timeout)
 
 ---
 
@@ -197,7 +197,7 @@ The minimum number of valid council responses LoopTroop requires before it trust
 
 **What "valid" means:**
 
-A model response is valid if it returns within the `Council Response Timeout` and its structured output can be parsed without terminal errors. Malformed or timed-out responses do not count toward quorum.
+A model response is valid if it returns within `AI Response Timeout` and its structured output can be parsed without terminal errors. Malformed or timed-out responses do not count toward quorum.
 
 **What happens when quorum is not met:**
 

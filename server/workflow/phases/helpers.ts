@@ -1524,6 +1524,25 @@ export function resolveCouncilRuntimeSettings(context: TicketContext): {
   }
 }
 
+export function resolveAiResponseRuntimeSettings(context: TicketContext): {
+  timeoutMs: number
+  minQuorum: number
+} {
+  const councilSettings = resolveCouncilRuntimeSettings(context)
+  return {
+    timeoutMs: councilSettings.draftTimeoutMs,
+    minQuorum: councilSettings.minQuorum,
+  }
+}
+
+export function resolveAiResponseTimeoutForTicket(ticketId: string): number {
+  const storedContext = getStoredTicketContext(ticketId)
+  const profile = appDb.select().from(profiles).get()
+  return storedContext?.localProject.councilResponseTimeout
+    ?? profile?.councilResponseTimeout
+    ?? PROFILE_DEFAULTS.councilResponseTimeout
+}
+
 export function resolveExecutionRuntimeSettings(context: TicketContext): {
   maxIterations: number
   perIterationTimeoutMs: number

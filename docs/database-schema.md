@@ -86,7 +86,7 @@ Important columns:
 - `max_iterations`
 - `per_iteration_timeout` — milliseconds, nullable project-level override
 - `execution_setup_timeout` — milliseconds, nullable project-level override
-- `council_response_timeout` — milliseconds, nullable project-level override
+- `council_response_timeout` — milliseconds, nullable project-level override for the user-facing AI Response Timeout setting
 - `min_council_quorum`
 - `interview_questions`
 - `ticket_counter`

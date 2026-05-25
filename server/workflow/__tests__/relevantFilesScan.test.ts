@@ -128,6 +128,8 @@ describe('handleRelevantFilesScan', () => {
     expect(runOpenCodePromptMock.mock.calls[0]?.[0]).toMatchObject({
       model: TEST.implementer,
       toolPolicy: 'default',
+      timeoutKind: 'ai_response',
+      timeoutMs: expect.any(Number),
     })
     expect(runOpenCodeSessionPromptMock.mock.calls[0]?.[0]?.parts).toEqual(expect.arrayContaining([
       expect.objectContaining({

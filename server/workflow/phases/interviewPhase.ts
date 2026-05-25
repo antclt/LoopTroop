@@ -58,6 +58,7 @@ import {
   createOpenCodeStreamState,
   resolveInterviewDraftSettings,
   resolveCouncilRuntimeSettings,
+  resolveAiResponseTimeoutForTicket,
   resolveStructuredRetryRuntimeSettings,
   resolveStructuredRetryCountForTicket,
   resolveCouncilMembers,
@@ -394,7 +395,7 @@ export async function handleInterviewDeliberate(
     context.externalId,
     phase,
     'info',
-    `Interview draft settings: max_initial_questions=${draftSettings.maxInitialQuestions}, council_response_timeout=${draftSettings.draftTimeoutMs}ms, min_council_quorum=${draftSettings.minQuorum}.`,
+    `Interview draft settings: max_initial_questions=${draftSettings.maxInitialQuestions}, ai_response_timeout=${draftSettings.draftTimeoutMs}ms, min_council_quorum=${draftSettings.minQuorum}.`,
   )
   emitPhaseLog(ticketId, context.externalId, phase, 'info', `Dispatching interview draft requests to ${members.length} council members.`)
 
@@ -1054,7 +1055,7 @@ export async function handleInterviewQAStart(
       )
     },
     ticketId,
-    undefined,
+    interviewSettings.draftTimeoutMs,
     resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
   )
   throwIfAborted(signal, ticketId)
@@ -1288,7 +1289,7 @@ export async function handleInterviewQABatch(
       )
     },
     ticketId,
-    undefined,
+    resolveAiResponseTimeoutForTicket(ticketId),
     restartOptions,
     resolveStructuredRetryCountForTicket(ticketId),
   )

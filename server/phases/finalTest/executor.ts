@@ -96,6 +96,7 @@ export async function executeFinalTestWithRetries(
     variant?: string
     maxIterations: number
     timeoutMs: number
+    aiResponseTimeoutMs?: number
     structuredRetryCount?: number
   },
   callbacks: {
@@ -162,7 +163,7 @@ export async function executeFinalTestWithRetries(
         ticketId: options.ticketId,
         model: options.model,
         variant: options.variant,
-        timeoutMs: options.timeoutMs,
+        timeoutMs: options.aiResponseTimeoutMs ?? options.timeoutMs,
         structuredRetryCount: options.structuredRetryCount,
         phaseAttempt: attempt,
         onSessionCreated: (sessionId) => {

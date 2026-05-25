@@ -4,6 +4,7 @@ import { classifyStructuredFailureFromError } from '../lib/structuredOutputRetry
 import { getErrorMessage } from '@shared/typeGuards'
 
 export const PHASE_DEADLINE_ERROR = 'CouncilPhaseDeadlineReached'
+export const AI_RESPONSE_TIMEOUT_ERROR = 'Timeout'
 
 export function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError'
@@ -11,6 +12,10 @@ export function isAbortError(error: unknown): boolean {
 
 export function isPhaseDeadlineError(error: unknown): boolean {
   return error instanceof Error && error.message === PHASE_DEADLINE_ERROR
+}
+
+export function isAiResponseTimeoutError(error: unknown): boolean {
+  return error instanceof Error && error.message === AI_RESPONSE_TIMEOUT_ERROR
 }
 
 export function classifyDraftFailure(

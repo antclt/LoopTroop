@@ -121,6 +121,7 @@ export async function refineDraft(
         parts: promptParts,
         signal,
         timeoutMs,
+        timeoutKind: 'ai_response',
         model: winnerDraft.memberId,
         toolPolicy,
         ...(sessionOwnership

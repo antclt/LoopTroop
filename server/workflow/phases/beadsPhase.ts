@@ -111,6 +111,7 @@ export async function executeBeadsExpandStep(params: {
       parts: promptParts,
       signal: params.signal,
       timeoutMs: params.timeoutMs,
+      timeoutKind: 'ai_response',
       model: params.winnerId,
       variant: params.variant ?? 'refine',
       toolPolicy: PROM25.toolPolicy,
@@ -292,7 +293,7 @@ export async function handleBeadsDraft(
     `Beads council drafting started. Context: ${ticketContext.length} parts, prd=${prd ? 'loaded' : 'missing'}.`)
   const councilSettings = resolveCouncilRuntimeSettings(context)
   emitPhaseLog(ticketId, context.externalId, phase, 'info',
-    `Beads draft settings: council_response_timeout=${councilSettings.draftTimeoutMs}ms, min_council_quorum=${councilSettings.minQuorum}.`)
+    `Beads draft settings: ai_response_timeout=${councilSettings.draftTimeoutMs}ms, min_council_quorum=${councilSettings.minQuorum}.`)
   emitPhaseLog(ticketId, context.externalId, phase, 'info', `Dispatching beads draft requests to ${members.length} council members.`)
 
   if (signal.aborted) throw new CancelledError(ticketId)

@@ -14,7 +14,7 @@ import type { Message, PromptPart, StreamEvent } from '../opencode/types'
 import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
 import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
-import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, classifyDraftFailure } from './draftUtils'
+import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, isAiResponseTimeoutError, classifyDraftFailure } from './draftUtils'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount } from '../lib/structuredRetryPolicy'
@@ -174,11 +174,20 @@ export async function generateDrafts(
       const maxStructuredRetries = normalizeStructuredRetryCount(runtimeOptions?.maxStructuredRetries)
 
       while (true) {
+        const remainingTimeoutMs = deadlineAt === null
+          ? undefined
+          : deadlineAt - Date.now()
+        if (deadlineAt !== null && (remainingTimeoutMs ?? 0) <= 0) {
+          throw new Error(PHASE_DEADLINE_ERROR)
+        }
+
         result = await runOpenCodePrompt({
           adapter,
           projectPath,
           parts: promptParts,
           signal,
+          timeoutMs: remainingTimeoutMs,
+          timeoutKind: 'ai_response',
           model: member.modelId,
           variant: member.variant,
           toolPolicy: runtimeOptions?.toolPolicy,
@@ -341,7 +350,8 @@ export async function generateDrafts(
       }
 
       const duration = Date.now() - startTime
-      if (isPhaseDeadlineError(err) || closed) {
+      if (isPhaseDeadlineError(err) || isAiResponseTimeoutError(err) || closed) {
+        deadlineReached = true
         const draft: DraftResult = {
           memberId: member.modelId,
           content: '',

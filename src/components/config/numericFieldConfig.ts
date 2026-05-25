@@ -31,7 +31,7 @@ export const numericFields = {
     min: 10,
     max: MAX_TIMEOUT_SECONDS,
     label: 'AI Response Timeout',
-    docsPath: '/configuration#council-response-timeout',
+    docsPath: '/configuration#ai-response-timeout',
     fromStore: (v: number) => String(Math.round(v / 1000)),
     toStore: (v: number) => v * 1000,
   },
