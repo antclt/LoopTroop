@@ -178,11 +178,9 @@ export function logCommand(
   const shouldUseStructuredOutput = shouldRenderStructuredCommandOutput(result)
 
   if (result.ok) {
-    const compactOutcome = formatKnownCompactSuccessWithStderr(bin, args, result)
-    if (compactOutcome !== null) {
-      content = `[CMD] $ ${cmdStr}  →  ${truncateOutput(compactOutcome, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`
-      type = 'info'
-      emitCommandLog(ctx, type, content)
+    const pushLog = formatKnownGitPushLog(bin, args, cmdStr, result)
+    if (pushLog !== null) {
+      emitCommandLog(ctx, 'info', pushLog)
       return
     }
 
@@ -322,22 +320,38 @@ function isLikelyBenignGitProbeFailure(error: string): boolean {
 }
 
 /**
- * Returns a compact summary for successful commands where STDERR output is
- * expected and purely informational (e.g. git push remote progress messages).
- * Returning a non-null value skips the structured output path entirely.
+ * Formats a successful git push log entry with a compact summary header and
+ * the remote output (git's STDERR) labeled as REMOTE: to distinguish it from
+ * actual errors. Returns null when there is no output (silent path handles it).
  */
-function formatKnownCompactSuccessWithStderr(
+function formatKnownGitPushLog(
   bin: string,
   args: string[],
+  cmdStr: string,
   result: LoggedCommandResult,
 ): string | null {
   if (!result.ok || result.stdin) return null
   if (bin !== 'git') return null
 
   const command = getGitSubcommand(args)
-  if (command?.name === 'push') return 'push completed'
+  if (command?.name !== 'push') return null
 
-  return null
+  const stderr = normalizeCommandText(result.stderr)
+  const stdout = normalizeCommandText(result.stdout)
+
+  // No output — fall through to the silent path which returns 'push completed'
+  if (!stderr && !stdout) return null
+
+  const sections: string[] = [`[CMD] $ ${cmdStr}  →  push completed`]
+
+  if (stdout) {
+    sections.push(`STDOUT:\n${truncateOutput(stdout, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`)
+  }
+  if (stderr) {
+    sections.push(`REMOTE:\n${truncateOutput(stderr, COMMAND_LOG_OUTPUT_PREVIEW_LENGTH)}`)
+  }
+
+  return sections.join('\n')
 }
 
 function formatKnownGitProbeSuccess(commandText: string, stdout?: string, stderr?: string): string | null {

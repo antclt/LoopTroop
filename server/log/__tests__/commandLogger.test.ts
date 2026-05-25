@@ -97,7 +97,16 @@ describe('commandLogger', () => {
     expect(logs).toEqual([
       {
         type: 'info',
-        content: '[CMD] $ git -C worktrees/SYTH-10 push origin HEAD:refs/heads/SYTH-10  →  push completed',
+        content: [
+          '[CMD] $ git -C worktrees/SYTH-10 push origin HEAD:refs/heads/SYTH-10  →  push completed',
+          'REMOTE:',
+          'remote: ',
+          'remote: Create a pull request for \'SYTH-10\' on GitHub by visiting:',
+          'remote:      https://github.com/org/repo/pull/new/SYTH-10',
+          'remote: ',
+          'To github.com:org/repo.git',
+          ' * [new branch]      HEAD -> SYTH-10',
+        ].join('\n'),
       },
     ])
   })
@@ -119,7 +128,12 @@ describe('commandLogger', () => {
     expect(logs).toEqual([
       {
         type: 'info',
-        content: '[CMD] $ git push origin HEAD:refs/heads/SYTH-10  →  push completed',
+        content: [
+          '[CMD] $ git push origin HEAD:refs/heads/SYTH-10  →  push completed',
+          'REMOTE:',
+          'To github.com:org/repo.git',
+          '   d9c79cc..2a383e0  HEAD -> SYTH-10',
+        ].join('\n'),
       },
     ])
   })
