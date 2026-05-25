@@ -341,7 +341,7 @@ describe('ticketRouter beads approval routes', () => {
     expect(payload.details).toContain('Invalid JSON at bead line 2')
   })
 
-  it('stamps createdAt on beads during approval', async () => {
+  it('stamps createdAt on all beads at approval time', async () => {
     const { app, ticket, paths, beadsContent } = setupBeadsApprovalTicket()
 
     const response = await app.request(`/api/tickets/${ticket.id}/approve-beads`, {
@@ -351,7 +351,7 @@ describe('ticketRouter beads approval routes', () => {
 
     expect(response.status).toBe(200)
 
-    // Approval should stamp createdAt on beads that don't have one
+    // Approval should set createdAt to the approval timestamp on all beads
     const afterContent = readFileSync(paths.beadsPath, 'utf-8')
     const afterLines = afterContent.split('\n').filter(l => l.trim())
     for (const line of afterLines) {

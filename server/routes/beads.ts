@@ -8,7 +8,6 @@ import { syncTicketRuntimeProjection } from '../storage/ticketRuntimeProjection'
 import { clearExecutionSetupState } from '../phases/executionSetup/storage'
 import { upsertBeadsApprovalSnapshot } from '../phases/beads/document'
 import { contentSha256 } from '../lib/contentHash'
-import { nowIso } from '../lib/dateUtils'
 import { writeUserEditReceipt } from '../workflow/artifactEditReceipts'
 
 // Minimum schema for fields required by the scheduler and execution engine.
@@ -119,15 +118,8 @@ beadsRouter.put('/tickets/:id/beads', async (c) => {
 
   try {
     const beforeRaw = fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf-8') : null
-    // Stamp createdAt on any bead that doesn't have one yet (user edit time)
-    const savedAt = nowIso()
-    const stampedBody = body.map((item: Record<string, unknown>) => {
-      if (!item.createdAt || (typeof item.createdAt === 'string' && item.createdAt.trim() === '')) {
-        return { ...item, createdAt: savedAt }
-      }
-      return item
-    })
-    const jsonl = stampedBody.map((item: unknown) => JSON.stringify(item)).join('\n') + '\n'
+    // createdAt is set at approval time, not save time
+    const jsonl = body.map((item: unknown) => JSON.stringify(item)).join('\n') + '\n'
     safeAtomicWrite(filePath, jsonl)
     upsertBeadsApprovalSnapshot(ticketId, jsonl)
     const executionSetupInvalidation = clearExecutionSetupState(ticketId)

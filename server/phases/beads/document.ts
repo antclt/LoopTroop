@@ -71,26 +71,18 @@ export function approveBeadsDocument(ticketId: string, expectedContentSha256: st
     }
   }
 
-  // Stamp createdAt on any bead that doesn't have one yet (approval time)
+  // Stamp createdAt on all beads at approval time
   const approvedAt = nowIso()
-  let needsRewrite = false
   const updatedLines = lines.map((line) => {
     const parsed = JSON.parse(line) as Record<string, unknown>
-    if (!parsed.createdAt || (typeof parsed.createdAt === 'string' && parsed.createdAt.trim() === '')) {
-      parsed.createdAt = approvedAt
-      needsRewrite = true
-    }
+    parsed.createdAt = approvedAt
     return JSON.stringify(parsed)
   })
 
-  if (needsRewrite) {
-    const updatedContent = updatedLines.join('\n') + '\n'
-    writeFileSync(beadsPath, updatedContent, 'utf-8')
-  }
+  const updatedContent = updatedLines.join('\n') + '\n'
+  writeFileSync(beadsPath, updatedContent, 'utf-8')
 
-  // Re-read content after potential rewrite for the snapshot
-  const snapshotContent = needsRewrite ? readFileSync(beadsPath, 'utf-8') : content
-  upsertBeadsApprovalSnapshot(ticketId, snapshotContent)
+  upsertBeadsApprovalSnapshot(ticketId, updatedContent)
   const approvalReceipt = JSON.stringify({
     approved_by: 'user',
     approved_at: approvedAt,
