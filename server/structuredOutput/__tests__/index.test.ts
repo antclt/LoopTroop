@@ -1468,6 +1468,30 @@ describe.concurrent('structured output normalization', () => {
     ])
   })
 
+  it('accepts PRD YAML after repairing bare epic and user story sequence ids', () => {
+    const interviewContent = buildInterviewContent(TICKET_ID)
+    const prdContent = buildStandardPrdYaml({
+      ticketId: TICKET_ID,
+    })
+      .replace('  - id: "EPIC-1"', '  - EPIC-1')
+      .replace('      - id: "US-1"', '      - US-1')
+
+    const result = normalizePrdYamlOutput(prdContent, {
+      ticketId: TICKET_ID,
+      interviewContent,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.epics[0]?.id).toBe('EPIC-1')
+    expect(result.value.epics[0]?.user_stories[0]?.id).toBe('US-1')
+    const warnings = result.repairWarnings.join('\n')
+    expect(warnings).toContain('Repaired YAML sequence entry under "epics"')
+    expect(warnings).toContain('treated bare item "EPIC-1" as id before parsing.')
+    expect(warnings).toContain('Repaired YAML sequence entry under "user_stories"')
+    expect(warnings).toContain('treated bare item "US-1" as id before parsing.')
+  })
+
   it('unwraps artifact.prd object wrappers without relaxing PRD validation', () => {
     const interviewContent = buildInterviewContent(TICKET_ID)
 
@@ -1886,6 +1910,60 @@ describe.concurrent('structured output normalization', () => {
     if (!result.ok) return
     expect(result.value[0]?.id).toBe('bead-1')
     expect(result.normalizedContent).toContain('beads:')
+  })
+
+  it('accepts bead subset YAML after repairing bare sequence item ids', () => {
+    const result = normalizeBeadSubsetYamlOutput([
+      'beads:',
+      '  - config-xml-json-marshalling',
+      '    title: Implement XML/JSON unmarshalling',
+      '    prdRefs:',
+      '      - EPIC-1 / US-1',
+      '    description: Handle conflict resolution config values.',
+      '    contextGuidance:',
+      '      patterns:',
+      '        - Keep parser repairs deterministic.',
+      '      anti_patterns:',
+      '        - Do not invent missing text.',
+      '    acceptanceCriteria:',
+      '      - Existing scalar text is moved into id.',
+      '    tests:',
+      '      - Parser regression covers bare id entries.',
+      '    testCommands:',
+      '      - npm run test:server',
+    ].join('\n'))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value[0]?.id).toBe('config-xml-json-marshalling')
+    expect(result.repairWarnings).toContain(
+      'Repaired YAML sequence entry under "beads" at line 2: treated bare item "config-xml-json-marshalling" as id before parsing.',
+    )
+  })
+
+  it('still rejects repaired bead subset YAML when required content is missing', () => {
+    const result = normalizeBeadSubsetYamlOutput([
+      'beads:',
+      '  - config-xml-json-marshalling',
+      '    title: Implement XML/JSON unmarshalling',
+      '    prdRefs:',
+      '      - EPIC-1 / US-1',
+      '    contextGuidance:',
+      '      patterns:',
+      '        - Keep parser repairs deterministic.',
+      '      anti_patterns:',
+      '        - Do not invent missing text.',
+      '    acceptanceCriteria:',
+      '      - Existing scalar text is moved into id.',
+      '    tests:',
+      '      - Parser regression covers bare id entries.',
+      '    testCommands:',
+      '      - npm run test:server',
+    ].join('\n'))
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toContain('bead description')
   })
 
   it('accepts bead subset YAML after repairing malformed quoted scalar items', () => {
@@ -2829,6 +2907,31 @@ describe.concurrent('structured output normalization', () => {
       relevance: 'high',
       likely_action: 'modify',
     })
+  })
+
+  it('accepts relevant-files YAML after repairing bare file path sequence items', () => {
+    const result = normalizeRelevantFilesOutput([
+      '<RELEVANT_FILES_RESULT>',
+      'file_count: 1',
+      'files:',
+      '  - src/app.ts',
+      '    rationale: Entry point for the app.',
+      '    relevance: high',
+      '    likely_action: modify',
+      '    content: |',
+      '      export const app = true',
+      '</RELEVANT_FILES_RESULT>',
+    ].join('\n'))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.files[0]?.path).toBe('src/app.ts')
+    expect(result.repairWarnings.join('\n')).toContain(
+      'Repaired YAML sequence entry under "files"',
+    )
+    expect(result.repairWarnings.join('\n')).toContain(
+      'treated bare item "src/app.ts" as path before parsing.',
+    )
   })
 
   it('repairs relevant-files payloads with transcript noise, fenced YAML, wrapper keys, aliases, and indentation drift', () => {

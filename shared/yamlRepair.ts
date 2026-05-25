@@ -131,6 +131,202 @@ function normalizeYamlRepairKey(value: string): string {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, '')
 }
 
+export interface YamlSequenceItemPrimaryKeyRepair {
+  parentKey: string
+  primaryKey: string
+  value: string
+  line: number
+}
+
+export interface YamlSequenceItemPrimaryKeyConfig {
+  primaryKey: string
+  childKeys: readonly string[]
+}
+
+export type YamlSequenceItemPrimaryKeyOptions = Record<string, YamlSequenceItemPrimaryKeyConfig>
+
+export interface YamlSequenceItemPrimaryKeyRepairResult {
+  yaml: string
+  repairs: YamlSequenceItemPrimaryKeyRepair[]
+}
+
+interface YamlSequenceParentContext {
+  key: string
+  normalizedKey: string
+  indent: number
+}
+
+interface NormalizedYamlSequenceItemPrimaryKeyConfig {
+  primaryKey: string
+  normalizedPrimaryKey: string
+  childKeys: Set<string>
+}
+
+function normalizeSequenceItemPrimaryKeyOptions(
+  options: YamlSequenceItemPrimaryKeyOptions | undefined,
+): Map<string, NormalizedYamlSequenceItemPrimaryKeyConfig> {
+  const normalized = new Map<string, NormalizedYamlSequenceItemPrimaryKeyConfig>()
+
+  for (const [parentKey, config] of Object.entries(options ?? {})) {
+    const normalizedParentKey = normalizeYamlRepairKey(parentKey)
+    const primaryKey = config.primaryKey.trim()
+    if (!normalizedParentKey || !primaryKey || config.childKeys.length === 0) continue
+
+    normalized.set(normalizedParentKey, {
+      primaryKey,
+      normalizedPrimaryKey: normalizeYamlRepairKey(primaryKey),
+      childKeys: new Set(config.childKeys.map(normalizeYamlRepairKey).filter(Boolean)),
+    })
+  }
+
+  return normalized
+}
+
+function readSafeBareSequenceScalar(value: string): string | null {
+  const trimmed = value.trim()
+  if (!trimmed || trimmed.includes(':') || trimmed.startsWith('#')) return null
+  if (/^[>|[\]{}&*!?@`]/.test(trimmed)) return null
+
+  const quote = trimmed[0]
+  if ((quote === '"' || quote === '\'') && trimmed.endsWith(quote) && trimmed.length >= 2) {
+    return trimmed
+  }
+
+  if (/\s/.test(trimmed)) return null
+  return /^[A-Za-z0-9_./\\~@()[\]+=$,-]+$/.test(trimmed) ? trimmed : null
+}
+
+function findNextSignificantLine(lines: string[], startIndex: number): string | null {
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const trimmed = line.trim()
+    if (!trimmed || trimmed.startsWith('#')) continue
+    return line
+  }
+
+  return null
+}
+
+function isKnownSequenceItemChildLine(
+  line: string,
+  dashIndent: number,
+  config: NormalizedYamlSequenceItemPrimaryKeyConfig,
+): boolean {
+  const match = line.match(/^(\s*)([A-Za-z_][\w_-]*)\s*:/)
+  if (!match) return false
+
+  const childIndent = match[1]!.length
+  if (childIndent <= dashIndent) return false
+
+  const childKey = normalizeYamlRepairKey(match[2]!)
+  return childKey !== config.normalizedPrimaryKey && config.childKeys.has(childKey)
+}
+
+/**
+ * Repair structured YAML list entries that emit the primary key as a bare item.
+ *
+ * Some models emit:
+ *
+ *   beads:
+ *     - config-schema-addition
+ *       title: Add config schema
+ *
+ * That is invalid YAML because the child mapping is attached to a scalar list
+ * item. This repair is opt-in per parent key and only moves the existing scalar
+ * text into the configured primary key when the following line proves the item
+ * is meant to be an object.
+ */
+export function repairYamlSequenceItemPrimaryKeys(
+  yaml: string,
+  options: YamlSequenceItemPrimaryKeyOptions | undefined,
+): YamlSequenceItemPrimaryKeyRepairResult {
+  const normalizedOptions = normalizeSequenceItemPrimaryKeyOptions(options)
+  if (normalizedOptions.size === 0) return { yaml, repairs: [] }
+
+  const lines = yaml.split('\n')
+  const result: string[] = []
+  const repairs: YamlSequenceItemPrimaryKeyRepair[] = []
+  const parentStack: YamlSequenceParentContext[] = []
+  const BARE_COLLECTION_KEY = /^(\s*)([A-Za-z_][\w_-]*)\s*:\s*(?:#.*)?$/
+  const BLOCK_SCALAR_PATTERN = /:\s*[>|][+-]?(?:\s+#.*)?$/
+  const DASH_SCALAR_LINE = /^(\s*)-\s+(.+)$/
+  let blockScalarBaseIndent = -1
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const trimmed = line.trim()
+    const indent = getLineIndent(line)
+
+    if (!trimmed || trimmed.startsWith('#')) {
+      result.push(line)
+      continue
+    }
+
+    if (blockScalarBaseIndent >= 0) {
+      if (indent > blockScalarBaseIndent) {
+        result.push(line)
+        continue
+      }
+      blockScalarBaseIndent = -1
+    }
+
+    while (parentStack.length > 0 && parentStack[parentStack.length - 1]!.indent >= indent) {
+      parentStack.pop()
+    }
+
+    const dashMatch = line.match(DASH_SCALAR_LINE)
+    if (dashMatch) {
+      const dashIndent = dashMatch[1]!.length
+      const immediateParent = parentStack[parentStack.length - 1]
+      const config = immediateParent ? normalizedOptions.get(immediateParent.normalizedKey) : undefined
+      const value = config ? readSafeBareSequenceScalar(dashMatch[2]!) : null
+      const nextLine = value ? findNextSignificantLine(lines, index + 1) : null
+
+      if (
+        immediateParent
+        && config
+        && dashIndent > immediateParent.indent
+        && value
+        && nextLine
+        && isKnownSequenceItemChildLine(nextLine, dashIndent, config)
+      ) {
+        result.push(`${dashMatch[1]}- ${config.primaryKey}: ${value}`)
+        repairs.push({
+          parentKey: immediateParent.key,
+          primaryKey: config.primaryKey,
+          value,
+          line: index + 1,
+        })
+        continue
+      }
+
+      result.push(line)
+      continue
+    }
+
+    const parentMatch = line.match(BARE_COLLECTION_KEY)
+    if (parentMatch) {
+      parentStack.push({
+        key: parentMatch[2]!,
+        normalizedKey: normalizeYamlRepairKey(parentMatch[2]!),
+        indent: parentMatch[1]!.length,
+      })
+      result.push(line)
+      continue
+    }
+
+    result.push(line)
+    if (BLOCK_SCALAR_PATTERN.test(trimmed)) {
+      blockScalarBaseIndent = indent
+    }
+  }
+
+  return {
+    yaml: result.join('\n'),
+    repairs,
+  }
+}
+
 const INLINE_SEQUENCE_SCALAR_PARENT_KEYS = new Set([
   'artifact',
   'content',

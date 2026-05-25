@@ -98,6 +98,32 @@ describe.concurrent('parseYamlOrJsonCandidate', () => {
     })
   })
 
+  it('repairs bare primary-key sequence items only when a parser opts in', () => {
+    const content = [
+      'beads:',
+      '  - config-xml-json-marshalling',
+      '    title: Implement XML/JSON unmarshalling',
+    ].join('\n')
+    const repairWarnings: string[] = []
+
+    expect(() => parseYamlOrJsonCandidate(content)).toThrow()
+
+    const parsed = parseYamlOrJsonCandidate(content, {
+      sequenceItemPrimaryKeys: {
+        beads: { primaryKey: 'id', childKeys: ['title'] },
+      },
+      repairWarnings,
+    }) as { beads: Array<{ id: string; title: string }> }
+
+    expect(parsed.beads[0]).toEqual({
+      id: 'config-xml-json-marshalling',
+      title: 'Implement XML/JSON unmarshalling',
+    })
+    expect(repairWarnings).toEqual([
+      'Repaired YAML sequence entry under "beads" at line 2: treated bare item "config-xml-json-marshalling" as id before parsing.',
+    ])
+  })
+
   it('repairs doubled single-quote wrappers around colon-containing list scalars', () => {
     const repairWarnings: string[] = []
 

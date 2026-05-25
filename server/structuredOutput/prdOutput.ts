@@ -39,6 +39,21 @@ const PRD_NESTED_MAPPING_CHILDREN = {
   verification: ['required_commands'],
 } as const
 
+const PRD_SEQUENCE_ITEM_PRIMARY_KEYS = {
+  epics: {
+    primaryKey: 'id',
+    childKeys: ['title', 'name', 'objective', 'goal', 'implementation_steps', 'implementationSteps', 'steps', 'user_stories', 'userStories', 'stories'],
+  },
+  user_stories: {
+    primaryKey: 'id',
+    childKeys: ['title', 'name', 'acceptance_criteria', 'acceptanceCriteria', 'implementation_steps', 'implementationSteps', 'steps', 'verification'],
+  },
+  stories: {
+    primaryKey: 'id',
+    childKeys: ['title', 'name', 'acceptance_criteria', 'acceptanceCriteria', 'implementation_steps', 'implementationSteps', 'steps', 'verification'],
+  },
+} as const
+
 const PRD_PROMPT_ECHO_ERROR = 'PRD output echoed the prompt instead of returning structured PRD YAML'
 
 function readOptionalString(record: Record<string, unknown>, aliases: string[]): string {
@@ -245,6 +260,7 @@ export function normalizePrdYamlOutput(
 
       const parsed = unwrapPrdArtifactObjectWrapper(unwrapExplicitWrapperRecord(parseYamlOrJsonCandidate(candidate, {
         nestedMappingChildren: PRD_NESTED_MAPPING_CHILDREN,
+        sequenceItemPrimaryKeys: PRD_SEQUENCE_ITEM_PRIMARY_KEYS,
         allowTrailingTerminalNoise: true,
         repairWarnings,
       }), [

@@ -178,6 +178,18 @@ describe('parser fix interventions', () => {
     expectIntervention(i, { code: 'parser_list_dash', stage: 'parse', category: 'parser_fix' })
   })
 
+  it('maps yaml sequence item primary key repair with dynamic details', () => {
+    const i = deriveOne('Repaired YAML sequence entry under "beads" at line 12: treated bare item "config-xml-json-marshalling" as id before parsing.')
+    expectIntervention(i, { code: 'parser_sequence_item_primary_key', stage: 'parse', category: 'parser_fix' })
+    expect(i.rule).toEqual({ id: 'parser_sequence_item_primary_key', label: 'YAML List Item Key Repair' })
+    expect(i.exactCorrection).toBe('Moved the existing bare list item "config-xml-json-marshalling" into id under beads at line 12.')
+    expect(i.examples?.[0]).toEqual({
+      scope: 'beads line 12',
+      before: '- config-xml-json-marshalling',
+      after: '- id: config-xml-json-marshalling',
+    })
+  })
+
   it('maps wrapper text recovery', () => {
     const i = deriveOne('Recovered the structured artifact from surrounding wrapper text before validation.')
     expectIntervention(i, { code: 'parser_transcript_recovery', stage: 'parse', category: 'parser_fix' })

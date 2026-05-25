@@ -152,7 +152,15 @@ questions:
 
 **Warning:** *Quoted YAML plain scalar values containing colon-space before reparsing.*
 
-#### 6. Markdown code fence stripping
+#### 6. Structured list primary-key repair
+
+**Trigger:** An opt-in structured artifact list item starts with a bare scalar and is followed by object fields, e.g. `beads: - config-parser title: ...`.
+
+**Repair:** The existing scalar is moved into the configured primary key for that list, such as `id` for beads/PRD items or `path` for relevant files. This repair is only enabled for known structured lists and does not touch scalar-only lists such as `patterns`, `tests`, `testCommands`, or `acceptanceCriteria`.
+
+**Warning:** *Repaired YAML sequence entry under "beads" at line 12: treated bare item "config-parser" as id before parsing.* (Lists the actual parent key, line, emitted scalar, and primary key.)
+
+#### 7. Markdown code fence stripping
 
 **Trigger:** The entire artifact is wrapped in a ` ```yaml ` … ` ``` ` block (or `json` / `yml` / `jsonl`).
 
@@ -160,7 +168,7 @@ questions:
 
 **Warning:** *Unwrapped markdown code fence wrapping the YAML payload.*
 
-#### 7. Spurious XML tag stripping
+#### 8. Spurious XML tag stripping
 
 **Trigger:** Lines that consist entirely of a bare XML-style tag (`<tag>`, `</tag>`, `<tag/>`).
 

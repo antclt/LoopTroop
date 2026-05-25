@@ -127,6 +127,7 @@ function buildDefaultRule(code: string): StructuredInterventionRule {
     parser_markdown_fence: 'Markdown Fence Unwrap',
     parser_quoted_scalar: 'Quoted Scalar Repair',
     parser_reserved_indicator_scalar: 'Reserved Scalar Repair',
+    parser_sequence_item_primary_key: 'YAML List Item Key Repair',
     parser_terminal_noise: 'Terminal Noise Trim',
     parser_transcript_recovery: 'Transcript Recovery',
     parser_unbalanced_quote: 'Quote Balance Repair',
@@ -233,6 +234,25 @@ function buildExactInterventionDetails(
         ? `Changed ${subject} from ${formatQuotedValue(before)} to ${formatQuotedValue(after)}.`
         : `Changed ${formatQuotedValue(before)} to ${formatQuotedValue(after)}.`,
       ...(example ? { examples: [example] } : {}),
+    }
+  }
+
+  if (code === 'parser_sequence_item_primary_key') {
+    const repairMatch = warning.match(/^Repaired YAML sequence entry under "(.+)" at line (\d+): treated bare item "(.+)" as ([A-Za-z_][\w_-]*) before parsing\.$/i)
+    if (repairMatch) {
+      const parentKey = repairMatch[1]!
+      const line = repairMatch[2]!
+      const value = repairMatch[3]!
+      const primaryKey = repairMatch[4]!
+      const example = buildBeforeAfterExample(
+        `${parentKey} line ${line}`,
+        `- ${value}`,
+        `- ${primaryKey}: ${value}`,
+      )
+      return {
+        exactCorrection: `Moved the existing bare list item ${formatQuotedValue(value)} into ${primaryKey} under ${parentKey} at line ${line}.`,
+        ...(example ? { examples: [example] } : {}),
+      }
     }
   }
 
@@ -993,6 +1013,18 @@ function deriveInterventionFromWarning(warning: string): StructuredIntervention 
       summary: 'A plain YAML scalar contained colon-space text that YAML could otherwise interpret as a nested mapping.',
       why: 'YAML treats colon-space inside an unquoted scalar as structure, so header-like or prose values can parse as the wrong type.',
       how: 'LoopTroop wrapped the existing scalar text in double quotes and reparsed the payload without changing the scalar content.',
+    })
+  }
+
+  if (/yaml sequence entry.*treated bare item/i.test(normalized)) {
+    return buildIntervention(warning, {
+      code: 'parser_sequence_item_primary_key',
+      stage: 'parse',
+      category: 'parser_fix',
+      title: 'Repaired a YAML list item key',
+      summary: 'A structured YAML list entry used a bare scalar where the item object should have started with its primary key.',
+      why: 'YAML cannot attach nested object fields to a scalar list item, so the generated list entry fails strict parsing.',
+      how: 'LoopTroop moved the existing bare scalar text into the configured primary key for that list and reparsed the payload.',
     })
   }
 

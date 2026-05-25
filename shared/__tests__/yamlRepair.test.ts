@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import jsYaml from 'js-yaml'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
 
 describe.concurrent('repairYamlListDashSpace', () => {
   it.each([
@@ -42,6 +42,115 @@ describe.concurrent('repairYamlListDashSpace', () => {
     expect(parsed.questions).toHaveLength(2)
     expect(parsed.questions[0]!.id).toBe('Q01')
     expect(parsed.questions[1]!.id).toBe('Q02')
+  })
+})
+
+describe('repairYamlSequenceItemPrimaryKeys', () => {
+  const options = {
+    beads: {
+      primaryKey: 'id',
+      childKeys: ['title', 'description', 'contextGuidance', 'acceptanceCriteria', 'tests', 'testCommands'],
+    },
+    files: {
+      primaryKey: 'path',
+      childKeys: ['rationale', 'relevance', 'likely_action', 'content'],
+    },
+  } as const
+
+  it('repairs structured bead list items that emit a bare id before object fields', () => {
+    const input = [
+      'beads:',
+      '  - id: config-schema-addition',
+      '    title: Add config schema',
+      '    testCommands:',
+      '      - go test ./lib/config -run TestFolderConfiguration',
+      '  - config-xml-json-marshalling',
+      '    title: Implement XML/JSON unmarshalling',
+      '    description: Handle conflict resolution config values.',
+    ].join('\n')
+    const expected = [
+      'beads:',
+      '  - id: config-schema-addition',
+      '    title: Add config schema',
+      '    testCommands:',
+      '      - go test ./lib/config -run TestFolderConfiguration',
+      '  - id: config-xml-json-marshalling',
+      '    title: Implement XML/JSON unmarshalling',
+      '    description: Handle conflict resolution config values.',
+    ].join('\n')
+
+    const result = repairYamlSequenceItemPrimaryKeys(input, options)
+
+    expect(result.yaml).toBe(expected)
+    expect(result.repairs).toEqual([
+      { parentKey: 'beads', primaryKey: 'id', value: 'config-xml-json-marshalling', line: 6 },
+    ])
+    const parsed = jsYaml.load(result.yaml) as { beads: Array<{ id: string }> }
+    expect(parsed.beads[1]?.id).toBe('config-xml-json-marshalling')
+  })
+
+  it('preserves quoted emitted values while moving them into the primary key', () => {
+    const input = [
+      'files:',
+      '  - "src/app.ts"',
+      '    rationale: App entry point.',
+      '    relevance: high',
+    ].join('\n')
+
+    const result = repairYamlSequenceItemPrimaryKeys(input, options)
+
+    expect(result.yaml).toBe([
+      'files:',
+      '  - path: "src/app.ts"',
+      '    rationale: App entry point.',
+      '    relevance: high',
+    ].join('\n'))
+    expect(result.repairs).toEqual([
+      { parentKey: 'files', primaryKey: 'path', value: '"src/app.ts"', line: 2 },
+    ])
+  })
+
+  it('does not modify scalar-only child lists even when entries are followed by field-like lines', () => {
+    const input = [
+      'beads:',
+      '  - id: bead-1',
+      '    contextGuidance:',
+      '      patterns:',
+      '        - keep-parser-local',
+      '          title: This is still scalar-list content.',
+      '      anti_patterns:',
+      '        - invent-text',
+      '    acceptanceCriteria:',
+      '      - repair-formatting-only',
+      '        title: This is not a bead item.',
+      '    tests:',
+      '      - parser-test',
+      '        title: This is not a bead item.',
+      '    testCommands:',
+      '      - npm-test',
+      '        title: This is not a bead item.',
+    ].join('\n')
+
+    const result = repairYamlSequenceItemPrimaryKeys(input, options)
+
+    expect(result.yaml).toBe(input)
+    expect(result.repairs).toEqual([])
+  })
+
+  it('does not repair ambiguous prose or entries without following object child fields', () => {
+    const input = [
+      'beads:',
+      '  - Add config schema',
+      '    title: Prose should not become an id.',
+      '  - config-schema-addition',
+      '  - another-entry',
+      '    unknownField: Unknown child keys are not enough evidence.',
+    ].join('\n')
+
+    const result = repairYamlSequenceItemPrimaryKeys(input, options)
+
+    expect(result.yaml).toBe(input)
+    expect(result.repairs).toEqual([])
   })
 })
 

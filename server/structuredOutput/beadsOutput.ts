@@ -23,6 +23,23 @@ import { parseRefinementChanges } from './refinementChanges'
 import { buildStructuredOutputFailure } from './failure'
 import { getErrorMessage } from '@shared/typeGuards'
 
+const BEAD_SEQUENCE_CHILD_KEYS = ['title', 'name', 'prdRefs', 'prd_refs', 'description', 'details', 'contextGuidance', 'context_guidance', 'acceptanceCriteria', 'acceptance_criteria', 'tests', 'testCommands', 'test_commands'] as const
+const BEAD_SEQUENCE_ITEM_PRIMARY_KEYS = {
+  beads: { primaryKey: 'id', childKeys: BEAD_SEQUENCE_CHILD_KEYS },
+  tasks: { primaryKey: 'id', childKeys: BEAD_SEQUENCE_CHILD_KEYS },
+  items: { primaryKey: 'id', childKeys: BEAD_SEQUENCE_CHILD_KEYS },
+  issues: { primaryKey: 'id', childKeys: BEAD_SEQUENCE_CHILD_KEYS },
+  workitems: { primaryKey: 'id', childKeys: BEAD_SEQUENCE_CHILD_KEYS },
+  work_items: { primaryKey: 'id', childKeys: BEAD_SEQUENCE_CHILD_KEYS },
+} as const
+
+const RELEVANT_FILES_SEQUENCE_ITEM_PRIMARY_KEYS = {
+  files: {
+    primaryKey: 'path',
+    childKeys: ['rationale', 'reason', 'why', 'relevance', 'likely_action', 'likelyAction', 'action', 'content', 'contents', 'code', 'source', 'snippet', 'excerpt', 'content_preview', 'contentPreview', 'preview', 'signatures'],
+  },
+} as const
+
 export interface BeadDraftMetrics {
   beadCount: number
   totalTestCount: number
@@ -189,6 +206,7 @@ export function normalizeBeadSubsetYamlOutput(
 
     try {
       const rawParsed = parseYamlOrJsonCandidate(candidate, {
+        sequenceItemPrimaryKeys: BEAD_SEQUENCE_ITEM_PRIMARY_KEYS,
         repairWarnings: candidateWarnings,
       })
 
@@ -887,13 +905,19 @@ export function normalizeRelevantFilesOutput(rawContent: string): StructuredOutp
 
       let yamlParsed: unknown
       try {
-        yamlParsed = parseYamlOrJsonCandidate(candidate, { repairWarnings: candidateWarnings })
+        yamlParsed = parseYamlOrJsonCandidate(candidate, {
+          sequenceItemPrimaryKeys: RELEVANT_FILES_SEQUENCE_ITEM_PRIMARY_KEYS,
+          repairWarnings: candidateWarnings,
+        })
       } catch (parseErr) {
         // Truncation recovery: trim the last incomplete file entry and retry
         const truncated = truncateToCompleteFileEntries(candidate)
         if (truncated) {
           try {
-            yamlParsed = parseYamlOrJsonCandidate(truncated, { repairWarnings: candidateWarnings })
+            yamlParsed = parseYamlOrJsonCandidate(truncated, {
+              sequenceItemPrimaryKeys: RELEVANT_FILES_SEQUENCE_ITEM_PRIMARY_KEYS,
+              repairWarnings: candidateWarnings,
+            })
             candidateWarnings.push('Truncated incomplete last file entry to recover from malformed YAML.')
           } catch {
             throw parseErr

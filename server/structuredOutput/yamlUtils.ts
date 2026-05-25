@@ -1,6 +1,6 @@
 import jsYaml from 'js-yaml'
 import type { PromptPart } from '../opencode/types'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlTypeUnionScalars, repairYamlUnclosedQuotes, stripCodeFences } from '@shared/yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlTypeUnionScalars, repairYamlUnclosedQuotes, stripCodeFences, type YamlSequenceItemPrimaryKeyOptions, type YamlSequenceItemPrimaryKeyRepair } from '@shared/yamlRepair'
 import { isRecord } from '@shared/typeGuards'
 
 export { isRecord }
@@ -119,6 +119,7 @@ export function stripSpuriousXmlTags(content: string): string {
 
 interface ParseYamlOrJsonCandidateOptions {
   nestedMappingChildren?: Record<string, readonly string[]>
+  sequenceItemPrimaryKeys?: YamlSequenceItemPrimaryKeyOptions
   allowTrailingTerminalNoise?: boolean
   repairWarnings?: string[]
 }
@@ -175,6 +176,14 @@ function buildXmlStyleTagsWarning(tags?: string[]): string {
 
   if (normalizedTags.length === 0) return XML_STYLE_TAGS_WARNING
   return `Stripped XML-style tags ${formatQuotedList(normalizedTags)} from the payload before parsing.`
+}
+
+function escapeWarningValue(value: string): string {
+  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+}
+
+function buildSequenceItemPrimaryKeyRepairWarning(repair: YamlSequenceItemPrimaryKeyRepair): string {
+  return `Repaired YAML sequence entry under "${escapeWarningValue(repair.parentKey)}" at line ${repair.line}: treated bare item "${escapeWarningValue(repair.value)}" as ${repair.primaryKey} before parsing.`
 }
 
 function findWrapperPath(
@@ -518,6 +527,7 @@ export function parseYamlOrJsonCandidate(
         inlineYaml?: boolean
         mappingKeyColonSpace?: boolean
         plainScalarColon?: boolean
+        sequenceItemPrimaryKey?: YamlSequenceItemPrimaryKeyRepair[]
         freeTextScalar?: boolean
         xmlStyleTags?: string[]
       },
@@ -536,6 +546,9 @@ export function parseYamlOrJsonCandidate(
       }
       if (appliedRepairs?.plainScalarColon) {
         appendRepairWarningOnce(options?.repairWarnings, PLAIN_SCALAR_COLON_WARNING)
+      }
+      for (const repair of appliedRepairs?.sequenceItemPrimaryKey ?? []) {
+        appendRepairWarningOnce(options?.repairWarnings, buildSequenceItemPrimaryKeyRepairWarning(repair))
       }
       if (appliedRepairs?.freeTextScalar) {
         appendRepairWarningOnce(options?.repairWarnings, FREE_TEXT_SCALAR_WARNING)
@@ -574,14 +587,19 @@ export function parseYamlOrJsonCandidate(
       })
       const mappingKeyColonSpacePreRepaired = repairYamlMappingKeyColonSpace(inlineKeyPreRepaired)
       const plainScalarColonPreRepaired = repairYamlPlainScalarColons(mappingKeyColonSpacePreRepaired)
-      const preParseRepaired = applyNestedMappingRepair(plainScalarColonPreRepaired)
+      const sequenceItemPrimaryKeyPreRepaired = repairYamlSequenceItemPrimaryKeys(
+        plainScalarColonPreRepaired,
+        options?.sequenceItemPrimaryKeys,
+      )
+      const preParseRepaired = applyNestedMappingRepair(sequenceItemPrimaryKeyPreRepaired.yaml)
       if (preParseRepaired !== candidate) {
         try {
           return finalizeParsedCandidate(jsYaml.load(preParseRepaired), {
             inlineYaml: inlineSequencePreRepaired !== candidate || inlineKeyPreRepaired !== inlineSequencePreRepaired,
             mappingKeyColonSpace: mappingKeyColonSpacePreRepaired !== inlineKeyPreRepaired,
             plainScalarColon: plainScalarColonPreRepaired !== mappingKeyColonSpacePreRepaired,
-            nestedMappingChildren: preParseRepaired !== plainScalarColonPreRepaired,
+            sequenceItemPrimaryKey: sequenceItemPrimaryKeyPreRepaired.repairs,
+            nestedMappingChildren: preParseRepaired !== sequenceItemPrimaryKeyPreRepaired.yaml,
           })
         } catch { /* fall through to the original input and later repairs */ }
       }
@@ -608,25 +626,33 @@ export function parseYamlOrJsonCandidate(
           nestedMappingChildren: options?.nestedMappingChildren,
         })
         const mappingKeyColonSpaceRepaired = repairYamlMappingKeyColonSpace(inlineRepaired)
-        if (mappingKeyColonSpaceRepaired !== effectiveBase) {
-          const nestedInlineRepaired = applyNestedMappingRepair(mappingKeyColonSpaceRepaired)
-          if (nestedInlineRepaired !== mappingKeyColonSpaceRepaired) {
+        const sequenceItemPrimaryKeyInlineRepaired = repairYamlSequenceItemPrimaryKeys(
+          mappingKeyColonSpaceRepaired,
+          options?.sequenceItemPrimaryKeys,
+        )
+        if (sequenceItemPrimaryKeyInlineRepaired.yaml !== effectiveBase) {
+          const nestedInlineRepaired = applyNestedMappingRepair(sequenceItemPrimaryKeyInlineRepaired.yaml)
+          if (nestedInlineRepaired !== sequenceItemPrimaryKeyInlineRepaired.yaml) {
             try {
               return finalizeParsedCandidate(jsYaml.load(nestedInlineRepaired), {
                 nestedMappingChildren: true,
                 inlineYaml: inlineRepaired !== effectiveBase,
                 mappingKeyColonSpace: mappingKeyColonSpaceRepaired !== inlineRepaired,
+                sequenceItemPrimaryKey: sequenceItemPrimaryKeyInlineRepaired.repairs,
               })
             } catch { /* fall through — later repairs may still be needed */ }
           }
           try {
-            return finalizeParsedCandidate(jsYaml.load(mappingKeyColonSpaceRepaired), {
+            return finalizeParsedCandidate(jsYaml.load(sequenceItemPrimaryKeyInlineRepaired.yaml), {
               inlineYaml: inlineRepaired !== effectiveBase,
               mappingKeyColonSpace: mappingKeyColonSpaceRepaired !== inlineRepaired,
+              sequenceItemPrimaryKey: sequenceItemPrimaryKeyInlineRepaired.repairs,
             })
           } catch { /* fall through — lines split but further repairs may be needed */ }
         }
-        const afterInline = mappingKeyColonSpaceRepaired !== effectiveBase ? mappingKeyColonSpaceRepaired : effectiveBase
+        const afterInline = sequenceItemPrimaryKeyInlineRepaired.yaml !== effectiveBase
+          ? sequenceItemPrimaryKeyInlineRepaired.yaml
+          : effectiveBase
 
         // Pre-processing: strip XML tags, quote fragile free_text values, remove duplicate keys, fix missing list-dash space
         const xmlStripped = stripSpuriousXmlTags(afterInline)
@@ -636,6 +662,7 @@ export function parseYamlOrJsonCandidate(
         const deduped = repairYamlDuplicateKeys(dashFixed)
         const base = applyNestedMappingRepair(deduped)
         const appliedPreParseRepairs = {
+          sequenceItemPrimaryKey: sequenceItemPrimaryKeyInlineRepaired.repairs,
           freeTextScalar: freeTextQuoted !== xmlStripped,
           xmlStyleTags: xmlTags,
         }
