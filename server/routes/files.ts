@@ -331,9 +331,7 @@ async function revealFolderInExplorer(targetPath: string) {
     }
   } catch {
     // If the path doesn't exist, try its parent
-    try {
-      resolvedPath = path.dirname(resolvedPath)
-    } catch {}
+    resolvedPath = path.dirname(resolvedPath)
   }
 
   const isWsl = process.platform === 'linux' && (
@@ -374,4 +372,3 @@ filesRouter.post('/files/open-path', async (c) => {
 })
 
 export { filesRouter }
-

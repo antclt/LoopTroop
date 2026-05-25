@@ -25,13 +25,16 @@ describe('gitOps allowlist/denylist', () => {
 
   it('allows .jsonl files', () => {
     expect(isAllowedFile('issues.jsonl')).toBe(true)
-    expect(isAllowedFile('.ticket/issues.jsonl')).toBe(true)
+    expect(isAllowedFile('reports/issues.jsonl')).toBe(true)
   })
 
-  it('allows known ticket artifact paths', () => {
-    expect(isAllowedFile('.ticket/interview.yaml')).toBe(true)
-    expect(isAllowedFile('.ticket/prd.yaml')).toBe(true)
-    expect(isAllowedFile('.ticket/codebase-map.yaml')).toBe(true)
+  it('blocks all .ticket paths from commit capture', () => {
+    expect(isAllowedFile('.ticket/interview.yaml')).toBe(false)
+    expect(isAllowedFile('.ticket/prd.yaml')).toBe(false)
+    expect(isAllowedFile('.ticket/codebase-map.yaml')).toBe(false)
+    expect(isAllowedFile('.ticket/beads/master/.beads/issues.jsonl')).toBe(false)
+    expect(isAllowedFile('.ticket/meta/ticket.meta.json')).toBe(false)
+    expect(isAllowedFile('.ticket/ui/artifact-companions/beads_expanded.json')).toBe(false)
   })
 
   it('blocks runtime/internal paths', () => {
@@ -341,6 +344,23 @@ describe('commitBeadChanges', () => {
     })
   })
 
+  it('returns { committed: false, pushed: false } when only .ticket files changed', () => {
+    const dir = makeFreshRepo()
+    mkdirSync(join(dir, '.ticket', 'beads', 'master', '.beads'), { recursive: true })
+    mkdirSync(join(dir, '.ticket', 'ui', 'artifact-companions'), { recursive: true })
+    writeFileSync(join(dir, '.ticket', 'beads', 'master', '.beads', 'issues.jsonl'), '{"id":"bead-1"}\n')
+    writeFileSync(join(dir, '.ticket', 'prd.yaml'), 'artifact: prd\n')
+    writeFileSync(join(dir, '.ticket', 'ui', 'artifact-companions', 'beads_expanded.json'), '{"ok":true}\n')
+
+    expect(commitBeadChanges(dir, 'bead-ticket-only', 'Skip ticket state')).toEqual({
+      committed: false,
+      pushed: false,
+    })
+
+    const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
+    expect(status).toContain('.ticket/')
+  })
+
   it('formats the commit message as bead(<beadId>): <beadTitle>', () => {
     const dir = makeFreshRepo()
     writeFileSync(join(dir, 'msg-test.ts'), 'export const m = 1\n')
@@ -364,6 +384,30 @@ describe('commitBeadChanges', () => {
     // photo.png should remain untracked
     const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
     expect(status).toContain('photo.png')
+  })
+
+  it('commits code changes while leaving .ticket files untracked', () => {
+    const dir = makeFreshRepo()
+    mkdirSync(join(dir, '.ticket', 'beads', 'master', '.beads'), { recursive: true })
+    writeFileSync(join(dir, 'app.ts'), 'export const app = 1\n')
+    writeFileSync(join(dir, '.ticket', 'beads', 'master', '.beads', 'issues.jsonl'), '{"id":"bead-1"}\n')
+
+    const result = commitBeadChanges(dir, 'bead-mixed-ticket', 'Commit code only')
+
+    expect(result.committed).toBe(true)
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-only',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    expect(committedFiles).toEqual(['app.ts'])
+
+    const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
+    expect(status).toContain('.ticket/')
   })
 
   it('does not commit pre-staged disallowed files alongside allowlisted changes', () => {

@@ -27,7 +27,7 @@ LoopTroop deliberately separates app-level state from project-level runtime stat
 | `<project>/.looptroop/worktrees/<ticket>/` | Ticket-owned Git worktree and `.ticket/**` runtime artifacts | One worktree per ticket |
 | `<ticket-worktree>/.ticket/runtime/` | Execution logs, stream state, locks, session records, temporary files, and state projection | Preserved or cleaned according to ticket outcome and cleanup choice |
 
-LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file when a project is attached. That keeps runtime state out of normal Git status without modifying the project's committed `.gitignore`.
+LoopTroop adds `/.looptroop/` and `/.ticket/` to the repository-local `.git/info/exclude` file when a project is attached. That keeps project-level runtime state and ticket-local artifacts out of normal Git status without modifying the project's committed `.gitignore`.
 
 ## Startup Maintenance
 
@@ -196,7 +196,7 @@ git commit -m "Stop tracking LoopTroop runtime data"
 
 This removes LoopTroop runtime paths from the Git index without deleting the local runtime files from disk.
 
-After cleanup, `git status --short .looptroop` should not show tracked `.looptroop` entries. Runtime files may still exist locally, but they should be ignored by the repo-local exclude.
+After cleanup, `git status --short .looptroop` should not show tracked `.looptroop` entries. Runtime files may still exist locally, but they should be ignored by the repo-local exclude. Ticket worktree artifacts under `.ticket/**` are also ignored locally and excluded from future bead commits; they remain available to LoopTroop but are not intended for target repository branches.
 
 Other ticket initialization errors from the Git hygiene check:
 

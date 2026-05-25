@@ -69,7 +69,8 @@ const LEGACY_EXECUTION_SETUP_CACHE_ROOTS = [
   '.cache/project-tooling',
 ] as const
 
-// Stable ticket artifacts that should always be committed regardless of extension
+// Stable root-level artifacts that should always be committed regardless of extension.
+// Ticket-local artifacts under .ticket/** stay local and are never captured.
 const ALWAYS_ALLOW_PATHS = [
   'issues.jsonl',
   'interview.yaml',
@@ -166,26 +167,29 @@ export function getExecutionSetupCommitExcludedRoots(worktreePath: string): stri
 }
 
 export function isAllowedFile(path: string, options: FileAllowOptions = {}): boolean {
+  const normalizedPath = normalizeRepoPath(path)
+  if (isWithinRoot(normalizedPath, '.ticket')) return false
+
   const excludedRoots = [
     ...LEGACY_EXECUTION_SETUP_CACHE_ROOTS,
     ...(options.excludedRoots ?? []),
   ]
   for (const root of excludedRoots) {
-    if (isWithinRoot(path, root)) return false
+    if (isWithinRoot(normalizedPath, root)) return false
   }
 
   // Check blocked patterns first
   for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(path)) return false
+    if (pattern.test(normalizedPath)) return false
   }
 
-  // Always allow known ticket artifacts
+  // Always allow known root-level planning artifacts
   for (const allowed of ALWAYS_ALLOW_PATHS) {
-    if (path.endsWith(allowed)) return true
+    if (normalizedPath.endsWith(allowed)) return true
   }
 
   // Check extension
-  const ext = path.slice(path.lastIndexOf('.'))
+  const ext = normalizedPath.slice(normalizedPath.lastIndexOf('.'))
   return ALLOWED_EXTENSIONS.has(ext)
 }
 

@@ -40,7 +40,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 | --- | --- | --- |
 | `~/.config/looptroop/app.sqlite` by default | Singleton profile, attached projects, app meta | Configurable via `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
 | `<project>/.looptroop/db.sqlite` | Projects, tickets, phase artifacts, phase attempts, OpenCode sessions, status history, error occurrences | This is the project-local operational database |
-| `<project>/.looptroop/worktrees/<ticket>/` | The isolated ticket worktree used for planning artifacts and code changes | Each ticket gets its own worktree; startup blocks if `.looptroop` is tracked by Git so stale runtime data cannot be checked out into new worktrees |
+| `<project>/.looptroop/worktrees/<ticket>/` | The isolated ticket worktree used for planning artifacts and code changes | Each ticket gets its own worktree; startup blocks if `.looptroop` is tracked by Git so stale runtime data cannot be checked out into new worktrees; `.ticket/**` artifacts inside the worktree are local LoopTroop state and are excluded from bead commits and PR diffs |
 | `.ticket/relevant-files.yaml` | Relevant file scan output used by later planning phases | Replaces older `codebase-map.yaml` terminology |
 | `.ticket/interview.yaml` and `.ticket/prd.yaml` | Editable review artifacts for the approved planning stages | These are user-facing canonical documents |
 | `.ticket/beads/<flow>/.beads/issues.jsonl` | The current bead plan for a given flow or base branch | Stored as line-oriented JSONL, but rewritten atomically on updates |
@@ -52,7 +52,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 | `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps, approval receipts, user-edit receipts, cleanup reports, and content hashes for reviewed artifacts |
 
 > Note
-> SQLite and the filesystem are complementary, not redundant. The database is optimized for querying and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable.
+> SQLite and the filesystem are complementary, not redundant. The database is optimized for querying and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable while staying local to LoopTroop rather than becoming target-repository branch content.
 
 ## End-to-End Ticket Lifecycle
 

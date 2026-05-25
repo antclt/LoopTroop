@@ -20,6 +20,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Allow Continue for blocked `HTTP 402 Payment Required` OpenCode provider errors when the original session is still active.
 - Show live `npm run dev` preflight progress so slow startup checks no longer look stalled.
 - Added a manual reload button next to "AI Models" in Configuration to force-refresh available OpenCode providers and models on demand.
+- Keep future `.ticket/**` metadata local to LoopTroop so ticket artifacts no longer get committed or pushed to target repository branches.
 - The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level to the log directory. Use `npm run dev --opencode-logs=all` to additionally print them to the console.
 
 ### Detailed Changes
@@ -30,6 +31,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Display index-based bead numbers next to dependencies (Blocked By, Blocks) in the collapsible Beads draft artifact details view.
 - Bead `startedAt` now preserves the first iteration's start timestamp across retries instead of being overwritten on each attempt. Only `updatedAt` reflects the latest attempt start time.
 - Bead `createdAt` is now stamped at approval time (or when the user saves edits during `WAITING_BEADS_APPROVAL`) instead of at expansion time. Beads start with `createdAt: ''` and receive their timestamp when the user approves or edits them.
+- Ticket worktree artifacts under `.ticket/**` now stay local: project attach installs `/.ticket/` in `.git/info/exclude`, and bead finalization excludes those files from commit capture while still preserving them across execution resets.
 
 #### Added
 - Added a 'Reveal in File Explorer' button next to the copy path button in the ticket details view.

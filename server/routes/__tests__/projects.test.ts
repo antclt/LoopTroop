@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { Hono } from 'hono'
 import { resolve } from 'node:path'
 import { initializeDatabase } from '../../db/init'
@@ -53,7 +53,7 @@ describe('projectRouter project cleanup', () => {
     delete process.env.WSL_DISTRO_NAME
   })
 
-  it('installs a repo-local .looptroop exclude and keeps git status clean', () => {
+  it('installs repo-local LoopTroop excludes and keeps git status clean', () => {
     const repoDir = repoManager.createRepo()
 
     attachProject({
@@ -63,12 +63,15 @@ describe('projectRouter project cleanup', () => {
     })
 
     writeFileSync(resolve(getProjectLoopTroopDir(repoDir), 'runtime-marker.txt'), 'runtime\n')
+    mkdirSync(resolve(repoDir, '.ticket'), { recursive: true })
+    writeFileSync(resolve(repoDir, '.ticket', 'runtime-marker.txt'), 'ticket runtime\n')
 
     expect(readLocalExcludeRules(repoDir)).toContain('/.looptroop/')
+    expect(readLocalExcludeRules(repoDir)).toContain('/.ticket/')
     expect(git(repoDir, ['status', '--porcelain'])).toBe('')
   })
 
-  it('does not duplicate the repo-local .looptroop exclude rule on reattach', () => {
+  it('does not duplicate repo-local LoopTroop exclude rules on reattach', () => {
     const repoDir = repoManager.createRepo()
 
     attachProject({
@@ -80,8 +83,11 @@ describe('projectRouter project cleanup', () => {
 
     const loopTroopRules = readLocalExcludeRules(repoDir)
       .filter((rule) => rule === '/.looptroop/')
+    const ticketRules = readLocalExcludeRules(repoDir)
+      .filter((rule) => rule === '/.ticket/')
 
     expect(loopTroopRules).toHaveLength(1)
+    expect(ticketRules).toHaveLength(1)
   })
 
   it('deletes project-local LoopTroop state and allows a clean re-attach', async () => {

@@ -79,7 +79,10 @@ function gitCommandSucceeds(projectPath: string, args: string[]) {
   return ok
 }
 
-const LOOP_TROOP_EXCLUDE_RULE = '/.looptroop/'
+const LOOP_TROOP_EXCLUDE_RULES = [
+  '/.looptroop/',
+  '/.ticket/',
+] as const
 
 export function getCurrentBranch(projectPath: string): string | null {
   try {
@@ -134,19 +137,23 @@ export function gitRefExists(projectPath: string, ref: string): boolean {
   return gitCommandSucceeds(projectPath, ['show-ref', '--verify', '--quiet', ref])
 }
 
-export function ensureLocalGitExclude(projectPath: string, rule = LOOP_TROOP_EXCLUDE_RULE) {
+export function ensureLocalGitExclude(projectPath: string, rules: string | readonly string[] = LOOP_TROOP_EXCLUDE_RULES) {
   const excludeGitPath = runGit(projectPath, ['rev-parse', '--git-path', 'info/exclude'])
   const excludePath = resolve(projectPath, excludeGitPath)
   const raw = existsSync(excludePath) ? readFileSync(excludePath, 'utf8') : ''
   const normalized = raw.replace(/\r\n/g, '\n')
-  const hasRule = normalized.split('\n').includes(rule)
+  const existingRules = new Set(normalized.split('\n'))
+  const desiredRules = Array.isArray(rules) ? rules : [rules]
   const newline = raw.includes('\r\n') ? '\r\n' : '\n'
 
   let next = raw
-  if (!hasRule) {
-    const separator = raw.length === 0 || raw.endsWith('\n') ? '' : newline
-    next = `${raw}${separator}${rule}${newline}`
-  } else if (raw.length > 0 && !raw.endsWith('\n')) {
+  for (const rule of desiredRules) {
+    if (existingRules.has(rule)) continue
+    const separator = next.length === 0 || next.endsWith('\n') ? '' : newline
+    next = `${next}${separator}${rule}${newline}`
+    existingRules.add(rule)
+  }
+  if (next === raw && raw.length > 0 && !raw.endsWith('\n')) {
     next = `${raw}${newline}`
   }
 
