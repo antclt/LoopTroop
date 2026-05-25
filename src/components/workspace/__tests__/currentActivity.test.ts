@@ -109,6 +109,22 @@ describe('deriveCurrentActivity', () => {
     expect(activity?.active).toBe(false)
   })
 
+  it('classifies explicit OpenCode provider timeout logs as provider_timeout_preserved', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({ sessionId: 'ses_continue' }),
+      makeLog('provider-timeout', 'OpenCode/provider timeout for session ses_continue; preserving session for Continue.', {
+        timestamp: timestamp(60_000),
+        source: 'opencode',
+        audience: 'debug',
+        kind: 'error',
+      }),
+    ], BASE_TIME_MS + 61_000)
+
+    expect(activity?.kind).toBe('provider_timeout_preserved')
+    expect(activity?.diagnostic).toBe('provider_timeout_preserved')
+    expect(activity?.sessionId).toBe('ses_continue')
+  })
+
   it('shows empty-output state for responseChars=0', () => {
     const activity = deriveCurrentActivity([
       makePrompt(),
@@ -135,6 +151,22 @@ describe('deriveCurrentActivity', () => {
 
     expect(activity?.kind).toBe('model_no_activity_timeout')
     expect(activity?.diagnostic).toBe('model_no_activity_timeout')
+  })
+
+  it('classifies explicit iteration timeout logs as iteration_timeout', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({ sessionId: 'ses_iteration', beadId: 'bead-7' }),
+      makeLog('iteration-timeout', 'Iteration timeout for bead bead-7 attempt 1; resetting for attempt 2 of 3.', {
+        timestamp: timestamp(120_000),
+        source: 'workflow',
+        audience: 'debug',
+        kind: 'error',
+      }),
+    ], BASE_TIME_MS + 121_000)
+
+    expect(activity?.kind).toBe('iteration_timeout')
+    expect(activity?.diagnostic).toBe('iteration_timeout')
+    expect(activity?.beadId).toBe('bead-7')
   })
 
   it('classifies timeout after first activity as workflow_timeout', () => {

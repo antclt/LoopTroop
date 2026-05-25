@@ -32,6 +32,7 @@ import {
   clearAllPendingSessionContinuationsForTests,
   requestSessionContinuation,
 } from '../../opencode/sessionContinuation'
+import { WorkflowDeadlineTimeoutError } from '../../lib/deadlineErrors'
 
 type OpenCodeSDKClient = NonNullable<ConstructorParameters<typeof OpenCodeSDKAdapter>[1]>
 
@@ -2124,6 +2125,90 @@ describe('runOpenCodePrompt', () => {
     expect((errors[0] as Error).message).toBe('Timeout')
     // Verify it's NOT a CancelledError
     expect((errors[0] as Error).name).not.toBe('CancelledError')
+  })
+
+  it('reports workflow-scoped prompt deadline as WorkflowDeadlineTimeoutError', async () => {
+    const deferredResponse = createDeferred<string>()
+    const testAdapter = new TestOpenCodeAdapter([deferredResponse])
+    const errors: unknown[] = []
+
+    const runPromise = runOpenCodeSessionPrompt({
+      adapter: testAdapter,
+      session: { id: 'ses-workflow-timeout' },
+      parts: [{ type: 'text', content: 'test prompt' }],
+      timeoutMs: 25,
+      deadlineScope: 'workflow',
+      skipSessionValidation: true,
+      sessionOwnership: {
+        ticketId: 'ticket-1',
+        phase: 'CODING',
+        beadId: 'bead-1',
+        iteration: 3,
+        keepActive: true,
+      },
+      onStreamError: (err) => {
+        errors.push(err)
+      },
+    })
+
+    await expect(runPromise).rejects.toBeInstanceOf(WorkflowDeadlineTimeoutError)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBeInstanceOf(WorkflowDeadlineTimeoutError)
+    expect((errors[0] as Error).message).toContain('Iteration timeout for bead bead-1 attempt 3')
+  })
+
+  it('keeps workflow-scoped deadline typed when the adapter reports a generic Timeout after abort', async () => {
+    class TimeoutOnAbortAdapter extends TestOpenCodeAdapter {
+      constructor() {
+        super([])
+      }
+
+      override async promptSession(
+        sessionId: string,
+        parts: PromptPart[],
+        signal?: AbortSignal,
+        options?: PromptSessionOptions,
+      ): Promise<string> {
+        this.promptCalls.push({ sessionId, parts, options })
+        const activeSignal = options?.signal ?? signal
+        if (!activeSignal) throw new Error('Missing abort signal')
+        return await new Promise<string>((_, reject) => {
+          const rejectTimeout = () => reject(new Error('Timeout'))
+          if (activeSignal.aborted) {
+            rejectTimeout()
+            return
+          }
+          activeSignal.addEventListener('abort', rejectTimeout, { once: true })
+        })
+      }
+    }
+
+    const testAdapter = new TimeoutOnAbortAdapter()
+    const errors: unknown[] = []
+
+    const runPromise = runOpenCodeSessionPrompt({
+      adapter: testAdapter,
+      session: { id: 'ses-generic-timeout' },
+      parts: [{ type: 'text', content: 'test prompt' }],
+      timeoutMs: 25,
+      deadlineScope: 'workflow',
+      skipSessionValidation: true,
+      sessionOwnership: {
+        ticketId: 'ticket-1',
+        phase: 'CODING',
+        beadId: 'bead-2',
+        iteration: 4,
+        keepActive: true,
+      },
+      onStreamError: (err) => {
+        errors.push(err)
+      },
+    })
+
+    await expect(runPromise).rejects.toBeInstanceOf(WorkflowDeadlineTimeoutError)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBeInstanceOf(WorkflowDeadlineTimeoutError)
+    expect(testAdapter.abortCalls).toEqual(['ses-generic-timeout'])
   })
 })
 

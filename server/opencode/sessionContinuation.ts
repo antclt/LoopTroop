@@ -7,6 +7,7 @@ import {
 } from './blockedErrorDiagnostics'
 import type { OpenCodeResponseMeta } from './assistantMessageAnalysis'
 import type { SessionOwnership } from './sessionManager'
+import { isWorkflowDeadlineTimeoutError } from '../lib/deadlineErrors'
 
 const CONTINUABLE_STATUS_CODES = new Set([402, 408, 429, 500, 502, 503, 504, 529])
 const NON_CONTINUABLE_STATUS_CODES = new Set([400, 401, 403, 404, 413, 422])
@@ -116,6 +117,7 @@ export function buildContinuationDiagnostics(
 
 export function shouldPreserveSessionForContinuation(input: PreserveSessionForContinuationInput): boolean {
   if (input.signal?.aborted) return false
+  if (isWorkflowDeadlineTimeoutError(input.error)) return false
   if (!input.sessionId || !input.sessionOwnership?.ticketId || !input.sessionOwnership.phase) return false
 
   const diagnosticResult = buildContinuationDiagnostics(input)

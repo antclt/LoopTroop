@@ -120,7 +120,7 @@ How many continuable OpenCode `session.status` retry events LoopTroop allows bef
 
 This is separate from `Max Bead Retries` and `Structured Output Retries`. It applies to provider or transport interruptions inside a single OpenCode prompt, such as rate limits, usage limits, resource exhaustion, overload/capacity, temporary unavailability, timeouts/deadlines, fetch failures, and network/socket resets.
 
-When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` with provider diagnostics so you can Continue when the owned session is preserved, Retry, or Cancel. CODING has one extra protection: these provider stalls do not consume the bead retry budget or wait for the bead iteration timeout. `HTTP 402 Payment Required` provider blocks can also use Continue after the payment or workspace condition clears, while ordinary implementation failures, malformed completion markers, failed tests, and non-continuable auth/configuration/request errors keep their existing behavior.
+When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` with provider diagnostics so you can Continue when the owned session is preserved, Retry, or Cancel. CODING has one extra protection: these provider stalls do not consume the bead retry budget or wait for the bead iteration timeout. Provider/session timeouts, retry-budget exhaustion, 408/429, selected 5xx/529, overload, and transport failures may preserve the session for Continue when diagnostics prove it is resumable. `HTTP 402 Payment Required` provider blocks can also use Continue after the payment or workspace condition clears, while ordinary implementation failures, workflow-owned bead iteration timeouts, malformed completion markers, failed tests, and non-continuable auth/configuration/request errors keep their existing behavior.
 
 **Trade-offs:**
 
@@ -388,11 +388,11 @@ Once coverage is clean or this cap is reached, LoopTroop advances to `EXPANDING_
 **Default:** 1200 s (20 minutes)  
 **Range:** 0–3600 s
 
-The maximum runtime for a single bead attempt in `CODING`. If a coding session is still running when this deadline expires, LoopTroop treats it as a failed iteration and routes it through the standard retry path.
+The maximum runtime for a single bead attempt in `CODING`. If a coding session is still running when this workflow-owned deadline expires, LoopTroop treats it as a failed iteration and routes it through the standard retry path. This timeout is separate from OpenCode/provider interruption handling, which can preserve an addressable session for Continue.
 
 **What retry means here:**
 
-LoopTroop generates a context wipe note summarizing the failure, resets the worktree to the bead's start snapshot, opens a fresh OpenCode session, and retries — up to `Max Bead Retries` times.
+LoopTroop generates a context wipe note summarizing the failure when possible, abandons the timed-out session so stale completions cannot finalize the bead, resets the worktree to the bead's start snapshot, opens a fresh OpenCode session, and retries — up to `Max Bead Retries` times. Repeated iteration timeouts consume this same attempt budget; once it is exhausted, CODING blocks with `BEAD_RETRY_BUDGET_EXHAUSTED`.
 
 **Trade-offs:**
 

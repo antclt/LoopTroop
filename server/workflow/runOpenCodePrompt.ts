@@ -32,6 +32,11 @@ import {
   type OpenCodeRetryPolicy,
 } from '../opencode/retryPolicy'
 import { findOpenCodeLogErrorDetails } from '../opencode/logDiagnostics'
+import {
+  type DeadlineScope,
+  isWorkflowDeadlineTimeoutError,
+  WorkflowDeadlineTimeoutError,
+} from '../lib/deadlineErrors'
 
 export interface OpenCodeRunCallbacks {
   onSessionCreated?: (session: Session) => void
@@ -75,6 +80,7 @@ export interface OpenCodeRunOptions extends OpenCodeRunCallbacks {
   parts: PromptPart[]
   signal?: AbortSignal
   timeoutMs?: number
+  deadlineScope?: DeadlineScope
   model?: string
   agent?: string
   variant?: string
@@ -248,6 +254,22 @@ function getRemainingTimeoutMs(timeoutDeadline: number | undefined): number | un
   return timeoutDeadline === undefined ? undefined : timeoutDeadline - Date.now()
 }
 
+function buildDeadlineTimeoutError(
+  deadlineScope: DeadlineScope | undefined,
+  timeoutMs: number | undefined,
+  sessionOwnership: OpenCodeSessionOwnership | undefined,
+): Error {
+  if (deadlineScope === 'workflow') {
+    return new WorkflowDeadlineTimeoutError({
+      phase: sessionOwnership?.phase,
+      beadId: sessionOwnership?.beadId ?? undefined,
+      iteration: sessionOwnership?.iteration ?? undefined,
+      timeoutMs,
+    })
+  }
+  return new Error(TIMEOUT_ERROR_MESSAGE)
+}
+
 function isPromptTransportFailure(error: unknown): boolean {
   if (error instanceof DOMException && error.name === 'AbortError') return true
   if (!(error instanceof Error)) return true
@@ -287,6 +309,7 @@ export async function runOpenCodePrompt({
   parts,
   signal,
   timeoutMs,
+  deadlineScope,
   model,
   agent,
   variant,
@@ -348,7 +371,7 @@ export async function runOpenCodePrompt({
       )
   } catch (error) {
     if (acquisitionDeadline.timedOut()) {
-      throw new Error(TIMEOUT_ERROR_MESSAGE)
+      throw buildDeadlineTimeoutError(deadlineScope, timeoutMs, sessionOwnership)
     }
     throw error
   } finally {
@@ -372,6 +395,7 @@ export async function runOpenCodePrompt({
       parts: promptParts,
       signal,
       timeoutMs,
+      deadlineScope,
       model,
       agent,
       variant,
@@ -392,7 +416,7 @@ export async function runOpenCodePrompt({
     }
     return result
   } catch (error) {
-    preservedForContinuation = shouldPreserveSessionForContinuation({
+    preservedForContinuation = !isWorkflowDeadlineTimeoutError(error) && shouldPreserveSessionForContinuation({
       error,
       sessionId: session.id,
       modelId: model,
@@ -418,6 +442,7 @@ export async function runOpenCodeSessionPrompt({
   parts,
   signal,
   timeoutMs,
+  deadlineScope,
   model,
   agent,
   variant,
@@ -448,7 +473,7 @@ export async function runOpenCodeSessionPrompt({
       }, validationDeadline.signal)
     } catch (error) {
       if (validationDeadline.timedOut()) {
-        throw new Error(TIMEOUT_ERROR_MESSAGE)
+        throw buildDeadlineTimeoutError(deadlineScope, timeoutMs, sessionOwnership)
       }
       throw error
     } finally {
@@ -576,7 +601,7 @@ export async function runOpenCodeSessionPrompt({
       }
     }
     if (deadlineController?.signal.aborted) {
-      throw new Error(TIMEOUT_ERROR_MESSAGE)
+      throw buildDeadlineTimeoutError(deadlineScope, timeoutMs, sessionOwnership)
     }
     response = await adapter.promptSession(resolvedSession.id, parts, combinedSignal, promptOptions)
     if (openCodeRetryError) {
@@ -585,7 +610,7 @@ export async function runOpenCodeSessionPrompt({
     // Adapter completed but deadline may have fired during execution;
     // enforce the timeout even if the adapter didn't respect the signal.
     if (deadlineController?.signal.aborted) {
-      throw new Error(TIMEOUT_ERROR_MESSAGE)
+      throw buildDeadlineTimeoutError(deadlineScope, timeoutMs, sessionOwnership)
     }
   } catch (error) {
     if (openCodeRetryError) {
@@ -607,10 +632,10 @@ export async function runOpenCodeSessionPrompt({
       throw enrichedError
     }
     if (deadlineController?.signal.aborted) {
-      const timeoutError = error instanceof Error && error.message === TIMEOUT_ERROR_MESSAGE
-        ? error
-        : new Error(TIMEOUT_ERROR_MESSAGE)
-      const preserveForContinuation = shouldPreserveSessionForContinuation({
+      const timeoutError = deadlineScope === 'workflow' || !(error instanceof Error && error.message === TIMEOUT_ERROR_MESSAGE)
+        ? buildDeadlineTimeoutError(deadlineScope, timeoutMs, sessionOwnership)
+        : error
+      const preserveForContinuation = !isWorkflowDeadlineTimeoutError(timeoutError) && shouldPreserveSessionForContinuation({
         error: timeoutError,
         sessionId: resolvedSession.id,
         modelId: model,

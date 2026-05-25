@@ -50,7 +50,7 @@ These reminders force the model to emit machine-checkable progress state. If the
 > [!NOTE]
 > **The Ralph Loop Philosophy:** Instead of trying to talk an AI out of a broken coding spiral, LoopTroop acts like a strict manager. It says "stop, write down what failed, throw away your scratchpad, and start over with a clear head."
 
-When a bead attempt fails, LoopTroop does not keep extending the same degraded transcript.
+When a bead attempt fails, including when LoopTroop's own per-iteration deadline fires, LoopTroop does not keep extending the same degraded transcript.
 
 ```mermaid
 flowchart TD
@@ -70,7 +70,7 @@ This is the execution discipline that most closely matches the Ralph-loop idea: 
 
 ## Context Wipe Notes
 
-`generateContextWipeNote()` sends a context-capture prompt to the still-open failing session to summarize the attempt before abandonment.
+`generateContextWipeNote()` sends a context-capture prompt to the still-open failing session to summarize the attempt before abandonment. For a workflow-owned iteration timeout, this capture is best effort: LoopTroop may query the failed session for notes, but that session is no longer allowed to preserve Continue or later finalize the bead.
 
 The note is intentionally compact. It exists to answer:
 
@@ -87,7 +87,7 @@ Execution combines fresh sessions with ownership-aware reconnect.
 
 | Behavior | Why it exists |
 | --- | --- |
-| Fresh session per retry | Avoid carrying corrupted reasoning into the next iteration |
+| Fresh session per retry | Avoid carrying corrupted reasoning or stale timed-out completions into the next iteration |
 | Ownership-aware reconnect | Survive restart or resumable phase transitions when the same owned session still exists |
 | Explicit completion or abandonment | Keep session state auditable in `opencode_sessions` |
 
@@ -105,6 +105,8 @@ The profile controls two limits:
 Matching messages include rate limits, usage limits, resource exhaustion, overloaded/capacity responses, temporary unavailability, timeout/deadline errors, fetch failures, and network/socket resets. Persisted `HTTP 402 Payment Required` provider diagnostics are also eligible for Continue once the payment or workspace condition clears. Auth, invalid-request, permission, missing-key, request-size, model-not-found, and non-402 quota errors remain non-continuable.
 
 In any owned phase, retry-budget exhaustion can preserve the active OpenCode session when possible and route the ticket to `BLOCKED_ERROR` with diagnostics. Continue sends exactly `continue please` into that same session. During `CODING`, this also prevents provider stalls from consuming the bead iteration timeout or bead retry budget; Retry still keeps the normal bead reset/retry behavior. Generic OpenCode provider errors are best-effort enriched from matching local OpenCode logs before they are shown in the ticket.
+
+This provider/session budget is separate from LoopTroop's workflow-owned per-iteration deadline. A provider timeout, retry-budget exhaustion, 408/429, selected 5xx/529, overload, or transport failure may preserve an addressable OpenCode session for Continue. A CODING per-iteration timeout consumes the current bead attempt, abandons the timed-out session after context-wipe capture, resets the worktree, and retries in a fresh owned session until the bead retry budget is exhausted.
 
 During `CODING`, matching OpenCode retry/session/output-limit diagnostics are also remembered while the bead continues. If the bead later blocks through completion-marker exhaustion or the normal bead retry budget, the blocked error keeps that latest underlying OpenCode cause in its diagnostics while the primary error still describes the bead failure.
 
@@ -190,7 +192,9 @@ When setup provisions tooling, it writes `.ticket/runtime/execution-setup/env.sh
 
 ### Per-Iteration Timeout
 
-Per-iteration timeout is the maximum allowed runtime for one bead attempt in `CODING`. If an attempt exceeds this budget, LoopTroop treats it as a failed iteration and routes it through the normal retry path.
+Per-iteration timeout is the maximum allowed runtime for one bead attempt in `CODING`. If an attempt exceeds this budget, LoopTroop treats it as a workflow-owned failed iteration, generates context-wipe notes when possible, abandons the timed-out session, resets the worktree, and retries in a fresh owned session.
+
+Repeated per-iteration timeouts consume the same `maxIterations` bead attempt budget as other implementation failures. When that budget is exhausted, the bead is marked with `BEAD_RETRY_BUDGET_EXHAUSTED` and the ticket enters `BLOCKED_ERROR`.
 
 ### Max Bead Retries
 

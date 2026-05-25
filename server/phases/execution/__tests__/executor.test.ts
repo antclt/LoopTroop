@@ -563,6 +563,97 @@ describe('executeBead', () => {
     expect(timeoutNotePrompt).not.toContain('CONTEXT REFRESH:')
   })
 
+  it('treats owned coding iteration timeout as context wipe instead of continuable session preservation', async () => {
+    resetTestDb()
+    const { ticket, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Owned coding timeout reset',
+    })
+    patchTicket(ticket.id, { status: 'CODING' })
+
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.promptFailures.set('mock-session-1#1', 'stallUntilAbort')
+    adapter.mockResponses.set('mock-session-1#2', 'Timeout note from owned stalled session.')
+    adapter.mockResponses.set('mock-session-2#1', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+
+    const contextWipes: Array<{ reason: string; attempt: number; nextAttempt: number; maxAttempts: number | null }> = []
+    const preservedTimeouts: string[] = []
+    const result = await executeBead(
+      adapter,
+      buildBead(),
+      [{ type: 'text', content: 'Bead context' }],
+      paths.worktreePath,
+      2,
+      25,
+      undefined,
+      {
+        ticketId: ticket.id,
+        model: 'model-a',
+        onContextWipe: async ({ reason, attempt, nextAttempt, maxAttempts }) => {
+          contextWipes.push({ reason, attempt, nextAttempt, maxAttempts })
+        },
+        onContinuableTimeoutPreserved: ({ message }) => {
+          preservedTimeouts.push(message)
+        },
+      },
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.iteration).toBe(2)
+    expect(contextWipes).toEqual([
+      { reason: 'iteration_timeout', attempt: 1, nextAttempt: 2, maxAttempts: 2 },
+    ])
+    expect(preservedTimeouts).toEqual([])
+    expect(adapter.abortCalls).toEqual(['mock-session-1'])
+    expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
+  })
+
+  it('resets and retries when the per-iteration timeout expires during a continuation prompt', async () => {
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.mockResponses.set('mock-session-1#1', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"error","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"},"reason":"one more step"}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+    adapter.promptFailures.set('mock-session-1#2', 'stallUntilAbort')
+    adapter.mockResponses.set('mock-session-1#3', 'Timeout note after continuation stalled.')
+    adapter.mockResponses.set('mock-session-2#1', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+
+    const contextWipeReasons: string[] = []
+    const result = await executeBead(
+      adapter,
+      buildBead(),
+      [{ type: 'text', content: 'Bead context' }],
+      '/tmp/test',
+      2,
+      25,
+      undefined,
+      {
+        onContextWipe: async ({ reason }) => {
+          contextWipeReasons.push(reason)
+        },
+      },
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.iteration).toBe(2)
+    expect(contextWipeReasons).toEqual(['iteration_timeout'])
+    expect(adapter.promptCalls.map((call) => call.sessionId)).toEqual([
+      'mock-session-1',
+      'mock-session-1',
+      'mock-session-1',
+      'mock-session-2',
+    ])
+    expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
+  })
+
   it('uses the configured profile default timeout when no bead timeout is passed explicitly', async () => {
     vi.useFakeTimers()
     try {

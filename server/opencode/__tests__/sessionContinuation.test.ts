@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { OPENCODE_PROVIDER_AUTH_FAILED } from '@shared/errorCodes'
 import type { BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
-import { isContinuableBlockedError } from '../sessionContinuation'
+import { isContinuableBlockedError, shouldPreserveSessionForContinuation } from '../sessionContinuation'
+import { WorkflowDeadlineTimeoutError } from '../../lib/deadlineErrors'
 
 function diagnostics(input: Partial<BlockedErrorDiagnostics>): BlockedErrorDiagnostics {
   return {
@@ -60,6 +61,26 @@ describe('session continuation eligibility', () => {
     expect(isContinuableBlockedError({
       diagnostics: diagnostics({ sessionId: undefined, statusCode: 429 }),
       errorCodes: [],
+    })).toBe(false)
+  })
+
+  it('does not preserve workflow deadline timeouts as continuable OpenCode sessions', () => {
+    expect(shouldPreserveSessionForContinuation({
+      error: new WorkflowDeadlineTimeoutError({
+        phase: 'CODING',
+        beadId: 'bead-1',
+        iteration: 1,
+        timeoutMs: 25,
+      }),
+      sessionId: 'ses-workflow-timeout',
+      modelId: 'model-a',
+      sessionOwnership: {
+        ticketId: 'ticket-1',
+        phase: 'CODING',
+        beadId: 'bead-1',
+        iteration: 1,
+        keepActive: true,
+      },
     })).toBe(false)
   })
 })

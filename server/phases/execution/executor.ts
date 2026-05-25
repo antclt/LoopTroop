@@ -27,9 +27,11 @@ import {
 } from '../../opencode/blockedErrorDiagnostics'
 import {
   attachContinuationDiagnostics,
+  clearSessionContinuation,
   shouldPreserveSessionForContinuation,
 } from '../../opencode/sessionContinuation'
 import { isContinuableOpenCodeRetryMessage, type OpenCodeRetryPolicy } from '../../opencode/retryPolicy'
+import { isWorkflowDeadlineTimeoutError, WorkflowDeadlineTimeoutError } from '../../lib/deadlineErrors'
 
 const BEAD_STATUS_SCHEMA_REMINDER = [
   'Return exactly one <BEAD_STATUS>...</BEAD_STATUS> block and nothing else.',
@@ -64,6 +66,7 @@ type CodingPromptStage =
   | 'coding_continue'
   | 'coding_structured_retry'
   | 'context_wipe_note'
+type ContextWipeReason = 'failure' | 'iteration_timeout'
 
 async function resolveContextParts(input: ContextPartsInput): Promise<PromptPart[]> {
   if (typeof input === 'function') {
@@ -268,7 +271,16 @@ export async function executeBead(
     onOpenCodeStreamEvent?: (entry: { sessionId: string; iteration: number; event: StreamEvent }) => void
     onPromptDispatched?: (entry: { sessionId: string; iteration: number; event: OpenCodePromptDispatchEvent }) => void
     onPromptCompleted?: (entry: { iteration: number; stage: CodingPromptStage; event: OpenCodePromptCompletedEvent }) => void
-    onContextWipe?: (entry: { beadId: string; notes: string; iteration: number }) => Promise<void>
+    onContextWipe?: (entry: {
+      beadId: string
+      notes: string
+      iteration: number
+      reason: ContextWipeReason
+      attempt: number
+      nextAttempt: number
+      maxAttempts: number | null
+    }) => Promise<void>
+    onContinuableTimeoutPreserved?: (entry: { beadId: string; sessionId: string; iteration: number; message: string }) => void
     structuredRetryCount?: number
     opencodeRetryPolicy?: Partial<OpenCodeRetryPolicy>
   },
@@ -352,6 +364,7 @@ export async function executeBead(
     let activeSessionId: string | null = null
     let activeSession: Session | null = null
     const iterationErrors: string[] = []
+    let contextWipeReason: ContextWipeReason = 'failure'
     let latestMessages: Message[] = []
     const deadlineAt = timeout > 0 ? Date.now() + timeout : undefined
 
@@ -371,6 +384,7 @@ export async function executeBead(
         parts: beadPrompt,
         signal,
         timeoutMs: getRemainingTimeoutMs(deadlineAt),
+        deadlineScope: 'workflow',
         model: callbacks?.model,
         variant: callbacks?.variant,
         opencodeRetryPolicy: callbacks?.opencodeRetryPolicy,
@@ -458,7 +472,12 @@ export async function executeBead(
 
         const remainingMs = getRemainingTimeoutMs(deadlineAt)
         if (remainingMs !== undefined && remainingMs <= 0) {
-          throw new Error('Timeout')
+          throw new WorkflowDeadlineTimeoutError({
+            phase: 'CODING',
+            beadId: bead.id,
+            iteration,
+            timeoutMs: timeout,
+          })
         }
 
         if (shouldUseStructuredRetry(result)) {
@@ -479,6 +498,7 @@ export async function executeBead(
               parts: retryParts,
               signal,
               timeoutMs: remainingMs,
+              deadlineScope: 'workflow',
               model: callbacks?.model,
               sessionOwnership: codingSessionOwnership,
               opencodeRetryPolicy: callbacks?.opencodeRetryPolicy,
@@ -526,6 +546,7 @@ export async function executeBead(
           parts: buildContinuationPrompt(bead.id, result.errors, lastOutput),
           signal,
           timeoutMs: remainingMs,
+          deadlineScope: 'workflow',
           model: callbacks?.model,
           variant: callbacks?.variant,
           sessionOwnership: codingSessionOwnership,
@@ -559,14 +580,20 @@ export async function executeBead(
       }
     } catch (err) {
       throwIfCancelled(err, signal)
-      rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
-        error: err,
-        modelId: callbacks?.model,
-        sessionId: activeSessionId ?? undefined,
-        fallbackMessage: err instanceof Error ? err.message : undefined,
-      }))
+      const workflowDeadlineTimedOut = isWorkflowDeadlineTimeoutError(err)
+      if (workflowDeadlineTimedOut) {
+        contextWipeReason = 'iteration_timeout'
+      } else {
+        rememberOpenCodeDiagnostics(buildOpenCodeBlockedErrorDiagnostics({
+          error: err,
+          modelId: callbacks?.model,
+          sessionId: activeSessionId ?? undefined,
+          fallbackMessage: err instanceof Error ? err.message : undefined,
+        }))
+      }
       if (
-        activeSessionId
+        !workflowDeadlineTimedOut
+        && activeSessionId
         && callbacks?.ticketId
         && shouldPreserveSessionForContinuation({
           error: err,
@@ -584,6 +611,20 @@ export async function executeBead(
         })
       ) {
         const continuableError = err instanceof Error ? err : new Error(String(err))
+        const diagnosticResult = buildOpenCodeBlockedErrorDiagnostics({
+          error: continuableError,
+          modelId: callbacks.model,
+          sessionId: activeSessionId,
+          fallbackMessage: continuableError.message,
+        })
+        if (diagnosticResult.diagnostics?.kind === 'timeout') {
+          callbacks.onContinuableTimeoutPreserved?.({
+            beadId: bead.id,
+            sessionId: activeSessionId,
+            iteration,
+            message: `OpenCode/provider timeout for session ${activeSessionId}; preserving session for Continue.`,
+          })
+        }
         throw attachContinuationDiagnostics(continuableError, {
           error: continuableError,
           sessionId: activeSessionId,
@@ -648,15 +689,21 @@ export async function executeBead(
     const noteHeader = `[Iteration ${iteration} — ${new Date().toISOString()}]`
     const stampedNote = `${noteHeader}\n${effectiveNote}`
     bead.notes = bead.notes ? `${bead.notes}\n\n---\n\n${stampedNote}` : stampedNote
+    const attempt = iteration - startingIteration + 1
     try {
       await callbacks?.onContextWipe?.({
         beadId: bead.id,
         notes: bead.notes,
         iteration,
+        reason: contextWipeReason,
+        attempt,
+        nextAttempt: attempt + 1,
+        maxAttempts: maxIterations > 0 ? maxIterations : null,
       })
     } finally {
       if (contextWipeSessionId && sessionManager) {
         await sessionManager.abandonSession(contextWipeSessionId)
+        clearSessionContinuation(contextWipeSessionId)
         clearOpenCodePromptDispatchCount(contextWipeSessionId)
       }
     }

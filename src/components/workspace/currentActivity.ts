@@ -2,6 +2,8 @@ import type { LogEntry } from '@/context/LogContext'
 
 export type CurrentActivityDiagnostic =
   | 'provider_retry_timeout'
+  | 'provider_timeout_preserved'
+  | 'iteration_timeout'
   | 'model_no_activity_timeout'
   | 'empty_model_output'
   | 'workflow_timeout'
@@ -98,12 +100,22 @@ function isProviderRetryTimeoutEntry(entry: LogEntry): boolean {
   return /\bopencode retry (?:budget exhausted|grace window expired)\b/i.test(entry.line)
 }
 
+function isProviderTimeoutPreservedEntry(entry: LogEntry): boolean {
+  return /\bopencode\/provider timeout for session \S+;\s*preserving session for continue\b/i.test(entry.line)
+}
+
 function isEmptyModelOutputEntry(entry: LogEntry): boolean {
   return /\bresponseChars=0\b/i.test(entry.line)
 }
 
+function isIterationTimeoutEntry(entry: LogEntry): boolean {
+  return /\biteration timeout for bead \S+ attempt \d+;\s*resetting for attempt \d+(?: of \d+)?\b/i.test(entry.line)
+}
+
 function isGenericTimeoutEntry(entry: LogEntry): boolean {
   if (isProviderRetryTimeoutEntry(entry)) return false
+  if (isProviderTimeoutPreservedEntry(entry)) return false
+  if (isIterationTimeoutEntry(entry)) return false
   return /\b(?:timed out|timeout|deadline exceeded)\b/i.test(entry.line)
 }
 
@@ -112,14 +124,23 @@ function escapeRegExp(value: string): string {
 }
 
 function entryMentionsSession(entry: LogEntry, sessionId: string): boolean {
-  return new RegExp(`\\bsession\\s*[=:]\\s*${escapeRegExp(sessionId)}\\b`).test(entry.line)
+  return new RegExp(`\\bsession(?:\\s*[=:]\\s*|\\s+)${escapeRegExp(sessionId)}\\b`, 'i').test(entry.line)
     || entry.line.includes(`(${sessionId})`)
+}
+
+function entryMentionsBead(entry: LogEntry, beadId: string): boolean {
+  return new RegExp(`\\bbead(?:\\s*[=:]\\s*|\\s+)${escapeRegExp(beadId)}\\b`, 'i').test(entry.line)
+    || entry.line.includes(`(${beadId})`)
 }
 
 function entryRelatesToPrompt(entry: LogEntry, prompt: LogEntry): boolean {
   if (!prompt.sessionId) return true
   if (entry.sessionId) return entry.sessionId === prompt.sessionId
   if (entryMentionsSession(entry, prompt.sessionId)) return true
+  if (prompt.beadId) {
+    if (entry.beadId) return entry.beadId === prompt.beadId
+    if (entryMentionsBead(entry, prompt.beadId)) return true
+  }
   return entry.audience === 'all' || entry.source === 'system' || entry.source === 'error'
 }
 
@@ -140,6 +161,30 @@ function buildDiagnosticActivity(
         active: false,
         severity: 'error',
         label: 'Provider retry timeout',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
+    case 'provider_timeout_preserved':
+      return {
+        kind,
+        diagnostic: kind,
+        active: false,
+        severity: 'warning',
+        label: 'Provider timeout preserved for Continue',
+        elapsedMs,
+        modelId: getModelId(prompt),
+        sessionId: prompt.sessionId,
+        beadId: prompt.beadId,
+      }
+    case 'iteration_timeout':
+      return {
+        kind,
+        diagnostic: kind,
+        active: false,
+        severity: 'error',
+        label: 'Iteration timeout; retrying bead',
         elapsedMs,
         modelId: getModelId(prompt),
         sessionId: prompt.sessionId,
@@ -224,8 +269,12 @@ export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): 
     const { entry } = indexedEntry
     if (isProviderRetryTimeoutEntry(entry)) {
       diagnosticCandidates.push({ kind: 'provider_retry_timeout', indexedEntry })
+    } else if (isProviderTimeoutPreservedEntry(entry)) {
+      diagnosticCandidates.push({ kind: 'provider_timeout_preserved', indexedEntry })
     } else if (isEmptyModelOutputEntry(entry)) {
       diagnosticCandidates.push({ kind: 'empty_model_output', indexedEntry })
+    } else if (isIterationTimeoutEntry(entry)) {
+      diagnosticCandidates.push({ kind: 'iteration_timeout', indexedEntry })
     } else if (isGenericTimeoutEntry(entry)) {
       const activityStartedBeforeTimeout = firstActivityEntry
         ? compareIndexedEntries(firstActivityEntry, indexedEntry) < 0

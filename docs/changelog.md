@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Show a live Current Activity strip above log views so model stalls, empty outputs, and timeout causes are visible while waiting.
+- Separate CODING iteration timeouts from OpenCode/provider interruptions so owned bead deadlines reset and retry while resumable provider stalls can still Continue.
 - Make the ticket location copy path button permanently visible in the ticket details view, and add an OS-agnostic 'Reveal in File Explorer' button next to it.
 - Show line count, interactive color legend, and copy button in the per-bead model log view.
 - Show index-based bead numbers next to bead titles and IDs in the beads details view (blocked by, blocks, and label matching lists) and draft views.
@@ -35,7 +36,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Ticket worktree artifacts under `.ticket/**` now stay local: project attach installs `/.ticket/` in `.git/info/exclude`, and bead finalization excludes those files from commit capture while still preserving them across execution resets.
 
 #### Added
-- Added a compact Current Activity strip to phase and full log views, deriving waiting-for-first-model, provider retry timeout, empty-output, and workflow timeout states from existing log events.
+- Added a compact Current Activity strip to phase and full log views, deriving waiting-for-first-model, provider retry timeout, provider-timeout-preserved, iteration-timeout, empty-output, and workflow timeout states from existing log events.
 - Added a 'Reveal in File Explorer' button next to the copy path button in the ticket details view.
 - Added a POST `/api/files/open-path` API endpoint that safely reveals files/folders in the user's native file explorer, supporting Windows, macOS, Linux, and WSL (including WSL path to Windows host conversion).
 - Added entry count, interactive color legend tooltip, and copy-to-clipboard button to the per-bead Log view (in the bead details pane) matching the standard dashboard phase/full log view headers.
@@ -55,6 +56,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Enriched generic `Provider returned error` OpenCode failures by correlating the session with local OpenCode logs, surfacing sanitized HTTP/provider details while excluding prompts, request bodies, headers, credentials, cookies, and URL query strings.
 - Fixed Continue and owned-session reconnect checks to verify preserved OpenCode sessions by exact session ID instead of relying on session-list membership, and surfaced rejected workflow actions inline in the blocked-error view.
 - Made `HTTP 402 Payment Required` OpenCode provider blocks eligible for same-session Continue after payment or workspace access is restored, while keeping permanent 4xx request, auth, permission, model-not-found, and request-size failures non-continuable.
+- Fixed CODING timeout ownership so LoopTroop-owned per-iteration deadlines consume bead attempts, capture context-wipe notes, abandon the timed-out session, reset the worktree, and retry in a fresh owned session until `BEAD_RETRY_BUDGET_EXHAUSTED`, while true OpenCode/provider timeouts still preserve same-session Continue when eligible.
 - Made `npm run dev` print immediate and phase-level preflight progress before bootstrap dependency checks, daily dependency/audit/OpenCode maintenance, stale-process cleanup, and port checks, with a final completion duration.
 
 ---

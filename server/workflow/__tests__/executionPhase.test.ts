@@ -410,7 +410,15 @@ describe('handleCoding', () => {
       callbacks: {
         ticketId: string
         model: string
-        onContextWipe: (entry: { beadId: string; notes: string; iteration: number }) => Promise<void>
+        onContextWipe: (entry: {
+          beadId: string
+          notes: string
+          iteration: number
+          reason: 'failure' | 'iteration_timeout'
+          attempt: number
+          nextAttempt: number
+          maxAttempts: number | null
+        }) => Promise<void>
       },
     ) => {
       // Simulate context wipe persistence before executeBead returns.
@@ -418,6 +426,10 @@ describe('handleCoding', () => {
         beadId: 'bead-1',
         notes: 'context wiped — retrying with notes',
         iteration: 1,
+        reason: 'failure',
+        attempt: 1,
+        nextAttempt: 2,
+        maxAttempts: 5,
       })
       return {
         success: true,
@@ -466,7 +478,15 @@ describe('handleCoding', () => {
       _signal: unknown,
       callbacks: {
         onSessionCreated?: (sessionId: string, iteration: number) => void
-        onContextWipe: (entry: { beadId: string; notes: string; iteration: number }) => Promise<void>
+        onContextWipe: (entry: {
+          beadId: string
+          notes: string
+          iteration: number
+          reason: 'failure' | 'iteration_timeout'
+          attempt: number
+          nextAttempt: number
+          maxAttempts: number | null
+        }) => Promise<void>
       },
     ) => {
       callbacks.onSessionCreated?.('session-1', 1)
@@ -474,6 +494,10 @@ describe('handleCoding', () => {
         beadId: 'bead-1',
         notes: 'retry note after timeout',
         iteration: 1,
+        reason: 'failure',
+        attempt: 1,
+        nextAttempt: 2,
+        maxAttempts: 5,
       })).rejects.toThrow('spawnSync git ENOBUFS')
       throw new Error('spawnSync git ENOBUFS')
     })

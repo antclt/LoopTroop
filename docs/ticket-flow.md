@@ -200,7 +200,7 @@ flowchart TB
 | `DRAFT` | `start`, `cancel` | `start` locks model configuration and initializes the ticket workspace. |
 | `WAITING_INTERVIEW_APPROVAL`, `WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`, `WAITING_EXECUTION_SETUP_APPROVAL` | `approve`, `cancel` | The generic approve route dispatches to the phase-specific approval handler. Approval requests must include `expectedContentSha256`; stale hashes return `409` and leave the gate paused. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | `merge` is also exposed through `/verify` as an alias during the transition period. |
-| `BLOCKED_ERROR` | `retry`, conditional `continue`, `cancel` | `retry` archives the failed active phase attempt for every non-implementation `previousStatus`, creates a fresh active attempt, then re-enters that exact status. `CODING` keeps bead-scoped retry recovery except for continuable OpenCode retry-budget blocks that preserve the active session. `continue` appears only for resumable OpenCode/provider interruptions with a matching active preserved session and sends exactly `continue please` into that same session. |
+| `BLOCKED_ERROR` | `retry`, conditional `continue`, `cancel` | `retry` archives the failed active phase attempt for every non-implementation `previousStatus`, creates a fresh active attempt, then re-enters that exact status. `CODING` keeps bead-scoped retry recovery for workflow-owned iteration timeouts and ordinary bead failures, while continuable OpenCode/provider interruptions can preserve the active session. `continue` appears only for resumable OpenCode/provider interruptions with a matching active preserved session and sends exactly `continue please` into that same session. |
 | Most active phases | `cancel` | Active work can be stopped from planning, execution, or review phases. |
 | `COMPLETED`, `CANCELED` | none | These are terminal states. |
 
@@ -211,7 +211,7 @@ Two extra guards matter at the user-action layer:
 - `BLOCKED_ERROR` retry from `CODING` first tries to restore the failed bead into a retryable state before it re-enters `CODING`.
 - `BLOCKED_ERROR` retry from a non-implementation phase archives the failed version with `manual_retry_after_blocked_error` and writes the rerun into the next phase attempt.
 - `BLOCKED_ERROR` retry is rejected when no preserved `previousStatus` exists.
-- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look continuable (HTTP 402 Payment Required, rate/usage limit, retry-budget exhaustion, overload/capacity, timeout, selected 5xx/529, or transport failure) rather than auth, non-402 quota, invalid-request, configuration, model-not-found, or request-size failures.
+- `BLOCKED_ERROR` continue is accepted only when the active error occurrence has a session id, the matching `opencode_sessions` row is still active for the ticket and previous phase, OpenCode still lists that session, and diagnostics look continuable (HTTP 402 Payment Required, rate/usage limit, retry-budget exhaustion, overload/capacity, provider/session timeout, selected 5xx/529 or 408/429, or transport failure) rather than a LoopTroop-owned CODING iteration timeout, auth, non-402 quota, invalid-request, configuration, model-not-found, or request-size failures.
 - `CODING` retry is rejected when the failed bead cannot be reset to a recorded bead-start commit.
 
 ## Artifact Checkpoints
@@ -348,7 +348,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `CODING` | The coding agent executes one bead at a time. Each bead gets narrow context, owned sessions, structured completion markers, bead diffs, bounded fresh-session retries, and profile-controlled OpenCode retry-budget blocking for transient provider stalls. A bead becomes `done` only after local finalization succeeds. | Bead status updates, bead notes, local per-bead commits or no-op completion, diff artifacts, execution log stream. | `cancel` | Each finalized successful bead self-transitions back to `CODING`; when all beads are done the flow moves to final test. |
+| `CODING` | The coding agent executes one bead at a time. Each bead gets narrow context, owned sessions, structured completion markers, bead diffs, bounded fresh-session retries, and profile-controlled OpenCode retry-budget blocking for transient provider stalls. Workflow-owned iteration timeouts consume bead attempts, trigger context-wipe/reset, and retry in a fresh owned session. A bead becomes `done` only after local finalization succeeds. | Bead status updates, bead notes, local per-bead commits or no-op completion, diff artifacts, execution log stream. | `cancel` | Each finalized successful bead self-transitions back to `CODING`; when all beads are done the flow moves to final test. |
 
 ### Post-Implementation
 
@@ -364,7 +364,7 @@ See [Configuration Reference → Beads Coverage Passes](/configuration#beads-cov
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
-| `BLOCKED_ERROR` | A blocking failure has paused the workflow. The error is tied to a preserved `previousStatus`, so recovery can re-enter the exact failed phase rather than guessing where to resume. | Error occurrence history, failure diagnostics, preserved `previousStatus`, and eligible preserved OpenCode session metadata. | `retry`, conditional `continue`, `cancel` | `retry` versions every non-implementation phase before re-entering it, while `CODING` keeps bead-scoped reset/retry recovery; `continue` re-enters without creating a fresh attempt and sends only `continue please` into the preserved session; `cancel` moves to `CANCELED`. |
+| `BLOCKED_ERROR` | A blocking failure has paused the workflow. The error is tied to a preserved `previousStatus`, so recovery can re-enter the exact failed phase rather than guessing where to resume. | Error occurrence history, failure diagnostics, preserved `previousStatus`, and eligible preserved OpenCode session metadata. | `retry`, conditional `continue`, `cancel` | `retry` versions every non-implementation phase before re-entering it, while `CODING` keeps bead-scoped reset/retry recovery; `continue` is only for eligible preserved OpenCode/provider interruptions and sends only `continue please` into that session; `cancel` moves to `CANCELED`. |
 | `COMPLETED` | The ticket finished successfully. The workflow is now read-only from an automation perspective, but all artifacts remain available for inspection. Cleanup warnings remain visible as a separate summary. | Full lifecycle history and cleanup summary remain accessible. | none | Terminal. |
 | `CANCELED` | The ticket was stopped by user action before or after partial progress. Earlier artifacts are preserved for review. | Preserved partial history and cancellation metadata. | none | Terminal. |
 
@@ -393,7 +393,7 @@ Before dispatching `RETRY`, every non-implementation phase archives the active p
 continue please
 ```
 
-For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. OpenCode rate/usage limit retry-budget blocks use this path when the session is preserved. Normal Retry keeps the reset-first behavior.
+For `CODING`, pending continuation skips the interrupted-bead reset path so the in-progress bead and OpenCode session can continue together. OpenCode rate/usage limit retry-budget blocks and provider/session timeouts use this path when the session is preserved. LoopTroop-owned per-iteration timeouts do not use Continue; they consume the bead attempt, capture context-wipe notes when possible, reset the worktree, abandon the timed-out session, and retry in a fresh owned session until `BEAD_RETRY_BUDGET_EXHAUSTED`.
 
 ## Safe Resume By Interruption Type
 
@@ -403,7 +403,7 @@ For `CODING`, pending continuation skips the interrupted-bead reset path so the 
 | Frontend crashes or restarts | Draft interview answers and approval editor state are saved to ticket UI-state artifacts. Page unload uses a best-effort keepalive write for the latest unsaved snapshot. |
 | Backend process restarts | Startup validates or reconstructs non-terminal actor snapshots, starts actors from their stored state, and immediately processes the restored snapshot so active work continues. |
 | OpenCode server restarts or loses a session | Owned sessions are validated by exact remote OpenCode session id. Missing remote sessions are abandoned and a fresh owned session is created when the phase can safely continue. |
-| Model prompt fails, times out, or returns invalid output | Planning phases use automatic structured retries whose rejected/accepted model text is preserved as Raw attempt variants while canonical artifacts keep only accepted normalized content. Manual Retry from `BLOCKED_ERROR` creates a new phase attempt/version for every non-implementation phase. CODING uses bead-scoped retry, context wipe notes, and worktree reset before trying again. |
+| Model prompt fails, times out, or returns invalid output | Planning phases use automatic structured retries whose rejected/accepted model text is preserved as Raw attempt variants while canonical artifacts keep only accepted normalized content. Manual Retry from `BLOCKED_ERROR` creates a new phase attempt/version for every non-implementation phase. CODING workflow-owned iteration timeouts use bead-scoped retry, context wipe notes, worktree reset, and a fresh owned session; eligible OpenCode/provider interruptions may preserve the session for Continue instead. |
 | Resume point cannot be proven | The ticket enters or remains in `BLOCKED_ERROR` with an explicit retry/cancel choice. |
 
 ## PR Review Outcomes

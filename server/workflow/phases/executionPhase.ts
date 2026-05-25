@@ -459,7 +459,17 @@ export async function handleCoding(
             executingBead.id,
           )
         },
-        onContextWipe: async ({ beadId, notes, iteration }) => {
+        onContinuableTimeoutPreserved: ({ beadId, message }) => {
+          emitPhaseLog(
+            ticketId,
+            context.externalId,
+            'CODING',
+            'info',
+            message,
+            { source: 'system', modelId: codingModelId, beadId },
+          )
+        },
+        onContextWipe: async ({ beadId, notes, iteration, reason, attempt, nextAttempt, maxAttempts }) => {
           const nextIteration = iteration + 1
           if (!beadStartCommit) {
             throw new Error(`Cannot reset bead ${beadId} for attempt ${nextIteration}: missing bead start commit`)
@@ -500,12 +510,15 @@ export async function handleCoding(
             updatedAt: retryUpdatedAt,
           })
           writeTicketBeads(ticketId, updated)
+          const resetMessage = reason === 'iteration_timeout'
+            ? `Iteration timeout for bead ${beadId} attempt ${attempt}; resetting for attempt ${nextAttempt}${maxAttempts ? ` of ${maxAttempts}` : ''}.`
+            : `Reset bead ${beadId} to its start snapshot and appended retry notes for attempt ${nextIteration}.`
           emitPhaseLog(
             ticketId,
             context.externalId,
             'CODING',
             'info',
-            `Reset bead ${beadId} to its start snapshot and appended retry notes for attempt ${nextIteration}.`,
+            resetMessage,
             { source: 'system', modelId: codingModelId, beadId },
           )
         },
