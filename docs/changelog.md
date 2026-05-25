@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Resume execution-setup and final-test attempt counters correctly after an app restart, so logs show the true attempt number and the maxIterations guard is respected across restarts.
 - Repair bare structured YAML list item keys before parsing so compatible model outputs no longer retry when they emitted an existing id/path as a scalar.
 - Show a live Current Activity strip above log views so model stalls, empty outputs, trusted timeout causes, and near-deadline warnings are visible while waiting.
 - Apply AI Response Timeout consistently to model-output waits across scan, planning, final-test generation, and PR drafting phases while keeping CODING on its bead iteration timeout.
@@ -54,6 +55,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - OpenCode managed server is now always started with `--log-level DEBUG`, writing native logs at full verbosity to the OpenCode log directory so they are always available in the DEBUG tab. Use `npm run dev --opencode-logs=all` to additionally print them to the terminal. The `--opencode-logs=all` flag adds `--print-logs` to the OpenCode serve args.
 
 #### Fixed
+- Fixed execution-setup and final-test attempt counters resetting to 1 after an app restart; both phases now resume from the correct attempt number derived from persisted retry notes, so the `maxIterations` guard is honoured across restarts.
 - Repaired opt-in structured YAML lists when a model emits an existing bead/PRD id or relevant-file path as a bare sequence item followed by object fields, with dynamic parser warnings that name the affected parent list, line, scalar value, and primary key.
 - Hardened the WSL LAN sharing one-liner so it listens on detected Windows LAN addresses, clears stale wildcard `0.0.0.0` portproxy entries, starts the Windows IP Helper service, and forwards through Windows localhost into WSL instead of depending on a fragile current WSL NAT address.
 - Let the ticket navigator's auto-expanded Errors section be collapsed and reopened by the user while preserving auto-open behavior for newly active or selected errors.
