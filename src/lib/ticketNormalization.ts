@@ -63,6 +63,7 @@ function normalizeRuntimeBeads(value: unknown): TicketRuntime['beads'] {
       iteration: numberOrFallback(bead.iteration, 0),
       notes: typeof bead.notes === 'string' ? bead.notes : undefined,
       startedAt: typeof bead.startedAt === 'string' ? bead.startedAt : null,
+      updatedAt: typeof bead.updatedAt === 'string' ? bead.updatedAt : null,
     }))
     .filter((bead) => bead.id.length > 0)
 }

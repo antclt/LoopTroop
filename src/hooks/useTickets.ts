@@ -40,6 +40,7 @@ interface TicketRuntime {
     iteration: number
     notes?: string
     startedAt?: string | null
+    updatedAt?: string | null
   }>
   candidateCommitSha: string | null
   preSquashHead: string | null

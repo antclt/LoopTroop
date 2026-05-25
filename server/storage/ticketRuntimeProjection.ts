@@ -51,6 +51,7 @@ function buildRuntimeProjection(ticket: PublicTicket) {
       iteration: bead.iteration,
       notes: bead.notes ?? '',
       startedAt: bead.startedAt ?? null,
+      updatedAt: bead.updatedAt ?? null,
     })),
   }
 }

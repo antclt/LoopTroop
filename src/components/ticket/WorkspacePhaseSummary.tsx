@@ -268,7 +268,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
             if (activeBead?.status === 'in_progress' && activeBead.startedAt) {
               return (
                 <ActiveBeadCountdown
-                  startedAt={activeBead.startedAt}
+                  startedAt={activeBead.updatedAt ?? activeBead.startedAt}
                   perIterationTimeoutMs={runtime.perIterationTimeoutMs}
                 />
               )
