@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Format commands in system logs to match tool calls exactly, using identical colors (`text-cyan-500`) and rendering output/error blocks in standard structured sections (squares/boxes) regardless of length.
 - Render bead separators in the per-phase normal log view for CODING phase, matching the existing Full Log bead grouping behavior.
 - Resume execution-setup and final-test attempt counters correctly after an app restart, so logs show the true attempt number and the maxIterations guard is respected across restarts.
 - Fixed bead iteration countdown timer showing 00:00 on iteration 2+ by anchoring to the current iteration's start time (`updatedAt`) instead of the first iteration's start time (`startedAt`).
@@ -33,7 +34,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Detailed Changes
 
-#### Changed
+### Added
+
+### Changed
+- Changed command tag `[CMD]` and text colors to match tool logs (`text-cyan-500`) instead of `text-zinc-500`.
+- Bypassed the length/complexity filter (`shouldRenderImplicitStdoutSection`) in `splitLegacyCommandBody` to ensure compact command outputs are always rendered as structured `STDOUT` or `ERROR` boxes.
+- Updated `PhaseLogPanel` tests to align with the standard structured formatting of all command outputs.
 - Broadened the existing `councilResponseTimeout` setting into the user-facing AI Response Timeout, covering non-coding model-output prompts including relevant-files scanning, setup-plan drafting, final-test generation, and PR drafting; CODING and execution setup keep their dedicated timeout behavior.
 - Removed the hover-only opacity constraint from the copy path button in the ticket details view, making it permanently visible.
 - Show the 1-based index (bead number) next to dependency references (Blocked By, Blocks) and label matching lists in the bead details view trigger and hover cards to easily locate them in the main bead list.

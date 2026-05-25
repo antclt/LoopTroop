@@ -88,7 +88,7 @@ function makeTicket(runtimeOverrides: Partial<Ticket['runtime']> = {}): Ticket {
   return {
     id: 'ticket-1',
     externalId: 'T-1',
-    projectId: 'proj-1',
+    projectId: 1,
     title: 'Test ticket',
     description: null,
     priority: 1,
@@ -1094,7 +1094,7 @@ describe('PhaseLogPanel', () => {
     expect(screen.getByText('warning: using cached token')).toBeInTheDocument()
   })
 
-  it('promotes meaningful plain command output to stdout while keeping tiny probe output compact', () => {
+  it('promotes all plain command outputs to stdout structured sections', () => {
     renderWithTooltipProvider(
       <PhaseLogPanel
         phase="CREATING_PULL_REQUEST"
@@ -1117,9 +1117,10 @@ describe('PhaseLogPanel', () => {
     )
 
     const stdoutLabels = screen.getAllByText('STDOUT:')
-    expect(stdoutLabels).toHaveLength(2)
+    expect(stdoutLabels).toHaveLength(3)
     expect(stdoutLabels[0]).toHaveClass('text-emerald-700')
     expect(stdoutLabels[1]).toHaveClass('text-emerald-700')
+    expect(stdoutLabels[2]).toHaveClass('text-emerald-700')
     expect(screen.getByText('{"nameWithOwner":"looptroop-ai/pocketbase-master"}')).toBeInTheDocument()
     expect(screen.getByText(/gh version 2\.90\.0/)).toBeInTheDocument()
     expect(screen.getByText(/\$ git rev-parse HEAD/)).toBeInTheDocument()

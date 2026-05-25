@@ -149,31 +149,16 @@ function splitLegacyCommandBody(bodyText: string): { introText: string; sections
     }
   }
 
-  if (shouldRenderImplicitStdoutSection(resultText)) {
-    return {
-      introText,
-      sections: [
-        {
-          kind: 'stdout',
-          label: 'STDOUT',
-          content: resultText,
-        },
-      ],
-    }
+  return {
+    introText,
+    sections: [
+      {
+        kind: 'stdout',
+        label: 'STDOUT',
+        content: resultText,
+      },
+    ],
   }
-
-  return { introText: bodyText, sections: [] }
-}
-
-function shouldRenderImplicitStdoutSection(resultText: string): boolean {
-  const trimmed = resultText.trim()
-  if (!trimmed || trimmed.toLowerCase() === 'ok') return false
-  if (trimmed.includes('\t')) return true
-  if (trimmed.includes(' | ')) return true
-  if (trimmed.startsWith('{') || trimmed.startsWith('[')) return true
-  if (trimmed.length >= 80) return true
-  if (trimmed.split(/\s+/).length >= 5) return true
-  return false
 }
 
 function renderStructuredLogLine(

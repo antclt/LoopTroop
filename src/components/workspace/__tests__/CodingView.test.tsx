@@ -611,7 +611,8 @@ describe('CodingView', () => {
     expect(copiedText).toContain('[CMD] $ git status')
     expect(copiedText).toContain('[PROMPT] openai/gpt-5.4 prompt #1')
 
-    expect(screen.getByText((content) => content.includes('git status') && content.includes('ok'))).toBeTruthy()
+    expect(screen.getByText((content) => content.includes('git status'))).toBeTruthy()
+    expect(screen.getByText((content) => content.includes('ok'))).toBeTruthy()
     expect(screen.getByText((content) => content.includes('prompt #1'))).toBeTruthy()
     expect(screen.getByText(/Checking the failing test output/)).toBeTruthy()
     expect(screen.queryByText(/hidden debug row/)).toBeNull()

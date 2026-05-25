@@ -104,7 +104,7 @@ export function getEntryColor(entry: LogEntry): string {
   if (entry.audience === 'debug' || entry.source === 'debug' || (hasLeadingLogTag(entry, 'DEBUG') && !isAiDetailOutput(entry))) return 'text-amber-600'
   if (entry.kind === 'tool' || entry.line.includes('[TOOL]')) return 'text-cyan-500'
   if (entry.kind === 'error' || entry.source === 'error' || (hasLeadingLogTag(entry, 'ERROR') && !isAiDetailOutput(entry))) return 'text-red-500'
-  if (hasLeadingLogTag(entry, 'CMD')) return 'text-zinc-500'
+  if (hasLeadingLogTag(entry, 'CMD')) return 'text-cyan-500'
   if (entry.kind === 'reasoning') return 'text-purple-400'
   if (entry.kind === 'prompt') return 'text-blue-500'
   if (entry.kind === 'text') return 'text-emerald-600'
