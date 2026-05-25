@@ -16,6 +16,7 @@ import { LogEntryRow } from './LogLine'
 import { LogColorLegend } from './LogColorLegend'
 import { CurrentActivityStrip } from './CurrentActivityStrip'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { BeadDelimiter, buildBeadSections } from './logGrouping'
 
 interface PhaseLogPanelProps {
   phase: string
@@ -408,6 +409,18 @@ export function PhaseLogPanel({
       : 'ALL'
   const filteredLogs = filterEntries(phaseLogs, effectiveTab)
   const shouldShowModelNameInLogTags = effectiveTab === 'ALL' || effectiveTab === 'AI'
+
+  const visibleEntryIds = useMemo(
+    () => new Set(filteredLogs.map((entry) => entry.entryId)),
+    [filteredLogs],
+  )
+
+  const beadSectionsResult = useMemo(() => {
+    if (phase !== 'CODING') return null
+    return buildBeadSections(phaseLogs, visibleEntryIds, ticket)
+  }, [phase, phaseLogs, visibleEntryIds, ticket])
+
+  const hasBeadSections = beadSectionsResult !== null && beadSectionsResult.beadSections.length > 0
   const hasLogs = filteredLogs.length > 0
   const [copied, copyToClipboard] = useCopyToClipboard()
   const handleCopyLogs = useCallback(() => {
@@ -664,9 +677,35 @@ export function PhaseLogPanel({
         <ScrollArea className="flex-1 min-h-0 h-full" viewportRef={viewportRef}>
           <div ref={contentRef} className="font-mono text-xs bg-muted rounded-md p-3 min-h-[100px] w-full max-w-full">
             {hasLogs ? (
-              filteredLogs.map((entry, i) => (
-                <LogEntryRow key={entry.entryId} entry={entry} index={i} showModelName={shouldShowModelNameInLogTags} />
-              ))
+              phase === 'CODING' && hasBeadSections && beadSectionsResult ? (
+                <>
+                  {beadSectionsResult.preambleEntries.map((entry) => (
+                    <LogEntryRow
+                      key={entry.entryId}
+                      entry={entry}
+                      index={filteredLogs.findIndex((e) => e.entryId === entry.entryId)}
+                      showModelName={shouldShowModelNameInLogTags}
+                    />
+                  ))}
+                  {beadSectionsResult.beadSections.map((section) => (
+                    <Fragment key={`bead-${section.beadId}-${section.ordinal}`}>
+                      <BeadDelimiter ordinal={section.ordinal} total={section.total} title={section.title} />
+                      {section.entries.map((entry) => (
+                        <LogEntryRow
+                          key={entry.entryId}
+                          entry={entry}
+                          index={filteredLogs.findIndex((e) => e.entryId === entry.entryId)}
+                          showModelName={shouldShowModelNameInLogTags}
+                        />
+                      ))}
+                    </Fragment>
+                  ))}
+                </>
+              ) : (
+                filteredLogs.map((entry, i) => (
+                  <LogEntryRow key={entry.entryId} entry={entry} index={i} showModelName={shouldShowModelNameInLogTags} />
+                ))
+              )
             ) : isLoadingLogs ? (
               <span className="text-muted-foreground/50 italic">
                 <LoadingText text="Loading logs" />

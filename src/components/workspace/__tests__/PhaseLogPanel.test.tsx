@@ -5,6 +5,7 @@ import type { LogEntry } from '@/context/LogContext'
 import { LogContext } from '@/context/logContextDef'
 import type { LogContextValue } from '@/context/logUtils'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import type { Ticket } from '@/hooks/useTickets'
 
 vi.mock('@/components/ui/scroll-area', () => ({
   ScrollArea: ({
@@ -61,6 +62,61 @@ function makeLog(id: string, line: string, overrides: Partial<LogEntry> = {}): L
     streaming: false,
     op: 'append',
     ...overrides,
+  }
+}
+
+function makeTicket(runtimeOverrides: Partial<Ticket['runtime']> = {}): Ticket {
+  const defaultRuntime: Ticket['runtime'] = {
+    baseBranch: 'main',
+    currentBead: 1,
+    completedBeads: 0,
+    totalBeads: 0,
+    percentComplete: 0,
+    iterationCount: 0,
+    maxIterations: null,
+    maxIterationsPerBead: null,
+    activeBeadId: null,
+    activeBeadIteration: null,
+    lastFailedBeadId: null,
+    artifactRoot: '/tmp/test',
+    beads: [],
+    candidateCommitSha: null,
+    preSquashHead: null,
+    finalTestStatus: 'pending',
+  }
+
+  return {
+    id: 'ticket-1',
+    externalId: 'T-1',
+    projectId: 'proj-1',
+    title: 'Test ticket',
+    description: null,
+    priority: 1,
+    status: 'CODING',
+    xstateSnapshot: null,
+    branchName: null,
+    currentBead: 1,
+    totalBeads: 0,
+    percentComplete: 0,
+    errorMessage: null,
+    lockedMainImplementer: null,
+    lockedMainImplementerVariant: null,
+    lockedInterviewQuestions: null,
+    lockedCoverageFollowUpBudgetPercent: null,
+    lockedMaxCoveragePasses: null,
+    lockedCouncilMembers: [],
+    lockedCouncilMemberVariants: null,
+    availableActions: [],
+    previousStatus: null,
+    reviewCutoffStatus: null,
+    startedAt: null,
+    plannedDate: null,
+    createdAt: '2026-03-10T10:00:00.000Z',
+    updatedAt: '2026-03-10T10:00:00.000Z',
+    runtime: {
+      ...defaultRuntime,
+      ...runtimeOverrides,
+    },
   }
 }
 
@@ -1149,5 +1205,101 @@ describe('PhaseLogPanel', () => {
     expect(strip).toHaveTextContent(/session ses_phase_current/i)
     expect(strip).toHaveTextContent(/bead bead-2/i)
     expect(Boolean(strip.compareDocumentPosition(viewport) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
+  })
+
+  it('renders bead delimiters in CODING phase', () => {
+    const logs: LogEntry[] = [
+      makeLog('preamble', '[SYS] Coding started'),
+      makeLog('exec-1', '[SYS] Executing bead bead-1: First bead'),
+      makeLog('bead-1-a', '[MODEL] Bead 1 output'),
+      makeLog('exec-2', '[SYS] Executing bead bead-2: Second bead'),
+      makeLog('bead-2-a', '[MODEL] Bead 2 output'),
+    ]
+
+    const ticket = makeTicket({
+      totalBeads: 2,
+      currentBead: 2,
+      activeBeadId: 'bead-2',
+      beads: [
+        { id: 'bead-1', title: 'First bead', status: 'completed', iteration: 1 },
+        { id: 'bead-2', title: 'Second bead', status: 'in_progress', iteration: 1 },
+      ],
+    })
+
+    renderWithTooltipProvider(<PhaseLogPanel phase="CODING" logs={logs} ticket={ticket} />)
+
+    expect(screen.getByText('Bead 1/2')).toBeInTheDocument()
+    expect(screen.getByText('Bead 2/2')).toBeInTheDocument()
+    expect(screen.getByText('First bead')).toBeInTheDocument()
+    expect(screen.getByText('Second bead')).toBeInTheDocument()
+  })
+
+  it('does not render bead delimiters in non-CODING phases', () => {
+    const logs: LogEntry[] = [
+      makeLog('sys-1', '[SYS] PRD drafting started', { status: 'DRAFTING_PRD' }),
+      makeLog('ai-1', '[MODEL] PRD output', { status: 'DRAFTING_PRD', source: 'model:openai/gpt-5.4', audience: 'ai', kind: 'text', modelId: 'openai/gpt-5.4' }),
+    ]
+
+    renderWithTooltipProvider(<PhaseLogPanel phase="DRAFTING_PRD" logs={logs} />)
+
+    expect(screen.queryByText(/Bead \d+\/\d+/)).not.toBeInTheDocument()
+  })
+
+  it('hides bead delimiter when current tab filter removes all entries for that bead', () => {
+    const logs: LogEntry[] = [
+      makeLog('exec-1', '[SYS] Executing bead bead-1: First bead'),
+      makeLog('bead-1-sys', '[SYS] Bead 1 system line'),
+      makeLog('exec-2', '[SYS] Executing bead bead-2: Second bead'),
+      makeLog('bead-2-ai', '[MODEL] Bead 2 output', { source: 'model:openai/gpt-5.4', audience: 'ai', kind: 'text', modelId: 'openai/gpt-5.4' }),
+    ]
+
+    const ticket = makeTicket({
+      totalBeads: 2,
+      currentBead: 2,
+      activeBeadId: 'bead-2',
+      beads: [
+        { id: 'bead-1', title: 'First bead', status: 'completed', iteration: 1 },
+        { id: 'bead-2', title: 'Second bead', status: 'in_progress', iteration: 1 },
+      ],
+    })
+
+    renderWithTooltipProvider(<PhaseLogPanel phase="CODING" logs={logs} ticket={ticket} defaultTab="AI" />)
+
+    // Bead 1 has no AI entries, so its delimiter should be hidden in the AI tab
+    expect(screen.queryByText('Bead 1/2')).not.toBeInTheDocument()
+    // Bead 2 has an AI entry, so its delimiter should show
+    expect(screen.getByText('Bead 2/2')).toBeInTheDocument()
+  })
+
+  it('hides incomplete future beads when runtime data is available', () => {
+    const logs: LogEntry[] = [
+      makeLog('exec-1', '[SYS] Executing bead bead-1: First bead'),
+      makeLog('bead-1-a', '[SYS] Bead 1 done'),
+      makeLog('exec-2', '[SYS] Executing bead bead-2: Second bead'),
+      makeLog('bead-2-a', '[SYS] Bead 2 in progress'),
+      makeLog('exec-3', '[SYS] Executing bead bead-3: Third bead'),
+      makeLog('bead-3-a', '[SYS] Bead 3 pending'),
+      makeLog('exec-4', '[SYS] Executing bead bead-4: Fourth bead'),
+      makeLog('bead-4-a', '[SYS] Bead 4 pending'),
+    ]
+
+    const ticket = makeTicket({
+      totalBeads: 4,
+      currentBead: 2,
+      activeBeadId: 'bead-2',
+      beads: [
+        { id: 'bead-1', title: 'First bead', status: 'completed', iteration: 1 },
+        { id: 'bead-2', title: 'Second bead', status: 'in_progress', iteration: 1 },
+        { id: 'bead-3', title: 'Third bead', status: 'pending', iteration: 0 },
+        { id: 'bead-4', title: 'Fourth bead', status: 'pending', iteration: 0 },
+      ],
+    })
+
+    renderWithTooltipProvider(<PhaseLogPanel phase="CODING" logs={logs} ticket={ticket} />)
+
+    expect(screen.getByText('Bead 1/4')).toBeInTheDocument()
+    expect(screen.getByText('Bead 2/4')).toBeInTheDocument()
+    expect(screen.queryByText('Bead 3/4')).not.toBeInTheDocument()
+    expect(screen.queryByText('Bead 4/4')).not.toBeInTheDocument()
   })
 })

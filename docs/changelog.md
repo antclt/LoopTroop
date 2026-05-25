@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Render bead separators in the per-phase normal log view for CODING phase, matching the existing Full Log bead grouping behavior.
 - Resume execution-setup and final-test attempt counters correctly after an app restart, so logs show the true attempt number and the maxIterations guard is respected across restarts.
 - Fixed bead iteration countdown timer showing 00:00 on iteration 2+ by anchoring to the current iteration's start time (`updatedAt`) instead of the first iteration's start time (`startedAt`).
 - Repair bare structured YAML list item keys before parsing so compatible model outputs no longer retry when they emitted an existing id/path as a scalar.
@@ -42,6 +43,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Ticket worktree artifacts under `.ticket/**` now stay local: project attach installs `/.ticket/` in `.git/info/exclude`, and bead finalization excludes those files from commit capture while still preserving them across execution resets.
 
 #### Added
+- Added bead delimiter separators to the per-phase normal log view for the CODING phase. Log entries are grouped by detected bead boundaries (from `[SYS] Executing bead ...` system lines) and each bead section is preceded by a `Bead X/Y` delimiter showing the bead title, matching the existing Full Log behavior. Incomplete future beads are hidden when runtime data is available, and the grouping respects the current tab filter so empty bead sections are omitted.
 - Added a compact Current Activity strip to phase and full log views, deriving waiting-for-first-model, provider retry timeout, provider-timeout-preserved, iteration-timeout, empty-output, workflow timeout, and near-timeout states from structured log events.
 - Added a 'Reveal in File Explorer' button next to the copy path button in the ticket details view.
 - Added a POST `/api/files/open-path` API endpoint that safely reveals files/folders in the user's native file explorer, supporting Windows, macOS, Linux, and WSL (including WSL path to Windows host conversion).
