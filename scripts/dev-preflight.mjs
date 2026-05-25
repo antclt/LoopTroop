@@ -40,6 +40,8 @@ function isExecutable(filePath) {
   try { accessSync(filePath, constants.X_OK); return true } catch { return false }
 }
 
+console.log('[dev-preflight] Preparing LoopTroop dev startup preflight.')
+
 const reasons = []
 
 if (!pathExists(resolve(repoRoot, 'node_modules'))) {
@@ -95,6 +97,8 @@ if (reasons.length > 0) {
     }
     process.exit(result.status ?? 1)
   }
+} else {
+  console.log('[dev-preflight] Bootstrap dependencies are ready.')
 }
 
 const stillMissing = requiredBins.filter(name => {
@@ -110,7 +114,12 @@ if (stillMissing.length > 0) {
   process.exit(1)
 }
 
+if (reasons.length > 0) {
+  console.log('[dev-preflight] Dependency bootstrap completed.')
+}
+
 // Delegate to the TypeScript preflight for all other checks
+console.log('[dev-preflight] Running startup maintenance, process cleanup, and port checks.')
 const result = spawnSync(tsxBin, [resolve(repoRoot, 'scripts', 'dev-preflight.ts')], {
   cwd: repoRoot,
   stdio: 'inherit',

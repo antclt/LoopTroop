@@ -18,6 +18,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Show exact sanitized OpenCode provider causes when generic provider errors can be matched to local OpenCode logs.
 - Make Continue recovery use exact OpenCode session lookup and show failed action reasons inline.
 - Allow Continue for blocked `HTTP 402 Payment Required` OpenCode provider errors when the original session is still active.
+- Show live `npm run dev` preflight progress so slow startup checks no longer look stalled.
 - Added a manual reload button next to "AI Models" in Configuration to force-refresh available OpenCode providers and models on demand.
 - The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level to the log directory. Use `npm run dev --opencode-logs=all` to additionally print them to the console.
 
@@ -50,6 +51,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Enriched generic `Provider returned error` OpenCode failures by correlating the session with local OpenCode logs, surfacing sanitized HTTP/provider details while excluding prompts, request bodies, headers, credentials, cookies, and URL query strings.
 - Fixed Continue and owned-session reconnect checks to verify preserved OpenCode sessions by exact session ID instead of relying on session-list membership, and surfaced rejected workflow actions inline in the blocked-error view.
 - Made `HTTP 402 Payment Required` OpenCode provider blocks eligible for same-session Continue after payment or workspace access is restored, while keeping permanent 4xx request, auth, permission, model-not-found, and request-size failures non-continuable.
+- Made `npm run dev` print immediate and phase-level preflight progress before bootstrap dependency checks, daily dependency/audit/OpenCode maintenance, stale-process cleanup, and port checks, with a final completion duration.
 
 ---
 

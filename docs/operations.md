@@ -33,6 +33,7 @@ LoopTroop adds `/.looptroop/` to the repository-local `.git/info/exclude` file w
 
 `npm run dev` starts the frontend, backend, docs server, and OpenCode watcher stack. Before those services launch, LoopTroop runs a dev preflight that:
 
+- prints immediate progress for bootstrap checks, daily maintenance, stale-process cleanup, and port availability so startup does not appear stalled during slower checks
 - verifies required local dev binaries exist, using `npm ci` when dependencies need to be restored
 - checks direct dependencies against npm publish metadata
 - updates stale direct dependencies only to stable releases that are newer than the current installed version and at least 7 days old

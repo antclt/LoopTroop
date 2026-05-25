@@ -56,6 +56,21 @@ const configuredPorts = [
   { label: 'docs', port: getDocsPort() },
 ]
 
+const preflightStartedAt = Date.now()
+
+function logProgress(message: string) {
+  console.log(`[dev-preflight] ${message}`)
+}
+
+function formatElapsedTime(startedAt: number) {
+  const elapsedMs = Date.now() - startedAt
+  if (elapsedMs < 1000) {
+    return `${elapsedMs}ms`
+  }
+
+  return `${(elapsedMs / 1000).toFixed(1)}s`
+}
+
 function listProcesses() {
   try {
     const output = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' })
@@ -216,9 +231,11 @@ function ensureDistinctConfiguredPorts() {
   }
 }
 
+logProgress('Validating configured dev ports.')
 ensureDistinctConfiguredPorts()
 const maintenanceState = readDailyMaintenanceState()
 
+logProgress('Checking local dependency installation.')
 const installReport = ensureInstallIfNeeded()
 for (const error of installReport.errors) {
   console.error(`[dev-preflight] ${error}`)
@@ -227,12 +244,21 @@ if (installReport.errors.length > 0) {
   process.exit(1)
 }
 
+logProgress('Checking direct dependency maintenance schedule.')
 const dependencySyncDecision = decideDailyMaintenanceTask({
   taskName: 'dependencySync',
   state: maintenanceState,
   force: shouldForceDailyMaintenance,
   invalidatedByPaths: [packageJsonPath],
 })
+
+if (shouldSkipDependencyMaintenance) {
+  logProgress('Skipping direct dependency sync because LOOPTROOP_DEV_SKIP_DEPS=1.')
+} else if (dependencySyncDecision.shouldRun) {
+  logProgress('Checking direct npm dependencies for eligible updates; this daily network check may take a moment.')
+} else {
+  logProgress('Direct dependency sync already completed today; deferring.')
+}
 
 const dependencySyncReport = shouldSkipDependencyMaintenance
   ? syncDirectDependencies({
@@ -269,12 +295,21 @@ if (!shouldSkipDependencyMaintenance && dependencySyncDecision.shouldRun && depe
   recordDailyMaintenanceSuccess(maintenanceState, 'dependencySync')
 }
 
+logProgress('Checking audit maintenance schedule.')
 const auditDecision = decideDailyMaintenanceTask({
   taskName: 'audit',
   state: maintenanceState,
   force: shouldForceDailyMaintenance,
   invalidatedByPaths: [packageJsonPath, packageLockPath],
 })
+
+if (shouldSkipDependencyMaintenance) {
+  logProgress('Skipping npm audit remediation because LOOPTROOP_DEV_SKIP_DEPS=1.')
+} else if (auditDecision.shouldRun) {
+  logProgress('Previewing npm audit remediation; this daily lockfile check may take a moment.')
+} else {
+  logProgress('npm audit remediation already completed today; deferring.')
+}
 
 const auditReport = shouldSkipDependencyMaintenance
   ? remediateAudit({
@@ -316,11 +351,20 @@ if (!shouldSkipDependencyMaintenance && auditDecision.shouldRun && auditReport.e
   recordDailyMaintenanceSuccess(maintenanceState, 'audit')
 }
 
+logProgress('Checking OpenCode maintenance schedule.')
 const opencodeDecision = decideDailyMaintenanceTask({
   taskName: 'opencode',
   state: maintenanceState,
   force: shouldForceDailyMaintenance,
 })
+
+if (shouldSkipOpenCodeUpgrade) {
+  logProgress('Skipping OpenCode CLI upgrade because LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1.')
+} else if (opencodeDecision.shouldRun) {
+  logProgress('Checking OpenCode CLI for updates; this daily check may take a moment.')
+} else {
+  logProgress('OpenCode CLI upgrade already completed today; deferring.')
+}
 
 const opencodeReport = shouldSkipOpenCodeUpgrade
   ? upgradeOpenCodeCli({
@@ -356,6 +400,7 @@ if (!shouldSkipOpenCodeUpgrade && opencodeDecision.shouldRun && opencodeReport.e
 
 writeDailyMaintenanceState(maintenanceState)
 
+logProgress('Verifying required local dev binaries.')
 const missingBinsAfterMaintenance = getMissingBins()
 if (missingBinsAfterMaintenance.length > 0) {
   console.error(
@@ -365,6 +410,7 @@ if (missingBinsAfterMaintenance.length > 0) {
   process.exit(1)
 }
 
+logProgress('Checking for stale LoopTroop dev processes.')
 const processes = listProcesses()
 const graph = buildProcessGraph(processes)
 const protectedPids = collectProtectedPids(process.pid, graph)
@@ -386,6 +432,11 @@ if (staleRoots.size > 0) {
   await sleep(500)
 }
 
+logProgress(
+  'Checking service port availability for ' +
+  configuredPorts.map(({ label, port }) => `${label}:${port}`).join(', ') +
+  '.',
+)
 const reclaimed = await reclaimOccupiedPorts(configuredPorts.map(({ port }) => port))
 if (!reclaimed) {
   process.exit(1)
@@ -433,3 +484,5 @@ writeDevPreflightReport({
   audit: auditReport,
   opencode: opencodeReport,
 })
+
+logProgress(`Startup preflight complete in ${formatElapsedTime(preflightStartedAt)}.`)
