@@ -61,6 +61,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made `HTTP 402 Payment Required` OpenCode provider blocks eligible for same-session Continue after payment or workspace access is restored, while keeping permanent 4xx request, auth, permission, model-not-found, and request-size failures non-continuable.
 - Fixed CODING timeout ownership so LoopTroop-owned per-iteration deadlines consume bead attempts, capture context-wipe notes, abandon the timed-out session, reset the worktree, and retry in a fresh owned session until `BEAD_RETRY_BUDGET_EXHAUSTED`, while true OpenCode/provider timeouts still preserve same-session Continue when eligible.
 - Fixed Current Activity timeout detection so timeout-like strings in model/tool/debug output no longer create false `Workflow timeout` banners; near-timeout warnings now use structured prompt deadline metadata and only appear during the final warning window.
+- Fixed stale Current Activity near-timeout warnings so completed prompts no longer keep showing active countdowns when revisiting a previous status, and terminal timeout elapsed values stay pinned to the diagnostic event.
 - Made `npm run dev` print immediate and phase-level preflight progress before bootstrap dependency checks, daily dependency/audit/OpenCode maintenance, stale-process cleanup, and port checks, with a final completion duration.
 
 ---

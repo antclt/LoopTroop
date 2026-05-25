@@ -153,6 +153,20 @@ describe('deriveCurrentActivity', () => {
     expect(activity?.diagnostic).toBe('model_no_activity_timeout')
   })
 
+  it('freezes terminal timeout elapsed duration at the diagnostic timestamp', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt(),
+      makeLog('timeout', '[ERROR] OpenCode prompt timed out after 120000ms.', {
+        timestamp: timestamp(120_000),
+        source: 'error',
+        kind: 'error',
+      }),
+    ], BASE_TIME_MS + 600_000)
+
+    expect(activity?.kind).toBe('model_no_activity_timeout')
+    expect(activity?.elapsedMs).toBe(120_000)
+  })
+
   it('classifies explicit iteration timeout logs as iteration_timeout', () => {
     const activity = deriveCurrentActivity([
       makePrompt({ sessionId: 'ses_iteration', beadId: 'bead-7' }),
@@ -266,6 +280,44 @@ describe('deriveCurrentActivity', () => {
     ], BASE_TIME_MS + 70_000)
 
     expect(activity?.kind).toBe('near_timeout')
+  })
+
+  it('clears near-timeout warnings after model activity starts', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({
+        timeoutMs: 100_000,
+        deadlineAt: timestamp(100_000),
+        timeoutKind: 'opencode_prompt',
+      }),
+      makeLog('model-output', '[MODEL] Work completed before the deadline.', {
+        timestamp: timestamp(75_000),
+        source: 'model:openai/gpt-5-codex',
+        audience: 'ai',
+        kind: 'text',
+        modelId: 'openai/gpt-5-codex',
+        sessionId: 'ses_waiting',
+      }),
+    ], BASE_TIME_MS + 90_000)
+
+    expect(activity).toBeNull()
+  })
+
+  it('clears near-timeout warnings after prompt completion without requiring text detail', () => {
+    const activity = deriveCurrentActivity([
+      makePrompt({
+        timeoutMs: 360_000,
+        deadlineAt: timestamp(360_000),
+        timeoutKind: 'per_iteration',
+      }),
+      makeLog('prompt-result', '[SYS] OpenCode coding_main: openai/gpt-5-codex session=ses_waiting, messages=4, responseChars=512.', {
+        timestamp: timestamp(349_000),
+        source: 'system',
+        kind: 'milestone',
+        modelId: 'openai/gpt-5-codex',
+      }),
+    ], BASE_TIME_MS + 400_000)
+
+    expect(activity).toBeNull()
   })
 
   it('lets terminal timeout diagnostics override near-timeout warnings', () => {

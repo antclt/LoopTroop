@@ -123,6 +123,17 @@ function isEmptyModelOutputEntry(entry: LogEntry): boolean {
   return isTrustedDiagnosticEntry(entry) && /\bresponseChars=0\b/i.test(entry.line)
 }
 
+function isPromptResultEntry(entry: LogEntry): boolean {
+  return isTrustedDiagnosticEntry(entry)
+    && /\bOpenCode\b.+\bsession=\S+,\s*messages=\d+,\s*responseChars=\d+\b/i.test(entry.line)
+}
+
+function isPromptCompletionEntry(entry: LogEntry): boolean {
+  if (entry.kind === 'session' && /\bsession status:\s*idle\b/i.test(entry.line)) return true
+  if (entry.kind === 'milestone' && /\bAI session completed\b/i.test(entry.line)) return true
+  return isPromptResultEntry(entry)
+}
+
 function isIterationTimeoutEntry(entry: LogEntry): boolean {
   return isTrustedDiagnosticEntry(entry)
     && /\biteration timeout for bead \S+ attempt \d+;\s*resetting for attempt \d+(?: of \d+)?\b/i.test(entry.line)
@@ -185,10 +196,10 @@ function entryRelatesToPrompt(entry: LogEntry, prompt: LogEntry): boolean {
 function buildDiagnosticActivity(
   kind: CurrentActivityDiagnostic,
   prompt: LogEntry,
-  nowMs: number,
+  elapsedUntilMs: number,
 ): CurrentActivity {
   const elapsedMs = Number.isFinite(parseTimeMs(prompt.timestamp))
-    ? Math.max(0, nowMs - parseTimeMs(prompt.timestamp))
+    ? Math.max(0, elapsedUntilMs - parseTimeMs(prompt.timestamp))
     : undefined
 
   switch (kind) {
@@ -313,6 +324,7 @@ export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): 
   const firstActivityIndex = entriesAfterPrompt.findIndex(({ entry }) => isFirstActivityEntry(entry))
   const firstActivityEntry = firstActivityIndex >= 0 ? entriesAfterPrompt[firstActivityIndex]! : null
   const hasFirstActivity = firstActivityEntry !== null
+  const promptCompletionEntry = entriesAfterPrompt.findLast(({ entry }) => isPromptCompletionEntry(entry))
   const diagnosticCandidates: DiagnosticCandidate[] = []
 
   for (const indexedEntry of entriesAfterPrompt) {
@@ -338,14 +350,17 @@ export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): 
 
   const latestDiagnostic = pickLatestDiagnostic(diagnosticCandidates)
   if (latestDiagnostic) {
-    return buildDiagnosticActivity(latestDiagnostic.kind, prompt, nowMs)
+    const elapsedUntilMs = Number.isFinite(latestDiagnostic.indexedEntry.timeMs)
+      ? latestDiagnostic.indexedEntry.timeMs
+      : nowMs
+    return buildDiagnosticActivity(latestDiagnostic.kind, prompt, elapsedUntilMs)
   }
+
+  if (promptCompletionEntry || hasFirstActivity) return null
 
   if (isNearTimeoutPrompt(prompt, nowMs)) {
     return buildDiagnosticActivity('near_timeout', prompt, nowMs)
   }
-
-  if (hasFirstActivity) return null
 
   const elapsedMs = Number.isFinite(promptTimeMs) ? Math.max(0, nowMs - promptTimeMs) : undefined
   const latestRetry = entriesAfterPrompt.findLast(({ entry }) => isProviderRetryEntry(entry))
