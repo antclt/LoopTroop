@@ -6,6 +6,7 @@ import { runPreFlightChecks } from '../doctor'
 import { MockOpenCodeAdapter } from '../../../opencode/adapter'
 import { OPENCODE_EXECUTION_ALLOW_ALL_PERMISSIONS } from '../../../opencode/permissions'
 import { TEST } from '../../../test/factories'
+import type { WorktreeChangeEntry, WorktreeChangeSummary } from '../../../git/worktreeChanges'
 
 function makeBead(overrides: Partial<Bead> = {}): Bead {
   return {
@@ -39,6 +40,31 @@ const defaultContext: PreFlightContext = {
   lockedMainImplementer: 'model-a',
   lockedMainImplementerVariant: 'high',
   maxIterations: 5,
+}
+
+function cleanWorktreeSummary(overrides: Partial<WorktreeChangeSummary> = {}): WorktreeChangeSummary {
+  const summary: WorktreeChangeSummary = {
+    entries: [],
+    committable: [],
+    looptroopExcluded: [],
+    setupExcluded: [],
+    generatedNoise: [],
+    hasChanges: false,
+    hasCommittableChanges: false,
+  }
+  return { ...summary, ...overrides }
+}
+
+function changeEntry(path: string, category: WorktreeChangeEntry['category'], untracked = false): WorktreeChangeEntry {
+  return {
+    path,
+    indexStatus: untracked ? '?' : ' ',
+    worktreeStatus: untracked ? '?' : 'M',
+    rawStatus: untracked ? '??' : ' M',
+    untracked,
+    category,
+    ...(category === 'generatedNoise' ? { generatedNoisePattern: `${path.split('/')[0]}/` } : {}),
+  }
 }
 
 describe('Pre-Flight Doctor', () => {
@@ -97,6 +123,7 @@ describe('Pre-Flight Doctor', () => {
       getLatestPhaseArtifact: () => approvalReceipt,
       fetchConnectedModelIds: async () => ['model-a', 'model-b'],
       findExecutionBandConflict: () => null,
+      getWorktreeChangeSummary: () => cleanWorktreeSummary(),
     }
   })
 
@@ -226,6 +253,40 @@ describe('Pre-Flight Doctor', () => {
     const gitCheck = report.criticalFailures.find(c => c.name === 'Git Worktree')
     expect(gitCheck).toBeDefined()
     expect(gitCheck?.message).toContain('does not exist')
+  })
+
+  it('fails when pre-existing committable project changes are present', async () => {
+    const beads = [makeBead()]
+    const dirtyEntry = changeEntry('src/changed.cs', 'committable')
+    deps.getWorktreeChangeSummary = () => cleanWorktreeSummary({
+      entries: [dirtyEntry],
+      committable: [dirtyEntry],
+      hasChanges: true,
+      hasCommittableChanges: true,
+    })
+
+    const report = await runPreFlightChecks(adapter, TEST.ticketId, beads, defaultContext, undefined, deps)
+
+    const cleanlinessCheck = report.criticalFailures.find(c => c.name === 'Worktree Cleanliness')
+    expect(cleanlinessCheck).toBeDefined()
+    expect(cleanlinessCheck?.message).toContain('src/changed.cs')
+  })
+
+  it('warns but passes when only untracked generated output is present', async () => {
+    const beads = [makeBead()]
+    const generatedEntry = changeEntry('node_modules/pkg/index.js', 'generatedNoise', true)
+    deps.getWorktreeChangeSummary = () => cleanWorktreeSummary({
+      entries: [generatedEntry],
+      generatedNoise: [generatedEntry],
+      hasChanges: true,
+    })
+
+    const report = await runPreFlightChecks(adapter, TEST.ticketId, beads, defaultContext, undefined, deps)
+
+    expect(report.passed).toBe(true)
+    const warning = report.warnings.find(c => c.name === 'Worktree Cleanliness')
+    expect(warning).toBeDefined()
+    expect(warning?.message).toContain('node_modules/pkg/index.js')
   })
 
   it('fails when no main implementer configured', async () => {

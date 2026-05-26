@@ -21,6 +21,12 @@ import { resolveOpenCodeTools } from '../../opencode/toolPolicy'
 import { parseModelRef, type Session, type SessionErrorStreamEvent, type StreamEvent } from '../../opencode/types'
 import { summarizeModelErrorForLog } from '../../opencode/errorDetails'
 import { createOpenCodeSessionWithRetry } from '../../opencode/sessionCreation'
+import {
+  buildGeneratedNoiseWarning,
+  buildWorktreeDirtyError,
+  getExecutionSetupCommitExcludedRoots,
+  summarizeWorktreeChanges,
+} from '../../git/worktreeChanges'
 
 export interface DoctorDeps {
   fileExists: (path: string) => boolean
@@ -34,6 +40,7 @@ export interface DoctorDeps {
   getLatestPhaseArtifact: typeof getLatestPhaseArtifact
   fetchConnectedModelIds: typeof fetchConnectedModelIds
   findExecutionBandConflict: (ticketId: string) => ReturnType<typeof findProjectExecutionBandConflict>
+  getWorktreeChangeSummary: typeof summarizeWorktreeChanges
 }
 
 export interface PreFlightRunOptions {
@@ -59,6 +66,7 @@ export const defaultDoctorDeps: DoctorDeps = {
     const ticket = getTicketContext(ticketId)
     return ticket ? findProjectExecutionBandConflict(ticket.projectId, ticket.ticketRef) : null
   },
+  getWorktreeChangeSummary: summarizeWorktreeChanges,
 }
 
 async function runExecutionCapabilityProbe(
@@ -327,7 +335,7 @@ export async function runPreFlightChecks(
       })
     } else {
       try {
-      const currentBranch = deps.getCurrentBranch(paths.worktreePath)
+        const currentBranch = deps.getCurrentBranch(paths.worktreePath)
         if (currentBranch) {
           checks.push({
             name: 'Git Worktree',
@@ -349,6 +357,43 @@ export async function runPreFlightChecks(
           category: 'git',
           result: 'fail',
           message: 'Failed to inspect git worktree branch',
+        })
+      }
+    }
+
+    if (worktreeExists) {
+      try {
+        const changeSummary = deps.getWorktreeChangeSummary(paths.worktreePath, {
+          setupExcludedRoots: getExecutionSetupCommitExcludedRoots(paths.worktreePath),
+        })
+        if (changeSummary.hasCommittableChanges) {
+          checks.push({
+            name: 'Worktree Cleanliness',
+            category: 'git',
+            result: 'fail',
+            message: buildWorktreeDirtyError(changeSummary.committable.map(entry => entry.path)),
+          })
+        } else if (changeSummary.generatedNoise.length > 0) {
+          checks.push({
+            name: 'Worktree Cleanliness',
+            category: 'git',
+            result: 'warning',
+            message: buildGeneratedNoiseWarning(changeSummary.generatedNoise),
+          })
+        } else {
+          checks.push({
+            name: 'Worktree Cleanliness',
+            category: 'git',
+            result: 'pass',
+            message: 'No pre-existing project changes need committing before setup',
+          })
+        }
+      } catch (err) {
+        checks.push({
+          name: 'Worktree Cleanliness',
+          category: 'git',
+          result: 'fail',
+          message: `Failed to inspect worktree cleanliness: ${err instanceof Error ? err.message : 'Unknown error'}`,
         })
       }
     }

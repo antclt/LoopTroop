@@ -8,15 +8,19 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
 
 ### Detailed Changes
 
 #### Added
+- Added pre-flight and execution-setup worktree cleanliness checks: pre-existing committable project changes now block before setup, ready setup attempts fail if they leave committable project changes, and untracked generated/local noise is reported with `.gitignore` suggestions.
 - Added support for tracking multiple parallel AI model activities and diagnostics concurrently.
 - Added state persistence to localStorage for the collapsible activity strip, saving user preferences across reloads.
 
 #### Changed
+- Changed bead commit capture to be language-agnostic. LoopTroop now commits Git-visible project changes regardless of extension, while still excluding `.ticket/**`, `.looptroop/**`, execution-setup roots, and untracked generated/local outputs.
+- Execution setup prompts now ask agents to record suggested `.gitignore` entries in profile cautions instead of editing `.gitignore` during setup.
 - Re-engineered the Current Activity strip below the log tabs to be fully collapsible and display a list of all active model sessions, beads, and warnings.
 - Redesigned the strip UI with premium unified severity styling (Error > Warning > Info) and smooth chevron transitions on toggle.
 

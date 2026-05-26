@@ -91,9 +91,9 @@ Human approval gates are content-addressed. The API exposes the current artifact
 
 Execution is built around beads, not around one monolithic coding prompt.
 
-1. `PRE_FLIGHT_CHECK` verifies the ticket can enter pre-implementation setup.
+1. `PRE_FLIGHT_CHECK` verifies the ticket can enter pre-implementation setup, including worktree cleanliness before setup starts.
 2. `WAITING_EXECUTION_SETUP_APPROVAL` pauses for setup-plan review before setup commands run.
-3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots before blocking.
+3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots before blocking and rejecting ready results that leave committable project changes behind.
 4. `CODING` selects the next runnable bead from the scheduler.
 5. `executeBead()` starts or reattaches to the owned OpenCode session for that bead attempt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path.

@@ -16,11 +16,15 @@ import { TEST } from '../../../test/factories'
 
 const BRANCH = TEST.externalId
 
-describe('gitOps allowlist/denylist', () => {
-  it('allows standard code extensions', () => {
+describe('gitOps worktree change classification', () => {
+  it('allows language-agnostic project files without an extension allowlist', () => {
     expect(isAllowedFile('src/app.ts')).toBe(true)
     expect(isAllowedFile('src/style.css')).toBe(true)
+    expect(isAllowedFile('src/Program.cs')).toBe(true)
     expect(isAllowedFile('package.json')).toBe(true)
+    expect(isAllowedFile('Makefile')).toBe(true)
+    expect(isAllowedFile('image.png')).toBe(true)
+    expect(isAllowedFile('data.bin')).toBe(true)
   })
 
   it('allows .jsonl files', () => {
@@ -37,24 +41,30 @@ describe('gitOps allowlist/denylist', () => {
     expect(isAllowedFile('.ticket/ui/artifact-companions/beads_expanded.json')).toBe(false)
   })
 
-  it('blocks runtime/internal paths', () => {
+  it('blocks LoopTroop runtime/internal paths', () => {
     expect(isAllowedFile('.ticket/runtime/state.json')).toBe(false)
     expect(isAllowedFile('.ticket/locks/main.lock')).toBe(false)
     expect(isAllowedFile('.ticket/sessions/abc.json')).toBe(false)
     expect(isAllowedFile('.ticket/streams/live.json')).toBe(false)
     expect(isAllowedFile('.ticket/tmp/scratch.ts')).toBe(false)
+  })
+
+  it('treats common generated and local-only outputs as noise only while untracked', () => {
     expect(isAllowedFile('node_modules/foo/bar.js')).toBe(false)
     expect(isAllowedFile('dist/bundle.js')).toBe(false)
+    expect(isAllowedFile('.env')).toBe(false)
+    expect(isAllowedFile('.env.local')).toBe(false)
+    expect(isAllowedFile('.env.example')).toBe(true)
+
+    expect(isAllowedFile('dist/bundle.js', { untracked: false })).toBe(true)
+    expect(isAllowedFile('node_modules/foo/bar.js', { untracked: false })).toBe(true)
+    expect(isAllowedFile('.env', { untracked: false })).toBe(true)
   })
 
-  it('blocks legacy execution setup cache paths without blocking similarly named cache paths', () => {
+  it('blocks legacy execution setup cache paths even when tracked', () => {
     expect(isAllowedFile('.cache/project-tooling/go/src/runtime.go')).toBe(false)
-    expect(isAllowedFile('.cache/project-tooling-extra/go/src/runtime.go')).toBe(true)
-  })
-
-  it('blocks unknown extensions', () => {
-    expect(isAllowedFile('data.bin')).toBe(false)
-    expect(isAllowedFile('image.png')).toBe(false)
+    expect(isAllowedFile('.cache/project-tooling-extra/go/src/runtime.go')).toBe(false)
+    expect(isAllowedFile('.cache/project-tooling-extra/go/src/runtime.go', { untracked: false })).toBe(true)
   })
 
   it('filterAllowedFiles returns only allowed files', () => {
@@ -334,14 +344,19 @@ describe('commitBeadChanges', () => {
     expect(remoteSha).toBe(headSha(dir))
   })
 
-  it('returns { committed: false, pushed: false } when only blocked files exist', () => {
+  it('returns no commit and records skipped files when only generated noise exists', () => {
     const dir = makeFreshRepo()
-    // .png is not in ALLOWED_EXTENSIONS and not an ALWAYS_ALLOW_PATH
-    writeFileSync(join(dir, 'image.png'), 'binary data')
-    expect(commitBeadChanges(dir, 'bead-3', 'Blocked only')).toEqual({
+    mkdirSync(join(dir, 'node_modules', 'pkg'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'pkg', 'index.js'), 'module.exports = 1\n')
+
+    const result = commitBeadChanges(dir, 'bead-3', 'Generated only')
+
+    expect(result).toMatchObject({
       committed: false,
       pushed: false,
     })
+    expect(result.skippedFiles).toEqual(['node_modules/pkg/index.js'])
+    expect(result.generatedNoiseWarning).toContain('Suggested .gitignore entries: node_modules/')
   })
 
   it('returns { committed: false, pushed: false } when only .ticket files changed', () => {
@@ -352,10 +367,17 @@ describe('commitBeadChanges', () => {
     writeFileSync(join(dir, '.ticket', 'prd.yaml'), 'artifact: prd\n')
     writeFileSync(join(dir, '.ticket', 'ui', 'artifact-companions', 'beads_expanded.json'), '{"ok":true}\n')
 
-    expect(commitBeadChanges(dir, 'bead-ticket-only', 'Skip ticket state')).toEqual({
+    const result = commitBeadChanges(dir, 'bead-ticket-only', 'Skip ticket state')
+
+    expect(result).toMatchObject({
       committed: false,
       pushed: false,
     })
+    expect(result.skippedFiles).toEqual(expect.arrayContaining([
+      '.ticket/beads/master/.beads/issues.jsonl',
+      '.ticket/prd.yaml',
+      '.ticket/ui/artifact-companions/beads_expanded.json',
+    ]))
 
     const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
     expect(status).toContain('.ticket/')
@@ -371,19 +393,22 @@ describe('commitBeadChanges', () => {
     expect(log).toContain('bead(bead-42): My Feature Title')
   })
 
-  it('stages only allowed files, leaving blocked files untracked', () => {
+  it('stages only committable files, leaving untracked generated noise alone', () => {
     const dir = makeFreshRepo()
     writeFileSync(join(dir, 'app.ts'), 'export const app = 1\n')
-    writeFileSync(join(dir, 'photo.png'), 'binary data')
-    commitBeadChanges(dir, 'bead-5', 'Mixed files')
+    mkdirSync(join(dir, 'node_modules'), { recursive: true })
+    writeFileSync(join(dir, 'node_modules', 'generated.js'), 'module.exports = true\n')
+    const result = commitBeadChanges(dir, 'bead-5', 'Mixed files')
+
+    expect(result.skippedFiles).toEqual(['node_modules/generated.js'])
     // app.ts should be in the commit
     const showFiles = execFileSync('git', ['-C', dir, 'show', '--name-only', 'HEAD'], {
       encoding: 'utf8',
     })
     expect(showFiles).toContain('app.ts')
-    // photo.png should remain untracked
-    const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
-    expect(status).toContain('photo.png')
+    // node_modules/generated.js should remain untracked
+    const untrackedFiles = execFileSync('git', ['-C', dir, 'ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' })
+    expect(untrackedFiles).toContain('node_modules/generated.js')
   })
 
   it('commits code changes while leaving .ticket files untracked', () => {
@@ -410,13 +435,14 @@ describe('commitBeadChanges', () => {
     expect(status).toContain('.ticket/')
   })
 
-  it('does not commit pre-staged disallowed files alongside allowlisted changes', () => {
+  it('does not commit pre-staged LoopTroop files alongside project changes', () => {
     const dir = makeFreshRepo()
-    writeFileSync(join(dir, 'secret.bin'), 'do not commit\n')
-    execFileSync('git', ['-C', dir, 'add', 'secret.bin'], { stdio: 'pipe' })
+    mkdirSync(join(dir, '.ticket', 'runtime'), { recursive: true })
+    writeFileSync(join(dir, '.ticket', 'runtime', 'secret.bin'), 'do not commit\n')
+    execFileSync('git', ['-C', dir, 'add', '.ticket/runtime/secret.bin'], { stdio: 'pipe' })
     writeFileSync(join(dir, 'app.ts'), 'export const app = 1\n')
 
-    const result = commitBeadChanges(dir, 'bead-6', 'Skip staged blocked file')
+    const result = commitBeadChanges(dir, 'bead-6', 'Skip staged LoopTroop file')
 
     expect(result.committed).toBe(true)
     const committedFiles = execFileSync('git', [
@@ -429,15 +455,80 @@ describe('commitBeadChanges', () => {
       'HEAD',
     ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
     expect(committedFiles).toContain('app.ts')
-    expect(committedFiles).not.toContain('secret.bin')
+    expect(committedFiles).not.toContain('.ticket/runtime/secret.bin')
 
     const treeFiles = execFileSync('git', ['-C', dir, 'ls-tree', '-r', '--name-only', 'HEAD'], {
       encoding: 'utf8',
     })
-    expect(treeFiles).not.toContain('secret.bin')
+    expect(treeFiles).not.toContain('.ticket/runtime/secret.bin')
 
     const status = execFileSync('git', ['-C', dir, 'status', '--porcelain'], { encoding: 'utf8' })
-    expect(status).toContain('secret.bin')
+    expect(status).toContain('.ticket/runtime/secret.bin')
+  })
+
+  it('commits arbitrary project file extensions and extensionless files', () => {
+    const dir = makeFreshRepo()
+    writeFileSync(join(dir, 'asset.bin'), 'binary data\n')
+    writeFileSync(join(dir, 'Makefile'), 'test:\n\t@echo ok\n')
+
+    const result = commitBeadChanges(dir, 'bead-any-file', 'Commit arbitrary project files')
+
+    expect(result.committed).toBe(true)
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-only',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    expect(committedFiles).toEqual(expect.arrayContaining(['asset.bin', 'Makefile']))
+  })
+
+  it('commits tracked generated-output changes but skips untracked generated noise', () => {
+    const dir = makeFreshRepo()
+    mkdirSync(join(dir, 'dist'), { recursive: true })
+    writeFileSync(join(dir, 'dist', 'bundle.js'), 'tracked baseline\n')
+    execFileSync('git', ['-C', dir, 'add', 'dist/bundle.js'], { stdio: 'pipe' })
+    execFileSync('git', ['-C', dir, 'commit', '-m', 'track bundle'], { stdio: 'pipe' })
+
+    writeFileSync(join(dir, 'dist', 'bundle.js'), 'tracked change\n')
+    writeFileSync(join(dir, 'dist', 'scratch.js'), 'untracked scratch\n')
+
+    const result = commitBeadChanges(dir, 'bead-tracked-generated', 'Commit tracked generated file')
+
+    expect(result.committed).toBe(true)
+    expect(result.skippedFiles).toEqual(['dist/scratch.js'])
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-only',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    expect(committedFiles).toEqual(['dist/bundle.js'])
+  })
+
+  it('commits deleted project files', () => {
+    const dir = makeFreshRepo()
+    rmSync(join(dir, 'hello.ts'))
+
+    const result = commitBeadChanges(dir, 'bead-delete', 'Delete file')
+
+    expect(result.committed).toBe(true)
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-status',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim()
+    expect(committedFiles).toContain('D\thello.ts')
   })
 
   it('does not commit files under execution setup profile temp roots or reusable artifacts', () => {
@@ -503,10 +594,13 @@ describe('commitBeadChanges', () => {
     mkdirSync(join(dir, '.cache', 'project-tooling', 'go', 'src'), { recursive: true })
     writeFileSync(join(dir, '.cache', 'project-tooling', 'go', 'src', 'runtime.go'), 'package runtime\n')
 
-    expect(commitBeadChanges(dir, 'bead-cache', 'Skip legacy cache')).toEqual({
+    const result = commitBeadChanges(dir, 'bead-cache', 'Skip legacy cache')
+
+    expect(result).toMatchObject({
       committed: false,
       pushed: false,
     })
+    expect(result.skippedFiles).toEqual(['.cache/project-tooling/go/src/runtime.go'])
 
     const untrackedFiles = execFileSync('git', ['-C', dir, 'ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' })
     expect(untrackedFiles).toContain('.cache/project-tooling/go/src/runtime.go')

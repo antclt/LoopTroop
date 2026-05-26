@@ -116,12 +116,12 @@ Beads move through a small local lifecycle even while the ticket moves through a
 | --- | --- |
 | `pending` | Planned but not yet started |
 | `in_progress` | Currently selected by the execution loop |
-| `done` | OpenCode succeeded and local finalization succeeded: changed work was committed, or the bead was a true no-op |
+| `done` | OpenCode succeeded and local finalization succeeded: committable project changes were committed regardless of language or file extension, or the bead was a true no-op |
 | `error` | Last attempt or finalization failed and needs retry or manual recovery |
 
 The scheduler decides which `pending` bead becomes active based on dependency satisfaction.
 
-Push failures after a successful local bead commit are warnings, not bead failures. Fatal local finalization errors use `BEAD_FINALIZATION_FAILED`, avoid `bead_complete`, and route the ticket through `BLOCKED_ERROR` so the bead can be retried.
+Push failures after a successful local bead commit are warnings, not bead failures. LoopTroop/setup roots are excluded from bead commits, and common generated/local outputs are skipped only while untracked with `.gitignore` suggestions in logs. Fatal local finalization errors use `BEAD_FINALIZATION_FAILED`, avoid `bead_complete`, and route the ticket through `BLOCKED_ERROR` so the bead can be retried.
 
 ## Scheduler Rules
 

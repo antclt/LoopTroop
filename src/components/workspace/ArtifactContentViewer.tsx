@@ -5309,6 +5309,13 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
         />
 
         <ArtifactListSection
+          title="Worktree Warnings"
+          items={report.worktreeWarnings}
+          emptyLabel="No worktree warnings were recorded."
+          tone="warning"
+        />
+
+        <ArtifactListSection
           title="Errors"
           items={report.errors}
           emptyLabel="No execution setup errors were recorded."
@@ -5555,13 +5562,13 @@ function ArtifactListSection({
   title: string
   items: string[]
   emptyLabel: string
-  tone?: 'default' | 'removed' | 'preserved' | 'error'
+  tone?: 'default' | 'removed' | 'preserved' | 'warning' | 'error'
 }) {
   const itemClassName = tone === 'removed'
     ? 'border-red-200 bg-red-50/70 text-red-950 dark:border-red-900/50 dark:bg-red-950/20 dark:text-red-100'
     : tone === 'preserved'
       ? 'border-blue-200 bg-blue-50/70 text-blue-950 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100'
-      : tone === 'error'
+      : tone === 'warning' || tone === 'error'
         ? 'border-amber-200 bg-amber-50/80 text-amber-950 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100'
         : 'border-border bg-background text-foreground'
 

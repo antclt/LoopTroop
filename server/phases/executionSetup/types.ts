@@ -61,6 +61,7 @@ export interface ExecutionSetupReport {
   checks: ExecutionSetupResult['checks'] | null
   modelOutput: string
   errors: string[]
+  worktreeWarnings?: string[]
   structuredOutput?: StructuredOutputMetadata
   rawAttempts?: RawAttempt[]
   attempt?: number

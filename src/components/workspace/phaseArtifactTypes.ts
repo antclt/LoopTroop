@@ -445,6 +445,7 @@ export interface ExecutionSetupRuntimeReportData {
   modelOutput?: string
   rawAttempts?: ArtifactRawAttemptData[]
   errors: string[]
+  worktreeWarnings: string[]
   structuredOutput?: ArtifactStructuredOutputData
   attempt?: number
   maxIterations?: number | null
@@ -973,6 +974,7 @@ export function parseExecutionSetupRuntimeReport(content: string): ExecutionSetu
   const modelOutput = normalizeOptionalString(getValueByAliases(parsed, ['modelOutput', 'model_output']))
   const rawAttempts = normalizeRawAttempts(getValueByAliases(parsed, ['rawAttempts', 'raw_attempts']))
   const errors = normalizeStringArray(getValueByAliases(parsed, ['errors']))
+  const worktreeWarnings = normalizeStringArray(getValueByAliases(parsed, ['worktreeWarnings', 'worktree_warnings']))
   const attemptHistory = parseExecutionSetupAttemptHistory(getValueByAliases(parsed, ['attemptHistory', 'attempt_history']))
 
   if (
@@ -983,6 +985,7 @@ export function parseExecutionSetupRuntimeReport(content: string): ExecutionSetu
     && !modelOutput
     && !rawAttempts
     && errors.length === 0
+    && worktreeWarnings.length === 0
     && attemptHistory.length === 0
   ) {
     return null
@@ -1000,6 +1003,7 @@ export function parseExecutionSetupRuntimeReport(content: string): ExecutionSetu
     modelOutput,
     rawAttempts,
     errors,
+    worktreeWarnings,
     structuredOutput: normalizeArtifactStructuredOutput(getValueByAliases(parsed, ['structuredOutput', 'structured_output'])),
     attempt: normalizeNumber(getValueByAliases(parsed, ['attempt'])),
     maxIterations: maxIterationsRaw === null ? null : normalizeNumber(maxIterationsRaw),

@@ -46,6 +46,12 @@ import {
   type ExecutionSetupReport,
   type ExecutionSetupResult,
 } from '../../phases/executionSetup/types'
+import {
+  buildGeneratedNoiseWarning,
+  buildWorktreeDirtyError,
+  getExecutionSetupCommitExcludedRoots,
+  summarizeWorktreeChanges,
+} from '../../git/worktreeChanges'
 import { isMockOpenCodeMode } from '../../opencode/factory'
 
 function allChecksPass(result: ExecutionSetupResult): boolean {
@@ -58,6 +64,7 @@ function buildExecutionSetupReport(input: {
   errors: string[]
   profile?: ExecutionSetupProfile | null
   approvedPlanCommands?: string[]
+  worktreeWarnings?: string[]
 }): ExecutionSetupReport {
   const profile = input.profile ?? input.generation.result?.profile ?? null
   const approvedPlanCommands = [...new Set(input.approvedPlanCommands ?? [])]
@@ -74,10 +81,19 @@ function buildExecutionSetupReport(input: {
     checks: input.generation.result?.checks ?? null,
     modelOutput: input.generation.output,
     errors: input.errors,
+    ...(input.worktreeWarnings?.length ? { worktreeWarnings: input.worktreeWarnings } : {}),
     structuredOutput: input.generation.structuredOutput,
     rawAttempts: input.generation.rawAttempts,
     approvedPlanCommands,
     executionAddedCommands,
+  }
+}
+
+function addProfileCautions(profile: ExecutionSetupProfile, cautions: string[]): ExecutionSetupProfile {
+  if (cautions.length === 0) return profile
+  return {
+    ...profile,
+    cautions: [...new Set([...profile.cautions, ...cautions])],
   }
 }
 
@@ -194,17 +210,41 @@ export async function handleExecutionSetup(
           evaluateGeneration: async ({ generation }) => {
             const errors = [...generation.parse.errors]
             const result = generation.result
+            const worktreeWarnings: string[] = []
+            let profile = result?.profile ?? null
 
             if (result && !allChecksPass(result)) {
               errors.push('Execution setup checks must all pass before the setup profile can be accepted.')
+            }
+
+            if (profile) {
+              try {
+                const setupExcludedRoots = getExecutionSetupCommitExcludedRoots(paths.worktreePath, profile)
+                const changeSummary = summarizeWorktreeChanges(paths.worktreePath, {
+                  setupExcludedRoots,
+                })
+
+                if (changeSummary.hasCommittableChanges) {
+                  errors.push(buildWorktreeDirtyError(changeSummary.committable.map(entry => entry.path)))
+                }
+
+                if (changeSummary.generatedNoise.length > 0) {
+                  const warning = buildGeneratedNoiseWarning(changeSummary.generatedNoise)
+                  worktreeWarnings.push(warning)
+                  profile = addProfileCautions(profile, [warning])
+                }
+              } catch (err) {
+                errors.push(`Failed to inspect setup worktree cleanliness: ${err instanceof Error ? err.message : 'Unknown error'}`)
+              }
             }
 
             return buildExecutionSetupReport({
               preparedBy: setupModelId,
               generation,
               errors,
-              profile: result?.profile ?? null,
+              profile,
               approvedPlanCommands,
+              worktreeWarnings,
             })
           },
           generateRetryNote: async ({ generation, report }) => {
@@ -264,6 +304,16 @@ export async function handleExecutionSetup(
                 ? `Execution setup attempt ${attempt} produced a reusable setup profile.`
                 : `Execution setup attempt ${attempt} failed: ${report.errors.join('; ') || 'validation failed'}`,
             )
+
+            for (const warning of report.worktreeWarnings ?? []) {
+              emitPhaseLog(
+                ticketId,
+                context.externalId,
+                'PREPARING_EXECUTION_ENV',
+                'info',
+                warning,
+              )
+            }
 
             if (report.ready) {
               await sessionManager.completeSession(generation.session.id)
@@ -403,6 +453,7 @@ export async function handleExecutionSetup(
           rawAttempts: report.rawAttempts,
           status: report.status,
           errors: report.errors,
+          worktreeWarnings: report.worktreeWarnings,
           retryNotes: retryNotes,
           attemptHistory: report.attemptHistory,
           approvedPlanCommands: report.approvedPlanCommands,

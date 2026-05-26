@@ -1,10 +1,14 @@
-// Git operations for bead execution — allowlist-based
+// Git operations for bead execution
 
 import { spawnSync } from 'node:child_process'
-import { existsSync, readFileSync } from 'node:fs'
-import { isAbsolute, relative, resolve } from 'node:path'
 import { getCurrentBranch } from '../../git/repository'
 import { pushBranchRef } from '../../git/push'
+import {
+  buildGeneratedNoiseWarning,
+  classifyWorktreePath,
+  getExecutionSetupCommitExcludedRoots,
+  summarizeWorktreeChanges,
+} from '../../git/worktreeChanges'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -25,59 +29,6 @@ function logCmd(
   }
 }
 
-const ALLOWED_EXTENSIONS = new Set([
-  '.ts',
-  '.tsx',
-  '.js',
-  '.jsx',
-  '.json',
-  '.jsonl',
-  '.yaml',
-  '.yml',
-  '.css',
-  '.scss',
-  '.html',
-  '.md',
-  '.txt',
-  '.svg',
-  '.py',
-  '.rb',
-  '.rs',
-  '.go',
-  '.java',
-  '.kt',
-  '.sh',
-  '.toml',
-  '.lock',
-  '.gitignore',
-])
-
-const BLOCKED_PATTERNS = [
-  /\.ticket\/runtime\//,
-  /\.ticket\/locks\//,
-  /\.ticket\/streams\//,
-  /\.ticket\/sessions\//,
-  /\.ticket\/tmp\//,
-  /node_modules\//,
-  /\.looptroop\//,
-  /dist\//,
-  /build\//,
-]
-
-const EXECUTION_SETUP_PROFILE_PATH = '.ticket/runtime/execution-setup-profile.json'
-const LEGACY_EXECUTION_SETUP_CACHE_ROOTS = [
-  '.cache/project-tooling',
-] as const
-
-// Stable root-level artifacts that should always be committed regardless of extension.
-// Ticket-local artifacts under .ticket/** stay local and are never captured.
-const ALWAYS_ALLOW_PATHS = [
-  'issues.jsonl',
-  'interview.yaml',
-  'prd.yaml',
-  'codebase-map.yaml',
-]
-
 const GIT_OP_MAX_BUFFER_BYTES = 16 * 1024 * 1024
 
 interface ResetWorktreeOptions {
@@ -86,111 +37,20 @@ interface ResetWorktreeOptions {
 
 interface FileAllowOptions {
   excludedRoots?: string[]
+  untracked?: boolean
 }
 
 export const WORKTREE_RESET_PRESERVE_PATHS = [
   '.ticket',
 ] as const
 
-function normalizeRepoPath(path: string): string {
-  return path
-    .replace(/\\/g, '/')
-    .replace(/^\.\//, '')
-    .replace(/\/+$/, '')
-    .trim()
-}
-
-function normalizeSetupRoot(worktreePath: string, input: unknown): string | null {
-  if (typeof input !== 'string' || !input.trim()) return null
-  const trimmed = input.trim()
-  const repoRelative = isAbsolute(trimmed)
-    ? relative(resolve(worktreePath), trimmed)
-    : trimmed
-  const normalized = normalizeRepoPath(repoRelative)
-  if (
-    !normalized
-    || normalized === '.'
-    || normalized === '..'
-    || normalized === '/'
-    || normalized.startsWith('../')
-  ) {
-    return null
-  }
-  return normalized
-}
-
-function isWithinRoot(path: string, root: string): boolean {
-  const normalizedPath = normalizeRepoPath(path)
-  const normalizedRoot = normalizeRepoPath(root)
-  return normalizedPath === normalizedRoot || normalizedPath.startsWith(`${normalizedRoot}/`)
-}
-
-function collectPathStrings(value: unknown): string[] {
-  return Array.isArray(value)
-    ? value.filter((entry): entry is string => typeof entry === 'string')
-    : []
-}
-
-function getRecordValue(record: Record<string, unknown>, keys: string[]): unknown {
-  for (const key of keys) {
-    if (key in record) return record[key]
-  }
-  return undefined
-}
-
-export function getExecutionSetupCommitExcludedRoots(worktreePath: string): string[] {
-  const roots = new Set<string>(LEGACY_EXECUTION_SETUP_CACHE_ROOTS)
-  const profilePath = resolve(worktreePath, EXECUTION_SETUP_PROFILE_PATH)
-  if (!existsSync(profilePath)) return [...roots]
-
-  try {
-    const parsed = JSON.parse(readFileSync(profilePath, 'utf8')) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [...roots]
-    const profile = parsed as Record<string, unknown>
-    for (const entry of collectPathStrings(getRecordValue(profile, ['temp_roots', 'tempRoots']))) {
-      const normalized = normalizeSetupRoot(worktreePath, entry)
-      if (normalized) roots.add(normalized)
-    }
-    const artifacts = getRecordValue(profile, ['reusable_artifacts', 'reusableArtifacts'])
-    if (Array.isArray(artifacts)) {
-      for (const artifact of artifacts) {
-        if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) continue
-        const normalized = normalizeSetupRoot(worktreePath, (artifact as Record<string, unknown>).path)
-        if (normalized) roots.add(normalized)
-      }
-    }
-  } catch {
-    return [...roots]
-  }
-
-  return [...roots]
-}
+export { getExecutionSetupCommitExcludedRoots } from '../../git/worktreeChanges'
 
 export function isAllowedFile(path: string, options: FileAllowOptions = {}): boolean {
-  const normalizedPath = normalizeRepoPath(path)
-  if (isWithinRoot(normalizedPath, '.ticket')) return false
-
-  const excludedRoots = [
-    ...LEGACY_EXECUTION_SETUP_CACHE_ROOTS,
-    ...(options.excludedRoots ?? []),
-  ]
-  for (const root of excludedRoots) {
-    if (isWithinRoot(normalizedPath, root)) return false
-  }
-
-  // Check blocked patterns first
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(normalizedPath)) return false
-  }
-
-  // Always allow known root-level planning artifacts
-  for (const allowed of ALWAYS_ALLOW_PATHS) {
-    if (normalizedPath.endsWith(allowed)) return true
-  }
-
-  // Check extension
-  const ext = normalizedPath.slice(normalizedPath.lastIndexOf('.'))
-  return ALLOWED_EXTENSIONS.has(ext)
+  return classifyWorktreePath(path, {
+    setupExcludedRoots: options.excludedRoots,
+    untracked: options.untracked ?? true,
+  }).category === 'committable'
 }
 
 export function filterAllowedFiles(files: string[], options: FileAllowOptions = {}): string[] {
@@ -289,48 +149,76 @@ export function recordBeadStartCommit(worktreePath: string): string {
 
 /**
  * Commit and push changes after a successful bead.
- * Uses allowlist/denylist filtering. Graceful — logs warnings but doesn't block on failure.
+ * Commits Git-visible project changes while excluding LoopTroop/setup roots
+ * and untracked generated/local noise. Graceful — logs warnings but doesn't block on push failure.
  */
 export function commitBeadChanges(
   worktreePath: string,
   beadId: string,
   beadTitle: string,
-): { committed: boolean; pushed: boolean; error?: string } {
-  // Get changed/untracked files
-  const trackedResult = runGitOpSafe(worktreePath, ['diff', '--name-only', 'HEAD'])
-  const untrackedResult = runGitOpSafe(worktreePath, ['ls-files', '--others', '--exclude-standard'])
-
-  const changedFiles = [
-    ...(trackedResult.ok ? trackedResult.stdout.split('\n').filter(Boolean) : []),
-    ...(untrackedResult.ok ? untrackedResult.stdout.split('\n').filter(Boolean) : []),
-  ]
-
-  const allowedFiles = filterAllowedFiles(changedFiles, {
-    excludedRoots: getExecutionSetupCommitExcludedRoots(worktreePath),
-  })
-  if (allowedFiles.length === 0) {
-    return { committed: false, pushed: false }
+): {
+  committed: boolean
+  pushed: boolean
+  error?: string
+  committableFiles?: string[]
+  skippedFiles?: string[]
+  generatedNoiseWarning?: string
+} {
+  let summary: ReturnType<typeof summarizeWorktreeChanges>
+  try {
+    summary = summarizeWorktreeChanges(worktreePath, {
+      setupExcludedRoots: getExecutionSetupCommitExcludedRoots(worktreePath),
+    })
+  } catch (err) {
+    return {
+      committed: false,
+      pushed: false,
+      error: err instanceof Error ? err.message : 'Failed to inspect worktree changes',
+    }
   }
 
-  // Stage allowed files
-  const addResult = runGitOpSafe(worktreePath, ['add', '-v', '--', ...allowedFiles])
+  const committableFiles = summary.committable.map(entry => entry.path)
+  const skippedFiles = [
+    ...summary.looptroopExcluded,
+    ...summary.setupExcluded,
+    ...summary.generatedNoise,
+  ].map(entry => entry.path)
+  const generatedNoiseWarning = summary.generatedNoise.length > 0
+    ? buildGeneratedNoiseWarning(summary.generatedNoise)
+    : undefined
+
+  if (committableFiles.length === 0) {
+    return {
+      committed: false,
+      pushed: false,
+      ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
+      ...(generatedNoiseWarning ? { generatedNoiseWarning } : {}),
+    }
+  }
+
+  const addResult = runGitOpSafe(worktreePath, ['add', '-v', '--', ...committableFiles])
   if (!addResult.ok) {
     return { committed: false, pushed: false, error: `git add failed: ${addResult.error}` }
   }
 
-  // Check whether the allowlisted paths have staged changes. The index may
-  // already contain unrelated files, but workflow commits must stay allowlisted.
-  const stagedProbe = probeStagedChanges(worktreePath, allowedFiles)
+  // Check whether the committable paths have staged changes. The index may
+  // already contain unrelated files, but workflow commits must stay scoped.
+  const stagedProbe = probeStagedChanges(worktreePath, committableFiles)
   if (stagedProbe.error) {
     return { committed: false, pushed: false, error: `git diff --cached --quiet failed: ${stagedProbe.error}` }
   }
   if (!stagedProbe.hasStagedChanges) {
-    return { committed: false, pushed: false }
+    return {
+      committed: false,
+      pushed: false,
+      committableFiles,
+      ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
+      ...(generatedNoiseWarning ? { generatedNoiseWarning } : {}),
+    }
   }
 
-  // Commit
   const commitMsg = `bead(${beadId}): ${beadTitle}`
-  const commitResult = runGitOpSafe(worktreePath, ['commit', '-m', commitMsg, '--', ...allowedFiles])
+  const commitResult = runGitOpSafe(worktreePath, ['commit', '-m', commitMsg, '--', ...committableFiles])
   if (!commitResult.ok) {
     return { committed: false, pushed: false, error: `git commit failed: ${commitResult.error}` }
   }
@@ -347,10 +235,23 @@ export function commitBeadChanges(
     maxRetries: 3,
   })
   if (!pushResult.pushed) {
-    return { committed: true, pushed: false, error: pushResult.error }
+    return {
+      committed: true,
+      pushed: false,
+      error: pushResult.error,
+      committableFiles,
+      ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
+      ...(generatedNoiseWarning ? { generatedNoiseWarning } : {}),
+    }
   }
 
-  return { committed: true, pushed: true }
+  return {
+    committed: true,
+    pushed: true,
+    committableFiles,
+    ...(skippedFiles.length > 0 ? { skippedFiles } : {}),
+    ...(generatedNoiseWarning ? { generatedNoiseWarning } : {}),
+  }
 }
 
 /**

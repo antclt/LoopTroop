@@ -119,10 +119,10 @@ Execution happens inside the ticket worktree, not the attached project root.
 Important `gitOps.ts` behavior:
 
 - diffs are captured without `.ticket/**`
-- local bead commits are required when project code changes exist; `.ticket/**` artifacts are kept local and excluded from commit capture, true no-op completions may finish without a commit, and remote push failures are warnings after a successful local commit
+- local bead commits are required when Git-visible project changes exist in any language or file extension; `.ticket/**`, `.looptroop/**`, execution-setup roots, and setup cache roots are kept local and excluded from commit capture, true no-op completions may finish without a commit, and remote push failures are warnings after a successful local commit
 - resets can hard-reset and clean the worktree back to the bead start snapshot
 - resets preserve LoopTroop-owned `.ticket` state, including beads, PRD, relevant files, approvals, metadata, UI companions, and logs
-- local runtime/build directories like `node_modules`, `.looptroop`, `dist`, and `build` are blocked from normal change capture
+- common generated/local paths like `node_modules`, `dist`, `build`, `.env`, and log files are skipped only while untracked, with suggested `.gitignore` entries surfaced in warnings; if such paths are already tracked by the repository, bead changes to them remain committable
 
 This is what makes retries safe: the next attempt starts from a known repository state.
 

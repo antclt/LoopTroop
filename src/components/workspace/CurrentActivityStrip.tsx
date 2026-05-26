@@ -27,7 +27,7 @@ function ActivityIcon({ activity }: { activity: CurrentActivity }) {
   return <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 }
 
-function ActivityRow({ activity, nowMs }: { activity: CurrentActivity; nowMs: number }) {
+function ActivityRow({ activity }: { activity: CurrentActivity }) {
   const elapsedLabel = activity.elapsedMs === undefined
     ? null
     : formatElapsedDuration(activity.elapsedMs)
@@ -198,7 +198,6 @@ export function CurrentActivityStrip({ entries, enabled = true, className }: Cur
           <ActivityRow
             key={`${activity.kind}-${activity.sessionId ?? ''}-${activity.beadId ?? ''}-${idx}`}
             activity={activity}
-            nowMs={nowMs}
           />
         ))}
       </div>

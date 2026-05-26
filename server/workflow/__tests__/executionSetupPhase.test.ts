@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { makeBeadsYaml, TEST } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
-import { upsertLatestPhaseArtifact } from '../../storage/tickets'
+import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
 
 const {
   executeExecutionSetupWithRetriesMock,
@@ -247,5 +247,125 @@ describe('handleExecutionSetup', () => {
       errors: ['Execution setup checks must all pass before the setup profile can be accepted.'],
     })
     expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
+  })
+
+  it('rejects a ready setup result when setup leaves committable project changes', async () => {
+    const { ticket, context, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Execution setup dirty worktree gate',
+    })
+    writeExecutionSetupPlan(ticket.id, ticket.externalId)
+
+    executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const callbacks = args[5] as {
+        evaluateGeneration: (entry: { attempt: number; generation: unknown }) => Promise<unknown>
+      }
+      writeFileSync(join(paths.worktreePath, 'setup-dirty.cs'), 'namespace Dirty;\n')
+
+      return await callbacks.evaluateGeneration({
+        attempt: 1,
+        generation: {
+          session: { id: 'ses-setup-dirty' },
+          output: '<EXECUTION_SETUP_RESULT>{"status":"ready"}</EXECUTION_SETUP_RESULT>',
+          result: {
+            status: 'ready',
+            summary: 'Ready but dirty.',
+            profile: readyExecutionSetupReport(ticket.externalId).profile,
+            checks: {
+              workspace: 'pass',
+              tooling: 'pass',
+              tempScope: 'pass',
+              policy: 'pass',
+            },
+          },
+          parse: {
+            markerFound: true,
+            result: null,
+            errors: [],
+          },
+          structuredOutput: {
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 0,
+          },
+        },
+      })
+    })
+
+    const sendEvent = vi.fn()
+    await handleExecutionSetup(
+      ticket.id,
+      {
+        ...context,
+        lockedMainImplementer: TEST.implementer,
+      },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'EXECUTION_SETUP_FAILED',
+      errors: [expect.stringContaining('setup-dirty.cs')],
+    })
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
+  })
+
+  it('allows generated setup noise but records gitignore suggestions as profile cautions', async () => {
+    const { ticket, context, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Execution setup generated noise warning',
+    })
+    writeExecutionSetupPlan(ticket.id, ticket.externalId)
+
+    executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const callbacks = args[5] as {
+        evaluateGeneration: (entry: { attempt: number; generation: unknown }) => Promise<unknown>
+      }
+      mkdirSync(join(paths.worktreePath, 'node_modules', 'pkg'), { recursive: true })
+      writeFileSync(join(paths.worktreePath, 'node_modules', 'pkg', 'index.js'), 'module.exports = 1\n')
+
+      return await callbacks.evaluateGeneration({
+        attempt: 1,
+        generation: {
+          session: { id: 'ses-setup-generated-noise' },
+          output: '<EXECUTION_SETUP_RESULT>{"status":"ready"}</EXECUTION_SETUP_RESULT>',
+          result: {
+            status: 'ready',
+            summary: 'Ready with generated noise.',
+            profile: readyExecutionSetupReport(ticket.externalId).profile,
+            checks: {
+              workspace: 'pass',
+              tooling: 'pass',
+              tempScope: 'pass',
+              policy: 'pass',
+            },
+          },
+          parse: {
+            markerFound: true,
+            result: null,
+            errors: [],
+          },
+          structuredOutput: {
+            repairApplied: false,
+            repairWarnings: [],
+            autoRetryCount: 0,
+          },
+        },
+      })
+    })
+
+    const sendEvent = vi.fn()
+    await handleExecutionSetup(
+      ticket.id,
+      {
+        ...context,
+        lockedMainImplementer: TEST.implementer,
+      },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
+    const profileArtifact = getLatestPhaseArtifact(ticket.id, 'execution_setup_profile', 'PREPARING_EXECUTION_ENV')
+    expect(profileArtifact?.content).toContain('node_modules/pkg/index.js')
+    expect(profileArtifact?.content).toContain('Suggested .gitignore entries: node_modules/')
   })
 })

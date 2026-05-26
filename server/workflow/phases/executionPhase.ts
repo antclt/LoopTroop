@@ -637,8 +637,13 @@ export async function handleCoding(
   if (gitResult.error) {
     emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Git push warning for bead ${finalizingBead.id}: ${gitResult.error}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
   }
+  if (gitResult.generatedNoiseWarning) {
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', gitResult.generatedNoiseWarning, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
+  }
   if (gitResult.committed) {
     emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `Committed bead ${finalizingBead.id} changes${gitResult.pushed ? ' and pushed' : ' (push pending)'}`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
+  } else if (gitResult.skippedFiles?.length) {
+    emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `No local commit was created for bead ${finalizingBead.id}; only LoopTroop/setup/generated paths changed.`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id, skippedFiles: gitResult.skippedFiles })
   } else {
     emitPhaseLog(ticketId, context.externalId, 'CODING', 'info', `No local commit was needed for bead ${finalizingBead.id}; finalization continued as a no-op.`, { source: 'system', modelId: codingModelId, beadId: finalizingBead.id })
   }
