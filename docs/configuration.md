@@ -163,13 +163,13 @@ The timer starts when OpenCode reports a matching retry status and is cleared by
 **Default:** 0 (no limit — OpenCode default)  
 **Range:** 0–500
 
-Maximum number of agent iterations (steps) OpenCode is allowed to perform per session. When the limit is reached, OpenCode instructs the model to summarize its work and close the session; LoopTroop then starts a fresh session to continue.
+Maximum number of steps OpenCode is allowed to perform per session. When the limit is reached, OpenCode instructs the model to summarize its work and close the session; LoopTroop then starts a fresh session to continue.
 
-**Steps vs messages:** Each step is one full agent iteration — the model reads the full context, decides which tools to call, and receives their results. Each step generates approximately two messages in the execution log (one assistant message with tool calls, one with tool results). So `messages=25` in the log corresponds roughly to 12–13 steps.
+**Steps vs messages:** Each step is one full round-trip — the model reads the full context, decides which tools to call, and receives their results. Each step generates approximately two messages in the execution log (one assistant message with tool calls, one with tool results). So `messages=25` in the log corresponds roughly to 12–13 steps.
 
-**What 0 means:** No `opencode.json` is written to the worktree. OpenCode runs with no step cap and the model stops whenever it decides naturally. This is the default behavior. When a session ends without producing a text response (the model stopped mid-tool-call iteration), LoopTroop will automatically start a new session and show a visible notification in the **ALL** tab.
+**What 0 means:** No `opencode.json` is written to the worktree. OpenCode runs with no step cap and the model stops whenever it decides naturally. This is the default behavior. When a session ends without producing a text response (the model stopped mid-step), LoopTroop will automatically start a new session and show a visible notification in the **ALL** tab.
 
-**When to set a value:** If you observe sessions running for a very large number of messages and then silently restarting, setting a cap (e.g. `20`) ensures OpenCode wraps up and summarizes at a predictable point. A session that hits the configured limit produces a summary response, so the restart is cleaner than a natural mid-iteration stop.
+**When to set a value:** If you observe sessions running for a very large number of messages and then silently restarting, setting a cap (e.g. `20`) ensures OpenCode wraps up and summarizes at a predictable point. A session that hits the configured limit produces a summary response, so the restart is cleaner than a natural mid-step stop.
 
 **Implementation detail:** When `opencodeSteps > 0`, LoopTroop writes `opencode.json` at the root of the ticket worktree before coding starts and deletes it when coding finishes (including on error). The file is automatically excluded from git via the worktree-local git exclude, so it never appears in commits or `git status`.
 

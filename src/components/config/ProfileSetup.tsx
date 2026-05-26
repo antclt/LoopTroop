@@ -395,7 +395,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
           <div className="grid grid-cols-2 gap-3">
             <NumericField fieldKey="opencodeRetryLimit" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Continuable OpenCode retry events before blocking any phase prompt (0–50)." />
             <NumericField fieldKey="opencodeRetryDelay" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum OpenCode retry grace window before blocking any phase prompt (0–3600s)." />
-            <NumericField fieldKey="opencodeSteps" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Max agent iterations per OpenCode session (0 = no limit, OpenCode default). Each iteration ≈ 2 messages in the log." />
+            <NumericField fieldKey="opencodeSteps" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Max steps per OpenCode session (0 = no limit, OpenCode default). Each step ≈ 2 messages in the log." />
           </div>
 
           <Separator />
