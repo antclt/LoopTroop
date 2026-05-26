@@ -65,7 +65,7 @@ That split matters because the workspace is designed for both live work and hist
 | `DraftView` | Ticket editing and start controls |
 | `CouncilView` | Multi-model draft and vote phases with artifacts |
 | `InterviewQAView` | Interactive interview batches, draft persistence, skip flow |
-| `ApprovalView` | Review and edit interview, PRD, beads, and execution setup artifacts; PRD approval also exposes the winning model's Full Answers as compact read-only context |
+| `ApprovalView` | Review and edit interview, PRD, beads, and execution setup artifacts; PRD approval also exposes the winning model's Full Answers as compact read-only context, and execution setup approval keeps live logs expanded until the setup plan is ready |
 | `CodingView` | Active bead execution, bead list, logs, diffs, verification actions |
 | `ErrorView` | Live blocked state or historical error occurrence review |
 | `PhaseReviewView` | Historical artifact review for completed phases |

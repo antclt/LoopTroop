@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Hardened setup reuse so final testing automatically runs through validated prepared environments.
+- Improved workspace setup approval logs so generation starts visibly expanded and collapses once the setup plan is ready.
 - Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
@@ -24,6 +25,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Changed
 - Final-test command execution now reuses a validated execution-setup wrapper automatically when one is declared, recording both the original command and the effective wrapped command in the report.
+- Workspace setup approval now keeps the live log drawer expanded while LoopTroop is generating the setup plan, then automatically collapses it when the plan artifact becomes visible for review.
 - Execution setup now fails early when declared wrappers are missing or unusable, probes fail, or wrapper/project command families are declared without probes.
 - Changed bead commit capture to be language-agnostic. LoopTroop now commits Git-visible project changes regardless of extension, while still excluding `.ticket/**`, `.looptroop/**`, execution-setup roots, and untracked generated/local outputs.
 - Execution setup prompts now ask agents to record suggested `.gitignore` entries in profile cautions instead of editing `.gitignore` during setup.

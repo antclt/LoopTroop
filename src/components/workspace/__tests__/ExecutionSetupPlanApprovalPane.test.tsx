@@ -9,6 +9,22 @@ const mockSaveUiState = vi.fn()
 const mockUseTicketUIState = vi.fn()
 const mockClearTicketArtifactsCache = vi.fn()
 const mockUseTicketArtifacts = vi.fn()
+const mockCollapsiblePhaseLogSection = vi.hoisted(() => vi.fn(({
+  defaultExpanded,
+  phase,
+  variant,
+}: {
+  defaultExpanded?: boolean
+  phase?: string
+  variant?: string
+}) => (
+  <div
+    data-testid="phase-log-section"
+    data-default-expanded={String(defaultExpanded)}
+    data-phase={phase}
+    data-variant={variant}
+  />
+)))
 
 function buildPlan(summary = 'Prepare the workspace runtime.') {
   return {
@@ -128,7 +144,7 @@ vi.mock('../PhaseArtifactsPanel', () => ({
 }))
 
 vi.mock('../CollapsiblePhaseLogSection', () => ({
-  CollapsiblePhaseLogSection: () => <div data-testid="phase-log-section" />,
+  CollapsiblePhaseLogSection: mockCollapsiblePhaseLogSection,
 }))
 
 vi.mock('../ExecutionSetupPlanEditor', () => ({
@@ -176,6 +192,7 @@ describe('ExecutionSetupPlanApprovalPane', () => {
     mockUseTicketUIState.mockReset()
     mockClearTicketArtifactsCache.mockReset()
     mockUseTicketArtifacts.mockReset()
+    mockCollapsiblePhaseLogSection.mockClear()
     mockUseTicketUIState.mockReturnValue({
       data: { scope: 'approval_execution_setup', exists: false, data: null, updatedAt: null },
     })
@@ -270,6 +287,28 @@ describe('ExecutionSetupPlanApprovalPane', () => {
 
   afterEach(() => {
     vi.restoreAllMocks()
+  })
+
+  it('keeps setup logs expanded until the generated plan is displayed', async () => {
+    renderWithProviders(<ExecutionSetupPlanApprovalPane ticket={makeTicket({ status: 'WAITING_EXECUTION_SETUP_APPROVAL' })} />)
+
+    let latestLogProps = mockCollapsiblePhaseLogSection.mock.calls[mockCollapsiblePhaseLogSection.mock.calls.length - 1]?.[0]
+    expect(latestLogProps).toMatchObject({
+      phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      defaultExpanded: true,
+      variant: 'bottom',
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-content')).toHaveTextContent('execution-setup-plan:with-report:plan')
+    })
+
+    latestLogProps = mockCollapsiblePhaseLogSection.mock.calls[mockCollapsiblePhaseLogSection.mock.calls.length - 1]?.[0]
+    expect(latestLogProps).toMatchObject({
+      phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      defaultExpanded: false,
+      variant: 'bottom',
+    })
   })
 
   it('opens regenerate in a modal from the header and submits commentary through the regenerate route', async () => {

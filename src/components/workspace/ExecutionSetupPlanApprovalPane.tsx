@@ -258,6 +258,8 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
     [executionSetupPlanReportContent],
   )
   const artifactPanelPhase = readOnly ? 'WAITING_EXECUTION_SETUP_APPROVAL' : ticket.status
+  const isSetupPlanVisible = !isPlanGenerating && rawContent.trim().length > 0
+  const shouldExpandSetupPlanLog = !isSetupPlanVisible
 
   const [isEditMode, setIsEditMode] = useState(false)
   const [editTab, setEditTab] = useState<EditTab>('structured')
@@ -731,9 +733,10 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
       </div>
 
       <CollapsiblePhaseLogSection
+        key={shouldExpandSetupPlanLog ? 'setup-plan-pending' : 'setup-plan-visible'}
         phase={ticket.status}
         ticket={ticket}
-        defaultExpanded={false}
+        defaultExpanded={shouldExpandSetupPlanLog}
         variant="bottom"
         className="px-4 pb-4"
         resizeContainerRef={containerRef}
