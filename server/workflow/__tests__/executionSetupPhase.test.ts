@@ -128,6 +128,20 @@ function readyExecutionSetupProfile(ticketId: string): ExecutionSetupProfile {
   return profile
 }
 
+function failedToolRequirementWithAttempts(
+  attempts: NonNullable<ExecutionSetupProfile['toolRequirements']>[number]['provisioningAttempts'],
+): NonNullable<ExecutionSetupProfile['toolRequirements']>[number] {
+  return {
+    launcher: 'project-tool',
+    requiredBy: ['project_commands.test_full[0]'],
+    status: 'failed',
+    missingProbe: 'project-tool --version',
+    provisioningAttempts: attempts,
+    finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
+    failureReason: 'tool could not be provisioned',
+  }
+}
+
 function buildExecutionSetupGeneration(input: {
   profile: ExecutionSetupProfile
   checks?: ExecutionSetupResult['checks']
@@ -305,6 +319,122 @@ describe('handleExecutionSetup', () => {
 
   it.each([
     {
+      title: 'one failed provisioning strategy',
+      toolRequirements: [
+        failedToolRequirementWithAttempts([
+          {
+            strategy: 'official archive',
+            commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+            result: 'failed',
+            reason: 'official archive download returned 404',
+          },
+        ]),
+      ],
+    },
+    {
+      title: 'duplicate failed provisioning strategy names',
+      toolRequirements: [
+        failedToolRequirementWithAttempts([
+          {
+            strategy: 'official archive',
+            commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+            result: 'failed',
+            reason: 'official archive download returned 404',
+          },
+          {
+            strategy: 'official archive',
+            commands: ['./install-project-tool --channel stable --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+            result: 'failed',
+            reason: 'same strategy label should not count twice',
+          },
+        ]),
+      ],
+    },
+    {
+      title: 'empty provisioning commands',
+      toolRequirements: [
+        failedToolRequirementWithAttempts([
+          {
+            strategy: 'official archive',
+            commands: [],
+            result: 'failed',
+            reason: 'empty commands should not count',
+          },
+          {
+            strategy: 'repository version manager',
+            commands: ['   '],
+            result: 'failed',
+            reason: 'blank commands should not count',
+          },
+        ]),
+      ],
+    },
+    {
+      title: 'not provisionable without reason',
+      toolRequirements: [
+        {
+          launcher: 'project-tool',
+          requiredBy: ['project_commands.test_full[0]'],
+          status: 'not_provisionable' as const,
+          missingProbe: 'project-tool --version',
+          provisioningAttempts: [],
+          finalProbe: '',
+          failureReason: '',
+        },
+      ],
+    },
+  ])('rejects incomplete tooling failure evidence for $title', async ({ title, toolRequirements }) => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: `Execution setup ${title}`,
+    })
+    writeExecutionSetupPlan(ticket.id, ticket.externalId)
+
+    const profile = {
+      ...readyExecutionSetupProfile(ticket.externalId),
+      toolRequirements,
+    }
+
+    executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const callbacks = args[5] as {
+        evaluateGeneration: (entry: { attempt: number; generation: unknown }) => Promise<unknown>
+      }
+      return await callbacks.evaluateGeneration({
+        attempt: 1,
+        generation: buildExecutionSetupGeneration({
+          profile,
+          checks: {
+            workspace: 'pass',
+            tooling: 'fail',
+            tempScope: 'pass',
+            policy: 'pass',
+          },
+        }),
+      })
+    })
+
+    const sendEvent = vi.fn()
+    await handleExecutionSetup(
+      ticket.id,
+      {
+        ...context,
+        lockedMainImplementer: TEST.implementer,
+      },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'EXECUTION_SETUP_FAILED',
+      errors: expect.arrayContaining([
+        'Execution setup checks must all pass before the setup profile can be accepted.',
+        expect.stringContaining('provisioning_attempts'),
+      ]),
+    })
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
+  })
+
+  it.each([
+    {
       title: 'failed provisioning evidence',
       toolRequirements: [
         {
@@ -312,7 +442,20 @@ describe('handleExecutionSetup', () => {
           requiredBy: ['project_commands.test_full[0]'],
           status: 'failed' as const,
           missingProbe: 'project-tool --version',
-          provisioningCommands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+          provisioningAttempts: [
+            {
+              strategy: 'official archive',
+              commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+              result: 'failed',
+              reason: 'official archive download returned 404',
+            },
+            {
+              strategy: 'repository version manager',
+              commands: ['./repo-toolchain install --cache .ticket/runtime/execution-setup/tool-cache/project-tool'],
+              result: 'failed',
+              reason: 'repository version manager could not resolve the requested version',
+            },
+          ],
           finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
           failureReason: 'official archive download returned 404',
         },
@@ -326,7 +469,7 @@ describe('handleExecutionSetup', () => {
           requiredBy: ['project_commands.test_full[0]'],
           status: 'not_provisionable' as const,
           missingProbe: 'project-tool --version',
-          provisioningCommands: [],
+          provisioningAttempts: [],
           finalProbe: '',
           failureReason: 'the repository requires a licensed interactive installer that cannot run safely in temp roots',
         },

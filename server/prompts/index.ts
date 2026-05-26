@@ -778,6 +778,8 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
     'Gitignore Suggestions: If setup commands create untracked generated or local outputs outside approved temp roots because repository ignore coverage is missing, do not edit `.gitignore` during setup. Record the exact paths and recommended `.gitignore` entries in `cautions`, and prefer moving reusable setup outputs under approved temp roots when possible.',
     'Missing Tool Self-Healing: If a required command launcher, language runtime, package manager, or toolchain is missing, first attempt a user-space provision under the approved temp roots before declaring tooling failed. Prefer official project/language distribution archives, repository-native version managers, or lockfile-directed installers that can live under `.ticket/runtime/execution-setup/tool-cache/**`. Do not use `sudo`, global OS package-manager installs, or arbitrary source-tree install paths as the default path.',
     'Missing required launchers: a failed version/info probe is discovery only; before returning `checks.tooling = fail`, attempt safe user-space provisioning under approved temp roots or record why no safe provisioning path exists.',
+    'Provisioning persistence: after a required launcher provisioning attempt fails, try at least two distinct safe, repository-appropriate strategies under approved temp roots before returning checks.tooling = fail, unless inspected evidence proves no safe path exists; do not repeat the same command unchanged.',
+    'Version pins/ranges: interpret repository-declared tool versions using that ecosystem\'s own resolution metadata before choosing an exact artifact.',
     'Provisioning Examples, Non-Exhaustive: For Node, inspect `packageManager`, lockfiles, `.nvmrc`, or `.node-version` and use Corepack, a version manager, or official archives under `tool-cache`; for Python, inspect `pyproject.toml`, lockfiles, `.python-version`, or runtime files and use a local virtual environment/tool installer under `tool-cache`; for JavaScript runtimes such as Deno or Bun, inspect project config/lockfiles and use official user-space installers or archives under `tool-cache`. These examples are illustrative only; use any safe, repository-appropriate commands, installers, archives, package managers, or version managers needed to satisfy the approved setup requirements, while keeping execution-only tooling and caches under approved temp roots and avoiding global/sudo installs or permanent repo changes.',
     'Reusable Runtime Wrapper: When you provision or need prepared runtime environment variables, create `.ticket/runtime/execution-setup/env.sh` and `.ticket/runtime/execution-setup/run`. The `run` wrapper must source `env.sh` and execute the command arguments. Record both files in `reusable_artifacts`, and list later project commands through the wrapper when needed, for example `./.ticket/runtime/execution-setup/run <project-test-command>`.',
     'Feature-Work Ban: Do not implement ticket feature code, broad source edits, or unrelated refactors during setup. If a repository-native bootstrap command changes tracked manifests, lockfiles, generated assets, or configuration, do not leave those changes behind; record the exact need in `cautions` and report a blocker if readiness depends on a permanent repository change.',
@@ -788,7 +790,7 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
     'Discovery Goal: Discover project-level command families for prepare/bootstrap, full test, full lint, and full typecheck when possible. If a command family is unavailable, return an empty list for that field instead of inventing a fake command.',
     'Tooling Probes: Record non-mutating, rerunnable `tooling_probe_commands` that prove the prepared environment works. If a wrapper is required, the probe command itself must use that wrapper, for example `./.ticket/runtime/execution-setup/run <tool> --version`. LoopTroop reruns these probes before coding and rejects profiles with broken wrappers or missing probes for declared command families.',
     'Quality Gate Policy: Default to bead test commands first, then impacted-or-package scoped lint/typecheck, and never block later phases on unrelated baseline debt.',
-    'Tooling Gate: If a required command launcher or toolchain is missing, set `checks.tooling` to `fail` only after a safe user-space provisioning attempt under approved temp roots fails, or when no safe temp-root provisioning path exists. Keep the top-level `status` and `profile.status` as `ready` for schema compatibility, and explain the attempted provisioning and blocker in `summary` and `cautions`. LoopTroop will block coding until every setup check passes.',
+    'Tooling Gate: If a required command launcher or toolchain is missing, set `checks.tooling` to `fail` only after at least two distinct safe user-space provisioning strategies under approved temp roots fail, or when no safe temp-root provisioning path exists. Keep the top-level `status` and `profile.status` as `ready` for schema compatibility, and explain the attempted provisioning and blocker in `summary` and `cautions`. LoopTroop will block coding until every setup check passes.',
     'Do Not Stop Early: Continue working until the environment is ready, you hit a hard blocker, or the app interrupts you.',
     'No Progress Prose: Do not return conversational status updates. Use tools until you can return the final structured result.',
     'Output Discipline: End with exactly one `<EXECUTION_SETUP_RESULT>...</EXECUTION_SETUP_RESULT>` block and nothing else.',
@@ -812,7 +814,14 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
         "required_by": ["project_commands.prepare[0]"],
         "status": "available|provisioned|failed|not_provisionable",
         "missing_probe": "<probe that proved the launcher was missing, when applicable>",
-        "provisioning_commands": ["<safe temp-root provisioning command attempted, when applicable>"],
+        "provisioning_attempts": [
+          {
+            "strategy": "<distinct safe provisioning strategy name>",
+            "commands": ["<safe temp-root provisioning command attempted for this strategy>"],
+            "result": "<available|provisioned|failed|not_run>",
+            "reason": "<short outcome or failure reason>"
+          }
+        ],
         "final_probe": "<final verification probe, when applicable>",
         "failure_reason": "<why provisioning failed or no safe provisioning path exists, when applicable>"
       }

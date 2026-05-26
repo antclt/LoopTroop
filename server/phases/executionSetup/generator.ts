@@ -29,8 +29,9 @@ const EXECUTION_SETUP_SCHEMA_REMINDER = [
   'profile.artifact must be execution_setup_profile.',
   'profile.temp_roots and profile.reusable_artifacts[].path should prefer approved runtime-owned setup paths under .ticket/runtime/execution-setup/**.',
   'profile.tool_requirements is optional for passing setup, but required as evidence when checks.tooling is fail.',
+  'failed tool_requirements evidence uses provisioning_attempts objects with distinct strategies and command lists, not flat provisioning_commands.',
   'checks must contain exactly: workspace, tooling, temp_scope, policy.',
-  'If required command launchers or toolchains are missing and cannot be prepared safely under approved temp roots, set checks.tooling to fail and record failed or not_provisionable tool_requirements evidence.',
+  'If required command launchers or toolchains are missing and cannot be prepared safely under approved temp roots, set checks.tooling to fail only after recording failed evidence for at least two distinct safe strategies or not_provisionable evidence with a no-safe-path reason.',
 ].join('\n')
 
 type ExecutionSetupPromptStage =

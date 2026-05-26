@@ -179,7 +179,7 @@ preflight:
 | `beads_draft` | Pre-expansion bead blueprint |
 | `bead_data` | The active bead specification for execution |
 | `bead_notes` | Prior execution notes used during retries |
-| `execution_setup_profile` | Concrete runtime environment profile with reusable artifacts, tooling probes, optional `tool_requirements` evidence for failed launcher provisioning, and command families; setup-plan phases may receive it inline, coding reads `.ticket/runtime/execution-setup-profile.json` only when needed, and final testing reuses any declared wrapper automatically |
+| `execution_setup_profile` | Concrete runtime environment profile with reusable artifacts, tooling probes, optional `tool_requirements.provisioning_attempts` evidence for failed launcher provisioning, and command families; setup-plan phases may receive it inline, coding reads `.ticket/runtime/execution-setup-profile.json` only when needed, and final testing reuses any declared wrapper automatically |
 | `execution_setup_plan` | Approved setup plan artifact |
 | `execution_setup_plan_notes` | Regeneration notes for the plan stage |
 | `execution_setup_notes` | Setup retry notes |

@@ -26,7 +26,14 @@ describe('parseExecutionSetupResult', () => {
             required_by: ['project_commands.test_full[0]'],
             status: 'provisioned',
             missing_probe: 'project-tool --version',
-            provisioning_commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+            provisioning_attempts: [
+              {
+                strategy: 'official archive',
+                commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+                result: 'provisioned',
+                reason: '',
+              },
+            ],
             final_probe: './.ticket/runtime/execution-setup/run project-tool --version',
             failure_reason: '',
           },
@@ -75,7 +82,14 @@ describe('parseExecutionSetupResult', () => {
         requiredBy: ['project_commands.test_full[0]'],
         status: 'provisioned',
         missingProbe: 'project-tool --version',
-        provisioningCommands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+        provisioningAttempts: [
+          {
+            strategy: 'official archive',
+            commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+            result: 'provisioned',
+            reason: '',
+          },
+        ],
         finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
         failureReason: '',
       },
@@ -119,7 +133,14 @@ describe('parseExecutionSetupResult', () => {
           requiredBy: ['project_commands.test_full[0]'],
           status: 'failed',
           missingProbe: 'project-tool --version',
-          provisioningCommands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+          provisioningAttempts: [
+            {
+              strategy: 'official archive',
+              commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+              result: 'failed',
+              reason: 'official archive download returned 404',
+            },
+          ],
           finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
           failureReason: 'official archive download returned 404',
         },
@@ -134,12 +155,76 @@ describe('parseExecutionSetupResult', () => {
           required_by: ['project_commands.test_full[0]'],
           status: 'failed',
           missing_probe: 'project-tool --version',
-          provisioning_commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+          provisioning_attempts: [
+            {
+              strategy: 'official archive',
+              commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+              result: 'failed',
+              reason: 'official archive download returned 404',
+            },
+          ],
           final_probe: './.ticket/runtime/execution-setup/run project-tool --version',
           failure_reason: 'official archive download returned 404',
         },
       ],
     })
+  })
+
+  it('rejects malformed provisioning attempt entries', () => {
+    const parsed = parseExecutionSetupResult(buildExecutionSetupPayload(JSON.stringify({
+      status: 'ready',
+      summary: 'tooling failed',
+      profile: {
+        schema_version: 1,
+        ticket_id: 'T-1',
+        artifact: 'execution_setup_profile',
+        status: 'ready',
+        summary: 'tooling failed',
+        temp_roots: ['.ticket/runtime/execution-setup'],
+        bootstrap_commands: [],
+        tooling_probe_commands: ['./.ticket/runtime/execution-setup/run project-tool --version'],
+        tool_requirements: [
+          {
+            launcher: 'project-tool',
+            required_by: ['project_commands.test_full[0]'],
+            status: 'failed',
+            missing_probe: 'project-tool --version',
+            provisioning_attempts: [
+              {
+                commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+                result: 'failed',
+                reason: 'missing strategy should be rejected',
+              },
+            ],
+            final_probe: './.ticket/runtime/execution-setup/run project-tool --version',
+            failure_reason: 'official archive download returned 404',
+          },
+        ],
+        reusable_artifacts: [],
+        project_commands: {
+          prepare: [],
+          test_full: ['project-tool test'],
+          lint_full: [],
+          typecheck_full: [],
+        },
+        quality_gate_policy: {
+          tests: 'bead-test-commands-first',
+          lint: 'impacted-or-package',
+          typecheck: 'impacted-or-package',
+          full_project_fallback: 'never-block-on-unrelated-baseline',
+        },
+        cautions: [],
+      },
+      checks: {
+        workspace: 'pass',
+        tooling: 'fail',
+        temp_scope: 'pass',
+        policy: 'pass',
+      },
+    })))
+
+    expect(parsed.result).toBeNull()
+    expect(parsed.errors[0]).toContain('tool_requirements[0].provisioning_attempts[0].strategy')
   })
 
   it('repairs fenced YAML payloads inside the execution setup marker', () => {

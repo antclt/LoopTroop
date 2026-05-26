@@ -4,6 +4,7 @@ import type {
   BeadCompletionPayload,
   ExecutionSetupPlanPayload,
   ExecutionSetupProfilePayload,
+  ExecutionSetupProvisioningAttemptPayload,
   ExecutionSetupResultPayload,
   ExecutionSetupToolRequirementStatus,
   FinalTestCommandPayload,
@@ -568,6 +569,23 @@ function normalizeExecutionSetupToolRequirementStatus(value: unknown, label: str
   throw new Error(`Invalid execution setup tool requirement status: ${raw}`)
 }
 
+function normalizeExecutionSetupProvisioningAttempts(
+  value: unknown,
+  label: string,
+): ExecutionSetupProvisioningAttemptPayload[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error(`${label} must be a list`)
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`${label}[${index}] must be an object`)
+    return {
+      strategy: getRequiredString(entry, ['strategy', 'name', 'approach'], `${label}[${index}].strategy`),
+      commands: toStringArray(getValueByAliases(entry, ['commands', 'provisioningcommands', 'attemptedcommands'])),
+      result: getRequiredString(entry, ['result', 'status', 'outcome'], `${label}[${index}].result`),
+      reason: toOptionalString(getValueByAliases(entry, ['reason', 'failure_reason', 'summary'])) ?? '',
+    }
+  })
+}
+
 function normalizeExecutionSetupToolRequirements(value: unknown): ExecutionSetupProfilePayload['toolRequirements'] {
   if (value === undefined || value === null) return undefined
   if (!Array.isArray(value)) throw new Error('Execution setup profile tool_requirements must be a list')
@@ -581,12 +599,14 @@ function normalizeExecutionSetupToolRequirements(value: unknown): ExecutionSetup
         `tool_requirements[${index}].status`,
       ),
       missingProbe: toOptionalString(getValueByAliases(entry, ['missingprobe', 'probe', 'discoveryprobe'])) ?? '',
-      provisioningCommands: toStringArray(getValueByAliases(entry, [
-        'provisioningcommands',
-        'provisioncommands',
-        'attemptedcommands',
-        'installcommands',
-      ])),
+      provisioningAttempts: normalizeExecutionSetupProvisioningAttempts(
+        getValueByAliases(entry, [
+          'provisioningattempts',
+          'provisionattempts',
+          'attempts',
+        ]),
+        `tool_requirements[${index}].provisioning_attempts`,
+      ),
       finalProbe: toOptionalString(getValueByAliases(entry, ['finalprobe', 'verificationprobe', 'probecommand'])) ?? '',
       failureReason: toOptionalString(getValueByAliases(entry, ['failurereason', 'reason', 'blocker'])) ?? '',
     }
@@ -747,7 +767,12 @@ function toCanonicalExecutionSetupResultPayload(value: ExecutionSetupResultPaylo
               required_by: requirement.requiredBy,
               status: requirement.status,
               missing_probe: requirement.missingProbe,
-              provisioning_commands: requirement.provisioningCommands,
+              provisioning_attempts: requirement.provisioningAttempts.map((attempt) => ({
+                strategy: attempt.strategy,
+                commands: attempt.commands,
+                result: attempt.result,
+                reason: attempt.reason,
+              })),
               final_probe: requirement.finalProbe,
               failure_reason: requirement.failureReason,
             })),

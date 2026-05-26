@@ -94,7 +94,12 @@ export function toExecutionSetupProfileArtifact(profile: ExecutionSetupProfile):
             required_by: requirement.requiredBy,
             status: requirement.status,
             missing_probe: requirement.missingProbe,
-            provisioning_commands: requirement.provisioningCommands,
+            provisioning_attempts: requirement.provisioningAttempts.map((attempt) => ({
+              strategy: attempt.strategy,
+              commands: attempt.commands,
+              result: attempt.result,
+              reason: attempt.reason,
+            })),
             final_probe: requirement.finalProbe,
             failure_reason: requirement.failureReason,
           })),

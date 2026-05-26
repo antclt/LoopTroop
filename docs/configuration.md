@@ -451,7 +451,7 @@ The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` phase, wh
 
 **What execution setup does:**
 
-The setup phase can install user-space toolchains under `.ticket/runtime/execution-setup/tool-cache`, warm caches, build native dependencies, or prepare repository-local runtime artifacts — anything the approved setup plan requires. It runs in the ticket's worktree before coding, records reusable wrapper commands when prepared runtime environment variables are needed, and validates declared `tooling_probe_commands` before the workflow enters coding. If required launcher setup fails, the profile records `tool_requirements` evidence showing the attempted temp-root provisioning commands or why no safe provisioning path exists.
+The setup phase can install user-space toolchains under `.ticket/runtime/execution-setup/tool-cache`, warm caches, build native dependencies, or prepare repository-local runtime artifacts — anything the approved setup plan requires. It runs in the ticket's worktree before coding, records reusable wrapper commands when prepared runtime environment variables are needed, and validates declared `tooling_probe_commands` before the workflow enters coding. If required launcher setup fails, the profile records `tool_requirements.provisioning_attempts` evidence showing distinct attempted temp-root provisioning strategies and commands, or why no safe provisioning path exists.
 
 **Trade-offs:**
 

@@ -191,10 +191,17 @@ function validateExecutionSetupToolingFailureEvidence(input: {
   if (input.result.checks.tooling !== 'fail') return []
 
   const requirements = input.profile.toolRequirements ?? []
-  const hasFailedProvisioningEvidence = requirements.some((requirement) => (
-    requirement.status === 'failed'
-    && requirement.provisioningCommands.some((command) => command.trim().length > 0)
-  ))
+  const failedProvisioningRequirements = requirements.filter((requirement) => requirement.status === 'failed')
+  const countDistinctFailedStrategies = (requirement: (typeof failedProvisioningRequirements)[number]): number => (
+    new Set(requirement.provisioningAttempts
+      .filter((attempt) => (
+        attempt.strategy.trim().length > 0
+        && attempt.commands.some((command) => command.trim().length > 0)
+      ))
+      .map((attempt) => attempt.strategy.trim().toLowerCase())).size
+  )
+  const hasFailedProvisioningEvidence = failedProvisioningRequirements
+    .some((requirement) => countDistinctFailedStrategies(requirement) >= 2)
   const hasNoSafePathEvidence = requirements.some((requirement) => (
     requirement.status === 'not_provisionable'
     && requirement.failureReason.trim().length > 0
@@ -202,8 +209,14 @@ function validateExecutionSetupToolingFailureEvidence(input: {
 
   if (hasFailedProvisioningEvidence || hasNoSafePathEvidence) return []
 
+  if (failedProvisioningRequirements.length > 0) {
+    return [
+      'Execution setup tooling failure must include persistent tool_requirements evidence: failed requirements need at least two distinct provisioning_attempts strategies with non-empty commands, or use not_provisionable with a failure_reason when no safe temp-root provisioning path exists.',
+    ]
+  }
+
   return [
-    'Execution setup tooling failure must include tool_requirements evidence: record a failed requirement with provisioning_commands or a not_provisionable requirement with failure_reason before returning checks.tooling=fail.',
+    'Execution setup tooling failure must include tool_requirements evidence: record a failed requirement with at least two distinct provisioning_attempts strategies and non-empty commands, or a not_provisionable requirement with failure_reason before returning checks.tooling=fail.',
   ]
 }
 
@@ -409,13 +422,15 @@ export async function handleExecutionSetup(
               return null
             }
           },
-          onAttemptStart: (attempt) => {
+          onAttemptStart: (attempt, metadata) => {
             emitPhaseLog(
               ticketId,
               context.externalId,
               'PREPARING_EXECUTION_ENV',
               'info',
-              runtimeSettings.maxIterations > 0
+              metadata.isExtraToolingPersistenceAttempt
+                ? `Starting execution setup tooling persistence attempt ${attempt} (extra ${metadata.extraToolingPersistenceAttempt} of ${metadata.maxExtraToolingPersistenceAttempts}; base budget ${metadata.baseMaxIterations}).`
+                : runtimeSettings.maxIterations > 0
                 ? `Starting execution setup attempt ${attempt} of ${runtimeSettings.maxIterations}.`
                 : `Starting execution setup attempt ${attempt} with unlimited retry budget.`,
             )

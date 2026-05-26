@@ -113,12 +113,19 @@ export interface ExecutionSetupReusableArtifactPayload {
 
 export type ExecutionSetupToolRequirementStatus = 'available' | 'provisioned' | 'failed' | 'not_provisionable'
 
+export interface ExecutionSetupProvisioningAttemptPayload {
+  strategy: string
+  commands: string[]
+  result: string
+  reason: string
+}
+
 export interface ExecutionSetupToolRequirementPayload {
   launcher: string
   requiredBy: string[]
   status: ExecutionSetupToolRequirementStatus
   missingProbe: string
-  provisioningCommands: string[]
+  provisioningAttempts: ExecutionSetupProvisioningAttemptPayload[]
   finalProbe: string
   failureReason: string
 }

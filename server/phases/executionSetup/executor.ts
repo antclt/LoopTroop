@@ -15,6 +15,14 @@ import type {
 type ContextPartsInput = PromptPart[] | (() => Promise<PromptPart[]>)
 
 const REPEATED_TOOLING_FAILURE_MESSAGE = 'Repeated tooling setup failure detected; stopping early because the same tooling blocker repeated after a provisioning attempt.'
+const MAX_EXTRA_TOOLING_PERSISTENCE_ATTEMPTS = 2
+
+interface ExecutionSetupAttemptStartMetadata {
+  baseMaxIterations: number
+  isExtraToolingPersistenceAttempt: boolean
+  extraToolingPersistenceAttempt: number
+  maxExtraToolingPersistenceAttempts: number
+}
 
 async function resolveContextParts(input: ContextPartsInput): Promise<PromptPart[]> {
   if (typeof input === 'function') return await input()
@@ -36,6 +44,41 @@ function buildToolingFailureSignature(report: ExecutionSetupReport): string | nu
     .map(normalizeToolingFailureText)
     .filter(Boolean)
   return parts.length > 0 ? parts.join('|') : null
+}
+
+function countDistinctFailedProvisioningStrategies(report: ExecutionSetupReport): number {
+  if (report.checks?.tooling !== 'fail') return 0
+  let maxStrategyCount = 0
+  for (const requirement of report.profile?.toolRequirements ?? []) {
+    if (requirement.status !== 'failed') continue
+    const strategyNames = new Set<string>()
+    for (const attempt of requirement.provisioningAttempts) {
+      if (!attempt.strategy.trim()) continue
+      if (!attempt.commands.some((command) => command.trim().length > 0)) continue
+      strategyNames.add(attempt.strategy.trim().toLowerCase())
+    }
+    maxStrategyCount = Math.max(maxStrategyCount, strategyNames.size)
+  }
+  return maxStrategyCount
+}
+
+function hasNoSafePathToolingEvidence(report: ExecutionSetupReport): boolean {
+  if (report.checks?.tooling !== 'fail') return false
+  return (report.profile?.toolRequirements ?? []).some((requirement) => (
+    requirement.status === 'not_provisionable'
+    && requirement.failureReason.trim().length > 0
+  ))
+}
+
+function hasTerminalToolingFailureEvidence(report: ExecutionSetupReport): boolean {
+  return hasNoSafePathToolingEvidence(report) || countDistinctFailedProvisioningStrategies(report) >= 2
+}
+
+function needsToolingPersistenceRetry(report: ExecutionSetupReport): boolean {
+  if (report.checks?.tooling !== 'fail') return false
+  if (hasNoSafePathToolingEvidence(report)) return false
+  const distinctStrategyCount = countDistinctFailedProvisioningStrategies(report)
+  return distinctStrategyCount > 0 && distinctStrategyCount < 2
 }
 
 function withRepeatedToolingFailureError(report: ExecutionSetupReport): ExecutionSetupReport {
@@ -86,6 +129,12 @@ function buildDeterministicExecutionSetupRetryNote(input: {
   ].join(' ').trim()
 }
 
+function withToolingPersistenceGuidance(note: string, report: ExecutionSetupReport): string {
+  if (!needsToolingPersistenceRetry(report)) return note
+  const guidance = 'Next attempt must not repeat the same provisioning command unchanged; try another distinct safe, repository-appropriate provisioning strategy under approved temp roots before returning checks.tooling=fail.'
+  return note.includes(guidance) ? note : `${note} ${guidance}`.trim()
+}
+
 function withRetryMetadata(
   report: ExecutionSetupReport,
   input: {
@@ -130,7 +179,7 @@ export async function executeExecutionSetupWithRetries(
       generation: GenerateExecutionSetupResult
       notes: string[]
     }) => Promise<string | null | undefined>
-    onAttemptStart?: (attempt: number) => void | Promise<void>
+    onAttemptStart?: (attempt: number, metadata: ExecutionSetupAttemptStartMetadata) => void | Promise<void>
     onAttemptComplete?: (input: {
       attempt: number
       report: ExecutionSetupReport
@@ -168,12 +217,23 @@ export async function executeExecutionSetupWithRetries(
   const notes: string[] = [...(options.initialRetryNotes ?? [])]
   const attemptHistory: ExecutionSetupAttemptHistoryEntry[] = []
   const toolingFailureSignatures: string[] = []
+  let extraToolingPersistenceAttemptsUsed = 0
   let attempt = (options.initialAttempt ?? 1) - 1
 
-  while (options.maxIterations <= 0 || attempt < options.maxIterations) {
+  while (
+    options.maxIterations <= 0
+    || attempt < options.maxIterations + extraToolingPersistenceAttemptsUsed
+  ) {
     attempt += 1
     throwIfAborted(signal)
-    await callbacks.onAttemptStart?.(attempt)
+    await callbacks.onAttemptStart?.(attempt, {
+      baseMaxIterations: options.maxIterations,
+      isExtraToolingPersistenceAttempt: options.maxIterations > 0 && attempt > options.maxIterations,
+      extraToolingPersistenceAttempt: options.maxIterations > 0
+        ? Math.max(0, attempt - options.maxIterations)
+        : 0,
+      maxExtraToolingPersistenceAttempts: MAX_EXTRA_TOOLING_PERSISTENCE_ATTEMPTS,
+    })
 
     const generation = await generateExecutionSetup(
       adapter,
@@ -207,6 +267,7 @@ export async function executeExecutionSetupWithRetries(
     const toolingFailureSignature = buildToolingFailureSignature(report)
     const repeatedToolingFailure = toolingFailureSignature !== null
       && toolingFailureSignatures[toolingFailureSignatures.length - 1] === toolingFailureSignature
+      && hasTerminalToolingFailureEvidence(report)
     if (toolingFailureSignature) {
       toolingFailureSignatures.push(toolingFailureSignature)
     }
@@ -238,15 +299,20 @@ export async function executeExecutionSetupWithRetries(
       note = null
     }
 
-    const resolvedNote = note?.trim() || buildDeterministicExecutionSetupRetryNote({
+    const resolvedNote = withToolingPersistenceGuidance(note?.trim() || buildDeterministicExecutionSetupRetryNote({
       attempt,
       report: finalReport,
       generation,
-    })
+    }), finalReport)
     notes.push(resolvedNote)
     attemptEntry.noteAppended = resolvedNote
 
-    const canRetry = !repeatedToolingFailure && (options.maxIterations <= 0 || attempt < options.maxIterations)
+    const withinBaseBudget = options.maxIterations <= 0 || attempt < options.maxIterations
+    const canUseExtraToolingPersistenceAttempt = options.maxIterations > 0
+      && !withinBaseBudget
+      && needsToolingPersistenceRetry(finalReport)
+      && extraToolingPersistenceAttemptsUsed < MAX_EXTRA_TOOLING_PERSISTENCE_ATTEMPTS
+    const canRetry = !repeatedToolingFailure && (withinBaseBudget || canUseExtraToolingPersistenceAttempt)
     await callbacks.onFailedAttempt?.({
       attempt,
       report: finalReport,
@@ -270,6 +336,10 @@ export async function executeExecutionSetupWithRetries(
         attemptHistory,
         retryNotes: [...notes],
       })
+    }
+
+    if (canUseExtraToolingPersistenceAttempt) {
+      extraToolingPersistenceAttemptsUsed += 1
     }
 
     await callbacks.beforeRetry?.({
