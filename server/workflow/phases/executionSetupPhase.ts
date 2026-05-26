@@ -35,6 +35,10 @@ import {
   writeExecutionSetupProfileMirror,
 } from '../../phases/executionSetup/storage'
 import {
+  getExecutionSetupCommandWrapper,
+  hasExecutionSetupProjectCommands,
+} from '../../phases/executionSetup/runtimeProfile'
+import {
   EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE,
   EXECUTION_SETUP_REPORT_ARTIFACT_TYPE,
   EXECUTION_SETUP_RETRY_NOTES_ARTIFACT_TYPE,
@@ -53,6 +57,10 @@ import {
   summarizeWorktreeChanges,
 } from '../../git/worktreeChanges'
 import { isMockOpenCodeMode } from '../../opencode/factory'
+import { quoteShellArg, runShellCommand } from '../../lib/shellCommand'
+
+const SETUP_WRAPPER_VALIDATION_TIMEOUT_MS = 10_000
+const SETUP_PROBE_TIMEOUT_MS = 30_000
 
 function allChecksPass(result: ExecutionSetupResult): boolean {
   return Object.values(result.checks).every((value) => value === 'pass')
@@ -95,6 +103,85 @@ function addProfileCautions(profile: ExecutionSetupProfile, cautions: string[]):
     ...profile,
     cautions: [...new Set([...profile.cautions, ...cautions])],
   }
+}
+
+function summarizeSetupCommandFailure(input: {
+  label: string
+  command: string
+  exitCode: number | null
+  stdout: string
+  stderr: string
+  durationMs: number
+  timedOut: boolean
+}): string {
+  const status = input.timedOut
+    ? `timed out after ${input.durationMs}ms`
+    : `exit code ${input.exitCode ?? 'no exit code'}`
+  const output = [input.stderr.trim(), input.stdout.trim()].filter(Boolean).join('\n').slice(0, 2000)
+  return `${input.label}: ${input.command} (${status})${output ? `\n${output}` : ''}`
+}
+
+async function validateExecutionSetupRuntimeProfile(input: {
+  ticketId: string
+  worktreePath: string
+  profile: ExecutionSetupProfile
+  signal: AbortSignal
+}): Promise<string[]> {
+  const errors: string[] = []
+  const wrapperPath = getExecutionSetupCommandWrapper(input.profile)
+  const declaresReusableExecution = Boolean(wrapperPath) || hasExecutionSetupProjectCommands(input.profile)
+
+  if (declaresReusableExecution && input.profile.toolingProbeCommands.length === 0) {
+    errors.push(
+      'Execution setup profile must include non-mutating tooling_probe_commands when it declares a command wrapper or project command families.',
+    )
+  }
+
+  if (wrapperPath) {
+    throwIfAborted(input.signal, input.ticketId)
+    const noOpCommand = `${quoteShellArg(process.execPath)} -e ${quoteShellArg('process.exit(0)')}`
+    const result = await runShellCommand({
+      command: noOpCommand,
+      cwd: input.worktreePath,
+      timeoutMs: SETUP_WRAPPER_VALIDATION_TIMEOUT_MS,
+      commandWrapper: wrapperPath,
+      forceWrapper: true,
+    })
+    if (result.exitCode !== 0 || result.timedOut) {
+      errors.push(summarizeSetupCommandFailure({
+        label: `Execution setup wrapper validation failed for ${wrapperPath}`,
+        command: noOpCommand,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: result.durationMs,
+        timedOut: result.timedOut,
+      }))
+      return errors
+    }
+  }
+
+  for (const probeCommand of input.profile.toolingProbeCommands) {
+    throwIfAborted(input.signal, input.ticketId)
+    const result = await runShellCommand({
+      command: probeCommand,
+      cwd: input.worktreePath,
+      timeoutMs: SETUP_PROBE_TIMEOUT_MS,
+    })
+    if (result.exitCode !== 0 || result.timedOut) {
+      errors.push(summarizeSetupCommandFailure({
+        label: 'Execution setup tooling probe failed',
+        command: probeCommand,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: result.durationMs,
+        timedOut: result.timedOut,
+      }))
+    }
+  }
+
+  return errors
 }
 
 async function generateExecutionSetupRetryNote(input: {
@@ -218,6 +305,15 @@ export async function handleExecutionSetup(
             }
 
             if (profile) {
+              if (result && allChecksPass(result) && errors.length === 0) {
+                errors.push(...await validateExecutionSetupRuntimeProfile({
+                  ticketId,
+                  worktreePath: paths.worktreePath,
+                  profile,
+                  signal,
+                }))
+              }
+
               try {
                 const setupExcludedRoots = getExecutionSetupCommitExcludedRoots(paths.worktreePath, profile)
                 const changeSummary = summarizeWorktreeChanges(paths.worktreePath, {

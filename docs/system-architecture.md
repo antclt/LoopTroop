@@ -93,13 +93,13 @@ Execution is built around beads, not around one monolithic coding prompt.
 
 1. `PRE_FLIGHT_CHECK` verifies the ticket can enter pre-implementation setup, including worktree cleanliness before setup starts.
 2. `WAITING_EXECUTION_SETUP_APPROVAL` pauses for setup-plan review before setup commands run.
-3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots before blocking and rejecting ready results that leave committable project changes behind.
+3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots, validating declared wrappers and `tooling_probe_commands`, and rejecting ready results that leave committable project changes behind.
 4. `CODING` selects the next runnable bead from the scheduler.
 5. `executeBead()` starts or reattaches to the owned OpenCode session for that bead attempt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path.
 7. If the attempt stalls or fails, LoopTroop generates a context wipe note, resets the worktree to the bead start commit, and retries in fresh context.
 8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
-9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery.
+9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper when one was declared.
 
 See [Execution Loop](execution-loop.md) and [Beads](beads.md).
 

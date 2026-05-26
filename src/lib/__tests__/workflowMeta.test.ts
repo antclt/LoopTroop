@@ -168,7 +168,7 @@ describe.concurrent('workflow metadata', () => {
     expect(setupApprovalPhase?.label).toBe('Approving Workspace Setup')
     expect(setupApprovalPhase?.reviewArtifactType).toBe('execution_setup_plan')
     expect(setupPhase?.label).toBe('Preparing Workspace Runtime')
-    expect(setupPhase?.description).toContain('Verifying readiness and provisioning missing required runtime tooling under ticket-owned temp roots before coding begins.')
+    expect(setupPhase?.description).toContain('validating declared wrappers/tooling probes before coding begins')
     expect(setupPhase?.contextSummary).toEqual(['ticket_details', 'beads', 'execution_setup_plan', 'execution_setup_notes'])
     expect(codingPhase?.contextSummary).toEqual(['bead_data', 'bead_notes'])
   })

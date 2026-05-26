@@ -320,6 +320,8 @@ describe.concurrent('structured prompt hardening', () => {
     expect(setupPrompt).toContain('do not leave those changes behind')
     expect(setupPrompt).toContain('set `checks.tooling` to `fail`')
     expect(setupPrompt).toContain('only after a safe user-space provisioning attempt under approved temp roots fails')
+    expect(setupPrompt).toContain('tooling_probe_commands')
+    expect(setupPrompt).toContain('LoopTroop reruns these probes before coding')
     expect(setupPrompt).toContain('execution_setup_profile')
     expect(PROM_EXECUTION_SETUP.contextInputs).toEqual(['ticket_details', 'beads', 'execution_setup_plan', 'execution_setup_notes'])
     expect(setupNotePrompt).toContain('append-only retry note')
@@ -353,6 +355,7 @@ describe.concurrent('structured prompt hardening', () => {
     expect(prompt).toContain('.ticket/runtime/execution-setup-profile.json')
     expect(prompt).toContain('./.ticket/runtime/execution-setup/run ...')
     expect(prompt).toContain('prepared PATH and cache variables')
+    expect(prompt).toContain('LoopTroop will also execute returned commands through the declared setup wrapper')
   })
 
   it('keeps PROM25 explicit about expansion-only ownership, preserved order, and tool-assisted target files', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseExecutionSetupResult } from '../parser'
+import { serializeExecutionSetupProfile } from '../types'
 
 function buildExecutionSetupPayload(body: string): string {
   return `<EXECUTION_SETUP_RESULT>\n${body}\n</EXECUTION_SETUP_RESULT>`
@@ -18,6 +19,7 @@ describe('parseExecutionSetupResult', () => {
         summary: 'environment initialized and reusable',
         temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
         bootstrap_commands: ['project bootstrap'],
+        tooling_probe_commands: ['./.ticket/runtime/execution-setup/run go version'],
         reusable_artifacts: [
           { path: '.ticket/runtime/execution-setup/tool-cache/dependencies', kind: 'cache', purpose: 'project dependency cache' },
           { path: '.ticket/runtime/execution-setup/env.sh', kind: 'environment', purpose: 'prepared runtime environment' },
@@ -55,7 +57,39 @@ describe('parseExecutionSetupResult', () => {
       '.ticket/runtime/execution-setup/env.sh',
       '.ticket/runtime/execution-setup/run',
     ])
+    expect(parsed.result?.profile.toolingProbeCommands).toEqual(['./.ticket/runtime/execution-setup/run go version'])
     expect(parsed.result?.profile.projectCommands.testFull).toEqual(['./.ticket/runtime/execution-setup/run go test ./...'])
+  })
+
+  it('serializes tooling probe commands in execution setup profile artifacts', () => {
+    const serialized = serializeExecutionSetupProfile({
+      schemaVersion: 1,
+      ticketId: 'T-1',
+      artifact: 'execution_setup_profile',
+      status: 'ready',
+      summary: 'environment initialized and reusable',
+      tempRoots: ['.ticket/runtime/execution-setup'],
+      bootstrapCommands: [],
+      toolingProbeCommands: ['./.ticket/runtime/execution-setup/run go version'],
+      reusableArtifacts: [],
+      projectCommands: {
+        prepare: [],
+        testFull: [],
+        lintFull: [],
+        typecheckFull: [],
+      },
+      qualityGatePolicy: {
+        tests: 'bead-test-commands-first',
+        lint: 'impacted-or-package',
+        typecheck: 'impacted-or-package',
+        fullProjectFallback: 'never-block-on-unrelated-baseline',
+      },
+      cautions: [],
+    })
+
+    expect(JSON.parse(serialized)).toMatchObject({
+      tooling_probe_commands: ['./.ticket/runtime/execution-setup/run go version'],
+    })
   })
 
   it('repairs fenced YAML payloads inside the execution setup marker', () => {

@@ -113,7 +113,7 @@ const CONTEXT_LABELS: Record<string, ContextItem> = {
     id: 'execution_setup_profile',
     label: 'Execution Setup Profile',
     icon: '🧰',
-    description: 'Runtime setup profile with temp roots, reusable artifacts, and discovered command families. Coding can read the profile file by reference when needed.',
+    description: 'Runtime setup profile with temp roots, tooling probes, reusable artifacts, and discovered command families. Coding can read it by reference and final testing can reuse declared wrappers.',
   },
   execution_setup_notes: {
     id: 'execution_setup_notes',

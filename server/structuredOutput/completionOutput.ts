@@ -579,6 +579,12 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
   }
 
   const bootstrapCommands = toStringArray(getValueByAliases(value, ['bootstrapcommands', 'bootstrap']))
+  const toolingProbeCommands = toStringArray(getValueByAliases(value, [
+    'toolingprobecommands',
+    'toolingprobes',
+    'probecommands',
+    'verificationcommands',
+  ]))
 
   const rawReusableArtifacts = getValueByAliases(value, ['reusableartifacts', 'artifacts'])
   const reusableArtifacts = Array.isArray(rawReusableArtifacts)
@@ -611,6 +617,7 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     summary,
     tempRoots: [...new Set(tempRoots)],
     bootstrapCommands,
+    toolingProbeCommands,
     reusableArtifacts,
     projectCommands,
     qualityGatePolicy,
@@ -687,6 +694,7 @@ function toCanonicalExecutionSetupResultPayload(value: ExecutionSetupResultPaylo
       summary: value.profile.summary,
       temp_roots: value.profile.tempRoots,
       bootstrap_commands: value.profile.bootstrapCommands,
+      tooling_probe_commands: value.profile.toolingProbeCommands,
       reusable_artifacts: value.profile.reusableArtifacts.map((artifact) => ({
         path: artifact.path,
         kind: artifact.kind,

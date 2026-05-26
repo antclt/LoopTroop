@@ -59,6 +59,7 @@ function buildAttemptHistoryEntry(
     summary: report.summary,
     tempRoots: report.profile?.tempRoots ?? [],
     bootstrapCommands: report.profile?.bootstrapCommands ?? [],
+    toolingProbeCommands: report.profile?.toolingProbeCommands ?? [],
     errors: [...report.errors],
     failureReason: report.errors[0] ?? undefined,
   }

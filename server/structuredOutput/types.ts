@@ -160,6 +160,7 @@ export interface ExecutionSetupProfilePayload {
   summary: string
   tempRoots: string[]
   bootstrapCommands: string[]
+  toolingProbeCommands: string[]
   reusableArtifacts: ExecutionSetupReusableArtifactPayload[]
   projectCommands: {
     prepare: string[]

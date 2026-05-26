@@ -543,6 +543,7 @@ describe('commitBeadChanges', () => {
       status: 'ready',
       summary: 'runtime roots',
       temp_roots: ['.ticket/runtime/execution-setup/tool-cache'],
+      tooling_probe_commands: [],
       reusable_artifacts: [
         { path: '.repo-tool-cache', kind: 'cache', purpose: 'repository-required cache' },
       ],

@@ -5023,15 +5023,16 @@ function ExecutionSetupProfileSummary({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
         <MetadataCard label="Status" value={profile.status || 'Unknown'} tone={statusReady ? 'success' : 'info'} />
         <MetadataCard label="Temp Roots" value={profile.tempRoots.length.toLocaleString()} tone="info" />
         <MetadataCard label="Bootstrap" value={profile.bootstrapCommands.length.toLocaleString()} tone={profile.bootstrapCommands.length > 0 ? 'info' : 'default'} />
+        <MetadataCard label="Probes" value={profile.toolingProbeCommands.length.toLocaleString()} tone={profile.toolingProbeCommands.length > 0 ? 'success' : 'default'} />
         <MetadataCard label="Reusable" value={profile.reusableArtifacts.length.toLocaleString()} tone={profile.reusableArtifacts.length > 0 ? 'success' : 'default'} />
         <MetadataCard label="Ticket" value={profile.ticketId || 'Unknown'} mono />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <ArtifactListSection
           title="Temporary Roots"
           items={profile.tempRoots}
@@ -5042,6 +5043,12 @@ function ExecutionSetupProfileSummary({
           title="Bootstrap Commands"
           items={profile.bootstrapCommands}
           emptyLabel="No bootstrap commands were recorded."
+          tone="default"
+        />
+        <ArtifactListSection
+          title="Tooling Probes"
+          items={profile.toolingProbeCommands}
+          emptyLabel="No tooling probes were recorded."
           tone="default"
         />
       </div>
@@ -5273,9 +5280,10 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
           <CollapsibleSection title="Profile Snapshot" defaultOpen>
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground leading-5">{report.profile.summary || 'No profile summary was recorded.'}</p>
-              <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                 <MetadataCard label="Temp Roots" value={report.profile.tempRoots.length.toLocaleString()} tone="info" />
                 <MetadataCard label="Bootstrap" value={report.profile.bootstrapCommands.length.toLocaleString()} tone={report.profile.bootstrapCommands.length > 0 ? 'info' : 'default'} />
+                <MetadataCard label="Probes" value={report.profile.toolingProbeCommands.length.toLocaleString()} tone={report.profile.toolingProbeCommands.length > 0 ? 'success' : 'default'} />
                 <MetadataCard label="Reusable" value={report.profile.reusableArtifacts.length.toLocaleString()} tone={report.profile.reusableArtifacts.length > 0 ? 'success' : 'default'} />
                 <MetadataCard label="Status" value={report.profile.status || 'Unknown'} tone={report.profile.status === 'ready' ? 'success' : 'default'} />
               </div>
@@ -5468,7 +5476,16 @@ function FinalTestResultsView({ content }: { content: string }) {
                     <div className="text-[11px] text-muted-foreground">
                       Exit code: {command.exitCode ?? 'none'}
                       {command.signal ? ` · Signal: ${command.signal}` : ''}
+                      {command.setupWrapperApplied ? ' · Setup wrapper applied' : ''}
                     </div>
+                    {command.effectiveCommand ? (
+                      <div>
+                        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Effective Command</div>
+                        <pre className="text-[11px] font-mono bg-background rounded border border-border p-2 overflow-x-auto whitespace-pre-wrap">
+                          {command.effectiveCommand}
+                        </pre>
+                      </div>
+                    ) : null}
                     {command.stdout ? (
                       <div>
                         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Stdout</div>

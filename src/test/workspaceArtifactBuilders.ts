@@ -278,6 +278,7 @@ export function buildExecutionSetupProfileContent(summary = 'Runtime cache and c
     summary,
     temp_roots: [DEFAULT_EXECUTION_SETUP_ROOT],
     bootstrap_commands: ['project bootstrap'],
+    tooling_probe_commands: ['project --version'],
     reusable_artifacts: [
       {
         path: `${DEFAULT_EXECUTION_SETUP_ROOT}/cache.json`,
@@ -310,6 +311,7 @@ export function buildExecutionSetupProfileArtifactContent() {
     summary: 'Runtime cache ready for implementation beads.',
     temp_roots: [DEFAULT_EXECUTION_SETUP_ROOT],
     bootstrap_commands: ['project bootstrap'],
+    tooling_probe_commands: ['project --version'],
     reusable_artifacts: [
       {
         path: `${DEFAULT_EXECUTION_SETUP_ROOT}/cache.json`,
@@ -348,6 +350,7 @@ export function buildExecutionSetupRuntimeReportContent() {
       summary: 'Runtime cache and command policy are ready.',
       tempRoots: [DEFAULT_EXECUTION_SETUP_ROOT],
       bootstrapCommands: ['project bootstrap'],
+      toolingProbeCommands: ['project --version'],
       reusableArtifacts: [
         {
           path: `${DEFAULT_EXECUTION_SETUP_ROOT}/cache.json`,
@@ -391,6 +394,7 @@ export function buildExecutionSetupRuntimeReportContent() {
         summary: 'Runtime profile is ready for coding beads.',
         tempRoots: [DEFAULT_EXECUTION_SETUP_ROOT],
         bootstrapCommands: ['project bootstrap'],
+        toolingProbeCommands: ['project --version'],
         errors: [],
       },
     ],
@@ -415,6 +419,7 @@ export function buildExecutionSetupReportArtifactContent() {
       summary: 'Runtime cache ready for implementation beads.',
       tempRoots: [DEFAULT_EXECUTION_SETUP_ROOT],
       bootstrapCommands: ['project bootstrap'],
+      toolingProbeCommands: ['project --version'],
       reusableArtifacts: [
         {
           path: `${DEFAULT_EXECUTION_SETUP_ROOT}/cache.json`,
@@ -454,6 +459,7 @@ export function buildExecutionSetupReportArtifactContent() {
         summary: 'Runtime profile is ready for coding beads.',
         tempRoots: [DEFAULT_EXECUTION_SETUP_ROOT],
         bootstrapCommands: ['project bootstrap'],
+        toolingProbeCommands: ['project --version'],
         errors: [],
       },
     ],

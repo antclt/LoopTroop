@@ -465,6 +465,7 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
       if (profile) {
         detailParts.push(`${profile.tempRoots.length} root${profile.tempRoots.length === 1 ? '' : 's'}`)
         detailParts.push(`${profile.bootstrapCommands.length} bootstrap`)
+        detailParts.push(`${profile.toolingProbeCommands.length} probe${profile.toolingProbeCommands.length === 1 ? '' : 's'}`)
         detailParts.push(`${profile.reusableArtifacts.length} reusable`)
       }
 
@@ -480,6 +481,7 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
       const detailParts = [
         `${profile.tempRoots.length} root${profile.tempRoots.length === 1 ? '' : 's'}`,
         `${profile.bootstrapCommands.length} bootstrap`,
+        `${profile.toolingProbeCommands.length} probe${profile.toolingProbeCommands.length === 1 ? '' : 's'}`,
         `${profile.reusableArtifacts.length} reusable`,
       ]
       return {

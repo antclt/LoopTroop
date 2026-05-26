@@ -1,52 +1,10 @@
-import { spawn } from 'node:child_process'
-import { existsSync } from 'node:fs'
-import { FORCE_KILL_DELAY_MS } from '../../lib/constants'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import type { RawAttempt } from '../../council/types'
 import type { FinalTestFileEffect } from './fileEffectsAudit'
+import { runShellCommand, type ShellCommandResult } from '../../lib/shellCommand'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
-const MAX_COMMAND_OUTPUT_BYTES = 1_000_000
-
-function getCommandShell(): { bin: string; args: string[] } {
-  if (process.platform === 'win32') {
-    return {
-      bin: process.env.ComSpec || 'cmd.exe',
-      args: ['/d', '/s', '/c'],
-    }
-  }
-
-  return {
-    bin: existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh',
-    args: [existsSync('/bin/bash') ? '-lc' : '-c'],
-  }
-}
-
-function appendBoundedOutput(current: string, chunk: Buffer | string): string {
-  if (Buffer.byteLength(current, 'utf8') >= MAX_COMMAND_OUTPUT_BYTES) return current
-  const text = chunk.toString()
-  const remaining = MAX_COMMAND_OUTPUT_BYTES - Buffer.byteLength(current, 'utf8')
-  const next = `${current}${text.slice(0, remaining)}`
-  if (Buffer.byteLength(next, 'utf8') >= MAX_COMMAND_OUTPUT_BYTES) {
-    return `${next}\n[LoopTroop truncated command output at ${MAX_COMMAND_OUTPUT_BYTES} bytes]`
-  }
-  return next
-}
-
-function terminateProcessTree(child: ReturnType<typeof spawn>, signal: NodeJS.Signals): void {
-  if (!child.pid) return
-  if (process.platform === 'win32') {
-    spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' }).on('error', () => undefined)
-    return
-  }
-
-  try {
-    process.kill(-child.pid, signal)
-  } catch {
-    child.kill(signal)
-  }
-}
 
 // Lazy-load commandLogger to avoid vitest mock-resolution deadlock.
 function logCmd(
@@ -66,6 +24,8 @@ function logCmd(
 
 export interface FinalTestCommandResult {
   command: string
+  effectiveCommand?: string
+  setupWrapperApplied?: boolean
   exitCode: number | null
   signal: NodeJS.Signals | null
   stdout: string
@@ -109,64 +69,18 @@ export interface FinalTestExecutionReport {
   retryNotes?: string[]
 }
 
-async function runCommand(
-  command: string,
-  cwd: string,
-  timeoutMs?: number,
-): Promise<FinalTestCommandResult> {
-  const startedAt = Date.now()
-  return await new Promise<FinalTestCommandResult>((resolve) => {
-    const shell = getCommandShell()
-    const child = spawn(shell.bin, [...shell.args, command], {
-      cwd,
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      detached: process.platform !== 'win32',
-    })
-
-    let stdout = ''
-    let stderr = ''
-    let settled = false
-    let timedOut = false
-    let timeoutHandle: ReturnType<typeof setTimeout> | undefined
-
-    const finish = (exitCode: number | null, signal: NodeJS.Signals | null) => {
-      if (settled) return
-      settled = true
-      if (timeoutHandle) clearTimeout(timeoutHandle)
-      resolve({
-        command,
-        exitCode,
-        signal,
-        stdout,
-        stderr,
-        durationMs: Date.now() - startedAt,
-        timedOut,
-      })
-    }
-
-    child.stdout.on('data', (chunk: Buffer | string) => {
-      stdout = appendBoundedOutput(stdout, chunk)
-    })
-    child.stderr.on('data', (chunk: Buffer | string) => {
-      stderr = appendBoundedOutput(stderr, chunk)
-    })
-    child.on('error', (error) => {
-      stderr += error.message
-      finish(null, null)
-    })
-    child.on('close', (exitCode, signal) => {
-      finish(exitCode, signal)
-    })
-
-    if (timeoutMs && timeoutMs > 0) {
-      timeoutHandle = setTimeout(() => {
-        timedOut = true
-        terminateProcessTree(child, 'SIGTERM')
-        setTimeout(() => terminateProcessTree(child, 'SIGKILL'), FORCE_KILL_DELAY_MS).unref()
-      }, timeoutMs)
-    }
-  })
+function toFinalTestCommandResult(result: ShellCommandResult): FinalTestCommandResult {
+  return {
+    command: result.command,
+    ...(result.effectiveCommand ? { effectiveCommand: result.effectiveCommand } : {}),
+    ...(result.setupWrapperApplied ? { setupWrapperApplied: true } : {}),
+    exitCode: result.exitCode,
+    signal: result.signal,
+    stdout: result.stdout,
+    stderr: result.stderr,
+    durationMs: result.durationMs,
+    timedOut: result.timedOut,
+  }
 }
 
 export async function executeFinalTestCommands(input: {
@@ -182,18 +96,26 @@ export async function executeFinalTestCommands(input: {
   modelOutput: string
   planStructuredOutput?: StructuredOutputMetadata
   rawAttempts?: RawAttempt[]
+  setupEnvironment?: {
+    commandWrapper?: string
+  }
 }): Promise<FinalTestExecutionReport> {
   const commandResults: FinalTestCommandResult[] = []
   const errors: string[] = []
 
   for (const command of input.commands) {
-    const result = await runCommand(command, input.cwd, input.timeoutMs)
-    const shell = getCommandShell()
+    const execution = await runShellCommand({
+      command,
+      cwd: input.cwd,
+      timeoutMs: input.timeoutMs,
+      commandWrapper: input.setupEnvironment?.commandWrapper,
+    })
+    const result = toFinalTestCommandResult(execution)
     commandResults.push(result)
 
     // Log the command execution to SYS
     if (result.exitCode === 0 && !result.timedOut) {
-      logCmd(shell.bin, [...shell.args, command], {
+      logCmd(execution.bin, execution.args, {
         ok: true,
         stdout: result.stdout.trim() || undefined,
         stderr: result.stderr.trim() || undefined,
@@ -202,7 +124,7 @@ export async function executeFinalTestCommands(input: {
       const errDetail = result.timedOut
         ? `timed out after ${result.durationMs}ms`
         : `exit code ${result.exitCode ?? 'unknown'}`
-      logCmd(shell.bin, [...shell.args, command], {
+      logCmd(execution.bin, execution.args, {
         ok: false,
         error: errDetail,
         stdout: result.stdout.trim() || undefined,

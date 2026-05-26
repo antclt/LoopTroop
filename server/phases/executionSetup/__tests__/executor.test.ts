@@ -47,6 +47,7 @@ function buildToolingFailureReport(attempt: number): ExecutionSetupReport {
       summary: 'Go toolchain could not be prepared.',
       tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
       bootstrapCommands: [],
+      toolingProbeCommands: [],
       reusableArtifacts: [
         {
           path: '.ticket/runtime/execution-setup/tool-cache',

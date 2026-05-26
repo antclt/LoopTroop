@@ -330,6 +330,8 @@ export interface RelevantFilesScanData {
 
 export interface FinalTestCommandResultData {
   command: string
+  effectiveCommand?: string
+  setupWrapperApplied?: boolean
   exitCode: number | null
   signal: string | null
   stdout: string
@@ -401,6 +403,7 @@ export interface ExecutionSetupProfileData {
   summary?: string
   tempRoots: string[]
   bootstrapCommands: string[]
+  toolingProbeCommands: string[]
   reusableArtifacts: ExecutionSetupReusableArtifactData[]
   projectCommands: {
     prepare: string[]
@@ -424,6 +427,7 @@ export interface ExecutionSetupAttemptHistoryEntryData {
   summary?: string
   tempRoots: string[]
   bootstrapCommands: string[]
+  toolingProbeCommands: string[]
   errors: string[]
   failureReason?: string
   noteAppended?: string
@@ -871,6 +875,16 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
   const artifact = normalizeOptionalString(getValueByAliases(record, ['artifact']))
   const tempRoots = normalizeStringArray(getValueByAliases(record, ['tempRoots', 'temp_roots']))
   const bootstrapCommands = normalizeStringArray(getValueByAliases(record, ['bootstrapCommands', 'bootstrap_commands']))
+  const toolingProbeCommands = normalizeStringArray(getValueByAliases(record, [
+    'toolingProbeCommands',
+    'tooling_probe_commands',
+    'toolingProbes',
+    'tooling_probes',
+    'probeCommands',
+    'probe_commands',
+    'verificationCommands',
+    'verification_commands',
+  ]))
   const reusableArtifactsRaw = getValueByAliases(record, ['reusableArtifacts', 'reusable_artifacts'])
   const projectCommandsRaw = getValueByAliases(record, ['projectCommands', 'project_commands'])
   const qualityGatePolicyRaw = getValueByAliases(record, ['qualityGatePolicy', 'quality_gate_policy'])
@@ -879,6 +893,7 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
     artifact !== 'execution_setup_profile'
     && tempRoots.length === 0
     && bootstrapCommands.length === 0
+    && toolingProbeCommands.length === 0
     && !isRecord(projectCommandsRaw)
     && !isRecord(qualityGatePolicyRaw)
   ) {
@@ -907,6 +922,7 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
     summary: normalizeOptionalString(getValueByAliases(record, ['summary'])),
     tempRoots,
     bootstrapCommands,
+    toolingProbeCommands,
     reusableArtifacts,
     projectCommands: {
       prepare: normalizeStringArray(getValueByAliases(projectCommands, ['prepare'])),
@@ -956,6 +972,7 @@ function parseExecutionSetupAttemptHistory(value: unknown): ExecutionSetupAttemp
       summary: normalizeOptionalString(getValueByAliases(entry, ['summary'])),
       tempRoots: normalizeStringArray(getValueByAliases(entry, ['tempRoots', 'temp_roots'])),
       bootstrapCommands: normalizeStringArray(getValueByAliases(entry, ['bootstrapCommands', 'bootstrap_commands'])),
+      toolingProbeCommands: normalizeStringArray(getValueByAliases(entry, ['toolingProbeCommands', 'tooling_probe_commands'])),
       errors: normalizeStringArray(getValueByAliases(entry, ['errors'])),
       failureReason: normalizeOptionalString(getValueByAliases(entry, ['failureReason', 'failure_reason'])),
       noteAppended: normalizeOptionalString(getValueByAliases(entry, ['noteAppended', 'note_appended'])),

@@ -243,6 +243,8 @@ describe('ArtifactContentViewer', () => {
 
     expect(screen.getByText('Execution Setup Profile')).toBeInTheDocument()
     expect(screen.getByText('Runtime cache and command policy are ready.')).toBeInTheDocument()
+    expect(screen.getByText('Tooling Probes')).toBeInTheDocument()
+    expect(screen.getByText('project --version')).toBeInTheDocument()
     expect(screen.getByText('Reusable Artifacts')).toBeInTheDocument()
     expect(screen.getByText('.ticket/runtime/execution-setup/cache.json')).toBeInTheDocument()
     expect(screen.getByText('Quality Gate Policy')).toBeInTheDocument()
@@ -266,6 +268,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Workspace')).toBeInTheDocument()
     expect(screen.getByText('Attempt History')).toBeInTheDocument()
     expect(screen.getByText('Attempt 1')).toBeInTheDocument()
+    expect(screen.getByText('Probes')).toBeInTheDocument()
     expect(screen.getByText('Command Audit')).toBeInTheDocument()
     expect(screen.getByText('project cache verify')).toBeInTheDocument()
 

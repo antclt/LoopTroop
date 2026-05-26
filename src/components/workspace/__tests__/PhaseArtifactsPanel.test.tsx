@@ -78,7 +78,7 @@ describe('PhaseArtifactsPanel', () => {
     )
 
     expect(screen.getByText('Execution Setup Runtime')).toBeInTheDocument()
-    expect(screen.getByText('ready · 1 attempt · 1 root · 1 bootstrap · 1 reusable')).toBeInTheDocument()
+    expect(screen.getByText('ready · 1 attempt · 1 root · 1 bootstrap · 1 probe · 1 reusable')).toBeInTheDocument()
     expect(screen.queryByText('Execution Setup Profile')).not.toBeInTheDocument()
     expect(screen.queryByText('Execution Setup Report')).not.toBeInTheDocument()
 

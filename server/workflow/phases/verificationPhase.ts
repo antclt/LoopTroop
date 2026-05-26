@@ -35,6 +35,11 @@ import type { FinalTestGenerationResult } from '../../phases/finalTest/generator
 import { executeFinalTestWithRetries } from '../../phases/finalTest/executor'
 import { executeFinalTestCommands } from '../../phases/finalTest/runner'
 import {
+  EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE,
+  EXECUTION_SETUP_PROFILE_MIRROR,
+} from '../../phases/executionSetup/types'
+import { getExecutionSetupCommandWrapperFromContent } from '../../phases/executionSetup/runtimeProfile'
+import {
   buildFinalTestFileEffectsAudit,
   captureFinalTestDirtyFiles,
   FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
@@ -3525,6 +3530,28 @@ export async function handlePreFlight(
 
 const FINAL_TEST_RETRY_NOTES_ARTIFACT_TYPE = 'final_test_retry_notes'
 
+function resolveFinalTestSetupEnvironment(ticketId: string, worktreePath: string): { commandWrapper?: string } | undefined {
+  const profileArtifact = getLatestPhaseArtifact(
+    ticketId,
+    EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE,
+    'PREPARING_EXECUTION_ENV',
+  )
+  const artifactWrapper = getExecutionSetupCommandWrapperFromContent(profileArtifact?.content)
+  if (artifactWrapper) return { commandWrapper: artifactWrapper }
+
+  const profileMirrorPath = resolve(worktreePath, EXECUTION_SETUP_PROFILE_MIRROR)
+  if (existsSync(profileMirrorPath)) {
+    try {
+      const mirrorWrapper = getExecutionSetupCommandWrapperFromContent(readFileSync(profileMirrorPath, 'utf-8'))
+      if (mirrorWrapper) return { commandWrapper: mirrorWrapper }
+    } catch {
+      return undefined
+    }
+  }
+
+  return undefined
+}
+
 function parseFinalTestRetryNotes(content: string | null | undefined): string[] {
   if (!content?.trim()) return []
 
@@ -3569,6 +3596,8 @@ function buildFinalTestRetryErrorContext(input: {
         : `exit ${command.exitCode ?? 'unknown'}`
       return [
         `Command: ${command.command}`,
+        command.effectiveCommand ? `Effective Command: ${command.effectiveCommand}` : '',
+        command.setupWrapperApplied ? 'Setup Wrapper Applied: yes' : '',
         `Result: ${status}`,
         command.stdout ? `STDOUT:\n${command.stdout.slice(0, COMMAND_OUTPUT_SLICE_LENGTH)}` : '',
         command.stderr ? `STDERR:\n${command.stderr.slice(0, COMMAND_OUTPUT_SLICE_LENGTH)}` : '',
@@ -3757,6 +3786,7 @@ export async function handleFinalTest(
   const executionSettings = resolveExecutionRuntimeSettings(context)
   const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
   const phaseStartCommit = recordWorktreeStartCommit(worktreePath)
+  const setupEnvironment = resolveFinalTestSetupEnvironment(ticketId, worktreePath)
   let finalTestBaselineDirtyFiles: FinalTestDirtyFile[] = captureFinalTestDirtyFiles(worktreePath)
   const streamStates = new Map<string, OpenCodeStreamState>()
   const report = await executeFinalTestWithRetries(
@@ -3871,6 +3901,7 @@ export async function handleFinalTest(
           modelOutput: output,
           planStructuredOutput,
           rawAttempts,
+          setupEnvironment,
         })
       },
       generateRetryNote: async ({ attempt, report, generation }) => {

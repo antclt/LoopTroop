@@ -46,6 +46,7 @@ export interface ExecutionSetupAttemptHistoryEntry {
   summary?: string
   tempRoots: string[]
   bootstrapCommands: string[]
+  toolingProbeCommands: string[]
   errors: string[]
   failureReason?: string
   noteAppended?: string
@@ -85,6 +86,7 @@ export function toExecutionSetupProfileArtifact(profile: ExecutionSetupProfile):
     summary: profile.summary,
     temp_roots: profile.tempRoots,
     bootstrap_commands: profile.bootstrapCommands,
+    tooling_probe_commands: profile.toolingProbeCommands,
     reusable_artifacts: profile.reusableArtifacts.map((artifact) => ({
       path: artifact.path,
       kind: artifact.kind,
