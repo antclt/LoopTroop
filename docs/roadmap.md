@@ -1980,7 +1980,7 @@ search: false
     *   If tracked files are dirty at finalize time, create one deterministic safety commit (`looptroop: finalize <ticket-id>`) before squash/land so no tracked work is silently lost.
     *   Persist finalization audit event `ticket_finalized` with links to landing receipt, merge/land result, and cleanup report for post-run investigation.
     *   Optional release tag: if ticket metadata includes `target_version_tag`, create an annotated git tag after manual verification; if the tag already exists, skip creation and log a warning.
-*   **Message Steering (deterministic queued control):** During execution, while an active bead is running, user steering messages are accepted in a chat-like panel and queued for deterministic application at safe checkpoints without pausing the run. Another steering direction can be for the rest of the project, not only for next bead or active bead. 
+*   **Message Steering (deterministic queued control):** During execution, while an active bead is running, user steering messages are accepted in a chat-like panel and queued for deterministic application at safe checkpoints without pausing the run. Another steering direction can be for the rest of the project, not only for next bead or active bead.
     *   Persist steering queue at `.looptroop/tickets/<ticket-id>/steering/queue.jsonl` with `queue_id`, `run_id`, `bead_id`, `created_at`, `status`, `applied_at`, and `result`.
     *   Apply policy: if the agent is mid-iteration, apply on the next checkpoint (after current command/test cycle) unless message is marked `urgent_stop`.
     *   Queue guarantees: FIFO within priority class, max queue size, deterministic dedupe for identical pending messages, and explicit expiration policy.
@@ -2216,4 +2216,4 @@ search: false
     *   The next retry must reference and apply the latest `correction`; retries without a new valid correction are rejected by loop control.
     *   Persist reflection outcomes (`applied`, `not_applied`, `regressed`) so harvest/review phases can measure whether the correction helped.
 *   **Global rankings:** Maestro has a global ranking for people who run the longest sessions, with badges and different levels of achievements. E.g., the best level is for those who run for 10 years (which can be achieved faster by running parallel sessions). Rankings are also done by cost. Users should be able to opt into these rankings and see their position in a leaderboard. [I1](https://runmaestro.ai/)
-*   **Actual data research:** Integrate with last 30 days, which will research a specific topic on Twitter and Reddit in the last month to give accurate data. [I1](https://github.com/mvanhorn/last30days-skill) 
+*   **Actual data research:** Integrate with last 30 days, which will research a specific topic on Twitter and Reddit in the last month to give accurate data. [I1](https://github.com/mvanhorn/last30days-skill)

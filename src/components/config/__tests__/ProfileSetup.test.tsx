@@ -156,7 +156,7 @@ describe('ProfileSetup', () => {
     await renderProfileSetup()
 
     const docsLinks = screen.getAllByRole('link', { name: /Open documentation for / })
-    expect(docsLinks).toHaveLength(18)
+    expect(docsLinks).toHaveLength(19)
 
     const mainImplementerLink = screen.getByRole('link', { name: 'Open documentation for Main Implementer Model' })
     expect(mainImplementerLink).toHaveAttribute('href', `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#main-implementer-model`)
@@ -194,6 +194,10 @@ describe('ProfileSetup', () => {
     expect(screen.getByRole('link', { name: 'Open documentation for OpenCode Retry Grace Window' })).toHaveAttribute(
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#opencode-retry-grace-window`,
+    )
+    expect(screen.getByRole('link', { name: 'Open documentation for OpenCode Max Steps' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#opencode-max-steps`,
     )
 
     fireEvent.focus(mainImplementerLink)

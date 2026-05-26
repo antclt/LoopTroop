@@ -8,6 +8,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+
+### Detailed Changes
+
+---
+
+## 0.2.3 (2026-05-26)
+
+### Summary
 - Added future-ticket safety around PR merge completion and final-test file effects so merged PRs and test-produced files are handled audibly and recoverably.
 - Format commands in system logs to match tool calls exactly, using identical colors (`text-cyan-500`) and rendering output/error blocks in standard structured sections (squares/boxes) regardless of length.
 - Render bead separators in the per-phase normal log view for CODING phase, matching the existing Full Log bead grouping behavior.
@@ -36,6 +44,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Successful `git push` commands now show a compact `→ push completed` log entry instead of the verbose multi-line `STDERR:` remote messages block.
 - Show a visible notification in the ALL tab whenever an OpenCode session is restarted due to no response text being produced, making silent session resets visible across all workflow phases.
 - Added **OpenCode Max Steps** profile setting to cap the number of steps per OpenCode session; when set, LoopTroop writes a per-worktree `opencode.json` (git-excluded) before coding and removes it after; 0 means no limit (OpenCode default).
+- Fixed release validation coverage for the OpenCode Max Steps documentation link and normalized roadmap line endings.
 
 ### Detailed Changes
 
@@ -92,6 +101,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Fixed Current Activity timeout detection so timeout-like strings in model/tool/debug output no longer create false `Workflow timeout` banners; near-timeout warnings now use structured prompt deadline metadata and only appear during the final warning window.
 - Fixed stale Current Activity near-timeout warnings so completed prompts no longer keep showing active countdowns when revisiting a previous status, and terminal timeout elapsed values stay pinned to the diagnostic event.
 - Made `npm run dev` print immediate and phase-level preflight progress before bootstrap dependency checks, daily dependency/audit/OpenCode maintenance, stale-process cleanup, and port checks, with a final completion duration.
+- Updated ProfileSetup documentation-link test coverage for the OpenCode Max Steps configuration link and normalized `docs/roadmap.md` to LF-only line endings so release validation passes consistently.
 
 ---
 
