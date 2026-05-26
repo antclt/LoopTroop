@@ -1,0 +1,6 @@
+export const FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT = 'final_test_file_effects_audit'
+export const FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT = 'final_test_file_effects_override'
+export const FINAL_TEST_FILE_EFFECTS_ERROR_CODE = 'FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED'
+
+export const FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION = 'include_final_test_files'
+export const FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION = 'discard_final_test_files'

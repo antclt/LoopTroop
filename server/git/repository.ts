@@ -117,16 +117,20 @@ export function resolveBaseBranch(projectPath: string): string {
 }
 
 export function resolveBaseBranchRef(projectPath: string, baseBranch: string): string {
-  if (gitCommandSucceeds(projectPath, ['show-ref', '--verify', '--quiet', `refs/heads/${baseBranch}`])) {
-    return baseBranch
-  }
-
   const remoteRef = `origin/${baseBranch}`
   if (gitCommandSucceeds(projectPath, ['show-ref', '--verify', '--quiet', `refs/remotes/${remoteRef}`])) {
     return remoteRef
   }
 
+  if (gitCommandSucceeds(projectPath, ['show-ref', '--verify', '--quiet', `refs/heads/${baseBranch}`])) {
+    return baseBranch
+  }
+
   throw new Error(`Base branch ${baseBranch} does not exist in ${projectPath}`)
+}
+
+export function tryFetchOrigin(projectPath: string): boolean {
+  return gitCommandSucceeds(projectPath, ['fetch', '--no-progress', '--prune', 'origin'])
 }
 
 export function readGitStdout(projectPath: string, args: string[]): string {

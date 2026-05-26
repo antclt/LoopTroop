@@ -683,8 +683,8 @@ export function syncLocalBaseBranch(projectPath: string, baseBranch: string): {
   localBaseHead: string
   remoteBaseHead: string
 } {
-  ensureWorktreeClean(projectPath)
   runGit(projectPath, ['fetch', '--no-progress', '--prune', 'origin'])
+  ensureWorktreeClean(projectPath)
 
   const originalBranch = getCurrentBranch(projectPath)
   const remoteBaseRef = `origin/${baseBranch}`

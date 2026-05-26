@@ -137,11 +137,15 @@ describe('handleIntegration', () => {
 
   it('passes validated final-test modified files into the squash stage', async () => {
     const sendEvent = vi.fn<(event: TicketEvent) => void>()
-    getLatestPhaseArtifactMock.mockReturnValue({
-      content: JSON.stringify({
-        modifiedFiles: ['src/final.test.ts', 'src/feature.ts'],
-      }),
-    })
+    getLatestPhaseArtifactMock.mockImplementation((_ticketId: string, artifactType: string) => (
+      artifactType === 'final_test_report'
+        ? {
+            content: JSON.stringify({
+              modifiedFiles: ['src/final.test.ts', 'src/feature.ts'],
+            }),
+          }
+        : undefined
+    ))
 
     await handleIntegration(TEST.ticketId, context, sendEvent)
 
@@ -152,6 +156,76 @@ describe('handleIntegration', () => {
       context.externalId,
       ['src/final.test.ts', 'src/feature.ts'],
     )
+  })
+
+  it('uses audited final-test candidate files when an audit is available', async () => {
+    const sendEvent = vi.fn<(event: TicketEvent) => void>()
+    getLatestPhaseArtifactMock.mockImplementation((_ticketId: string, artifactType: string) => (
+      artifactType === 'final_test_file_effects_audit'
+        ? {
+            content: JSON.stringify({
+              status: 'passed',
+              capturedAt: '2026-05-26T00:00:00.000Z',
+              baselineDirtyFiles: [],
+              dirtyFilesAfterTesting: [],
+              producedByFinalTesting: [],
+              declaredEffects: [{ path: 'tests/final.spec', intent: 'candidate' }],
+              candidateFiles: ['tests/final.spec'],
+              temporaryFiles: [],
+              unexpectedFiles: [],
+              unclassifiedFiles: [],
+              decisionRequiredFiles: [],
+              message: 'Final-test file effects were fully classified.',
+            }),
+          }
+        : undefined
+    ))
+
+    await handleIntegration(TEST.ticketId, context, sendEvent)
+
+    expect(prepareSquashCandidateMock).toHaveBeenCalledWith(
+      defaultPaths.worktreePath,
+      defaultPaths.baseBranch,
+      context.title,
+      context.externalId,
+      ['tests/final.spec'],
+    )
+  })
+
+  it('blocks integration when the latest final-test file effects audit is unresolved', async () => {
+    const sendEvent = vi.fn<(event: TicketEvent) => void>()
+    getLatestPhaseArtifactMock.mockImplementation((_ticketId: string, artifactType: string) => (
+      artifactType === 'final_test_file_effects_audit'
+        ? {
+            content: JSON.stringify({
+              status: 'blocked',
+              capturedAt: '2026-05-26T00:00:00.000Z',
+              baselineDirtyFiles: [],
+              dirtyFilesAfterTesting: [],
+              producedByFinalTesting: [],
+              declaredEffects: [],
+              candidateFiles: [],
+              temporaryFiles: [],
+              unexpectedFiles: [],
+              unclassifiedFiles: ['tmp/output.log'],
+              decisionRequiredFiles: ['tmp/output.log'],
+              message: 'Final testing left unclassified dirty file(s): tmp/output.log',
+            }),
+          }
+        : undefined
+    ))
+
+    await handleIntegration(TEST.ticketId, context, sendEvent)
+
+    expect(prepareSquashCandidateMock).not.toHaveBeenCalled()
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'ERROR',
+      message: 'Final testing left unclassified dirty file(s): tmp/output.log',
+      codes: ['FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED'],
+    })
+    const report = JSON.parse(insertPhaseArtifactMock.mock.calls[0]![1].content)
+    expect(report.status).toBe('blocked')
+    expect(report.errorCode).toBe('FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED')
   })
 
   it('missing ticket paths throws', async () => {

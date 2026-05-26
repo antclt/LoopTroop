@@ -10,7 +10,7 @@ import {
 import { realpathSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { isAbsolute, resolve } from 'node:path'
-import { ensureLocalGitExclude, resolveBaseBranchRef } from '../git/repository'
+import { ensureLocalGitExclude, resolveBaseBranchRef, tryFetchOrigin } from '../git/repository'
 import {
   detectGitBaseBranch,
   getTicketDir as resolveTicketDir,
@@ -356,12 +356,13 @@ function materializeWorktree(
 
 export function initializeTicket(options: InitializeOptions): InitializeTicketResult {
   const branchName = options.externalId
+  ensureGitRepo(options.projectFolder)
+  tryFetchOrigin(options.projectFolder)
   const baseBranch = detectGitBaseBranch(options.projectFolder)
   const baseBranchRef = ensureBaseBranch(options.projectFolder, baseBranch)
   const worktreePath = getTicketWorktreePath(options.projectFolder, options.externalId)
   const ticketDir = getTicketDir(options.projectFolder, options.externalId)
 
-  ensureGitRepo(options.projectFolder)
   ensureLoopTroopGitExclude(options.projectFolder)
   ensureLoopTroopRuntimeUntracked(options.projectFolder)
 

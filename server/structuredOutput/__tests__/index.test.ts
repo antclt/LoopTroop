@@ -2860,8 +2860,33 @@ describe.concurrent('structured output normalization', () => {
       summary: 'verify the whole workflow',
       testFiles: [],
       modifiedFiles: [],
+      fileEffects: [],
       testsCount: null,
     })
+  })
+
+  it('normalizes FINAL_TEST_COMMANDS file effects and preserves legacy candidate mapping', () => {
+    const result = normalizeFinalTestCommandsOutput([
+      '<FINAL_TEST_COMMANDS>',
+      'commands:',
+      '  - npm run test:server',
+      'modified_files:',
+      '  - tests/final.spec',
+      'file_effects:',
+      '  - path: tests/final.spec',
+      '    intent: candidate',
+      '  - path: tmp/output.log',
+      '    intent: temporary',
+      '    reason: created by test command',
+      '</FINAL_TEST_COMMANDS>',
+    ].join('\n'))
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.fileEffects).toEqual([
+      { path: 'tests/final.spec', intent: 'candidate' },
+      { path: 'tmp/output.log', intent: 'temporary', reason: 'created by test command' },
+    ])
   })
 
   it('records a single wrapper-key warning for exact FINAL_TEST_COMMANDS envelopes with wrapper objects', () => {

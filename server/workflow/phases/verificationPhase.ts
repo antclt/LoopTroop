@@ -34,6 +34,12 @@ import { runPreFlightChecks } from '../../phases/preflight/doctor'
 import type { FinalTestGenerationResult } from '../../phases/finalTest/generator'
 import { executeFinalTestWithRetries } from '../../phases/finalTest/executor'
 import { executeFinalTestCommands } from '../../phases/finalTest/runner'
+import {
+  buildFinalTestFileEffectsAudit,
+  captureFinalTestDirtyFiles,
+  FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
+  type FinalTestDirtyFile,
+} from '../../phases/finalTest/fileEffectsAudit'
 import { recordWorktreeStartCommit, resetWorktreeToCommit, WORKTREE_RESET_PRESERVE_PATHS } from '../../phases/execution/gitOps'
 import { broadcaster } from '../../sse/broadcaster'
 import { resolveInterviewCoverageFollowUpResolution } from '../interviewCoverageFollowUps'
@@ -3751,6 +3757,7 @@ export async function handleFinalTest(
   const executionSettings = resolveExecutionRuntimeSettings(context)
   const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
   const phaseStartCommit = recordWorktreeStartCommit(worktreePath)
+  let finalTestBaselineDirtyFiles: FinalTestDirtyFile[] = captureFinalTestDirtyFiles(worktreePath)
   const streamStates = new Map<string, OpenCodeStreamState>()
   const report = await executeFinalTestWithRetries(
     adapter,
@@ -3842,6 +3849,7 @@ export async function handleFinalTest(
             modelOutput: output,
             testFiles: validatedTestFiles,
             modifiedFiles: validatedModifiedFiles,
+            fileEffects: commandPlan.fileEffects,
             testsCount: commandPlan.testsCount,
             commands: [],
             errors: commandPlan.errors,
@@ -3858,6 +3866,7 @@ export async function handleFinalTest(
           ...(commandPlan.summary ? { summary: commandPlan.summary } : {}),
           testFiles: validatedTestFiles,
           modifiedFiles: validatedModifiedFiles,
+          fileEffects: commandPlan.fileEffects,
           testsCount: commandPlan.testsCount,
           modelOutput: output,
           planStructuredOutput,
@@ -3900,6 +3909,7 @@ export async function handleFinalTest(
         })
       },
       onAttemptStart: (attempt) => {
+        finalTestBaselineDirtyFiles = captureFinalTestDirtyFiles(worktreePath)
         emitPhaseLog(
           ticketId,
           context.externalId,
@@ -4053,6 +4063,29 @@ export async function handleFinalTest(
     },
   )
   if (report.passed) {
+    const dirtyFilesAfterTesting = captureFinalTestDirtyFiles(worktreePath)
+    const fileEffectsAudit = buildFinalTestFileEffectsAudit({
+      baselineDirtyFiles: finalTestBaselineDirtyFiles,
+      dirtyFilesAfterTesting,
+      declaredEffects: report.fileEffects,
+    })
+    insertPhaseArtifact(ticketId, {
+      phase: 'RUNNING_FINAL_TEST',
+      artifactType: FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
+      content: JSON.stringify(fileEffectsAudit),
+    })
+    emitPhaseLog(
+      ticketId,
+      context.externalId,
+      'RUNNING_FINAL_TEST',
+      'info',
+      fileEffectsAudit.status === 'passed'
+        ? `Final-test file effects audit passed (${fileEffectsAudit.producedByFinalTesting.length} dirty file effect${fileEffectsAudit.producedByFinalTesting.length === 1 ? '' : 's'} classified).`
+        : `Final-test file effects audit needs a decision for ${fileEffectsAudit.decisionRequiredFiles.join(', ')}.`,
+      {
+        audit: fileEffectsAudit,
+      },
+    )
     emitPhaseLog(ticketId, context.externalId, 'RUNNING_FINAL_TEST', 'info', `Final tests passed after ${report.attempt ?? 1} attempt${report.attempt === 1 ? '' : 's'} (${report.commands.length} command${report.commands.length === 1 ? '' : 's'}).`)
     sendEvent({ type: 'TESTS_PASSED' })
     return

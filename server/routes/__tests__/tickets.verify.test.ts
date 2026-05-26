@@ -7,6 +7,7 @@ import { attachProject } from '../../storage/projects'
 import {
   createTicket,
   getLatestPhaseArtifact,
+  getTicketByRef,
   insertPhaseArtifact,
   patchTicket,
 } from '../../storage/tickets'
@@ -33,6 +34,9 @@ vi.mock('../../workflow/phases/pullRequestPhase', () => ({
   refreshPullRequestReport: refreshPullRequestReportMock,
   refreshPullRequestState: refreshPullRequestStateMock,
   completeMergedPullRequest: completeMergedPullRequestMock,
+  isPullRequestLocalSyncError: (error: unknown) => (
+    error instanceof Error && error.name === 'PullRequestLocalSyncError'
+  ),
   completeCloseUnmerged: completeCloseUnmergedMock,
 }))
 
@@ -232,6 +236,27 @@ describe('ticketRouter PR review routes', () => {
       message: 'Merge complete',
     })
     expect(completeMergedPullRequestMock).toHaveBeenCalledOnce()
+  })
+
+  it('blocks as a local sync failure when GitHub already merged the pull request', async () => {
+    const { ticket } = createWaitingPrReviewTicket()
+    const app = new Hono()
+    app.route('/api', ticketRouter)
+    completeMergedPullRequestMock.mockImplementationOnce(() => {
+      const error = new Error('Pull request merged; local sync failed for main: dirty worktree')
+      error.name = 'PullRequestLocalSyncError'
+      throw error
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/merge`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    const payload = await response.json() as { status?: string; message?: string }
+    expect(payload).toMatchObject({
+      status: 'BLOCKED_ERROR',
+      message: 'Pull request merged; local sync failed and ticket was blocked',
+    })
+    expect(getTicketByRef(ticket.id)?.errorMessage).toContain('Pull request merged; local sync failed')
   })
 
   it('persists a close-unmerged merge report artifact', async () => {

@@ -170,5 +170,9 @@ describe('server/git/github', () => {
       Array.isArray(args)
       && args.join(' ') === '-C /repo fetch --no-progress --prune origin'
     ))).toBe(true)
+    const fetchCallIndex = spawnSyncMock.mock.calls.findIndex(([, args]) => Array.isArray(args) && args.includes('fetch'))
+    const statusCallIndex = spawnSyncMock.mock.calls.findIndex(([, args]) => Array.isArray(args) && args.includes('status'))
+    expect(fetchCallIndex).toBeGreaterThanOrEqual(0)
+    expect(statusCallIndex).toBeGreaterThan(fetchCallIndex)
   })
 })

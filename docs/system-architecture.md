@@ -65,7 +65,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 7. The beads council drafts, votes, refines, expands, and coverage-checks the execution plan.
 8. The user approves the beads artifact and then reviews the pre-implementation execution setup plan.
 9. Implementation runs bead by bead in an isolated ticket worktree, with bounded retry per bead.
-10. Post-implementation final testing, integration, PR creation, review follow-up, and cleanup drive the ticket to `COMPLETED`, `CANCELED`, or `BLOCKED_ERROR`.
+10. Post-implementation final testing, file-effects auditing, integration, PR creation, review follow-up, and cleanup drive the ticket to `COMPLETED`, `CANCELED`, or `BLOCKED_ERROR`.
 
 The full phase map lives in [State Machine](state-machine.md).
 

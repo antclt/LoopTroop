@@ -216,6 +216,8 @@ Example UI-state response:
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
 | `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase; versions every non-implementation failed phase and keeps CODING on bead-scoped reset recovery |
 | `POST` | `/api/tickets/:id/continue` | Continue a blocked ticket only when eligible OpenCode/provider diagnostics, including `HTTP 402 Payment Required`, have a matching active preserved OpenCode session |
+| `POST` | `/api/tickets/:id/include-final-test-files` | Resolve a `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` block by marking all unclassified final-test-produced files as PR candidates and retrying integration |
+| `POST` | `/api/tickets/:id/discard-final-test-files` | Resolve a `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` block by discarding only audited final-test-produced dirty files and retrying integration |
 | `POST` | `/api/tickets/:id/dev-event` | Disabled by default; requires `LOOPTROOP_ENABLE_DEV_EVENT=1`, `LOOPTROOP_DEV_EVENT_TOKEN`, and `X-LoopTroop-Dev-Event-Token` |
 
 All approval routes, including the generic `/approve` route, require the hash of the content currently shown to the user:
@@ -240,6 +242,8 @@ Malformed or missing hashes return `400`. If the current server artifact no long
 Successful approvals write durable `approval_receipt` phase artifacts. Approval snapshots and receipts include `content_sha256`; interview and PRD receipts also include `stored_content_sha256` when approval stamping changes the persisted YAML.
 
 The Continue endpoint is available only from `BLOCKED_ERROR`. It requires a known `previousStatus`, an unresolved active error occurrence with a diagnostic `sessionId`, a matching active `opencode_sessions` row for that ticket and previous phase, and an OpenCode session that is still addressable by that exact id. It returns `409` and leaves the ticket blocked when those checks fail. On success it dispatches `CONTINUE`, records the pending session continuation, and the next owned prompt sends exactly `continue please` without creating a fresh phase attempt.
+
+The final-test file-effects recovery endpoints are available only from `BLOCKED_ERROR` when the active error code is `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` and the previous status is `INTEGRATING_CHANGES`. `include-final-test-files` writes a `final_test_file_effects_override` artifact with `include_unclassified_as_candidate`; `discard-final-test-files` removes/reverts only files listed by the latest `final_test_file_effects_audit` as produced or changed during final testing, then writes a `discard_unclassified` override. Both routes dispatch `RETRY` into a fresh integration attempt and do not use the OpenCode `/continue` session path.
 
 The cancel endpoint accepts an optional JSON request body to trigger cleanup at cancellation time. Both fields default to `false`; the ticket record itself is never deleted.
 

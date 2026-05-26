@@ -21,6 +21,7 @@ import {
 } from '../../storage/tickets'
 import {
   completeMergedPullRequest,
+  isPullRequestLocalSyncError,
   readPullRequestReport,
   refreshPullRequestReport,
   refreshPullRequestState,
@@ -127,15 +128,19 @@ function syncWaitingPullRequestTicket(ticketId: string) {
     }
   } catch (err) {
     const details = getErrorMessage(err)
-    emitRoutePhaseLog(ticketId, 'WAITING_PR_REVIEW', 'error', `PR sync failed: ${details}`)
+    const localSyncFailure = isPullRequestLocalSyncError(err)
+    const message = localSyncFailure
+      ? details
+      : `PR sync failed: ${details}`
+    emitRoutePhaseLog(ticketId, 'WAITING_PR_REVIEW', 'error', message)
     try {
       const fresh = getTicketByRef(ticketId)
       if (fresh && fresh.status === 'WAITING_PR_REVIEW') {
         ensureActorForTicket(ticketId)
         sendTicketEvent(ticketId, {
           type: 'ERROR',
-          message: `PR sync failed: ${details}`,
-          codes: ['PULL_REQUEST_SYNC_FAILED'],
+          message,
+          codes: [localSyncFailure ? 'PULL_REQUEST_LOCAL_SYNC_FAILED' : 'PULL_REQUEST_SYNC_FAILED'],
         })
       }
     } catch {

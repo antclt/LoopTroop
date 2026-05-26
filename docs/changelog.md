@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added future-ticket safety around PR merge completion and final-test file effects so merged PRs and test-produced files are handled audibly and recoverably.
 - Format commands in system logs to match tool calls exactly, using identical colors (`text-cyan-500`) and rendering output/error blocks in standard structured sections (squares/boxes) regardless of length.
 - Render bead separators in the per-phase normal log view for CODING phase, matching the existing Full Log bead grouping behavior.
 - Resume execution-setup and final-test attempt counters correctly after an app restart, so logs show the true attempt number and the maxIterations guard is respected across restarts.
@@ -39,12 +40,16 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 ### Added
+- Added language-agnostic final-test file-effects auditing. Final-test structured output now accepts `file_effects` entries (`candidate`, `temporary`, or `unexpected`), records baseline/post-test dirty files in a `final_test_file_effects_audit` artifact, and blocks integration with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` when final testing leaves undeclared dirty files.
+- Added blocked-error recovery actions for unresolved final-test file effects: **Include in PR** writes a `final_test_file_effects_override` that treats unclassified final-test-produced files as candidate changes, while **Discard and Continue** removes/reverts only files proven by the audit to have been produced or changed during final testing.
 - `emitOpenCodeSessionLogs` now emits an `audience: 'all'` milestone notification when `responseChars=0`, making silent OpenCode session restarts visible in the ALL tab across all workflow phases (coding, PRD, interview, verification, PR drafting, etc.).
 - New **OpenCode Max Steps** profile setting (`opencodeSteps`, default `0`): caps the number of steps per OpenCode session. When set to a non-zero value, LoopTroop writes `opencode.json` at the worktree root before coding starts (git-excluded via per-worktree local exclude) and removes it in a `finally` block after coding completes. `0` means no limit — matching OpenCode's default behavior.
 - Added `opencodeSteps` to DB schema (`opencode_steps INTEGER DEFAULT 0`), Drizzle ORM profile schema, Zod profile route schema, frontend `Profile` interface, `numericFields` config, `buildInitialRawNumeric`, and `ProfileSetup.tsx` with a `NumericField` control and inline hint.
 - Added **OpenCode Max Steps** section to `docs/configuration.md` covering steps-vs-messages semantics, trade-offs, and git-exclusion implementation detail.
 
 ### Changed
+- PR merge completion now treats the GitHub merge as complete once GitHub reports the PR merged. Local base-branch sync runs afterward as a recoverable follow-up, and retries for already-merged PRs skip the remote merge call and resume local sync/cleanup.
+- New ticket worktrees now fetch `origin` before resolving their base and prefer `origin/<baseBranch>` when that remote ref is available.
 - Successful `git push` with informational remote STDERR is now rendered as a compact `→ push completed` log entry in `commandLogger`, suppressing the verbose multi-line `STDERR:` block.
 - Changed command tag `[CMD]` and text colors to match tool logs (`text-cyan-500`) instead of `text-zinc-500`.
 - Bypassed the length/complexity filter (`shouldRenderImplicitStdoutSection`) in `splitLegacyCommandBody` to ensure compact command outputs are always rendered as structured `STDOUT` or `ERROR` boxes.

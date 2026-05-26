@@ -11,6 +11,7 @@ export interface FinalTestCommandPlan {
   summary: string | null
   testFiles: string[]
   modifiedFiles: string[]
+  fileEffects: Array<{ path: string; intent: 'candidate' | 'temporary' | 'unexpected'; reason?: string }>
   testsCount: number | null
   errors: string[]
   repairApplied?: boolean
@@ -33,6 +34,7 @@ export function parseFinalTestCommands(output: string): FinalTestCommandPlan {
       summary: null,
       testFiles: [],
       modifiedFiles: [],
+      fileEffects: [],
       testsCount: null,
       errors: parsed.errors,
       repairApplied: parsed.repairApplied,
@@ -48,6 +50,7 @@ export function parseFinalTestCommands(output: string): FinalTestCommandPlan {
     summary: parsed.value.summary,
     testFiles: parsed.value.testFiles,
     modifiedFiles: parsed.value.modifiedFiles,
+    fileEffects: parsed.value.fileEffects,
     testsCount: parsed.value.testsCount,
     errors: [],
     repairApplied: parsed.repairApplied,

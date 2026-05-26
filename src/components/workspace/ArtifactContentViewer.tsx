@@ -16,6 +16,7 @@ import { encode } from 'gpt-tokenizer'
 import { ChevronDown, ChevronRight, Trophy, Copy, Check, Lightbulb, CheckCircle2, XCircle, AlertTriangle, FileCode2, ExternalLink, GitPullRequest } from 'lucide-react'
 import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
 import { ModelBadge, ModelIcon } from '@/components/shared/ModelBadge'
+import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { useLogs } from '@/context/useLogContext'
@@ -5416,6 +5417,21 @@ function FinalTestResultsView({ content }: { content: string }) {
             <div className="rounded-md border border-border bg-background px-3 py-2 text-xs font-mono text-foreground space-y-0.5">
               {parsed.testFiles.map((file, i) => (
                 <div key={i}>{file}</div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {parsed.fileEffects && parsed.fileEffects.length > 0 && (
+          <div className="space-y-1">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">File Effects</div>
+            <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-foreground space-y-1">
+              {parsed.fileEffects.map((effect, i) => (
+                <div key={`${effect.path}:${effect.intent}:${i}`} className="flex flex-wrap gap-2">
+                  <span className="font-mono">{effect.path}</span>
+                  <Badge variant="outline" className="text-[10px]">{effect.intent}</Badge>
+                  {effect.reason ? <span className="text-muted-foreground">{effect.reason}</span> : null}
+                </div>
               ))}
             </div>
           </div>

@@ -76,7 +76,7 @@ Read more: [Core Philosophy](core-philosophy.md), [System Architecture](system-a
 
 ## What does `BLOCKED_ERROR` mean?
 
-It means the workflow hit a failure that LoopTroop decided not to continue through automatically. The system stores the exact `previousStatus`, captures error details and history, and waits for you to either retry that phase or cancel the ticket.
+It means the workflow hit a failure that LoopTroop decided not to continue through automatically. The system stores the exact `previousStatus`, captures error details and history, and waits for an explicit recovery choice: retry, cancel, eligible same-session Continue, or final-test file-effects actions such as Include in PR / Discard and Continue when testing left unclassified dirty files.
 
 It is a recovery state, not a silent dead end.
 

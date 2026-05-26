@@ -345,6 +345,8 @@ export interface FinalTestAttemptHistoryEntryData {
   summary?: string
   commands: string[]
   testFiles: string[]
+  modifiedFiles?: string[]
+  fileEffects?: Array<{ path: string; intent: string; reason?: string }>
   errors: string[]
   failureReason?: string
   noteAppended?: string
@@ -357,6 +359,8 @@ export interface FinalTestExecutionReportData {
   plannedBy: string
   summary?: string
   testFiles?: string[]
+  modifiedFiles?: string[]
+  fileEffects?: Array<{ path: string; intent: string; reason?: string }>
   testsCount?: number | null
   modelOutput: string
   commands: FinalTestCommandResultData[]

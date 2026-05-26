@@ -46,6 +46,8 @@ function normalizeCandidatePath(filePath: string): string | null {
     || normalized.includes('/../')
     || normalized === '.ticket'
     || normalized.startsWith('.ticket/')
+    || normalized === '.looptroop'
+    || normalized.startsWith('.looptroop/')
   ) {
     return null
   }
@@ -109,6 +111,7 @@ export function prepareSquashCandidate(
       '--',
       '.',
       ':(top,exclude).ticket',
+      ':(top,exclude).looptroop',
     ])))
     const explicitFiles = uniqueCandidatePaths(extraFilesToStage)
     const candidateFiles = uniqueCandidatePaths([
@@ -134,7 +137,7 @@ export function prepareSquashCandidate(
       runGit(['add', '-v', '-A', '--', ...batch.map(toLiteralPathspec)])
     }
 
-    const stagedChanges = runGit(['diff', '--cached', '--name-only', '--', '.', ':(top,exclude).ticket'])
+    const stagedChanges = runGit(['diff', '--cached', '--name-only', '--', '.', ':(top,exclude).ticket', ':(top,exclude).looptroop'])
     if (!stagedChanges) {
       runGit(['reset', '--mixed', preSquashHead])
       return {

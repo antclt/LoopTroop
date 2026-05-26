@@ -11,7 +11,9 @@ import { updateProject } from '../../storage/projects'
 import {
   buildPullRequestContext,
   buildPullRequestPrompt,
+  completeMergedPullRequest,
   handleCreatePullRequest,
+  isPullRequestLocalSyncError,
   readPullRequestReport,
 } from '../phases/pullRequestPhase'
 
@@ -292,5 +294,81 @@ describe('pull request drafting context', () => {
     expect(mocks.pushBranchRef).toHaveBeenCalledTimes(1)
     expect(mocks.createOrUpdateDraftPullRequest).not.toHaveBeenCalled()
     expect(getLatestPhaseArtifact(ticket.id, 'git_recovery_receipt', 'CREATING_PULL_REQUEST')).toBeDefined()
+  })
+
+  it('records a merged PR separately when local base sync fails', () => {
+    resetTestDb()
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Merge sync failure',
+    })
+    const prInfo = {
+      number: 42,
+      url: 'https://github.example/pulls/42',
+      title: 'Merge sync failure',
+      body: 'Body',
+      state: 'open' as const,
+      baseRefName: 'main',
+      headRefName: ticket.externalId,
+      headRefOid: 'candidate123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      closedAt: null,
+      mergedAt: null,
+    }
+    mocks.getPullRequestForBranch.mockReturnValue(prInfo)
+    mocks.mergePullRequest.mockReturnValue({
+      ...prInfo,
+      state: 'merged',
+      mergedAt: '2026-01-01T00:05:00.000Z',
+    })
+    mocks.syncLocalBaseBranch.mockImplementation(() => {
+      throw new Error('Project worktree has uncommitted changes')
+    })
+
+    let thrown: unknown
+    try {
+      completeMergedPullRequest({
+        ticketId: ticket.id,
+        externalId: ticket.externalId,
+        projectPath: context.externalId,
+        baseBranch: 'main',
+        headBranch: ticket.externalId,
+        candidateCommitSha: 'candidate123',
+        prReport: {
+          status: 'passed',
+          completedAt: '2026-01-01T00:00:00.000Z',
+          baseBranch: 'main',
+          headBranch: ticket.externalId,
+          candidateCommitSha: 'candidate123',
+          prNumber: 42,
+          prUrl: prInfo.url,
+          prState: 'open',
+          prHeadSha: 'candidate123',
+          title: prInfo.title,
+          body: prInfo.body,
+          createdAt: prInfo.createdAt,
+          updatedAt: prInfo.updatedAt,
+          mergedAt: null,
+          closedAt: null,
+          message: 'Draft PR ready.',
+        },
+      })
+    } catch (error) {
+      thrown = error
+    }
+
+    expect(isPullRequestLocalSyncError(thrown)).toBe(true)
+    expect(mocks.mergePullRequest).toHaveBeenCalledOnce()
+    expect(mocks.tryDeleteRemoteBranch).not.toHaveBeenCalled()
+    const mergeReport = getLatestPhaseArtifact(ticket.id, 'merge_report', 'WAITING_PR_REVIEW')
+    expect(JSON.parse(mergeReport!.content)).toMatchObject({
+      status: 'local_sync_failed',
+      disposition: 'merged',
+      localSyncError: 'Project worktree has uncommitted changes',
+    })
+    expect(readPullRequestReport(ticket.id)).toMatchObject({
+      prState: 'merged',
+      message: expect.stringContaining('local sync failed for main'),
+    })
   })
 })

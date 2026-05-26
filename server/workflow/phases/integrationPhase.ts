@@ -2,6 +2,10 @@ import type { TicketContext, TicketEvent } from '../../machines/types'
 import { getLatestPhaseArtifact, getTicketPaths, insertPhaseArtifact } from '../../storage/tickets'
 import { isMockOpenCodeMode } from '../../opencode/factory'
 import { prepareSquashCandidate } from '../../phases/integration/squash'
+import {
+  FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
+  resolveFinalTestCandidateFiles,
+} from '../../phases/finalTest/fileEffectsAudit'
 import { emitPhaseLog } from './helpers'
 import { handleMockExecutionUnsupported } from './executionPhase'
 import { withCommandLoggingAsync } from '../../log/commandLogger'
@@ -54,7 +58,34 @@ export async function handleIntegration(
   emitPhaseLog(ticketId, context.externalId, 'INTEGRATING_CHANGES', 'info',
     'Analyzing ticket branch for squash...', { source: 'system', audience: 'all' })
 
-  const finalTestFilesToStage = readFinalTestFilesToStage(ticketId)
+  const finalTestFileResolution = resolveFinalTestCandidateFiles(ticketId)
+  if (!finalTestFileResolution.ok) {
+    const message = finalTestFileResolution.message
+      ?? 'Final testing left unclassified dirty files that require a decision before integration can continue.'
+    insertPhaseArtifact(ticketId, {
+      phase: 'INTEGRATING_CHANGES',
+      artifactType: 'integration_report',
+      content: JSON.stringify({
+        status: 'blocked',
+        completedAt: new Date().toISOString(),
+        baseBranch: paths.baseBranch,
+        errorCode: FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
+        message,
+      }),
+    })
+    emitPhaseLog(ticketId, context.externalId, 'INTEGRATING_CHANGES', 'info',
+      message, { source: 'system', audience: 'all', audit: finalTestFileResolution.audit })
+    sendEvent({
+      type: 'ERROR',
+      message,
+      codes: [FINAL_TEST_FILE_EFFECTS_ERROR_CODE],
+    })
+    return
+  }
+
+  const finalTestFilesToStage = finalTestFileResolution.audit
+    ? finalTestFileResolution.candidateFiles
+    : readFinalTestFilesToStage(ticketId)
 
   const squash = prepareSquashCandidate(
     paths.worktreePath,

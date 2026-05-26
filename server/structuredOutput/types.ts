@@ -93,7 +93,16 @@ export interface FinalTestCommandPayload {
   summary: string | null
   testFiles: string[]
   modifiedFiles: string[]
+  fileEffects: FinalTestFileEffect[]
   testsCount: number | null
+}
+
+export type FinalTestFileEffectIntent = 'candidate' | 'temporary' | 'unexpected'
+
+export interface FinalTestFileEffect {
+  path: string
+  intent: FinalTestFileEffectIntent
+  reason?: string
 }
 
 export interface ExecutionSetupReusableArtifactPayload {

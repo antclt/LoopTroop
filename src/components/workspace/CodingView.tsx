@@ -163,7 +163,7 @@ function normalizeBead(input: {
   dependencies?: { blocked_by?: string[]; blocks?: string[] }
   notes?: string | string[]
   createdAt?: string
-  updatedAt?: string
+  updatedAt?: string | null
   completedAt?: string
   startedAt?: string | null
   beadStartCommit?: string | null
@@ -285,9 +285,9 @@ async function fetchTicketBeads(ticketId: string): Promise<TicketBead[]> {
           dependencies?: { blocked_by?: string[]; blocks?: string[] }
           notes?: string | string[]
           createdAt?: string
-          updatedAt?: string
+          updatedAt?: string | null
           completedAt?: string
-          startedAt?: string
+          startedAt?: string | null
           beadStartCommit?: string | null
         } =>
           Boolean(item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string' && typeof (item as { title?: unknown }).title === 'string'),

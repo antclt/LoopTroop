@@ -108,6 +108,7 @@ describe('handleFinalTest', () => {
         summary: 'verify retry state',
         testFiles: ['src/final.test.ts'],
         modifiedFiles: ['src/final.test.ts'],
+        fileEffects: [{ path: 'src/final.test.ts', intent: 'candidate' }],
         testsCount: 1,
         modelOutput: '<FINAL_TEST_COMMANDS>{"commands":["npm run test:final"]}</FINAL_TEST_COMMANDS>',
         commands: [
@@ -186,6 +187,7 @@ describe('handleFinalTest', () => {
         summary: 'passed after retry reset',
         testFiles: [],
         modifiedFiles: [],
+        fileEffects: [],
         testsCount: 0,
         modelOutput: '<FINAL_TEST_COMMANDS>{"commands":[]}</FINAL_TEST_COMMANDS>',
         commands: [],

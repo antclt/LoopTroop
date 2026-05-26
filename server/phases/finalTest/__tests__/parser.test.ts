@@ -16,6 +16,7 @@ describe.concurrent('parseFinalTestCommands', () => {
       summary: null,
       testFiles: [],
       modifiedFiles: [],
+      fileEffects: [],
       testsCount: null,
       errors: ['No final test command marker found'],
       repairApplied: false,
@@ -70,6 +71,10 @@ describe.concurrent('parseFinalTestCommands', () => {
     expect(result.markerFound).toBe(true)
     expect(result.testFiles).toEqual(['src/test1.ts', 'src/test2.ts'])
     expect(result.modifiedFiles).toEqual(['src/test1.ts', 'src/test2.ts'])
+    expect(result.fileEffects).toEqual([
+      { path: 'src/test1.ts', intent: 'candidate' },
+      { path: 'src/test2.ts', intent: 'candidate' },
+    ])
   })
 
   it('coerces a single test_files string to an array', () => {
@@ -135,6 +140,10 @@ describe.concurrent('parseFinalTestCommands', () => {
     const result = parseFinalTestCommands(output)
     expect(result.testFiles).toEqual(['src/my.test.ts'])
     expect(result.modifiedFiles).toEqual(['src/my.test.ts', 'src/feature.ts'])
+    expect(result.fileEffects).toEqual([
+      { path: 'src/my.test.ts', intent: 'candidate' },
+      { path: 'src/feature.ts', intent: 'candidate' },
+    ])
   })
 
   it('coerces a single modified_files string to an array', () => {
@@ -144,5 +153,29 @@ describe.concurrent('parseFinalTestCommands', () => {
     expect(result.modifiedFiles).toEqual(['src/feature.ts'])
     expect(result.repairApplied).toBe(true)
     expect(result.repairWarnings).toContain('Coerced modified_files from string to array')
+  })
+
+  it('parses explicit file effects with candidate, temporary, and unexpected intents', () => {
+    const output = [
+      '<FINAL_TEST_COMMANDS>',
+      JSON.stringify({
+        commands: ['npm test'],
+        test_files: ['tests/final.spec'],
+        modified_files: ['tests/final.spec'],
+        file_effects: [
+          { path: 'tests/final.spec', intent: 'candidate' },
+          { path: 'tmp/output.log', intent: 'temporary', reason: 'created by test command' },
+          { path: 'cache/state.db', intent: 'unexpected', reason: 'left dirty by tool' },
+        ],
+      }),
+      '</FINAL_TEST_COMMANDS>',
+    ].join('')
+
+    const result = parseFinalTestCommands(output)
+    expect(result.fileEffects).toEqual([
+      { path: 'tests/final.spec', intent: 'candidate' },
+      { path: 'tmp/output.log', intent: 'temporary', reason: 'created by test command' },
+      { path: 'cache/state.db', intent: 'unexpected', reason: 'left dirty by tool' },
+    ])
   })
 })

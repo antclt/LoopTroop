@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { FORCE_KILL_DELAY_MS } from '../../lib/constants'
 import type { StructuredOutputMetadata } from '../../structuredOutput/types'
 import type { RawAttempt } from '../../council/types'
+import type { FinalTestFileEffect } from './fileEffectsAudit'
 
 import { createRequire } from 'node:module'
 const _require = createRequire(import.meta.url)
@@ -81,6 +82,7 @@ export interface FinalTestAttemptHistoryEntry {
   commands: string[]
   testFiles: string[]
   modifiedFiles: string[]
+  fileEffects: FinalTestFileEffect[]
   errors: string[]
   failureReason?: string
   noteAppended?: string
@@ -94,6 +96,7 @@ export interface FinalTestExecutionReport {
   summary?: string
   testFiles: string[]
   modifiedFiles: string[]
+  fileEffects: FinalTestFileEffect[]
   testsCount: number | null
   modelOutput: string
   commands: FinalTestCommandResult[]
@@ -174,6 +177,7 @@ export async function executeFinalTestCommands(input: {
   summary?: string
   testFiles?: string[]
   modifiedFiles?: string[]
+  fileEffects?: FinalTestFileEffect[]
   testsCount?: number | null
   modelOutput: string
   planStructuredOutput?: StructuredOutputMetadata
@@ -223,6 +227,7 @@ export async function executeFinalTestCommands(input: {
     summary: input.summary,
     testFiles: input.testFiles ?? [],
     modifiedFiles: input.modifiedFiles ?? input.testFiles ?? [],
+    fileEffects: input.fileEffects ?? [],
     testsCount: input.testsCount ?? null,
     modelOutput: input.modelOutput,
     commands: commandResults,

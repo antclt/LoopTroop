@@ -6,6 +6,8 @@ import type {
   ExecutionSetupProfilePayload,
   ExecutionSetupResultPayload,
   FinalTestCommandPayload,
+  FinalTestFileEffect,
+  FinalTestFileEffectIntent,
   StructuredOutputResult,
 } from './types'
 import {
@@ -84,6 +86,58 @@ function normalizeCompletionChecks(value: unknown): BeadChecks {
     typecheck: normalizeCompletionCheckValue(typecheck),
     qualitative: normalizeCompletionCheckValue(qualitative),
   }
+}
+
+function normalizeFinalTestFileEffectIntent(value: unknown): FinalTestFileEffectIntent {
+  if (typeof value !== 'string' || !value.trim()) {
+    throw new Error('Final test file effect intent must be a non-empty string')
+  }
+  const normalized = normalizeKey(value)
+  if (['candidate', 'include', 'included', 'commit', 'committed', 'permanent', 'keep'].includes(normalized)) {
+    return 'candidate'
+  }
+  if (['temporary', 'temp', 'scratch', 'artifact', 'generated', 'exclude', 'excluded'].includes(normalized)) {
+    return 'temporary'
+  }
+  if (['unexpected', 'unknown', 'unintended', 'accidental'].includes(normalized)) {
+    return 'unexpected'
+  }
+  throw new Error(`Invalid final test file effect intent: ${value}`)
+}
+
+function normalizeFinalTestFileEffects(value: unknown): FinalTestFileEffect[] {
+  if (value === undefined || value === null) return []
+  const rawEffects = Array.isArray(value) ? value : [value]
+  const effects: FinalTestFileEffect[] = []
+  const seen = new Set<string>()
+
+  for (const rawEffect of rawEffects) {
+    if (typeof rawEffect === 'string') {
+      const path = rawEffect.trim()
+      if (!path || seen.has(path)) continue
+      seen.add(path)
+      effects.push({ path, intent: 'candidate' })
+      continue
+    }
+    if (!isRecord(rawEffect)) {
+      throw new Error('Final test file effect entries must be objects or paths')
+    }
+    const path = toOptionalString(getValueByAliases(rawEffect, ['path', 'file', 'filepath', 'file_path']))
+    if (!path) {
+      throw new Error('Final test file effect entry is missing path')
+    }
+    const intent = normalizeFinalTestFileEffectIntent(getValueByAliases(rawEffect, ['intent', 'kind', 'type', 'action']))
+    const reason = toOptionalString(getValueByAliases(rawEffect, ['reason', 'why', 'notes', 'summary']))
+    if (seen.has(path)) continue
+    seen.add(path)
+    effects.push({
+      path,
+      intent,
+      ...(reason ? { reason } : {}),
+    })
+  }
+
+  return effects
 }
 
 export function normalizeBeadCompletionMarkerOutput(rawContent: string): StructuredOutputResult<BeadCompletionPayload> {
@@ -243,6 +297,18 @@ export function normalizeFinalTestCommandsOutput(rawContent: string): Structured
         (modifiedFiles.length > 0 ? modifiedFiles : dedupedTestFiles),
       )]
 
+      const rawFileEffects = getValueByAliases(parsed, [
+        'file_effects',
+        'fileeffects',
+        'file_effect',
+        'fileeffect',
+        'effects',
+      ])
+      const explicitFileEffects = normalizeFinalTestFileEffects(rawFileEffects)
+      const fileEffects = explicitFileEffects.length > 0
+        ? explicitFileEffects
+        : dedupedModifiedFiles.map((path) => ({ path, intent: 'candidate' as const }))
+
       const rawTestsCount = getValueByAliases(parsed, ['tests_count', 'testscount', 'test_count', 'testcount', 'num_tests'])
       const testsCount = toInteger(rawTestsCount)
 
@@ -255,6 +321,7 @@ export function normalizeFinalTestCommandsOutput(rawContent: string): Structured
           summary,
           testFiles: dedupedTestFiles,
           modifiedFiles: dedupedModifiedFiles,
+          fileEffects,
           testsCount,
         },
         normalizedContent: JSON.stringify({
@@ -262,6 +329,7 @@ export function normalizeFinalTestCommandsOutput(rawContent: string): Structured
           ...(summary ? { summary } : {}),
           ...(dedupedTestFiles.length > 0 ? { testFiles: dedupedTestFiles } : {}),
           ...(dedupedModifiedFiles.length > 0 ? { modifiedFiles: dedupedModifiedFiles } : {}),
+          ...(fileEffects.length > 0 ? { fileEffects } : {}),
           ...(testsCount != null ? { testsCount } : {}),
         }),
         repairApplied: candidateWarnings.length > 0 || shouldRecordStructuredCandidateRecovery(rawContent, candidate, { tag: 'FINAL_TEST_COMMANDS' }),

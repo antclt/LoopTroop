@@ -90,7 +90,7 @@ export interface PullRequestReport {
 }
 
 export interface MergeCompletionReport {
-  status: 'passed'
+  status: 'passed' | 'local_sync_failed'
   completedAt: string
   disposition: 'merged' | 'closed_unmerged'
   baseBranch: string
@@ -103,7 +103,22 @@ export interface MergeCompletionReport {
   localBaseHead: string | null
   remoteBaseHead: string | null
   remoteBranchDeleteWarning: string | null
+  localSyncError?: string
   message: string
+}
+
+export class PullRequestLocalSyncError extends Error {
+  public readonly syncCause: unknown
+
+  constructor(message: string, cause: unknown) {
+    super(message)
+    this.name = 'PullRequestLocalSyncError'
+    this.syncCause = cause
+  }
+}
+
+export function isPullRequestLocalSyncError(error: unknown): error is PullRequestLocalSyncError {
+  return error instanceof PullRequestLocalSyncError
 }
 
 function normalizeStringArray(value: unknown): string[] {
@@ -762,7 +777,52 @@ export function completeMergedPullRequest(input: {
     }
 
     currentStep = 'sync_local_base_branch'
-    const syncResult = syncLocalBaseBranch(input.projectPath, input.baseBranch)
+    let syncResult: ReturnType<typeof syncLocalBaseBranch>
+    try {
+      syncResult = syncLocalBaseBranch(input.projectPath, input.baseBranch)
+    } catch (syncError) {
+      if (pr.state === 'merged') {
+        const syncMessage = getErrorMessage(syncError)
+        const message = `Pull request merged; local sync failed for ${input.baseBranch}: ${syncMessage}`
+        const report: MergeCompletionReport = {
+          status: 'local_sync_failed',
+          completedAt: new Date().toISOString(),
+          disposition: 'merged',
+          baseBranch: input.baseBranch,
+          headBranch: input.headBranch,
+          candidateCommitSha: input.candidateCommitSha,
+          prNumber: pr.number,
+          prUrl: pr.url,
+          prState: pr.state,
+          prHeadSha: pr.headRefOid,
+          localBaseHead: null,
+          remoteBaseHead: null,
+          remoteBranchDeleteWarning: null,
+          localSyncError: syncMessage,
+          message,
+        }
+        insertPhaseArtifact(input.ticketId, {
+          phase: 'WAITING_PR_REVIEW',
+          artifactType: MERGE_REPORT_ARTIFACT,
+          content: JSON.stringify(report),
+        })
+        refreshPullRequestReport(input.ticketId, {
+          ...input.prReport,
+          completedAt: new Date().toISOString(),
+          prNumber: pr.number,
+          prUrl: pr.url,
+          prState: pr.state,
+          prHeadSha: pr.headRefOid,
+          createdAt: pr.createdAt,
+          updatedAt: pr.updatedAt,
+          mergedAt: pr.mergedAt,
+          closedAt: pr.closedAt,
+          message,
+        })
+        throw new PullRequestLocalSyncError(message, syncError)
+      }
+      throw syncError
+    }
     const remoteBranchDelete = pr.state === 'merged'
       ? tryDeleteRemoteBranch(input.projectPath, input.headBranch)
       : { deleted: false, warning: null as string | null }
