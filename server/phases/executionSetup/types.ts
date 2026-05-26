@@ -87,6 +87,19 @@ export function toExecutionSetupProfileArtifact(profile: ExecutionSetupProfile):
     temp_roots: profile.tempRoots,
     bootstrap_commands: profile.bootstrapCommands,
     tooling_probe_commands: profile.toolingProbeCommands,
+    ...(profile.toolRequirements
+      ? {
+          tool_requirements: profile.toolRequirements.map((requirement) => ({
+            launcher: requirement.launcher,
+            required_by: requirement.requiredBy,
+            status: requirement.status,
+            missing_probe: requirement.missingProbe,
+            provisioning_commands: requirement.provisioningCommands,
+            final_probe: requirement.finalProbe,
+            failure_reason: requirement.failureReason,
+          })),
+        }
+      : {}),
     reusable_artifacts: profile.reusableArtifacts.map((artifact) => ({
       path: artifact.path,
       kind: artifact.kind,

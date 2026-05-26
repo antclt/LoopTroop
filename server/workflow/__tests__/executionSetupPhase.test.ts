@@ -295,7 +295,90 @@ describe('handleExecutionSetup', () => {
 
     expect(sendEvent).toHaveBeenCalledWith({
       type: 'EXECUTION_SETUP_FAILED',
+      errors: expect.arrayContaining([
+        'Execution setup checks must all pass before the setup profile can be accepted.',
+        expect.stringContaining('tool_requirements evidence'),
+      ]),
+    })
+    expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
+  })
+
+  it.each([
+    {
+      title: 'failed provisioning evidence',
+      toolRequirements: [
+        {
+          launcher: 'project-tool',
+          requiredBy: ['project_commands.test_full[0]'],
+          status: 'failed' as const,
+          missingProbe: 'project-tool --version',
+          provisioningCommands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+          finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
+          failureReason: 'official archive download returned 404',
+        },
+      ],
+    },
+    {
+      title: 'no safe provisioning path evidence',
+      toolRequirements: [
+        {
+          launcher: 'project-tool',
+          requiredBy: ['project_commands.test_full[0]'],
+          status: 'not_provisionable' as const,
+          missingProbe: 'project-tool --version',
+          provisioningCommands: [],
+          finalProbe: '',
+          failureReason: 'the repository requires a licensed interactive installer that cannot run safely in temp roots',
+        },
+      ],
+    },
+  ])('accepts tooling failure evidence for $title', async ({ title, toolRequirements }) => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: `Execution setup ${title}`,
+    })
+    writeExecutionSetupPlan(ticket.id, ticket.externalId)
+
+    const profile = {
+      ...readyExecutionSetupProfile(ticket.externalId),
+      toolRequirements,
+    }
+
+    executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
+      const callbacks = args[5] as {
+        evaluateGeneration: (entry: { attempt: number; generation: unknown }) => Promise<unknown>
+      }
+      return await callbacks.evaluateGeneration({
+        attempt: 1,
+        generation: buildExecutionSetupGeneration({
+          profile,
+          checks: {
+            workspace: 'pass',
+            tooling: 'fail',
+            tempScope: 'pass',
+            policy: 'pass',
+          },
+        }),
+      })
+    })
+
+    const sendEvent = vi.fn()
+    await handleExecutionSetup(
+      ticket.id,
+      {
+        ...context,
+        lockedMainImplementer: TEST.implementer,
+      },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'EXECUTION_SETUP_FAILED',
       errors: ['Execution setup checks must all pass before the setup profile can be accepted.'],
+    })
+    expect(sendEvent).not.toHaveBeenCalledWith({
+      type: 'EXECUTION_SETUP_FAILED',
+      errors: expect.arrayContaining([expect.stringContaining('tool_requirements evidence')]),
     })
     expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
   })

@@ -111,6 +111,18 @@ export interface ExecutionSetupReusableArtifactPayload {
   purpose: string
 }
 
+export type ExecutionSetupToolRequirementStatus = 'available' | 'provisioned' | 'failed' | 'not_provisionable'
+
+export interface ExecutionSetupToolRequirementPayload {
+  launcher: string
+  requiredBy: string[]
+  status: ExecutionSetupToolRequirementStatus
+  missingProbe: string
+  provisioningCommands: string[]
+  finalProbe: string
+  failureReason: string
+}
+
 export interface ExecutionSetupPlanStepPayload {
   id: string
   title: string
@@ -161,6 +173,7 @@ export interface ExecutionSetupProfilePayload {
   tempRoots: string[]
   bootstrapCommands: string[]
   toolingProbeCommands: string[]
+  toolRequirements?: ExecutionSetupToolRequirementPayload[]
   reusableArtifacts: ExecutionSetupReusableArtifactPayload[]
   projectCommands: {
     prepare: string[]

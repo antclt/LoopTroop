@@ -184,6 +184,29 @@ async function validateExecutionSetupRuntimeProfile(input: {
   return errors
 }
 
+function validateExecutionSetupToolingFailureEvidence(input: {
+  result: ExecutionSetupResult
+  profile: ExecutionSetupProfile
+}): string[] {
+  if (input.result.checks.tooling !== 'fail') return []
+
+  const requirements = input.profile.toolRequirements ?? []
+  const hasFailedProvisioningEvidence = requirements.some((requirement) => (
+    requirement.status === 'failed'
+    && requirement.provisioningCommands.some((command) => command.trim().length > 0)
+  ))
+  const hasNoSafePathEvidence = requirements.some((requirement) => (
+    requirement.status === 'not_provisionable'
+    && requirement.failureReason.trim().length > 0
+  ))
+
+  if (hasFailedProvisioningEvidence || hasNoSafePathEvidence) return []
+
+  return [
+    'Execution setup tooling failure must include tool_requirements evidence: record a failed requirement with provisioning_commands or a not_provisionable requirement with failure_reason before returning checks.tooling=fail.',
+  ]
+}
+
 async function generateExecutionSetupRetryNote(input: {
   ticketId: string
   context: TicketContext
@@ -305,6 +328,13 @@ export async function handleExecutionSetup(
             }
 
             if (profile) {
+              if (result) {
+                errors.push(...validateExecutionSetupToolingFailureEvidence({
+                  result,
+                  profile,
+                }))
+              }
+
               if (result && allChecksPass(result) && errors.length === 0) {
                 errors.push(...await validateExecutionSetupRuntimeProfile({
                   ticketId,

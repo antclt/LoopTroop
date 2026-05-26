@@ -5,6 +5,7 @@ import type {
   ExecutionSetupPlanPayload,
   ExecutionSetupProfilePayload,
   ExecutionSetupResultPayload,
+  ExecutionSetupToolRequirementStatus,
   FinalTestCommandPayload,
   FinalTestFileEffect,
   FinalTestFileEffectIntent,
@@ -555,6 +556,43 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
   }
 }
 
+function normalizeExecutionSetupToolRequirementStatus(value: unknown, label: string): ExecutionSetupToolRequirementStatus {
+  const raw = getRequiredString({ status: value }, ['status'], label)
+  const normalized = normalizeKey(raw)
+  if (normalized === 'available') return 'available'
+  if (['provisioned', 'prepared'].includes(normalized)) return 'provisioned'
+  if (['failed', 'fail', 'error'].includes(normalized)) return 'failed'
+  if (['notprovisionable', 'notpossible', 'nosafepath', 'unsupported'].includes(normalized)) {
+    return 'not_provisionable'
+  }
+  throw new Error(`Invalid execution setup tool requirement status: ${raw}`)
+}
+
+function normalizeExecutionSetupToolRequirements(value: unknown): ExecutionSetupProfilePayload['toolRequirements'] {
+  if (value === undefined || value === null) return undefined
+  if (!Array.isArray(value)) throw new Error('Execution setup profile tool_requirements must be a list')
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`tool_requirements[${index}] must be an object`)
+    return {
+      launcher: getRequiredString(entry, ['launcher', 'command', 'tool'], `tool_requirements[${index}].launcher`),
+      requiredBy: toStringArray(getValueByAliases(entry, ['requiredby', 'requiredfor', 'requiredcommands'])),
+      status: normalizeExecutionSetupToolRequirementStatus(
+        getValueByAliases(entry, ['status']),
+        `tool_requirements[${index}].status`,
+      ),
+      missingProbe: toOptionalString(getValueByAliases(entry, ['missingprobe', 'probe', 'discoveryprobe'])) ?? '',
+      provisioningCommands: toStringArray(getValueByAliases(entry, [
+        'provisioningcommands',
+        'provisioncommands',
+        'attemptedcommands',
+        'installcommands',
+      ])),
+      finalProbe: toOptionalString(getValueByAliases(entry, ['finalprobe', 'verificationprobe', 'probecommand'])) ?? '',
+      failureReason: toOptionalString(getValueByAliases(entry, ['failurereason', 'reason', 'blocker'])) ?? '',
+    }
+  })
+}
+
 function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePayload {
   if (!isRecord(value)) throw new Error('Execution setup profile is missing')
 
@@ -584,6 +622,12 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     'toolingprobes',
     'probecommands',
     'verificationcommands',
+  ]))
+  const toolRequirements = normalizeExecutionSetupToolRequirements(getValueByAliases(value, [
+    'toolrequirements',
+    'toolrequirement',
+    'toolingrequirements',
+    'requiredtools',
   ]))
 
   const rawReusableArtifacts = getValueByAliases(value, ['reusableartifacts', 'artifacts'])
@@ -618,6 +662,7 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     tempRoots: [...new Set(tempRoots)],
     bootstrapCommands,
     toolingProbeCommands,
+    ...(toolRequirements ? { toolRequirements } : {}),
     reusableArtifacts,
     projectCommands,
     qualityGatePolicy,
@@ -695,6 +740,19 @@ function toCanonicalExecutionSetupResultPayload(value: ExecutionSetupResultPaylo
       temp_roots: value.profile.tempRoots,
       bootstrap_commands: value.profile.bootstrapCommands,
       tooling_probe_commands: value.profile.toolingProbeCommands,
+      ...(value.profile.toolRequirements
+        ? {
+            tool_requirements: value.profile.toolRequirements.map((requirement) => ({
+              launcher: requirement.launcher,
+              required_by: requirement.requiredBy,
+              status: requirement.status,
+              missing_probe: requirement.missingProbe,
+              provisioning_commands: requirement.provisioningCommands,
+              final_probe: requirement.finalProbe,
+              failure_reason: requirement.failureReason,
+            })),
+          }
+        : {}),
       reusable_artifacts: value.profile.reusableArtifacts.map((artifact) => ({
         path: artifact.path,
         kind: artifact.kind,

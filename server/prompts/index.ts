@@ -777,8 +777,9 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
     'Workspace Writes: You may run repository-native setup commands from the approved plan. Execution-only toolchains, dependency caches, build caches, generated outputs, tool caches, setup logs, and reusable notes should be created under the approved temp roots, preferably `.ticket/runtime/execution-setup/**` and especially `.ticket/runtime/execution-setup/tool-cache/**` for toolchains.',
     'Gitignore Suggestions: If setup commands create untracked generated or local outputs outside approved temp roots because repository ignore coverage is missing, do not edit `.gitignore` during setup. Record the exact paths and recommended `.gitignore` entries in `cautions`, and prefer moving reusable setup outputs under approved temp roots when possible.',
     'Missing Tool Self-Healing: If a required command launcher, language runtime, package manager, or toolchain is missing, first attempt a user-space provision under the approved temp roots before declaring tooling failed. Prefer official project/language distribution archives, repository-native version managers, or lockfile-directed installers that can live under `.ticket/runtime/execution-setup/tool-cache/**`. Do not use `sudo`, global OS package-manager installs, or arbitrary source-tree install paths as the default path.',
-    'Go Toolchain Provisioning: For Go repositories, read `go.mod` and any `toolchain` directive to choose the required Go version. If `go` is missing or too old, download the official OS/architecture Go archive into `.ticket/runtime/execution-setup/tool-cache`, unpack it there, prepend its `bin` directory to PATH, verify with `go version`, then run the required Go probes/tests through that prepared PATH.',
-    'Reusable Runtime Wrapper: When you provision or need prepared runtime environment variables, create `.ticket/runtime/execution-setup/env.sh` and `.ticket/runtime/execution-setup/run`. The `run` wrapper must source `env.sh` and execute the command arguments. Record both files in `reusable_artifacts`, and list later project commands through the wrapper when needed, for example `./.ticket/runtime/execution-setup/run go test ./...`.',
+    'Missing required launchers: a failed version/info probe is discovery only; before returning `checks.tooling = fail`, attempt safe user-space provisioning under approved temp roots or record why no safe provisioning path exists.',
+    'Provisioning Examples, Non-Exhaustive: For Node, inspect `packageManager`, lockfiles, `.nvmrc`, or `.node-version` and use Corepack, a version manager, or official archives under `tool-cache`; for Python, inspect `pyproject.toml`, lockfiles, `.python-version`, or runtime files and use a local virtual environment/tool installer under `tool-cache`; for JavaScript runtimes such as Deno or Bun, inspect project config/lockfiles and use official user-space installers or archives under `tool-cache`. These examples are illustrative only; use any safe, repository-appropriate commands, installers, archives, package managers, or version managers needed to satisfy the approved setup requirements, while keeping execution-only tooling and caches under approved temp roots and avoiding global/sudo installs or permanent repo changes.',
+    'Reusable Runtime Wrapper: When you provision or need prepared runtime environment variables, create `.ticket/runtime/execution-setup/env.sh` and `.ticket/runtime/execution-setup/run`. The `run` wrapper must source `env.sh` and execute the command arguments. Record both files in `reusable_artifacts`, and list later project commands through the wrapper when needed, for example `./.ticket/runtime/execution-setup/run <project-test-command>`.',
     'Feature-Work Ban: Do not implement ticket feature code, broad source edits, or unrelated refactors during setup. If a repository-native bootstrap command changes tracked manifests, lockfiles, generated assets, or configuration, do not leave those changes behind; record the exact need in `cautions` and report a blocker if readiness depends on a permanent repository change.',
     'Approved Plan Execution: Start from the approved setup-plan steps and commands. Reuse them directly when they are still correct for the repository state.',
     'Minimum Necessary Work: If the environment is already ready or only partially missing one prerequisite, do only the missing temporary work. Do not rebuild or re-bootstrap the environment from scratch without evidence.',
@@ -805,6 +806,17 @@ export const PROM_EXECUTION_SETUP: PromptTemplate = {
     "temp_roots": [".ticket/runtime/execution-setup", ".ticket/runtime/execution-setup/tool-cache"],
     "bootstrap_commands": ["..."],
     "tooling_probe_commands": ["./.ticket/runtime/execution-setup/run <tool> --version"],
+    "tool_requirements": [
+      {
+        "launcher": "<required command launcher>",
+        "required_by": ["project_commands.prepare[0]"],
+        "status": "available|provisioned|failed|not_provisionable",
+        "missing_probe": "<probe that proved the launcher was missing, when applicable>",
+        "provisioning_commands": ["<safe temp-root provisioning command attempted, when applicable>"],
+        "final_probe": "<final verification probe, when applicable>",
+        "failure_reason": "<why provisioning failed or no safe provisioning path exists, when applicable>"
+      }
+    ],
     "reusable_artifacts": [
       {
         "path": ".ticket/runtime/execution-setup/tool-cache",

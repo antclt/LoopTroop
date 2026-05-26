@@ -12,6 +12,8 @@ export type {
   ExecutionSetupPlanStepPayload,
   ExecutionSetupPlanPayload,
   ExecutionSetupReusableArtifactPayload,
+  ExecutionSetupToolRequirementPayload,
+  ExecutionSetupToolRequirementStatus,
   ExecutionSetupProfilePayload,
   ExecutionSetupResultPayload,
   FinalTestCommandPayload,

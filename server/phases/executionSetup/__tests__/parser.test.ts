@@ -20,6 +20,17 @@ describe('parseExecutionSetupResult', () => {
         temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
         bootstrap_commands: ['project bootstrap'],
         tooling_probe_commands: ['./.ticket/runtime/execution-setup/run go version'],
+        tool_requirements: [
+          {
+            launcher: 'project-tool',
+            required_by: ['project_commands.test_full[0]'],
+            status: 'provisioned',
+            missing_probe: 'project-tool --version',
+            provisioning_commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+            final_probe: './.ticket/runtime/execution-setup/run project-tool --version',
+            failure_reason: '',
+          },
+        ],
         reusable_artifacts: [
           { path: '.ticket/runtime/execution-setup/tool-cache/dependencies', kind: 'cache', purpose: 'project dependency cache' },
           { path: '.ticket/runtime/execution-setup/env.sh', kind: 'environment', purpose: 'prepared runtime environment' },
@@ -58,11 +69,22 @@ describe('parseExecutionSetupResult', () => {
       '.ticket/runtime/execution-setup/run',
     ])
     expect(parsed.result?.profile.toolingProbeCommands).toEqual(['./.ticket/runtime/execution-setup/run go version'])
+    expect(parsed.result?.profile.toolRequirements).toEqual([
+      {
+        launcher: 'project-tool',
+        requiredBy: ['project_commands.test_full[0]'],
+        status: 'provisioned',
+        missingProbe: 'project-tool --version',
+        provisioningCommands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+        finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
+        failureReason: '',
+      },
+    ])
     expect(parsed.result?.profile.projectCommands.testFull).toEqual(['./.ticket/runtime/execution-setup/run go test ./...'])
   })
 
-  it('serializes tooling probe commands in execution setup profile artifacts', () => {
-    const serialized = serializeExecutionSetupProfile({
+  it('serializes optional tool requirements in execution setup profile artifacts', () => {
+    const baseProfile = {
       schemaVersion: 1,
       ticketId: 'T-1',
       artifact: 'execution_setup_profile',
@@ -85,10 +107,38 @@ describe('parseExecutionSetupResult', () => {
         fullProjectFallback: 'never-block-on-unrelated-baseline',
       },
       cautions: [],
+    } satisfies Parameters<typeof serializeExecutionSetupProfile>[0]
+
+    expect(JSON.parse(serializeExecutionSetupProfile(baseProfile))).not.toHaveProperty('tool_requirements')
+
+    const serialized = serializeExecutionSetupProfile({
+      ...baseProfile,
+      toolRequirements: [
+        {
+          launcher: 'project-tool',
+          requiredBy: ['project_commands.test_full[0]'],
+          status: 'failed',
+          missingProbe: 'project-tool --version',
+          provisioningCommands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+          finalProbe: './.ticket/runtime/execution-setup/run project-tool --version',
+          failureReason: 'official archive download returned 404',
+        },
+      ],
     })
 
     expect(JSON.parse(serialized)).toMatchObject({
       tooling_probe_commands: ['./.ticket/runtime/execution-setup/run go version'],
+      tool_requirements: [
+        {
+          launcher: 'project-tool',
+          required_by: ['project_commands.test_full[0]'],
+          status: 'failed',
+          missing_probe: 'project-tool --version',
+          provisioning_commands: ['./install-project-tool --prefix .ticket/runtime/execution-setup/tool-cache/project-tool'],
+          final_probe: './.ticket/runtime/execution-setup/run project-tool --version',
+          failure_reason: 'official archive download returned 404',
+        },
+      ],
     })
   })
 

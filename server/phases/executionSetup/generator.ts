@@ -28,8 +28,9 @@ const EXECUTION_SETUP_SCHEMA_REMINDER = [
   'status and profile.status must be ready for schema compatibility.',
   'profile.artifact must be execution_setup_profile.',
   'profile.temp_roots and profile.reusable_artifacts[].path should prefer approved runtime-owned setup paths under .ticket/runtime/execution-setup/**.',
+  'profile.tool_requirements is optional for passing setup, but required as evidence when checks.tooling is fail.',
   'checks must contain exactly: workspace, tooling, temp_scope, policy.',
-  'If required command launchers or toolchains are missing and cannot be prepared safely under approved temp roots, set checks.tooling to fail and explain the blocker in summary/cautions.',
+  'If required command launchers or toolchains are missing and cannot be prepared safely under approved temp roots, set checks.tooling to fail and record failed or not_provisionable tool_requirements evidence.',
 ].join('\n')
 
 type ExecutionSetupPromptStage =
