@@ -310,69 +310,107 @@ export function formatElapsedDuration(elapsedMs: number): string {
   return `${hours}h ${minutes}m`
 }
 
-export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): CurrentActivity | null {
+export function deriveCurrentActivities(entries: LogEntry[], nowMs = Date.now()): CurrentActivity[] {
   const orderedEntries = sortEntries(entries)
-  const latestPromptIndex = orderedEntries.findLastIndex(({ entry }) => isPromptEntry(entry))
-  if (latestPromptIndex < 0) return null
+  const prompts = orderedEntries.filter(({ entry }) => isPromptEntry(entry))
 
-  const prompt = orderedEntries[latestPromptIndex]!.entry
-  const promptTimeMs = orderedEntries[latestPromptIndex]!.timeMs
-  const entriesAfterPrompt = orderedEntries
-    .slice(latestPromptIndex + 1)
-    .filter(({ entry }) => entryRelatesToPrompt(entry, prompt))
+  const activities: CurrentActivity[] = []
 
-  const firstActivityIndex = entriesAfterPrompt.findIndex(({ entry }) => isFirstActivityEntry(entry))
-  const firstActivityEntry = firstActivityIndex >= 0 ? entriesAfterPrompt[firstActivityIndex]! : null
-  const hasFirstActivity = firstActivityEntry !== null
-  const promptCompletionEntry = entriesAfterPrompt.findLast(({ entry }) => isPromptCompletionEntry(entry))
-  const diagnosticCandidates: DiagnosticCandidate[] = []
+  for (let i = 0; i < prompts.length; i++) {
+    const promptIndexed = prompts[i]!
+    const prompt = promptIndexed.entry
+    const promptTimeMs = promptIndexed.timeMs
 
-  for (const indexedEntry of entriesAfterPrompt) {
-    const { entry } = indexedEntry
-    if (isProviderRetryTimeoutEntry(entry)) {
-      diagnosticCandidates.push({ kind: 'provider_retry_timeout', indexedEntry })
-    } else if (isProviderTimeoutPreservedEntry(entry)) {
-      diagnosticCandidates.push({ kind: 'provider_timeout_preserved', indexedEntry })
-    } else if (isEmptyModelOutputEntry(entry)) {
-      diagnosticCandidates.push({ kind: 'empty_model_output', indexedEntry })
-    } else if (isIterationTimeoutEntry(entry)) {
-      diagnosticCandidates.push({ kind: 'iteration_timeout', indexedEntry })
-    } else if (isTrustedPromptTimeoutEntry(entry)) {
-      const activityStartedBeforeTimeout = firstActivityEntry
-        ? compareIndexedEntries(firstActivityEntry, indexedEntry) < 0
-        : false
-      diagnosticCandidates.push({
-        kind: activityStartedBeforeTimeout ? 'workflow_timeout' : 'model_no_activity_timeout',
-        indexedEntry,
-      })
+    // Check if this prompt is superseded by a newer prompt
+    let isSuperseded = false
+    for (let j = i + 1; j < prompts.length; j++) {
+      const newerPrompt = prompts[j]!.entry
+
+      const sameSession = prompt.sessionId && newerPrompt.sessionId && prompt.sessionId === newerPrompt.sessionId
+      const sameBead = prompt.beadId && newerPrompt.beadId && prompt.beadId === newerPrompt.beadId
+      const sameModel = prompt.modelId && newerPrompt.modelId && prompt.modelId === newerPrompt.modelId
+
+      if (sameSession || sameBead || sameModel) {
+        isSuperseded = true
+        break
+      }
+      if (!prompt.sessionId && !prompt.beadId && !prompt.modelId &&
+          !newerPrompt.sessionId && !newerPrompt.beadId && !newerPrompt.modelId) {
+        isSuperseded = true
+        break
+      }
     }
+
+    if (isSuperseded) continue
+
+    const promptIndex = promptIndexed.index
+    const entriesAfterPrompt = orderedEntries
+      .slice(promptIndex + 1)
+      .filter(({ entry }) => entryRelatesToPrompt(entry, prompt))
+
+    const firstActivityIndex = entriesAfterPrompt.findIndex(({ entry }) => isFirstActivityEntry(entry))
+    const firstActivityEntry = firstActivityIndex >= 0 ? entriesAfterPrompt[firstActivityIndex]! : null
+    const hasFirstActivity = firstActivityEntry !== null
+    const promptCompletionEntry = entriesAfterPrompt.findLast(({ entry }) => isPromptCompletionEntry(entry))
+    const diagnosticCandidates: DiagnosticCandidate[] = []
+
+    for (const indexedEntry of entriesAfterPrompt) {
+      const { entry } = indexedEntry
+      if (isProviderRetryTimeoutEntry(entry)) {
+        diagnosticCandidates.push({ kind: 'provider_retry_timeout', indexedEntry })
+      } else if (isProviderTimeoutPreservedEntry(entry)) {
+        diagnosticCandidates.push({ kind: 'provider_timeout_preserved', indexedEntry })
+      } else if (isEmptyModelOutputEntry(entry)) {
+        diagnosticCandidates.push({ kind: 'empty_model_output', indexedEntry })
+      } else if (isIterationTimeoutEntry(entry)) {
+        diagnosticCandidates.push({ kind: 'iteration_timeout', indexedEntry })
+      } else if (isTrustedPromptTimeoutEntry(entry)) {
+        const activityStartedBeforeTimeout = firstActivityEntry
+          ? compareIndexedEntries(firstActivityEntry, indexedEntry) < 0
+          : false
+        diagnosticCandidates.push({
+          kind: activityStartedBeforeTimeout ? 'workflow_timeout' : 'model_no_activity_timeout',
+          indexedEntry,
+        })
+      }
+    }
+
+    const latestDiagnostic = pickLatestDiagnostic(diagnosticCandidates)
+    if (latestDiagnostic) {
+      const elapsedUntilMs = Number.isFinite(latestDiagnostic.indexedEntry.timeMs)
+        ? latestDiagnostic.indexedEntry.timeMs
+        : nowMs
+      activities.push(buildDiagnosticActivity(latestDiagnostic.kind, prompt, elapsedUntilMs))
+      continue
+    }
+
+    if (promptCompletionEntry || hasFirstActivity) continue
+
+    if (isNearTimeoutPrompt(prompt, nowMs)) {
+      activities.push(buildDiagnosticActivity('near_timeout', prompt, nowMs))
+      continue
+    }
+
+    const elapsedMs = Number.isFinite(promptTimeMs) ? Math.max(0, nowMs - promptTimeMs) : undefined
+    const latestRetry = entriesAfterPrompt.findLast(({ entry }) => isProviderRetryEntry(entry))
+
+    activities.push({
+      kind: latestRetry ? 'provider_retrying' : 'waiting_first_model_activity',
+      active: true,
+      severity: latestRetry ? 'warning' : 'info',
+      label: latestRetry ? 'Provider retrying before first model activity' : 'Waiting for first model activity',
+      elapsedMs,
+      modelId: getModelId(prompt),
+      sessionId: prompt.sessionId,
+      beadId: prompt.beadId,
+    })
   }
 
-  const latestDiagnostic = pickLatestDiagnostic(diagnosticCandidates)
-  if (latestDiagnostic) {
-    const elapsedUntilMs = Number.isFinite(latestDiagnostic.indexedEntry.timeMs)
-      ? latestDiagnostic.indexedEntry.timeMs
-      : nowMs
-    return buildDiagnosticActivity(latestDiagnostic.kind, prompt, elapsedUntilMs)
-  }
+  return activities
+}
 
-  if (promptCompletionEntry || hasFirstActivity) return null
-
-  if (isNearTimeoutPrompt(prompt, nowMs)) {
-    return buildDiagnosticActivity('near_timeout', prompt, nowMs)
-  }
-
-  const elapsedMs = Number.isFinite(promptTimeMs) ? Math.max(0, nowMs - promptTimeMs) : undefined
-  const latestRetry = entriesAfterPrompt.findLast(({ entry }) => isProviderRetryEntry(entry))
-
-  return {
-    kind: latestRetry ? 'provider_retrying' : 'waiting_first_model_activity',
-    active: true,
-    severity: latestRetry ? 'warning' : 'info',
-    label: latestRetry ? 'Provider retrying before first model activity' : 'Waiting for first model activity',
-    elapsedMs,
-    modelId: getModelId(prompt),
-    sessionId: prompt.sessionId,
-    beadId: prompt.beadId,
-  }
+export function deriveCurrentActivity(entries: LogEntry[], nowMs = Date.now()): CurrentActivity | null {
+  const activities = deriveCurrentActivities(entries, nowMs)
+  if (activities.length === 0) return null
+  return activities[activities.length - 1] || null
 }

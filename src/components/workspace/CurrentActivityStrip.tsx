@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Clock3, RefreshCw } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Clock3, RefreshCw } from 'lucide-react'
 import type { LogEntry } from '@/context/LogContext'
 import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
 import { cn } from '@/lib/utils'
-import { deriveCurrentActivity, formatElapsedDuration, type CurrentActivity } from './currentActivity'
+import { deriveCurrentActivities, formatElapsedDuration, type CurrentActivity } from './currentActivity'
 
 interface CurrentActivityStripProps {
   entries: LogEntry[]
@@ -27,26 +27,7 @@ function ActivityIcon({ activity }: { activity: CurrentActivity }) {
   return <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 }
 
-export function CurrentActivityStrip({ entries, enabled = true, className }: CurrentActivityStripProps) {
-  const [nowMs, setNowMs] = useState(() => Date.now())
-
-  useEffect(() => {
-    setNowMs(Date.now())
-  }, [entries])
-
-  const activity = useMemo(
-    () => (enabled ? deriveCurrentActivity(entries, nowMs) : null),
-    [enabled, entries, nowMs],
-  )
-
-  useEffect(() => {
-    if (!activity?.active) return
-    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000)
-    return () => window.clearInterval(intervalId)
-  }, [activity?.active])
-
-  if (!activity) return null
-
+function ActivityRow({ activity, nowMs }: { activity: CurrentActivity; nowMs: number }) {
   const elapsedLabel = activity.elapsedMs === undefined
     ? null
     : formatElapsedDuration(activity.elapsedMs)
@@ -54,43 +35,162 @@ export function CurrentActivityStrip({ entries, enabled = true, className }: Cur
 
   return (
     <div
+      className={cn(
+        'flex flex-wrap items-center gap-2 px-3 py-2 text-xs transition-colors hover:bg-black/5 dark:hover:bg-white/5',
+        activity.severity === 'error' && 'text-rose-800 dark:text-rose-200',
+        activity.severity === 'warning' && 'text-amber-800 dark:text-amber-200',
+        activity.severity === 'info' && 'text-sky-800 dark:text-sky-200',
+      )}
+    >
+      <ActivityIcon activity={activity} />
+      <span className="min-w-0 font-medium text-foreground truncate max-w-full sm:max-w-md">
+        {activity.label}
+      </span>
+      <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-muted-foreground">
+        {elapsedLabel ? (
+          <span>· {elapsedLabel}</span>
+        ) : null}
+        {modelLabel ? (
+          <span title={activity.modelId}>
+            · model <strong className="text-foreground/80">{modelLabel}</strong>
+          </span>
+        ) : null}
+        {activity.sessionId ? (
+          <span title={activity.sessionId}>
+            · session <code className="bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded text-[10px]">{activity.sessionId}</code>
+          </span>
+        ) : null}
+        {activity.beadId ? (
+          <span title={activity.beadId}>
+            · bead <code className="bg-black/5 dark:bg-white/5 px-1 py-0.5 rounded text-[10px]">{activity.beadId}</code>
+          </span>
+        ) : null}
+      </div>
+      {activity.diagnostic ? (
+        <span className="ml-auto shrink-0 rounded border border-current/25 px-1.5 py-0.5 font-mono text-[9px] bg-black/5 dark:bg-white/5">
+          {activity.diagnostic}
+        </span>
+      ) : null}
+    </div>
+  )
+}
+
+export function CurrentActivityStrip({ entries, enabled = true, className }: CurrentActivityStripProps) {
+  const [nowMs, setNowMs] = useState(() => Date.now())
+
+  useEffect(() => {
+    setNowMs(Date.now())
+  }, [entries])
+
+  const activities = useMemo(
+    () => (enabled ? deriveCurrentActivities(entries, nowMs) : []),
+    [enabled, entries, nowMs],
+  )
+
+  const hasAnyActive = useMemo(() => activities.some((a) => a.active), [activities])
+
+  useEffect(() => {
+    if (!hasAnyActive) return
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(intervalId)
+  }, [hasAnyActive])
+
+  const [isExpanded, setIsExpanded] = useState(() => {
+    if (typeof window === 'undefined') return true
+    const saved = localStorage.getItem('looptroop:activity-strip:expanded')
+    return saved !== 'false'
+  })
+
+  const toggleExpand = () => {
+    setIsExpanded((prev) => {
+      const next = !prev
+      localStorage.setItem('looptroop:activity-strip:expanded', String(next))
+      return next
+    })
+  }
+
+  if (activities.length === 0) return null
+
+  const maxSeverity = (() => {
+    if (activities.some((a) => a.severity === 'error')) return 'error'
+    if (activities.some((a) => a.severity === 'warning')) return 'warning'
+    return 'info'
+  })()
+
+  const headerIcon = (() => {
+    const hasError = activities.some((a) => a.severity === 'error')
+    const hasWarning = activities.some((a) => a.severity === 'warning')
+    if (hasError) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
+    if (hasWarning) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+    return <Clock3 className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+  })()
+
+  const headerTitle = (() => {
+    if (activities.length === 1) {
+      const a = activities[0]!
+      const modelLabel = a.modelId ? getModelDisplayName(a.modelId) : null
+      return (
+        <div className="flex items-center gap-1.5 truncate">
+          <span className="font-semibold text-foreground truncate">{a.label}</span>
+          {modelLabel && (
+            <span className="text-muted-foreground truncate">· model {modelLabel}</span>
+          )}
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex items-center gap-2 truncate">
+        <span className="font-semibold text-foreground">AI Activity Status & Warnings</span>
+        <span className="inline-flex items-center justify-center bg-foreground/10 text-foreground px-1.5 py-0.5 rounded-full text-[10px] font-bold">
+          {activities.length}
+        </span>
+      </div>
+    )
+  })()
+
+  return (
+    <div
       role="status"
       aria-live="polite"
       aria-label="Current activity"
       className={cn(
-        'mx-1 mb-1 flex min-h-8 shrink-0 items-center gap-1.5 overflow-hidden rounded-md border px-2.5 py-1.5 text-xs',
-        'shadow-none',
-        severityClassName[activity.severity],
+        'mx-1 mb-1 overflow-hidden rounded-md border text-xs shadow-none transition-all duration-300 ease-in-out',
+        severityClassName[maxSeverity],
         className,
       )}
     >
-      <ActivityIcon activity={activity} />
-      <span className="min-w-0 shrink truncate font-medium text-foreground">
-        {activity.label}
-      </span>
-      {elapsedLabel ? (
-        <span className="shrink-0 text-muted-foreground">· {elapsedLabel}</span>
-      ) : null}
-      {modelLabel ? (
-        <span className="min-w-0 shrink truncate text-muted-foreground" title={activity.modelId}>
-          · model {modelLabel}
-        </span>
-      ) : null}
-      {activity.sessionId ? (
-        <span className="min-w-0 shrink truncate text-muted-foreground" title={activity.sessionId}>
-          · session {activity.sessionId}
-        </span>
-      ) : null}
-      {activity.beadId ? (
-        <span className="min-w-0 shrink truncate text-muted-foreground" title={activity.beadId}>
-          · bead {activity.beadId}
-        </span>
-      ) : null}
-      {activity.diagnostic ? (
-        <span className="ml-auto shrink-0 rounded border border-current/20 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-          {activity.diagnostic}
-        </span>
-      ) : null}
+      <button
+        onClick={toggleExpand}
+        className="w-full flex items-center justify-between px-3 py-2 text-left font-medium select-none hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+        aria-expanded={isExpanded}
+      >
+        <div className="flex items-center gap-2 truncate min-w-0">
+          {headerIcon}
+          {headerTitle}
+        </div>
+        <ChevronDown
+          className={cn(
+            'h-4 w-4 shrink-0 opacity-60 transition-transform duration-300',
+            isExpanded && 'rotate-180',
+          )}
+        />
+      </button>
+
+      <div
+        className={cn(
+          'border-t border-current/10 divide-y divide-current/10 transition-all duration-300',
+          !isExpanded && 'hidden',
+        )}
+      >
+        {activities.map((activity, idx) => (
+          <ActivityRow
+            key={`${activity.kind}-${activity.sessionId ?? ''}-${activity.beadId ?? ''}-${idx}`}
+            activity={activity}
+            nowMs={nowMs}
+          />
+        ))}
+      </div>
     </div>
   )
 }

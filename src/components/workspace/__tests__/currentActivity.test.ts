@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LogEntry } from '@/context/LogContext'
-import { deriveCurrentActivity, formatElapsedDuration } from '../currentActivity'
+import { deriveCurrentActivity, deriveCurrentActivities, formatElapsedDuration } from '../currentActivity'
 
 const BASE_TIME_MS = Date.parse('2026-05-25T10:00:00.000Z')
 
@@ -336,5 +336,54 @@ describe('deriveCurrentActivity', () => {
 
     expect(activity?.kind).toBe('model_no_activity_timeout')
     expect(activity?.diagnostic).toBe('model_no_activity_timeout')
+  })
+})
+
+describe('deriveCurrentActivities', () => {
+  it('identifies multiple concurrent active model status computations', () => {
+    const prompt1 = makePrompt({
+      id: 'prompt-1',
+      entryId: 'prompt-1',
+      sessionId: 'ses_active_1',
+      beadId: 'bead-1',
+      modelId: 'openai/gpt-4o',
+    })
+    const prompt2 = makePrompt({
+      id: 'prompt-2',
+      entryId: 'prompt-2',
+      sessionId: 'ses_active_2',
+      beadId: 'bead-2',
+      modelId: 'anthropic/claude-3-sonnet',
+    })
+
+    const activities = deriveCurrentActivities([prompt1, prompt2], BASE_TIME_MS + 10_000)
+
+    expect(activities).toHaveLength(2)
+    expect(activities[0]?.sessionId).toBe('ses_active_1')
+    expect(activities[0]?.modelId).toBe('openai/gpt-4o')
+    expect(activities[1]?.sessionId).toBe('ses_active_2')
+    expect(activities[1]?.modelId).toBe('anthropic/claude-3-sonnet')
+  })
+
+  it('filters out superseded prompts of the same session/bead/model', () => {
+    const prompt1 = makePrompt({
+      id: 'prompt-1',
+      entryId: 'prompt-1',
+      sessionId: 'ses-1',
+      beadId: 'bead-1',
+      modelId: 'openai/gpt-4o',
+    })
+    const prompt2 = makePrompt({
+      id: 'prompt-2',
+      entryId: 'prompt-2',
+      sessionId: 'ses-1',
+      beadId: 'bead-1',
+      modelId: 'openai/gpt-4o',
+    })
+
+    const activities = deriveCurrentActivities([prompt1, prompt2], BASE_TIME_MS + 10_000)
+
+    expect(activities).toHaveLength(1)
+    expect(activities[0]?.sessionId).toBe('ses-1')
   })
 })

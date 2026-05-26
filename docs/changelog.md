@@ -8,8 +8,17 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
 
 ### Detailed Changes
+
+#### Added
+- Added support for tracking multiple parallel AI model activities and diagnostics concurrently.
+- Added state persistence to localStorage for the collapsible activity strip, saving user preferences across reloads.
+
+#### Changed
+- Re-engineered the Current Activity strip below the log tabs to be fully collapsible and display a list of all active model sessions, beads, and warnings.
+- Redesigned the strip UI with premium unified severity styling (Error > Warning > Info) and smooth chevron transitions on toggle.
 
 ---
 
