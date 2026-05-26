@@ -96,15 +96,25 @@ export function CurrentActivityStrip({ entries, enabled = true, className }: Cur
   }, [hasAnyActive])
 
   const [isExpanded, setIsExpanded] = useState(() => {
-    if (typeof window === 'undefined') return true
-    const saved = localStorage.getItem('looptroop:activity-strip:expanded')
-    return saved !== 'false'
+    try {
+      if (typeof window === 'undefined') return false
+      const saved = localStorage.getItem('looptroop:activity-strip:expanded')
+      return saved === 'true' // Collapsed by default (returns false if null or 'false')
+    } catch {
+      return false
+    }
   })
 
-  const toggleExpand = () => {
+  const toggleExpand = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
     setIsExpanded((prev) => {
       const next = !prev
-      localStorage.setItem('looptroop:activity-strip:expanded', String(next))
+      try {
+        localStorage.setItem('looptroop:activity-strip:expanded', String(next))
+      } catch {
+        // Safe fallback if localStorage is sandboxed or disabled
+      }
       return next
     })
   }
@@ -161,6 +171,7 @@ export function CurrentActivityStrip({ entries, enabled = true, className }: Cur
       )}
     >
       <button
+        type="button"
         onClick={toggleExpand}
         className="w-full flex items-center justify-between px-3 py-2 text-left font-medium select-none hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
         aria-expanded={isExpanded}
