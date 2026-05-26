@@ -48,6 +48,11 @@ describe('dropped interventions', () => {
     expectIntervention(i, { code: 'dropped_invalid_change', stage: 'semantic_validation', category: 'dropped' })
   })
 
+  it('maps skipped path and summary only refinement change metadata', () => {
+    const i = deriveOne('Skipped refinement change at index 0 with path/summary metadata only; semantic before/after item records are required.')
+    expectIntervention(i, { code: 'dropped_invalid_change', stage: 'semantic_validation', category: 'dropped' })
+  })
+
   it('maps ignored because pattern', () => {
     const i = deriveOne('PRD coverage follow_up_questions were ignored because PRD coverage is envelope-only.')
     expectIntervention(i, { code: 'dropped_unsupported_or_partial_data', stage: 'semantic_validation', category: 'dropped' })

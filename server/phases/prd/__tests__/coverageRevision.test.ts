@@ -140,6 +140,57 @@ describe.concurrent('PRD coverage revision diffs', () => {
     })
   })
 
+  it('drops path-only change metadata while keeping the structural PRD diff reviewable', () => {
+    const coverageGap = 'Record structural fallback coverage as a tooling assumption.'
+    const currentCandidateContent = buildPrdContent([
+      'Use vitest for coverage diff regression checks.',
+    ])
+    const revised = jsYaml.load(buildPrdContent([
+      'Use vitest for coverage diff regression checks.',
+      'Build a structural fallback diff when path-only change metadata cannot be trusted.',
+    ])) as Record<string, unknown>
+
+    revised.changes = [{
+      change_type: 'modified',
+      path: 'technical_requirements.tooling_assumptions',
+      before_summary: 'Only the vitest regression check was listed.',
+      after_summary: 'The structural fallback diff assumption was added.',
+      summary: 'Added structural fallback diff tooling guidance.',
+    }]
+    revised.gap_resolutions = [{
+      gap: coverageGap,
+      action: 'updated_prd',
+      rationale: 'The revised PRD records the structural diff fallback as a tooling assumption.',
+      affected_items: [],
+    }]
+
+    const result = validatePrdCoverageRevisionOutput(
+      jsYaml.dump(revised, { lineWidth: 120, noRefs: true }) as string,
+      {
+        ticketId: 'POBA-3',
+        interviewContent: buildInterviewContent(),
+        currentCandidateContent,
+        coverageGaps: [coverageGap],
+      },
+    )
+    const uiDiffArtifact = buildPrdCoverageRevisionUiDiff(
+      buildPrdCoverageRevisionArtifact('openai/gpt-5.4', 3, result),
+    )
+
+    expect(result.changes).toEqual([])
+    expect(result.repairApplied).toBe(true)
+    expect(result.repairWarnings.join('\n')).toContain(
+      'Skipped refinement change at index 0 with path/summary metadata only; semantic before/after item records are required.',
+    )
+    expect(uiDiffArtifact.entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        changeType: 'modified',
+        itemKind: 'technical_requirements.tooling_assumptions',
+        label: 'Tooling Assumptions',
+      }),
+    ]))
+  })
+
   it('drops section-level affected_items references that the PRD coverage schema cannot represent', () => {
     const coverageGap = 'Clarify the API contracts section.'
     const currentCandidateContent = buildPrdContent([

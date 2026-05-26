@@ -1028,8 +1028,9 @@ export function toBoolean(value: unknown): boolean | null {
 }
 
 export function getValueByAliases(record: Record<string, unknown>, aliases: string[]): unknown {
+  const normalizedAliases = new Set(aliases.map((alias) => normalizeKey(alias)))
   for (const [key, value] of Object.entries(record)) {
-    if (aliases.includes(normalizeKey(key))) return value
+    if (normalizedAliases.has(normalizeKey(key))) return value
   }
   return undefined
 }

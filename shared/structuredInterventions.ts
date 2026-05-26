@@ -791,7 +791,11 @@ function deriveInterventionFromWarning(warning: string): StructuredIntervention 
     })
   }
 
-  if (/^skipped non-object refinement change/i.test(warning) || /^skipped refinement change .* invalid type/i.test(warning)) {
+  if (
+    /^skipped non-object refinement change/i.test(warning)
+    || /^skipped refinement change .* invalid type/i.test(warning)
+    || /^skipped refinement change .* path\/summary metadata only/i.test(warning)
+  ) {
     return buildIntervention(warning, {
       code: 'dropped_invalid_change',
       stage: 'semantic_validation',

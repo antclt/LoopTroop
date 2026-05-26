@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildStructuredRetryPrompt, parseYamlOrJsonCandidate } from '../yamlUtils'
+import { buildStructuredRetryPrompt, getValueByAliases, parseYamlOrJsonCandidate } from '../yamlUtils'
 
 describe.concurrent('buildStructuredRetryPrompt', () => {
   it('keeps retry prompts focused on schema correction only', () => {
@@ -212,5 +212,25 @@ describe.concurrent('parseYamlOrJsonCandidate', () => {
       'Edit ui/src/scss/_vars.scss and replace the default token.',
       'Preserve the emitted body text exactly.',
     ].join('\n'))
+  })
+})
+
+describe.concurrent('getValueByAliases', () => {
+  it('matches snake_case aliases against normalized object keys', () => {
+    expect(getValueByAliases({
+      change_type: 'modified',
+      itemType: 'user_story',
+      source_interview: 'hash',
+    }, ['change_type'])).toBe('modified')
+    expect(getValueByAliases({
+      change_type: 'modified',
+      itemType: 'user_story',
+      source_interview: 'hash',
+    }, ['item_type'])).toBe('user_story')
+    expect(getValueByAliases({
+      change_type: 'modified',
+      itemType: 'user_story',
+      source_interview: 'hash',
+    }, ['sourceInterview'])).toBe('hash')
   })
 })

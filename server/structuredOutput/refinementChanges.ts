@@ -17,6 +17,17 @@ function normalizeRefinementChangeType(value: unknown): RefinementChangeType | n
   return null
 }
 
+function hasSummaryOnlyChangeMetadata(value: Record<string, unknown>): boolean {
+  return [
+    'path',
+    'summary',
+    'before_summary',
+    'beforeSummary',
+    'after_summary',
+    'afterSummary',
+  ].some((alias) => getValueByAliases(value, [alias]) !== undefined)
+}
+
 function normalizeRefinementChangeItem(value: unknown): RefinementChangeItem | null {
   if (!isRecord(value)) return null
   const id = toOptionalString(getValueByAliases(value, ['id']))
@@ -59,7 +70,7 @@ function normalizeRefinementInspiration(
   if (!isRecord(value)) return null
 
   const rawAltDraft = getValueByAliases(value, ['alternative_draft', 'alternativedraft', 'draft', 'draft_index', 'draftindex'])
-  
+
   let draftIndex = -1
   let memberId = ''
 
@@ -125,6 +136,11 @@ export function parseRefinementChanges(
 
     const rawBefore = getValueByAliases(entry, ['before'])
     const rawAfter = getValueByAliases(entry, ['after'])
+    if (rawBefore === undefined && rawAfter === undefined && hasSummaryOnlyChangeMetadata(entry)) {
+      repairWarnings.push(`Skipped refinement change at index ${index} with path/summary metadata only; semantic before/after item records are required.`)
+      continue
+    }
+
     const before = rawBefore === null ? null : normalizeRefinementChangeItem(rawBefore)
     const after = rawAfter === null ? null : normalizeRefinementChangeItem(rawAfter)
 

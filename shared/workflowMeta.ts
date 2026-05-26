@@ -437,17 +437,18 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   VERIFYING_PRD_COVERAGE: {
-    overview: 'LoopTroop runs a versioned PRD coverage loop, comparing the current PRD candidate against the winning model\'s Full Answers artifact to find any missing requirements or gaps. Unlike the interview coverage loop (which sends you back to answer more questions), PRD coverage stays inside this same phase — the model revises the PRD directly when gaps are found. The loop can produce later PRD candidate versions until the configured cap is reached, and if gaps remain after that, the latest version still advances to approval with warnings.',
+    overview: 'LoopTroop runs a versioned PRD coverage loop, comparing the current PRD candidate against the winning model\'s Full Answers artifact to find any missing requirements or gaps. Unlike the interview coverage loop (which sends you back to answer more questions), PRD coverage stays inside this same phase — the model revises the PRD directly when gaps are found. Revision metadata is normalized only when it preserves existing text; path/summary-only change notes stay diagnostic while the validated PRD versions provide the visible diff. The loop can produce later PRD candidate versions until the configured cap is reached, and if gaps remain after that, the latest version still advances to approval with warnings.',
     steps: [
       'Coverage Evaluation: The winning PRD model compares the current PRD candidate against that model\'s Full Answers artifact. It returns a structured coverage result: either "clean" (the PRD fully covers the canonical completed answers) or "gaps found" (specific requirements or acceptance criteria are missing or incomplete).',
       'Gap Details: When gaps are found, the coverage result includes specific descriptions of what is missing, which completed answers are not reflected in the PRD, unresolved source-artifact contradictions when present, and why the gap matters for implementation correctness.',
       'In-Phase Revision: If gaps are found and the coverage cap has not been reached, LoopTroop asks the model to produce a revised PRD that addresses the identified gaps. The revised candidate is validated and promoted to the next version number (for example v1 → v2) within the same phase.',
-      'Version History: Coverage attempts and version transitions are persisted, so you can see what changed between PRD versions and why. Each attempt records the coverage result, identified gaps, revision actions, and the resulting candidate version.',
+      'Safe Change Metadata: Revision outputs may include structured change metadata. LoopTroop accepts harmless key aliases such as `change_type`, but it only keeps change records that contain real semantic before/after item records; path and summary-only notes are dropped as diagnostics so missing item text is never invented.',
+      'Version History: Coverage attempts and version transitions are persisted, so you can see what changed between PRD versions and why. Each attempt records the coverage result, identified gaps, revision actions, parser/repair notices, and the resulting candidate version. If validated semantic change records are empty, the approval UI falls back to a structural diff between the validated PRD versions.',
       'Clean Finalization: If the PRD becomes clean (all gaps resolved), the clean result is recorded and the current candidate becomes the approval candidate with a clean status.',
       'Cap Enforcement: If the configured PRD coverage cap is reached, LoopTroop advances using the latest candidate even if minor gaps remain. The unresolved-gap history is preserved and visible during approval so you can address any remaining issues manually.',
     ],
     outputs: [
-      'Versioned PRD coverage attempts and transition history — showing the journey from Candidate v1 through any revisions.',
+      'Versioned PRD coverage attempts and transition history — showing the journey from Candidate v1 through any revisions, including safe parser repair notices when model change metadata needed normalization.',
       'Latest PRD candidate after zero or more coverage revisions.',
       'Structured diagnostics about artifact processing notices, identified gaps, and whether they were resolved.',
     ],
@@ -459,6 +460,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Unlike the interview loop (which bounces back to the user for more answers), PRD gap resolution stays inside this same phase — the model revises the PRD directly.',
       'The maximum number of coverage versions is configuration-driven to ensure convergence without hard-coding a single limit for every project.',
+      'Change metadata repairs are text-preserving only. If a model provides section paths or summaries without concrete before/after item records, LoopTroop records a warning and derives the review diff from the validated PRD documents instead.',
       'Context available: winning model Full Answers + PRD (current candidate version). The approved interview is not fed to this phase; the winner Full Answers artifact is the canonical coverage source.',
       'Why cap the loop? Diminishing returns: most meaningful gaps are caught in early revisions. The cap prevents the loop from endlessly polishing minor details while delaying your approval review.',
     ],
@@ -1233,7 +1235,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'VERIFYING_PRD_COVERAGE',
     label: 'Coverage Check (PRD)',
-    description: 'LoopTroop checks the current PRD candidate against the winning model\'s Full Answers artifact and revises it in-phase until clean or the configured cap is reached.',
+    description: 'LoopTroop checks the current PRD candidate against the winning model\'s Full Answers artifact, normalizes safe revision metadata, and revises it in-phase until clean or the configured cap is reached.',
     details: WORKFLOW_PHASE_DETAILS.VERIFYING_PRD_COVERAGE,
     kanbanPhase: 'in_progress',
     groupId: 'prd',

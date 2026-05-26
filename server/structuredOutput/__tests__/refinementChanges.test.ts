@@ -17,6 +17,39 @@ function makeChange(overrides: Record<string, unknown> = {}) {
 }
 
 describe.concurrent('parseRefinementChanges — inspiration item parsing', () => {
+  it('accepts change_type aliases when semantic before and after item records are present', () => {
+    const { changes, repairWarnings } = parseRefinementChanges(
+      [makeChange({ change_type: 'modified' })],
+      LOSING_DRAFT_META,
+    )
+
+    expect(repairWarnings).toEqual([])
+    expect(changes).toHaveLength(1)
+    expect(changes[0]).toMatchObject({
+      type: 'modified',
+      itemType: 'user_story',
+      before: { id: 'US-1', label: 'Original story' },
+      after: { id: 'US-1', label: 'Refined story' },
+    })
+  })
+
+  it('drops path and summary only change metadata without inventing item records', () => {
+    const { changes, repairWarnings } = parseRefinementChanges([
+      {
+        change_type: 'modified',
+        path: 'technical_requirements.tooling_assumptions',
+        before_summary: 'One tooling assumption was listed.',
+        after_summary: 'A second tooling assumption was added.',
+        summary: 'Added a tooling assumption.',
+      },
+    ])
+
+    expect(changes).toEqual([])
+    expect(repairWarnings).toEqual([
+      'Skipped refinement change at index 0 with path/summary metadata only; semantic before/after item records are required.',
+    ])
+  })
+
   it('accepts inspiration with both id and label (strict format)', () => {
     const { changes } = parseRefinementChanges(
       [makeChange({

@@ -11,6 +11,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Hardened setup reuse so final testing automatically runs through validated prepared environments.
 - Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
+- Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
 
 ### Detailed Changes
 
@@ -105,6 +106,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - OpenCode managed server is now always started with `--log-level DEBUG`, writing native logs at full verbosity to the OpenCode log directory so they are always available in the DEBUG tab. Use `npm run dev --opencode-logs=all` to additionally print them to the terminal. The `--opencode-logs=all` flag adds `--print-logs` to the OpenCode serve args.
 
 #### Fixed
+- Fixed PRD coverage revision parsing so `change_type` aliases are recognized and path/summary-only change notes are dropped as diagnostics while the validated PRD diff remains reviewable.
 - Fixed execution-setup and final-test attempt counters resetting to 1 after an app restart; both phases now resume from the correct attempt number derived from persisted retry notes, so the `maxIterations` guard is honoured across restarts.
 - Fixed bead iteration countdown timer showing 00:00 on iteration 2+ beads; the timer now anchors to `updatedAt` (updated at the start of each iteration session) instead of `startedAt` (frozen at the first iteration), so the remaining time is accurate across all iterations.
 - Fixed blocked CODING provider interruptions showing a live bead countdown while the ticket was paused; the header now hides the timer outside live CODING, and the error panel shows that the preserved session will resume with a fresh bead timer when Continue is available.
