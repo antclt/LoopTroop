@@ -386,4 +386,28 @@ describe('deriveCurrentActivities', () => {
     expect(activities).toHaveLength(1)
     expect(activities[0]?.sessionId).toBe('ses-1')
   })
+
+  it('clears past phase waiting activities when a new phase has started', () => {
+    const promptInCouncil = makePrompt({
+      id: 'prompt-council',
+      entryId: 'prompt-council',
+      sessionId: 'ses-council',
+      status: 'COUNCIL',
+    })
+
+    // A state transition log in the new CODING phase
+    const transitionLog = makeLog('transition', '[SYS] Transitioning to CODING status.', {
+      status: 'CODING',
+      timestamp: timestamp(1000),
+    })
+
+    // Before transition: COUNCIL prompt is active
+    const activitiesBefore = deriveCurrentActivities([promptInCouncil], BASE_TIME_MS)
+    expect(activitiesBefore).toHaveLength(1)
+    expect(activitiesBefore[0]?.sessionId).toBe('ses-council')
+
+    // After transition: COUNCIL prompt is from a past phase, so it should be ignored!
+    const activitiesAfter = deriveCurrentActivities([promptInCouncil, transitionLog], BASE_TIME_MS + 2000)
+    expect(activitiesAfter).toHaveLength(0)
+  })
 })

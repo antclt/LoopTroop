@@ -312,7 +312,23 @@ export function formatElapsedDuration(elapsedMs: number): string {
 
 export function deriveCurrentActivities(entries: LogEntry[], nowMs = Date.now()): CurrentActivity[] {
   const orderedEntries = sortEntries(entries)
-  const prompts = orderedEntries.filter(({ entry }) => isPromptEntry(entry))
+
+  // Identify the current active status (ignoring BLOCKED_ERROR)
+  let activeStatus: string | undefined = undefined
+  for (let i = orderedEntries.length - 1; i >= 0; i--) {
+    const status = orderedEntries[i]!.entry.status
+    if (status && status !== 'BLOCKED_ERROR') {
+      activeStatus = status
+      break
+    }
+  }
+
+  // Filter prompts to only keep those belonging to the activeStatus
+  const prompts = orderedEntries.filter(({ entry }) => {
+    if (!isPromptEntry(entry)) return false
+    if (activeStatus && entry.status !== activeStatus) return false
+    return true
+  })
 
   const activities: CurrentActivity[] = []
 
