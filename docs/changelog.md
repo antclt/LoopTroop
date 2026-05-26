@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Enabled setup-scoped online artifact lookup for missing launcher provisioning while keeping real provisioning evidence stricter.
 - Fixed version log isolation: switching to the active version in multi-attempt phases now shows only that version's logs instead of all attempts' logs.
 - Hardened execution setup so missing launcher failures must show persistent provisioning attempts before blocking.
 - Hardened setup reuse so final testing automatically runs through validated prepared environments.
@@ -19,6 +20,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added setup-scoped OpenCode `websearch`/`webfetch` access during `PREPARING_EXECUTION_ENV`, with managed dev OpenCode servers started using `OPENCODE_ENABLE_EXA=1`, so agents can resolve official launcher artifact metadata when local repository evidence is insufficient.
 - Added `tool_requirements.provisioning_attempts` evidence to execution setup profiles so failed required-launcher setup records distinct temp-root provisioning strategies and commands, or why no safe provisioning path exists.
 - Added `tooling_probe_commands` to execution setup profiles so prepared language/toolchain environments can be verified by model-selected, non-mutating probes before coding starts.
 - Added pre-flight and execution-setup worktree cleanliness checks: pre-existing committable project changes now block before setup, ready setup attempts fail if they leave committable project changes, and untracked generated/local noise is reported with `.gitignore` suggestions.
@@ -30,6 +32,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.
 
 #### Changed
+- Execution setup prompts now state that wrapper creation, cache inspection, PATH edits, and version probes are discovery/scaffolding only, and do not count as provisioning strategies unless the attempt actually obtains, installs, or activates the missing launcher under approved temp roots.
 - Execution setup prompts now treat failed launcher version/info probes as discovery only, replacing single-ecosystem provisioning guidance with non-exhaustive Node, Python, and JavaScript-runtime examples plus permission to use any safe repository-appropriate temp-root provisioning approach.
 - Execution setup now requires at least two distinct failed provisioning strategies before accepting terminal failed-tooling evidence, and grants a small bounded persistence retry extension when the base setup budget is exhausted after only one real strategy.
 - Final-test command execution now reuses a validated execution-setup wrapper automatically when one is declared, recording both the original command and the effective wrapped command in the report.

@@ -88,11 +88,13 @@ describe.concurrent('structured prompt hardening', () => {
       expect(buildPromptFromTemplate(prompt, [])).not.toContain('Do not use tools.')
     }
 
-    for (const prompt of [PROM0, PROM25, PROM_EXECUTION_SETUP, PROM_CODING, PROM52, PROM54]) {
+    for (const prompt of [PROM0, PROM25, PROM_CODING, PROM52, PROM54]) {
       expect(prompt.toolPolicy).toBe('default')
       expect(buildPromptFromTemplate(prompt, [])).not.toContain('Do not use tools.')
     }
 
+    expect(PROM_EXECUTION_SETUP.toolPolicy).toBe('execution_setup_online')
+    expect(buildPromptFromTemplate(PROM_EXECUTION_SETUP, [])).not.toContain('Do not use tools.')
     expect(PROM_EXECUTION_CAPABILITY_PROBE.toolPolicy).toBe('read_only')
     expect(buildPromptFromTemplate(PROM_EXECUTION_CAPABILITY_PROBE, [])).not.toContain('Do not use tools.')
     expect(PROM_EXECUTION_SETUP_PLAN.toolPolicy).toBe('read_only')
@@ -310,7 +312,12 @@ describe.concurrent('structured prompt hardening', () => {
     expect(setupPrompt).toContain('Do not use `sudo`, global OS package-manager installs, or arbitrary source-tree install paths')
     expect(setupPrompt).toContain('Missing required launchers: a failed version/info probe is discovery only')
     expect(setupPrompt).toContain('Provisioning persistence: after a required launcher provisioning attempt fails')
+    expect(setupPrompt).toContain('Real provisioning attempts: If the required launcher is missing')
+    expect(setupPrompt).toContain('wrapper creation, cache inspection, PATH edits, and version probes do not count as provisioning strategies')
     expect(setupPrompt).toContain('Version pins/ranges: interpret repository-declared tool versions')
+    expect(setupPrompt).toContain('Online artifact lookup')
+    expect(setupPrompt).toContain('OpenCode `websearch`')
+    expect(setupPrompt).toContain('`webfetch` for official release/download metadata')
     expect(setupPrompt).toContain('Provisioning Examples, Non-Exhaustive')
     expect(setupPrompt).toContain('For Node')
     expect(setupPrompt).toContain('for Python')

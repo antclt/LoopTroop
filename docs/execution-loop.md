@@ -186,7 +186,7 @@ Execution recovery is intentionally stricter after process or OpenCode interrupt
 
 ### Execution Setup Timeout
 
-Execution setup timeout is the maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` step after the setup plan is approved. It bounds setup work such as installing user-space toolchains, warming caches, and preparing repository-local runtime artifacts.
+Execution setup timeout is the maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` step after the setup plan is approved. It bounds setup work such as installing user-space toolchains, warming caches, using setup-scoped online lookup for official launcher artifact metadata when local evidence is insufficient, and preparing repository-local runtime artifacts.
 
 Execution setup treats missing command launchers or toolchains for required checks as readiness blockers, not as successful setup cautions. A failed version/info probe is discovery only: before blocking, the setup agent must first try safe user-space provisioning under approved temp roots, preferably `.ticket/runtime/execution-setup/tool-cache`, or record why no safe provisioning path exists. Failed tooling profiles must include `tool_requirements.provisioning_attempts` evidence with at least two distinct failed provisioning strategies and their commands, or a no-safe-path reason, and the setup profile must also record non-mutating `tooling_probe_commands` selected from the repository's own tooling so LoopTroop can rerun them before coding.
 

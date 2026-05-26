@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   OPENCODE_ALLOW_ALL_PERMISSION_VALUE,
+  OPENCODE_ENABLE_EXA,
   OPENCODE_PERMISSION,
+  withManagedOpenCodeServerEnv,
   withOpenCodePermissionEnv,
 } from '../scripts/opencode-permission-env'
 
@@ -36,5 +38,19 @@ describe('withOpenCodePermissionEnv', () => {
     })
 
     expect(env[OPENCODE_PERMISSION]).toBe(OPENCODE_ALLOW_ALL_PERMISSION_VALUE)
+  })
+
+  it('enables OpenCode websearch support for the managed server by default', () => {
+    const env = withManagedOpenCodeServerEnv({})
+
+    expect(env[OPENCODE_ENABLE_EXA]).toBe('1')
+  })
+
+  it('forces OpenCode websearch support on for the managed server', () => {
+    const env = withManagedOpenCodeServerEnv({
+      [OPENCODE_ENABLE_EXA]: '0',
+    })
+
+    expect(env[OPENCODE_ENABLE_EXA]).toBe('1')
   })
 })

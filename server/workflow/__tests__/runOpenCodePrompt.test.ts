@@ -21,7 +21,11 @@ import type {
   StreamEvent,
 } from '../../opencode/types'
 import { deliberateInterview } from '../../phases/interview/deliberate'
-import { OPENCODE_DISABLED_TOOLS } from '../../opencode/toolPolicy'
+import {
+  OPENCODE_DEFAULT_TOOLS,
+  OPENCODE_DISABLED_TOOLS,
+  OPENCODE_EXECUTION_SETUP_ONLINE_TOOLS,
+} from '../../opencode/toolPolicy'
 import {
   runOpenCodePrompt,
   runOpenCodeSessionPrompt,
@@ -963,7 +967,7 @@ describe('runOpenCodePrompt', () => {
     expect(adapter.promptCalls[0]?.options?.tools).toEqual(OPENCODE_DISABLED_TOOLS)
   })
 
-  it('does not send a tools override when toolPolicy is default', async () => {
+  it('sends the default no-web tools override when toolPolicy is default', async () => {
     const adapter = new TestOpenCodeAdapter(['assistant response'])
 
     await runOpenCodePrompt({
@@ -974,7 +978,21 @@ describe('runOpenCodePrompt', () => {
     })
 
     expect(adapter.promptCalls).toHaveLength(1)
-    expect(adapter.promptCalls[0]?.options?.tools).toBeUndefined()
+    expect(adapter.promptCalls[0]?.options?.tools).toEqual(OPENCODE_DEFAULT_TOOLS)
+  })
+
+  it('enables OpenCode web tools for execution setup prompts only', async () => {
+    const adapter = new TestOpenCodeAdapter(['assistant response'])
+
+    await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Prompt body' }],
+      toolPolicy: 'execution_setup_online',
+    })
+
+    expect(adapter.promptCalls).toHaveLength(1)
+    expect(adapter.promptCalls[0]?.options?.tools).toEqual(OPENCODE_EXECUTION_SETUP_ONLINE_TOOLS)
   })
 
   it('propagates the initial PROM1 interview draft prompt to callers', async () => {

@@ -447,7 +447,7 @@ LoopTroop generates a context wipe note summarizing the failure when possible, a
 **Default:** 1200 s (20 minutes)  
 **Range:** 0–3600 s
 
-The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` phase, which runs after the setup plan is approved and before any coding begins.
+The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` phase, which runs after the setup plan is approved and before any coding begins. This budget also covers setup-scoped online lookup of official launcher artifact metadata when local repository evidence is insufficient.
 
 **What execution setup does:**
 

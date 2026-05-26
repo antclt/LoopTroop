@@ -3,7 +3,7 @@ import { DEFAULT_OPENCODE_BASE_URL } from '../shared/appConfig'
 import { getErrorMessage } from '../shared/typeGuards'
 import { resolveOpenCodeBaseUrl } from './opencode-dev-base-url'
 import { resolveOpenCodeLogMode } from './opencode-log-mode'
-import { withOpenCodePermissionEnv } from './opencode-permission-env'
+import { withManagedOpenCodeServerEnv } from './opencode-permission-env'
 
 const requestedBaseUrl = process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim() || DEFAULT_OPENCODE_BASE_URL
 const hasExplicitBaseUrl = Boolean(process.env.LOOPTROOP_OPENCODE_BASE_URL?.trim())
@@ -48,7 +48,7 @@ if (opencodeLogMode.mode === 'all') {
 
 const child = spawn('opencode', ['serve', ...opencodeLogMode.serveArgs, '--hostname', serveHostname, '--port', String(port)], {
   stdio: 'inherit',
-  env: withOpenCodePermissionEnv(process.env),
+  env: withManagedOpenCodeServerEnv(process.env),
 })
 
 child.once('error', (error) => {

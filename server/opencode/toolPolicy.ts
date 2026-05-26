@@ -1,6 +1,11 @@
 import type { PromptSessionOptions } from './types'
 
-export type OpenCodeToolPolicy = 'default' | 'disabled' | 'read_only'
+export type OpenCodeToolPolicy = 'default' | 'disabled' | 'read_only' | 'execution_setup_online'
+
+export const OPENCODE_DEFAULT_TOOLS: Readonly<Record<string, boolean>> = Object.freeze({
+  webfetch: false,
+  websearch: false,
+})
 
 export const OPENCODE_DISABLED_TOOLS: Readonly<Record<string, boolean>> = Object.freeze({
   '*': false,
@@ -46,10 +51,17 @@ export const OPENCODE_READ_ONLY_TOOLS: Readonly<Record<string, boolean>> = Objec
   write: false,
 })
 
+export const OPENCODE_EXECUTION_SETUP_ONLINE_TOOLS: Readonly<Record<string, boolean>> = Object.freeze({
+  webfetch: true,
+  websearch: true,
+})
+
 export function resolveOpenCodeTools(
   toolPolicy: OpenCodeToolPolicy = 'default',
 ): PromptSessionOptions['tools'] | undefined {
+  if (toolPolicy === 'default') return OPENCODE_DEFAULT_TOOLS
   if (toolPolicy === 'disabled') return OPENCODE_DISABLED_TOOLS
   if (toolPolicy === 'read_only') return OPENCODE_READ_ONLY_TOOLS
+  if (toolPolicy === 'execution_setup_online') return OPENCODE_EXECUTION_SETUP_ONLINE_TOOLS
   return undefined
 }
