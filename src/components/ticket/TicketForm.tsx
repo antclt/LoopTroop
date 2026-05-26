@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useCreateTicket } from '@/hooks/useTickets'
+import { useCreateTicket, useTicketAction, type Ticket } from '@/hooks/useTickets'
 import { useProjects } from '@/hooks/useProjects'
+import { useUI } from '@/context/useUI'
 import { DropdownPicker } from '@/components/shared/DropdownPicker'
 import { LoadingText } from '@/components/ui/LoadingText'
 import { ChevronDown, Check } from 'lucide-react'
@@ -14,7 +15,9 @@ interface TicketFormProps {
 }
 
 export function TicketForm({ onClose }: TicketFormProps) {
+  const { dispatch } = useUI()
   const createTicket = useCreateTicket()
+  const { mutateAsync: startTicket, isPending: isStartPending } = useTicketAction()
   const { data: projects = [] } = useProjects()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -24,6 +27,24 @@ export function TicketForm({ onClose }: TicketFormProps) {
 
   const selectedProject = projects.find(p => p.id === projectId) ?? projects[0]
   const effectiveProjectId = selectedProject?.id ?? ''
+
+  const handleCreateAndStart = async () => {
+    if (!effectiveProjectId) return
+    try {
+      const created: Ticket = await createTicket.mutateAsync({
+        projectId: effectiveProjectId,
+        title,
+        description: description || undefined,
+        priority,
+      })
+      await startTicket({ id: created.id, action: 'start' })
+      dispatch({ type: 'SELECT_TICKET', ticketId: created.id, externalId: created.externalId })
+      onClose()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start ticket'
+      alert(message)
+    }
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -195,7 +216,15 @@ export function TicketForm({ onClose }: TicketFormProps) {
               </Tooltip>
         <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button type="submit" disabled={createTicket.isPending || !effectiveProjectId}>
+                  <Button type="button" variant="outline" disabled={createTicket.isPending || isStartPending || !effectiveProjectId} onClick={handleCreateAndStart}>
+                        {createTicket.isPending || isStartPending ? <LoadingText text="Starting" /> : 'Create and Start'}
+                      </Button>
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs text-center text-balance">Create ticket and immediately start the workflow</TooltipContent>
+              </Tooltip>
+        <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button type="submit" disabled={createTicket.isPending || isStartPending || !effectiveProjectId}>
                         {createTicket.isPending ? <LoadingText text="Creating" /> : 'Create Ticket'}
                       </Button>
                 </TooltipTrigger>

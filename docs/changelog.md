@@ -19,6 +19,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added pre-flight and execution-setup worktree cleanliness checks: pre-existing committable project changes now block before setup, ready setup attempts fail if they leave committable project changes, and untracked generated/local noise is reported with `.gitignore` suggestions.
 - Added support for tracking multiple parallel AI model activities and diagnostics concurrently.
 - Added state persistence to localStorage for the collapsible activity strip, saving user preferences across reloads.
+- Added a **"Create and Start"** button to the New Ticket modal, letting users create a ticket and immediately trigger the workflow from a single action.
 
 #### Changed
 - Final-test command execution now reuses a validated execution-setup wrapper automatically when one is declared, recording both the original command and the effective wrapped command in the report.
