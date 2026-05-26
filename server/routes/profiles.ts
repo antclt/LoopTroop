@@ -27,6 +27,7 @@ const profileSchema = z.object({
   maxIterations: z.number().int().min(0).max(20).optional(),
   opencodeRetryLimit: z.number().int().min(0).max(50).optional(),
   opencodeRetryDelay: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(),
+  opencodeSteps: z.number().int().min(0).max(500).optional(), // 0 = no limit (OpenCode default)
   toolInputMaxChars: z.number().int().min(500).max(50_000).optional(),
   toolOutputMaxChars: z.number().int().min(1_000).max(100_000).optional(),
   toolErrorMaxChars: z.number().int().min(500).max(50_000).optional(),

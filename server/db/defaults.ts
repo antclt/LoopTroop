@@ -14,6 +14,7 @@ export const PROFILE_DEFAULTS = {
   maxIterations: 5,
   opencodeRetryLimit: 10,
   opencodeRetryDelay: 60_000,
+  opencodeSteps: 0,
   toolInputMaxChars: 4000,
   toolOutputMaxChars: 12_000,
   toolErrorMaxChars: 6_000,

@@ -10,6 +10,7 @@ All configuration lives in your profile, accessible via the **Configuration** bu
 | [Council Members](#council-members) | _(required, 1–3 additional)_ | any available models | AI Models |
 | [OpenCode Retry Limit](#opencode-retry-limit) | 10 | 0–50 | OpenCode Provider Recovery |
 | [OpenCode Retry Grace Window](#opencode-retry-grace-window) | 60 s | 0–3600 s | OpenCode Provider Recovery |
+| [OpenCode Max Steps](#opencode-max-steps) | 0 (no limit) | 0–500 | OpenCode Provider Recovery |
 | [AI Response Timeout](#ai-response-timeout) | 1200 s | 10–3600 s | AI Thinking |
 | [Min Council Quorum](#min-council-quorum) | 2 | 1–4 | AI Thinking |
 | [Max Interview Questions](#max-interview-questions) | 50 | 0–50 | AI Thinking |
@@ -151,6 +152,35 @@ The timer starts when OpenCode reports a matching retry status and is cleared by
 | Surfaces stuck retry loops quickly | Allows longer provider backoff windows |
 | Better for interactive supervision | Better for unattended runs with temporary provider load |
 | 0 disables the timer | Long windows can delay manual intervention |
+
+**See also:** [OpenCode Integration → Prompt Runner](/opencode-integration#prompt-runner)
+
+---
+
+### OpenCode Max Steps
+
+**Type:** integer  
+**Default:** 0 (no limit — OpenCode default)  
+**Range:** 0–500
+
+Maximum number of agent iterations (steps) OpenCode is allowed to perform per session. When the limit is reached, OpenCode instructs the model to summarize its work and close the session; LoopTroop then starts a fresh session to continue.
+
+**Steps vs messages:** Each step is one full agent iteration — the model reads the full context, decides which tools to call, and receives their results. Each step generates approximately two messages in the execution log (one assistant message with tool calls, one with tool results). So `messages=25` in the log corresponds roughly to 12–13 steps.
+
+**What 0 means:** No `opencode.json` is written to the worktree. OpenCode runs with no step cap and the model stops whenever it decides naturally. This is the default behavior. When a session ends without producing a text response (the model stopped mid-tool-call iteration), LoopTroop will automatically start a new session and show a visible notification in the **ALL** tab.
+
+**When to set a value:** If you observe sessions running for a very large number of messages and then silently restarting, setting a cap (e.g. `20`) ensures OpenCode wraps up and summarizes at a predictable point. A session that hits the configured limit produces a summary response, so the restart is cleaner than a natural mid-iteration stop.
+
+**Implementation detail:** When `opencodeSteps > 0`, LoopTroop writes `opencode.json` at the root of the ticket worktree before coding starts and deletes it when coding finishes (including on error). The file is automatically excluded from git via the worktree-local git exclude, so it never appears in commits or `git status`.
+
+**Trade-offs:**
+
+| Lower (5–15) | Higher (30–100) |
+| --- | --- |
+| Sessions wrap up and summarize more frequently | Fewer session restarts overall |
+| More predictable restart points | Model may run longer before being forced to summarize |
+| Useful for models that tend to drift in very long sessions | Useful when tasks genuinely need many uninterrupted steps |
+| 0 = no limit, same as not setting the value | 0 is the OpenCode default |
 
 **See also:** [OpenCode Integration → Prompt Runner](/opencode-integration#prompt-runner)
 

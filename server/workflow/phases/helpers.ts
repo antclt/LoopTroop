@@ -1154,6 +1154,16 @@ export function emitOpenCodeSessionLogs(
     memberId,
     beadId ? { beadId } : undefined,
   )
+  if (response.length === 0) {
+    emitAiMilestone(
+      ticketId,
+      ticketExternalId,
+      phase,
+      `OpenCode session was restarted: no response text was produced (stage: ${stage}, messages: ${messages.length}). A new session will be started to continue.`,
+      `session-restart:${sessionId}`,
+      { source: 'system', modelId: memberId, ...(beadId ? { beadId } : {}) },
+    )
+  }
   const { responseText, responseMeta } = analyzeAssistantMessages(messages)
   const latestAssistantMessageId = responseMeta.latestAssistantMessageId
   const latestTextEntryId = latestAssistantMessageId
@@ -1548,6 +1558,7 @@ export function resolveExecutionRuntimeSettings(context: TicketContext): {
   perIterationTimeoutMs: number
   opencodeRetryLimit: number
   opencodeRetryDelayMs: number
+  opencodeSteps: number
 } {
   const storedContext = getStoredTicketContext(context.ticketId)
   const profile = appDb.select().from(profiles).get()
@@ -1560,12 +1571,14 @@ export function resolveExecutionRuntimeSettings(context: TicketContext): {
     ?? PROFILE_DEFAULTS.perIterationTimeout
   const opencodeRetryLimit = profile?.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit
   const opencodeRetryDelayMs = profile?.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay
+  const opencodeSteps = profile?.opencodeSteps ?? PROFILE_DEFAULTS.opencodeSteps
 
   return {
     maxIterations,
     perIterationTimeoutMs,
     opencodeRetryLimit,
     opencodeRetryDelayMs,
+    opencodeSteps,
   }
 }
 

@@ -13,6 +13,9 @@ import { emitPhaseLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStr
 import type { OpenCodeStreamState } from './types'
 import { readTicketBeads, recoverCodingBeadWithReset, writeTicketBeads, updateTicketProgressFromBeads } from './beadsPhase'
 import { hasPendingSessionContinuationForTicketPhase } from '../../opencode/sessionContinuation'
+import { ensureLocalGitExclude } from '../../git/repository'
+import { writeFileSync, rmSync } from 'fs'
+import { resolve } from 'path'
 
 function mergeBeadRetryMetadata(
   beads: Bead[],
@@ -234,6 +237,24 @@ export async function handleMockExecutionUnsupported(
   sendEvent({ type: 'ERROR', message, codes: ['MOCK_EXECUTION_UNSUPPORTED'] })
 }
 
+const OPENCODE_STEPS_CONFIG_FILENAME = 'opencode.json'
+
+function writeOpencodeStepsConfig(worktreePath: string, steps: number): void {
+  const config = {
+    $schema: 'https://opencode.ai/config.json',
+    agent: { build: { steps } },
+  }
+  writeFileSync(resolve(worktreePath, OPENCODE_STEPS_CONFIG_FILENAME), JSON.stringify(config, null, 2) + '\n', 'utf8')
+}
+
+function removeOpencodeStepsConfig(worktreePath: string): void {
+  try {
+    rmSync(resolve(worktreePath, OPENCODE_STEPS_CONFIG_FILENAME), { force: true })
+  } catch {
+    // Ignore errors — file may have already been removed
+  }
+}
+
 export async function handleCoding(
   ticketId: string,
   context: TicketContext,
@@ -267,6 +288,13 @@ export async function handleCoding(
     throw new Error('No locked main implementer is configured for coding')
   }
 
+  const executionSettings = resolveExecutionRuntimeSettings(context)
+  if (executionSettings.opencodeSteps > 0) {
+    writeOpencodeStepsConfig(paths.worktreePath, executionSettings.opencodeSteps)
+    ensureLocalGitExclude(paths.worktreePath, ['/' + OPENCODE_STEPS_CONFIG_FILENAME])
+  }
+
+  try {
   let activeBead = getLatestInterruptedInProgressBead(beads)
   let beadStartCommit: string | null = activeBead?.beadStartCommit ?? null
   let result: ExecutionResult | null = null
@@ -375,7 +403,6 @@ export async function handleCoding(
     }
 
     throwIfAborted(signal, ticketId)
-    const executionSettings = resolveExecutionRuntimeSettings(context)
     const streamStates = new Map<string, OpenCodeStreamState>()
     result = await withCommandLoggingFieldsAsync({ beadId: executingBead.id }, async () => await executeBead(
       adapter,
@@ -652,6 +679,11 @@ export async function handleCoding(
     sendEvent({ type: 'ALL_BEADS_DONE' })
   } else {
     sendEvent({ type: 'BEAD_COMPLETE' })
+  }
+  } finally {
+    if (executionSettings.opencodeSteps > 0) {
+      removeOpencodeStepsConfig(paths.worktreePath)
+    }
   }
     },
     (phase, type, content, data) => emitPhaseLog(ticketId, context.externalId, phase, type, content, { source: 'system', audience: 'all', ...(data ?? {}) }),

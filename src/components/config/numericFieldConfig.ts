@@ -59,6 +59,14 @@ export const numericFields = {
     fromStore: (v: number) => String(Math.round(v / 1000)),
     toStore: (v: number) => v * 1000,
   },
+  opencodeSteps: {
+    min: 0,
+    max: 500,
+    label: 'OpenCode Max Steps',
+    docsPath: '/configuration#opencode-max-steps',
+    fromStore: (v: number) => String(v),
+    toStore: (v: number) => v,
+  },
   minCouncilQuorum: {
     min: 1,
     max: 4,
@@ -173,6 +181,7 @@ export function buildInitialRawNumeric(data: Record<string, unknown>): Record<st
     structuredRetryCount: String(data.structuredRetryCount ?? PROFILE_DEFAULTS.structuredRetryCount),
     opencodeRetryLimit: String(data.opencodeRetryLimit ?? PROFILE_DEFAULTS.opencodeRetryLimit),
     opencodeRetryDelay: numericFields.opencodeRetryDelay.fromStore((data.opencodeRetryDelay ?? PROFILE_DEFAULTS.opencodeRetryDelay) as number),
+    opencodeSteps: String(data.opencodeSteps ?? PROFILE_DEFAULTS.opencodeSteps),
     toolInputMaxChars: String(data.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars),
     toolOutputMaxChars: String(data.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars),
     toolErrorMaxChars: String(data.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars),

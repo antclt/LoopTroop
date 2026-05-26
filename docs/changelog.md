@@ -33,10 +33,16 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - The DEBUG tab now shows every single log line from LoopTroop (all three channels) and OpenCode (all SDK stream events plus native server logs); OpenCode native logs are always written at DEBUG level to the log directory. Use `npm run dev --opencode-logs=all` to additionally print them to the console.
 - Added a high-priority roadmap item for an AI Gap-Fix Button on coverage warnings during approval statuses, letting the main AI implementer resolve unresolved coverage gaps in-place.
 - Successful `git push` commands now show a compact `→ push completed` log entry instead of the verbose multi-line `STDERR:` remote messages block.
+- Show a visible notification in the ALL tab whenever an OpenCode session is restarted due to no response text being produced, making silent session resets visible across all workflow phases.
+- Added **OpenCode Max Steps** profile setting to cap the number of agent iterations per OpenCode session; when set, LoopTroop writes a per-worktree `opencode.json` (git-excluded) before coding and removes it after; 0 means no limit (OpenCode default).
 
 ### Detailed Changes
 
 ### Added
+- `emitOpenCodeSessionLogs` now emits an `audience: 'all'` milestone notification when `responseChars=0`, making silent OpenCode session restarts visible in the ALL tab across all workflow phases (coding, PRD, interview, verification, PR drafting, etc.).
+- New **OpenCode Max Steps** profile setting (`opencodeSteps`, default `0`): caps the number of OpenCode agent iterations per session. When set to a non-zero value, LoopTroop writes `opencode.json` at the worktree root before coding starts (git-excluded via per-worktree local exclude) and removes it in a `finally` block after coding completes. `0` means no limit — matching OpenCode's default behavior.
+- Added `opencodeSteps` to DB schema (`opencode_steps INTEGER DEFAULT 0`), Drizzle ORM profile schema, Zod profile route schema, frontend `Profile` interface, `numericFields` config, `buildInitialRawNumeric`, and `ProfileSetup.tsx` with a `NumericField` control and inline hint.
+- Added **OpenCode Max Steps** section to `docs/configuration.md` covering steps-vs-messages semantics, trade-offs, and git-exclusion implementation detail.
 
 ### Changed
 - Successful `git push` with informational remote STDERR is now rendered as a compact `→ push completed` log entry in `commandLogger`, suppressing the verbose multi-line `STDERR:` block.

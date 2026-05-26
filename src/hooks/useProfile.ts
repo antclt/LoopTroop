@@ -19,6 +19,7 @@ interface Profile {
   maxIterations: number
   opencodeRetryLimit: number
   opencodeRetryDelay: number
+  opencodeSteps: number
   toolInputMaxChars: number
   toolOutputMaxChars: number
   toolErrorMaxChars: number
@@ -44,6 +45,7 @@ interface CreateProfileInput {
   maxIterations?: number
   opencodeRetryLimit?: number
   opencodeRetryDelay?: number
+  opencodeSteps?: number
   toolInputMaxChars?: number
   toolOutputMaxChars?: number
   toolErrorMaxChars?: number
