@@ -538,11 +538,13 @@ function ReadOnlyApprovalAttemptView({
   phase,
   artifactType,
   phaseAttempt,
+  logPhaseAttempt,
 }: {
   ticket: Ticket
   phase: string
   artifactType: 'interview' | 'prd' | 'beads'
   phaseAttempt?: number
+  logPhaseAttempt?: number
 }) {
   const councilMemberNames = useMemo(
     () => ticket.lockedCouncilMembers.filter((memberId) => memberId.trim().length > 0),
@@ -661,7 +663,7 @@ function ReadOnlyApprovalAttemptView({
 
       <CollapsiblePhaseLogSection
         phase={phase}
-        phaseAttempt={archivedAttempt ? phaseAttempt : undefined}
+        phaseAttempt={logPhaseAttempt ?? (archivedAttempt ? phaseAttempt : undefined)}
         ticket={ticket}
         defaultExpanded={false}
         variant="bottom"
@@ -698,6 +700,7 @@ export function ApprovalView({ ticket, phase, artifactType, readOnly }: Approval
   )
 
   const archivedAttemptNumber = selectedAttempt?.state === 'archived' ? selectedAttempt.attemptNumber : undefined
+  const logPhaseAttempt = attempts.length > 1 ? selectedAttemptNumber ?? undefined : undefined
   const selector = attempts.length > 1 ? (
     <div className="px-4 pt-4 shrink-0">
       <PhaseAttemptSelector
@@ -734,6 +737,7 @@ export function ApprovalView({ ticket, phase, artifactType, readOnly }: Approval
             phase={resolvedPhase}
             artifactType={artifactType}
             phaseAttempt={archivedAttemptNumber}
+            logPhaseAttempt={logPhaseAttempt}
           />
         </div>
       </div>

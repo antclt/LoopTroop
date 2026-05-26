@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Fixed version log isolation: switching to the active version in multi-attempt phases now shows only that version's logs instead of all attempts' logs.
 - Hardened execution setup so missing launcher failures must show persistent provisioning attempts before blocking.
 - Hardened setup reuse so final testing automatically runs through validated prepared environments.
 - Improved workspace setup approval logs so generation starts visibly expanded and collapses once the setup plan is ready.
@@ -24,6 +25,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added support for tracking multiple parallel AI model activities and diagnostics concurrently.
 - Added state persistence to localStorage for the collapsible activity strip, saving user preferences across reloads.
 - Added a **"Create and Start"** button to the New Ticket modal, letting users create a ticket and immediately trigger the workflow from a single action.
+
+#### Fixed
+- Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.
 
 #### Changed
 - Execution setup prompts now treat failed launcher version/info probes as discovery only, replacing single-ecosystem provisioning guidance with non-exhaustive Node, Python, and JavaScript-runtime examples plus permission to use any safe repository-appropriate temp-root provisioning approach.

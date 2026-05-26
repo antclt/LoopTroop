@@ -112,7 +112,7 @@ describe('CouncilView', () => {
     expect(screen.getByText('Current version (2)')).toBeInTheDocument()
     expect(screen.getByText('Archived version 1')).toBeInTheDocument()
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('current-prd-draft')
-    expect(screen.getByTestId('phase-log-section')).toHaveTextContent('DRAFTING_PRD:active')
+    expect(screen.getByTestId('phase-log-section')).toHaveTextContent('DRAFTING_PRD:2')
 
     fireEvent.change(selector, { target: { value: '1' } })
 

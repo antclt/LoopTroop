@@ -221,7 +221,7 @@ describe('CodingView', () => {
     expect(screen.getByText('Current version (2)')).toBeInTheDocument()
     expect(screen.getByText('Archived version 1')).toBeInTheDocument()
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:live')
-    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:active')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:2')
 
     fireEvent.change(selector, { target: { value: '1' } })
 
@@ -235,7 +235,7 @@ describe('CodingView', () => {
     fireEvent.change(selector, { target: { value: '2' } })
 
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:live')
-    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:active')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:2')
   })
 
   it('hides the phase version selector for CODING because bead retry has separate recovery', () => {
