@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { screen, fireEvent } from '@testing-library/react'
 import { PhaseTimeline } from '../PhaseTimeline'
 import { renderWithProviders } from '@/test/renderHelpers'
+import { makeTicket } from '@/test/factories'
 
 describe('PhaseTimeline', () => {
   it('renders phase groups', () => {
@@ -50,6 +51,26 @@ describe('PhaseTimeline', () => {
     expect(screen.getByText(/Implementing \(Bead \?\/\?\)/)).toBeInTheDocument()
     fireEvent.click(screen.getByText('Post-Implementation'))
     expect(screen.getByText('Testing Implementation')).toBeInTheDocument()
+  })
+
+  it('uses bead progress only for the live CODING timeline row', () => {
+    const ticket = makeTicket({
+      status: 'RUNNING_FINAL_TEST',
+      runtime: {
+        ...makeTicket().runtime,
+        currentBead: 3,
+        totalBeads: 10,
+      },
+    })
+
+    renderWithProviders(
+      <PhaseTimeline currentStatus="RUNNING_FINAL_TEST" ticket={ticket} />,
+    )
+
+    fireEvent.click(screen.getByText('Implementation'))
+
+    expect(screen.queryByText('Implementing (Bead 3/10)')).not.toBeInTheDocument()
+    expect(screen.getByText(/Implementing \(Bead \?\/\?\)/)).toBeInTheDocument()
   })
 
   it('hides the error phase once a ticket is no longer actively blocked', () => {

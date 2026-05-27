@@ -308,6 +308,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'This is the "coverage check" step of the Interview phase. The same pattern repeats in the Specs (PRD) phase as "Coverage Check (PRD)" (where the PRD is checked against the winning model\'s Full Answers artifact) and in the Blueprint (Beads) phase as "Coverage Check (Beads)" (where the beads blueprint is checked against the approved PRD).',
       'All three coverage checks share the goal of verifying completeness, but they differ in how gaps are resolved: Interview coverage sends you back to answer follow-up questions (user-facing loop). PRD coverage revises the document automatically within the same phase (AI-internal loop, up to the configured pass cap). Beads coverage also revises automatically within the Coverage Check (Beads) phase, and is then followed by a separate Expanding Blueprint phase that transforms the validated semantic blueprint into execution-ready bead records.',
       'Each coverage check has a budget or cap to ensure convergence — interview has a follow-up round budget, PRD has a configured pass cap, and beads has its own configured pass cap. Blueprint expansion happens in the dedicated Expanding Blueprint phase that follows.',
+      'While this status is active, the workspace title shows the current coverage pass when it can be read from coverage artifacts or logs. That live progress text disappears once the ticket leaves this status.',
     ],
   },
   WAITING_INTERVIEW_APPROVAL: {
@@ -460,6 +461,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'Unlike the interview loop (which bounces back to the user for more answers), PRD gap resolution stays inside this same phase — the model revises the PRD directly.',
       'The maximum number of coverage versions is configuration-driven to ensure convergence without hard-coding a single limit for every project.',
+      'While this status is active, the workspace title shows the PRD candidate version being checked and the current coverage pass when those values are available. That live progress text disappears once the ticket leaves this status.',
       'Change metadata repairs are text-preserving only. If a model provides section paths or summaries without concrete before/after item records, LoopTroop records a warning and derives the review diff from the validated PRD documents instead.',
       'Context available: winning model Full Answers + PRD (current candidate version). The approved interview is not fed to this phase; the winner Full Answers artifact is the canonical coverage source.',
       'Why cap the loop? Diminishing returns: most meaningful gaps are caught in early revisions. The cap prevents the loop from endlessly polishing minor details while delaying your approval review.',
@@ -616,6 +618,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This phase handles only the semantic coverage loop — expansion into execution-ready bead records happens in the separate Expanding Blueprint phase that follows.',
       'The beads coverage cap ensures convergence — the loop cannot run indefinitely.',
+      'While this status is active, the workspace title shows the implementation-plan version being checked and the current coverage pass when those values are available. That live progress text disappears once the ticket leaves this status.',
       'Context available: PRD + Beads (semantic blueprint).',
       'Why separate coverage from expansion? Coverage at the semantic level is cheaper and faster than expansion. By checking coverage first at the semantic level, LoopTroop avoids wasting expansion effort on a blueprint that would need revision.',
     ],
@@ -773,7 +776,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   CODING: {
-    overview: 'LoopTroop runs the approved beads one at a time, selecting the next runnable bead by dependency order and priority, executing it with the coding agent, and recovering cleanly between failed iterations via checkpoint finalization or worktree reset. Each bead attempt runs with narrow context, a bead retry budget, a LoopTroop-owned per-iteration timeout, and a separate prompt-level OpenCode/provider retry budget. When a workflow-owned iteration timeout or ordinary implementation failure occurs, the failed session is used only for best-effort context-wipe notes, then abandoned; the worktree resets to the pre-bead git snapshot and the next attempt starts in a fresh owned session with diagnostic notes as additional context. When OpenCode reports retryable provider stalls such as rate or usage limits past the configured prompt budget, LoopTroop blocks early with diagnostics and preserves the active session when Continue is possible. If a normal bead failure later blocks the ticket, the latest meaningful OpenCode provider/session diagnostic is still attached to the blocked error. On backend restart, a current matching execution checkpoint can be finalized without re-running the bead; stale or mismatched checkpoints are ignored and the bead is reset before retry. Successful beads are marked done only after local finalization succeeds: Git-visible project changes are committed regardless of language or extension, true no-op work may complete without a commit, and push or untracked generated-noise findings are warnings after a successful local commit. The status label shows current bead progress (e.g., "Implementing (Bead 3/7)").',
+    overview: 'LoopTroop runs the approved beads one at a time, selecting the next runnable bead by dependency order and priority, executing it with the coding agent, and recovering cleanly between failed iterations via checkpoint finalization or worktree reset. Each bead attempt runs with narrow context, a bead retry budget, a LoopTroop-owned per-iteration timeout, and a separate prompt-level OpenCode/provider retry budget. When a workflow-owned iteration timeout or ordinary implementation failure occurs, the failed session is used only for best-effort context-wipe notes, then abandoned; the worktree resets to the pre-bead git snapshot and the next attempt starts in a fresh owned session with diagnostic notes as additional context. When OpenCode reports retryable provider stalls such as rate or usage limits past the configured prompt budget, LoopTroop blocks early with diagnostics and preserves the active session when Continue is possible. If a normal bead failure later blocks the ticket, the latest meaningful OpenCode provider/session diagnostic is still attached to the blocked error. On backend restart, a current matching execution checkpoint can be finalized without re-running the bead; stale or mismatched checkpoints are ignored and the bead is reset before retry. Successful beads are marked done only after local finalization succeeds: Git-visible project changes are committed regardless of language or extension, true no-op work may complete without a commit, and push or untracked generated-noise findings are warnings after a successful local commit. While CODING is active, the workspace title shows the current bead and iteration progress (for example, "Implementing (working on bead 3 of 7, iteration 2 of 5)") and returns to the plain status label once the ticket leaves CODING.',
     steps: [
       'Bead Selection and Tracker Update: LoopTroop reads the authoritative bead tracker, identifies all runnable beads (status `pending` with every entry in `blocked_by` present in the done-bead set), and sorts them by `priority` ascending. The first bead in that sorted list is selected. The selected bead is immediately marked `in_progress` in the tracker and ticket progress counters are updated so the UI progress ring reflects active work.',
       'Bead Start Commit Recording (Best Effort): Before the agent writes any files, LoopTroop attempts to record the current git HEAD SHA of the worktree as `beadStartCommit` and persists it in the bead tracker. This SHA is the worktree reset anchor — if a later iteration fails, the worktree can be rolled back to exactly this state. If recording fails (e.g., a git error), execution continues without it; context-wipe reset and bead-diff capture are simply disabled for this bead.',
@@ -810,6 +813,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'The context wipe note uses the failing session\'s full accumulated context (tool calls, test output, error traces) to generate an AI-authored diagnostic. If the context-capture prompt itself fails, a deterministic fallback note is built from recorded errors and recent tool-failure excerpts — the worktree reset always completes regardless of whether the AI note succeeds.',
       'Each successful bead with committable project changes produces a separate local per-bead git commit regardless of language or file extension. A successful no-op bead may complete without one. The integration phase later squashes all bead commits into a single clean candidate commit for the pull request.',
       'Internal git commands in this phase are logged to `SYS > CMD` after completion with concise summaries for quiet outcomes such as clean worktrees, empty diffs, completed pushes, and context-wipe cleanup.',
+      'The live workspace title shows bead and iteration progress only while CODING is the ticket\'s current status; historical CODING views and completed phases use the plain status label.',
     ],
   },
   RUNNING_FINAL_TEST: {
@@ -1175,7 +1179,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'VERIFYING_INTERVIEW_COVERAGE',
     label: 'Coverage Check (Interview)',
-    description: 'Coverage check for interview completeness; may add targeted follow-up questions before approval.',
+    description: 'Coverage check for interview completeness; may add targeted follow-up questions before approval. The live workspace title shows the current pass when known.',
     details: WORKFLOW_PHASE_DETAILS.VERIFYING_INTERVIEW_COVERAGE,
     kanbanPhase: 'in_progress',
     groupId: 'interview',
@@ -1237,7 +1241,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'VERIFYING_PRD_COVERAGE',
     label: 'Coverage Check (PRD)',
-    description: 'LoopTroop checks the current PRD candidate against the winning model\'s Full Answers artifact, normalizes safe revision metadata, and revises it in-phase until clean or the configured cap is reached.',
+    description: 'LoopTroop checks the current PRD candidate against the winning model\'s Full Answers artifact, normalizes safe revision metadata, and revises it in-phase until clean or the configured cap is reached. The live workspace title shows candidate version and pass when known.',
     details: WORKFLOW_PHASE_DETAILS.VERIFYING_PRD_COVERAGE,
     kanbanPhase: 'in_progress',
     groupId: 'prd',
@@ -1298,7 +1302,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'VERIFYING_BEADS_COVERAGE',
     label: 'Coverage Check (Beads)',
-    description: 'LoopTroop checks the current semantic beads blueprint against the approved PRD. If something is missing, it updates the blueprint and checks again. Once clean or the cap is reached, the workflow advances automatically to the Expanding Blueprint phase.',
+    description: 'LoopTroop checks the current semantic beads blueprint against the approved PRD. If something is missing, it updates the blueprint and checks again. Once clean or the cap is reached, the workflow advances automatically to the Expanding Blueprint phase. The live workspace title shows plan version and pass when known.',
     details: WORKFLOW_PHASE_DETAILS.VERIFYING_BEADS_COVERAGE,
     kanbanPhase: 'in_progress',
     groupId: 'beads',
@@ -1374,7 +1378,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CODING',
     label: 'Implementing (Bead ?/?)',
-    description: 'AI coding agent executes beads one at a time with workflow-owned iteration timeouts that reset and retry in fresh sessions, while eligible OpenCode/provider stalls can preserve the active session for Continue. `done` means OpenCode success plus local finalization success, with language-agnostic commits for committable project changes, no-op completion support, push/generated-noise warnings, and retryable finalization failures.',
+    description: 'AI coding agent executes beads one at a time with workflow-owned iteration timeouts that reset and retry in fresh sessions, while eligible OpenCode/provider stalls can preserve the active session for Continue. The live workspace title shows current bead and iteration progress. `done` means OpenCode success plus local finalization success, with language-agnostic commits for committable project changes, no-op completion support, push/generated-noise warnings, and retryable finalization failures.',
     details: WORKFLOW_PHASE_DETAILS.CODING,
     kanbanPhase: 'in_progress',
     groupId: 'implementation',

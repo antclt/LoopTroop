@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added live-only workspace status progress labels for coding, coverage checks, and retried phases.
 - Fixed long ticket descriptions being unscrollable in backlog and detail views.
 - Enabled setup-scoped online artifact lookup for missing launcher provisioning while keeping real provisioning evidence stricter.
 - Fixed realtime logs for active multi-attempt phases while keeping archived phase versions static and attempt-scoped.
@@ -26,6 +27,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added live-only progress wording to the workspace status title: CODING now names the active bead and iteration, coverage phases show pass/version progress when known, and manually retried non-implementation phases show the active retry attempt while the status is live.
 - Raw artifact tab now defaults to the validated variant when available. When multiple model sources exist (e.g. council drafts, votes), the first source with a validated variant is auto-selected. Falls back to the first non-disabled variant when no validated variant exists.
 - Added an `Initial Prompt` selector to future model-produced Raw attempt views when the first prompt is persisted, making the model input inspectable beside accepted and rejected attempt outputs without inferring legacy prompts from logs.
 - Added a guarded setup-plan rewind while `PREPARING_EXECUTION_ENV` is active, letting users edit or regenerate the approved setup plan after runtime setup starts while preserving archived runtime evidence.

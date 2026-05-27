@@ -38,6 +38,8 @@ Browser, frontend, backend, OpenCode, and model interruptions do not create new 
 
 The workspace header's `(details)` button opens the same canonical workflow metadata that `shared/workflowMeta.ts` provides, including the longer overview, steps, outputs, transitions, notes, equivalents, context, and workflow info for each status.
 
+The live workspace status title adds progress wording only while the ticket is currently in that status: CODING shows the current bead and iteration, PRD/Beads coverage shows the candidate version plus coverage pass, Interview coverage shows the pass, and manually retried non-implementation phases show the active retry attempt. Once the workflow transitions to the next status, those live details disappear from historical review and timeline rows.
+
 When a ticket enters `BLOCKED_ERROR`, the error panel shows the normal error details and logs. If OpenCode or the provider exposed underlying diagnostics, LoopTroop persists and displays those structured details too, including provider, model, session, timeout, retry, and rate-limit-style failure context. If OpenCode streams only `Provider returned error`, LoopTroop also checks local OpenCode logs for the matching session and displays the exact sanitized provider cause when available. When structured-output validation fails because OpenCode returned no usable content, the error panel keeps the latest underlying OpenCode retry/provider message instead of showing only the parser wrapper.
 
 ## Detailed Flow Diagram

@@ -214,10 +214,12 @@ export function PhaseTimeline({
                     const isCurrent = phase.id === currentStatus
                     const isSelectable = !isFuture || isCurrent
 
-                    const phaseLabel = getStatusUserLabel(phase.id, {
-                      currentBead: ticket?.runtime?.currentBead ?? ticket?.currentBead,
-                      totalBeads: ticket?.runtime?.totalBeads ?? ticket?.totalBeads,
-                    })
+                    const phaseLabel = getStatusUserLabel(phase.id, phase.id === currentStatus
+                      ? {
+                          currentBead: ticket?.runtime?.currentBead ?? ticket?.currentBead,
+                          totalBeads: ticket?.runtime?.totalBeads ?? ticket?.totalBeads,
+                        }
+                      : {})
 
                     return (
                       <Tooltip key={phase.id}>

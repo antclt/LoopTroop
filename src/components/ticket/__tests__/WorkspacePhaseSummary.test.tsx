@@ -1,6 +1,6 @@
 import type { ReactElement } from 'react'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { LogContext } from '@/context/logContextDef'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
 import { TEST, makeTicket } from '@/test/factories'
@@ -44,6 +44,29 @@ function renderWithLogContext(ui: ReactElement, logsByPhase: Record<string, LogE
 afterEach(() => {
   vi.restoreAllMocks()
   vi.useRealTimers()
+})
+
+beforeEach(() => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const url = String(input)
+    if (url.includes('/attempts')) {
+      return createJsonResponse([
+        {
+          ticketId: TEST.ticketId,
+          phase: 'DRAFTING_PRD',
+          attemptNumber: 1,
+          state: 'active',
+          archivedReason: null,
+          createdAt: TEST.timestamp,
+          archivedAt: null,
+        },
+      ])
+    }
+    if (url.endsWith(`/api/tickets/${TEST.ticketId}/artifacts`)) {
+      return createJsonResponse([])
+    }
+    throw new Error(`Unhandled fetch: ${url}`)
+  })
 })
 
 describe('WorkspacePhaseSummary', () => {
@@ -107,8 +130,47 @@ describe('WorkspacePhaseSummary', () => {
       <WorkspacePhaseSummary phase="CODING" ticket={ticket} />,
     )
 
-    expect(screen.getByRole('button', { name: 'Implementing (Bead 2/4)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Implementing (working on bead 2 of 4)' })).toBeInTheDocument()
     expect(screen.getByText(/AI coding agent executes beads one at a time/)).toBeInTheDocument()
+  })
+
+  it('shows live coding bead and iteration progress in the main title', () => {
+    const ticket = makeTicket({
+      status: 'CODING',
+      runtime: {
+        ...makeTicket().runtime,
+        currentBead: 3,
+        totalBeads: 10,
+        activeBeadIteration: 2,
+        maxIterationsPerBead: 5,
+      },
+    })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="CODING" ticket={ticket} />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Implementing (working on bead 3 of 10, iteration 2 of 5)' })).toBeInTheDocument()
+  })
+
+  it('hides live coding progress when reviewing CODING after the ticket moved on', () => {
+    const ticket = makeTicket({
+      status: 'RUNNING_FINAL_TEST',
+      runtime: {
+        ...makeTicket().runtime,
+        currentBead: 3,
+        totalBeads: 10,
+        activeBeadIteration: 2,
+        maxIterationsPerBead: 5,
+      },
+    })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="CODING" ticket={ticket} />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Implementing' })).toBeInTheDocument()
+    expect(screen.queryByText(/working on bead/)).not.toBeInTheDocument()
   })
 
   it('shows the bead countdown only while CODING is the live ticket status', () => {
@@ -169,10 +231,13 @@ describe('WorkspacePhaseSummary', () => {
     expect(screen.queryByText('08:00')).not.toBeInTheDocument()
   })
 
-  it('shows the next live PRD coverage version in the main title when revision work starts', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+  it('shows the next live PRD coverage version and pass in the main title when revision work starts', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
       const url = String(input)
       if (url.endsWith(`/api/tickets/${TEST.ticketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      if (url.includes('/attempts')) {
         return createJsonResponse([])
       }
       throw new Error(`Unhandled fetch: ${url}`)
@@ -182,6 +247,7 @@ describe('WorkspacePhaseSummary', () => {
     const logsByPhase = {
       VERIFYING_PRD_COVERAGE: [
         createLogEntry('[SYS] Transition: REFINING_PRD -> VERIFYING_PRD_COVERAGE', '2026-01-01T00:00:00.000Z'),
+        createLogEntry('[SYS] Coverage verification started using winning model: test-vendor/test-model (run 2/5).', '2026-01-01T00:00:01.000Z'),
         createLogEntry('[SYS] Coverage found 2 gap(s) in PRD Candidate v1. Revising candidate before the next audit pass.', '2026-01-01T00:00:02.000Z'),
       ],
     }
@@ -192,12 +258,12 @@ describe('WorkspacePhaseSummary', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Coverage Check (PRD) · Live v2' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Coverage Check (PRD) (checking version 2, pass 2 of 5)' })).toBeInTheDocument()
     })
   })
 
-  it('shows the latest live beads coverage version in the main title from coverage artifacts', async () => {
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+  it('shows the latest live beads coverage version and pass in the main title from coverage artifacts', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
       const url = String(input)
       if (url.endsWith(`/api/tickets/${TEST.ticketId}/artifacts`)) {
         return createJsonResponse([
@@ -211,10 +277,15 @@ describe('WorkspacePhaseSummary', () => {
               winnerId: TEST.councilMembers[0],
               refinedContent: 'beads: []',
               candidateVersion: 3,
+              coverageRunNumber: 2,
+              maxCoveragePasses: 5,
             }),
             createdAt: '2026-01-01T00:00:03.000Z',
           },
         ])
+      }
+      if (url.includes('/attempts')) {
+        return createJsonResponse([])
       }
       throw new Error(`Unhandled fetch: ${url}`)
     })
@@ -227,7 +298,91 @@ describe('WorkspacePhaseSummary', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Coverage Check (Beads) · Live v3' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Coverage Check (Beads) (checking version 3, pass 2 of 5)' })).toBeInTheDocument()
+    })
+  })
+
+  it('shows the live interview coverage pass without a candidate version', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith(`/api/tickets/${TEST.ticketId}/artifacts`)) {
+        return createJsonResponse([
+          {
+            id: 1,
+            ticketId: TEST.ticketId,
+            phase: 'VERIFYING_INTERVIEW_COVERAGE',
+            phaseAttempt: 1,
+            artifactType: 'interview_coverage',
+            filePath: null,
+            content: JSON.stringify({
+              status: 'gaps',
+              summary: 'Need more details.',
+              coverageRunNumber: 2,
+              maxCoveragePasses: 5,
+            }),
+            createdAt: '2026-01-01T00:00:03.000Z',
+            updatedAt: '2026-01-01T00:00:03.000Z',
+          },
+        ])
+      }
+      if (url.includes('/attempts')) {
+        return createJsonResponse([])
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    const ticket = makeTicket({ id: TEST.ticketId, status: 'VERIFYING_INTERVIEW_COVERAGE' })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="VERIFYING_INTERVIEW_COVERAGE" ticket={ticket} />,
+      { queryClient: createTestQueryClient() },
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Coverage Check (Interview) (pass 2 of 5)' })).toBeInTheDocument()
+    })
+  })
+
+  it('shows the live retry attempt for manually retried phases', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith(`/api/tickets/${TEST.ticketId}/phases/REFINING_PRD/attempts`)) {
+        return createJsonResponse([
+          {
+            ticketId: TEST.ticketId,
+            phase: 'REFINING_PRD',
+            attemptNumber: 2,
+            state: 'active',
+            archivedReason: null,
+            createdAt: '2026-01-01T00:01:00.000Z',
+            archivedAt: null,
+          },
+          {
+            ticketId: TEST.ticketId,
+            phase: 'REFINING_PRD',
+            attemptNumber: 1,
+            state: 'archived',
+            archivedReason: 'manual_retry_after_blocked_error',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            archivedAt: '2026-01-01T00:01:00.000Z',
+          },
+        ])
+      }
+      if (url.endsWith(`/api/tickets/${TEST.ticketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    const ticket = makeTicket({ id: TEST.ticketId, status: 'REFINING_PRD' })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary phase="REFINING_PRD" ticket={ticket} />,
+      { queryClient: createTestQueryClient() },
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Refining Specs (retry attempt 2)' })).toBeInTheDocument()
     })
   })
 })

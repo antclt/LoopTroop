@@ -7,6 +7,7 @@ import { getStatusUserLabel, WORKFLOW_GROUPS } from '@/lib/workflowMeta'
 import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
 import { type DBartifact, useTicketArtifacts } from '@/hooks/useTicketArtifacts'
+import { useTicketPhaseAttempts, type TicketPhaseAttempt } from '@/hooks/useTicketPhaseAttempts'
 import { getTicketRuntime } from '@/lib/ticketNormalization'
 import { findLatestArtifactByType, findLatestCompanionArtifact, parseArtifactCompanionPayload } from '@/components/workspace/artifactCompanionUtils'
 import { buildCoverageArtifactContent, parseCoverageArtifact } from '@/components/workspace/phaseArtifactTypes'
@@ -56,10 +57,11 @@ interface WorkspacePhaseSummaryProps {
   errorMessage?: string | null
 }
 
-type CoveragePhase = 'VERIFYING_PRD_COVERAGE' | 'VERIFYING_BEADS_COVERAGE'
+type CoveragePhase = 'VERIFYING_INTERVIEW_COVERAGE' | 'VERIFYING_PRD_COVERAGE' | 'VERIFYING_BEADS_COVERAGE'
+type VersionedCoveragePhase = 'VERIFYING_PRD_COVERAGE' | 'VERIFYING_BEADS_COVERAGE'
 
 /** Phase-specific metadata for the two coverage phases that track versioned candidate revisions. */
-const COVERAGE_PHASE_META: Record<CoveragePhase, {
+const COVERAGE_PHASE_META: Record<VersionedCoveragePhase, {
   coverageArtifactType: 'prd_coverage' | 'beads_coverage'
   coverageInputArtifactType: 'prd_coverage_input' | 'beads_coverage_input'
   coverageRevisionArtifactType: 'prd_coverage_revision' | 'beads_coverage_revision'
@@ -79,12 +81,46 @@ const COVERAGE_PHASE_META: Record<CoveragePhase, {
   },
 }
 
+const COVERAGE_ARTIFACT_TYPES: Record<CoveragePhase, {
+  coverageArtifactType: 'interview_coverage' | 'prd_coverage' | 'beads_coverage'
+  coverageInputArtifactType: 'interview_coverage_input' | 'prd_coverage_input' | 'beads_coverage_input'
+  coverageRevisionArtifactType?: 'prd_coverage_revision' | 'beads_coverage_revision'
+}> = {
+  VERIFYING_INTERVIEW_COVERAGE: {
+    coverageArtifactType: 'interview_coverage',
+    coverageInputArtifactType: 'interview_coverage_input',
+  },
+  VERIFYING_PRD_COVERAGE: {
+    coverageArtifactType: 'prd_coverage',
+    coverageInputArtifactType: 'prd_coverage_input',
+    coverageRevisionArtifactType: 'prd_coverage_revision',
+  },
+  VERIFYING_BEADS_COVERAGE: {
+    coverageArtifactType: 'beads_coverage',
+    coverageInputArtifactType: 'beads_coverage_input',
+    coverageRevisionArtifactType: 'beads_coverage_revision',
+  },
+}
+
 function isCoveragePhase(phase: string): phase is CoveragePhase {
+  return phase === 'VERIFYING_INTERVIEW_COVERAGE'
+    || phase === 'VERIFYING_PRD_COVERAGE'
+    || phase === 'VERIFYING_BEADS_COVERAGE'
+}
+
+function isVersionedCoveragePhase(phase: string): phase is VersionedCoveragePhase {
   return phase === 'VERIFYING_PRD_COVERAGE' || phase === 'VERIFYING_BEADS_COVERAGE'
 }
 
 /** Normalises a candidate-version number: returns a positive integer or `null`. */
 function normalizeCandidateVersion(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null
+  const normalized = Math.trunc(value)
+  return normalized > 0 ? normalized : null
+}
+
+/** Normalises a positive integer used in live progress labels. */
+function normalizePositiveInteger(value: unknown): number | null {
   if (typeof value !== 'number' || !Number.isFinite(value)) return null
   const normalized = Math.trunc(value)
   return normalized > 0 ? normalized : null
@@ -102,6 +138,7 @@ function isTimestampOnOrAfter(timestamp: string | undefined, minimumTimestamp: s
 }
 
 type ArtifactContentSource = Pick<DBartifact, 'content'>
+type CoveragePassProgress = { run: number; max?: number }
 
 /** Extracts a candidate version number from an artifact’s content or its companion payload. */
 function extractArtifactCandidateVersion(
@@ -123,7 +160,7 @@ function extractArtifactCandidateVersion(
 }
 
 /** Reads the highest candidate version from coverage, input, and revision artifacts for the current phase activation. */
-function extractCoverageVersionFromArtifacts(phase: CoveragePhase, artifacts: DBartifact[]): number | null {
+function extractCoverageVersionFromArtifacts(phase: VersionedCoveragePhase, artifacts: DBartifact[]): number | null {
   const meta = COVERAGE_PHASE_META[phase]
   const coverageArtifact = findLatestArtifactByType(artifacts, meta.coverageArtifactType, [phase])
   const coverageCompanion = findLatestCompanionArtifact(artifacts, meta.coverageArtifactType, [phase])
@@ -151,7 +188,7 @@ function extractCoverageVersionFromArtifacts(phase: CoveragePhase, artifacts: DB
 }
 
 /** Scans log lines (newest-first) for candidate-version patterns (e.g., "PRD Candidate v3") and returns the latest version found. */
-function extractCoverageVersionFromLogs(phase: CoveragePhase, lines: string[]): number | null {
+function extractCoverageVersionFromLogs(phase: VersionedCoveragePhase, lines: string[]): number | null {
   const candidateLabel = COVERAGE_PHASE_META[phase].candidateLabel
   const escapedCandidateLabel = candidateLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const revisingPattern = new RegExp(`Coverage found .* ${escapedCandidateLabel} v(\\d+)\\. Revising candidate before the next audit pass\\.`, 'i')
@@ -182,6 +219,102 @@ function extractCoverageVersionFromLogs(phase: CoveragePhase, lines: string[]): 
   return null
 }
 
+function parseArtifactRecord(content: string | null | undefined): Record<string, unknown> | null {
+  if (!content?.trim()) return null
+  try {
+    const parsed = JSON.parse(content) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null
+  } catch {
+    return null
+  }
+}
+
+function extractCoveragePassFromRecord(record: Record<string, unknown> | null): CoveragePassProgress | null {
+  if (!record) return null
+  const attempts = Array.isArray(record.attempts) ? record.attempts : []
+  const latestAttempt = attempts.length > 0
+    ? attempts[attempts.length - 1]
+    : null
+  const latestAttemptRecord = latestAttempt && typeof latestAttempt === 'object' && !Array.isArray(latestAttempt)
+    ? latestAttempt as Record<string, unknown>
+    : null
+
+  const run = normalizePositiveInteger(record.coverageRunNumber)
+    ?? normalizePositiveInteger(latestAttemptRecord?.coverageRunNumber)
+  if (!run) return null
+
+  const max = normalizePositiveInteger(record.maxCoveragePasses)
+    ?? normalizePositiveInteger(latestAttemptRecord?.maxCoveragePasses)
+    ?? undefined
+  return { run, ...(max ? { max } : {}) }
+}
+
+function extractCoveragePassFromArtifactContent(
+  artifact: ArtifactContentSource | undefined,
+  expectedBaseArtifactType?: string,
+): CoveragePassProgress | null {
+  if (!artifact?.content?.trim()) return null
+  const companionRecord = parseArtifactCompanionPayload(artifact.content, expectedBaseArtifactType)
+  return extractCoveragePassFromRecord(companionRecord ?? parseArtifactRecord(artifact.content))
+}
+
+function chooseLatestCoveragePassProgress(
+  candidates: Array<CoveragePassProgress | null>,
+): CoveragePassProgress | null {
+  return candidates
+    .filter((candidate): candidate is CoveragePassProgress => Boolean(candidate))
+    .reduce<CoveragePassProgress | null>((latest, candidate) => (
+      latest == null || candidate.run >= latest.run ? candidate : latest
+    ), null)
+}
+
+function extractCoveragePassFromArtifacts(phase: CoveragePhase, artifacts: DBartifact[]): CoveragePassProgress | null {
+  const meta = COVERAGE_ARTIFACT_TYPES[phase]
+  const coverageArtifact = findLatestArtifactByType(artifacts, meta.coverageArtifactType, [phase])
+  const coverageCompanion = findLatestCompanionArtifact(artifacts, meta.coverageArtifactType, [phase])
+  const inputArtifact = findLatestArtifactByType(artifacts, meta.coverageInputArtifactType, [phase])
+  const inputCompanion = findLatestCompanionArtifact(artifacts, meta.coverageInputArtifactType, [phase])
+  const revisionArtifact = meta.coverageRevisionArtifactType
+    ? findLatestArtifactByType(artifacts, meta.coverageRevisionArtifactType, [phase])
+    : undefined
+  const revisionCompanion = meta.coverageRevisionArtifactType
+    ? findLatestCompanionArtifact(artifacts, meta.coverageRevisionArtifactType, [phase])
+    : undefined
+
+  return chooseLatestCoveragePassProgress([
+    extractCoveragePassFromArtifactContent(coverageArtifact, meta.coverageArtifactType),
+    extractCoveragePassFromArtifactContent(coverageCompanion, meta.coverageArtifactType),
+    extractCoveragePassFromArtifactContent(inputArtifact, meta.coverageInputArtifactType),
+    extractCoveragePassFromArtifactContent(inputCompanion, meta.coverageInputArtifactType),
+    extractCoveragePassFromArtifactContent(revisionArtifact, meta.coverageRevisionArtifactType),
+    extractCoveragePassFromArtifactContent(revisionCompanion, meta.coverageRevisionArtifactType),
+  ])
+}
+
+function extractCoveragePassFromLogs(lines: string[]): CoveragePassProgress | null {
+  const runPatterns = [
+    /\b(?:run|pass)\s+(\d+)\s*(?:\/|of)\s*(\d+)\b/i,
+    /\((\d+)\s*\/\s*(\d+)\)/,
+  ]
+
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index] ?? ''
+    for (const pattern of runPatterns) {
+      const match = line.match(pattern)
+      if (!match) continue
+      const run = Number.parseInt(match[1] ?? '', 10)
+      const max = Number.parseInt(match[2] ?? '', 10)
+      if (Number.isFinite(run) && run > 0 && Number.isFinite(max) && max > 0) {
+        return { run, max }
+      }
+    }
+  }
+
+  return null
+}
+
 /** Walks log entries backwards to find the timestamp when this phase was last activated (used to scope coverage-version queries to the current run). */
 function findLatestPhaseActivationTimestamp(phase: string, logLines: Array<{ line: string; timestamp?: string }>): string | undefined {
   for (let index = logLines.length - 1; index >= 0; index -= 1) {
@@ -204,6 +337,48 @@ function DetailsList({ items }: { items: readonly string[] }) {
   )
 }
 
+function formatCodingLiveLabel(runtime: ReturnType<typeof getTicketRuntime>): string {
+  const beadLabel = runtime.currentBead > 0 && runtime.totalBeads > 0
+    ? `working on bead ${runtime.currentBead} of ${runtime.totalBeads}`
+    : null
+  const iterationLabel = runtime.activeBeadIteration && runtime.activeBeadIteration > 0
+    ? `iteration ${runtime.activeBeadIteration}${runtime.maxIterationsPerBead && runtime.maxIterationsPerBead > 0 ? ` of ${runtime.maxIterationsPerBead}` : ''}`
+    : null
+  const details = [beadLabel, iterationLabel].filter((detail): detail is string => Boolean(detail))
+  return details.length > 0 ? `Implementing (${details.join(', ')})` : 'Implementing'
+}
+
+function formatCoverageLiveLabel(
+  baseLabel: string,
+  candidateVersion: number | null,
+  coveragePass: CoveragePassProgress | null,
+): string {
+  const details: string[] = []
+  if (candidateVersion) details.push(`checking version ${candidateVersion}`)
+  if (coveragePass) {
+    details.push(`pass ${coveragePass.run}${coveragePass.max ? ` of ${coveragePass.max}` : ''}`)
+  }
+  return details.length > 0 ? `${baseLabel} (${details.join(', ')})` : baseLabel
+}
+
+function getSummaryBasePhaseLabel(phase: string, errorMessage?: string | null): string {
+  if (phase === 'CODING') return 'Implementing'
+  return getStatusUserLabel(phase, { errorMessage })
+}
+
+function getActivePhaseAttempt(attempts: TicketPhaseAttempt[]): TicketPhaseAttempt | null {
+  return attempts.find((attempt) => attempt.state === 'active') ?? attempts[0] ?? null
+}
+
+function formatLivePhaseAttemptLabel(attempts: TicketPhaseAttempt[]): string | null {
+  const activeAttempt = getActivePhaseAttempt(attempts)
+  if (!activeAttempt || activeAttempt.attemptNumber <= 1) return null
+
+  const previousAttempt = attempts.find((attempt) => attempt.attemptNumber === activeAttempt.attemptNumber - 1)
+  const isManualRetry = previousAttempt?.archivedReason === 'manual_retry_after_blocked_error'
+  return `${isManualRetry ? 'retry attempt' : 'attempt'} ${activeAttempt.attemptNumber}`
+}
+
 /**
  * Collapsible status bar with phase label, description, "(details)" dialog trigger,
  * and optional live coverage-version badge.
@@ -215,23 +390,28 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
   const runtime = getTicketRuntime(ticket)
   const descriptionId = useId()
   const logCtx = useLogs()
-  const shouldTrackCoverageVersion = isCoveragePhase(phase)
-  const { artifacts } = useTicketArtifacts(ticket.id, { skipFetch: !shouldTrackCoverageVersion })
-  const phaseLogs = useMemo(
-    () => shouldTrackCoverageVersion && logCtx ? logCtx.getLogsForPhase(phase) : [],
-    [shouldTrackCoverageVersion, logCtx, phase],
+  const isLivePhase = ticket.status === phase
+  const shouldTrackCoverageProgress = isLivePhase && isCoveragePhase(phase)
+  const shouldTrackPhaseAttempt = isLivePhase && phase !== 'CODING' && !isCoveragePhase(phase)
+  const { artifacts } = useTicketArtifacts(ticket.id, { skipFetch: !shouldTrackCoverageProgress })
+  const { data: phaseAttempts = [] } = useTicketPhaseAttempts(
+    shouldTrackPhaseAttempt ? ticket.id : undefined,
+    shouldTrackPhaseAttempt ? phase : undefined,
   )
-  const phaseActivationTimestamp = shouldTrackCoverageVersion
+  const phaseLogs = useMemo(
+    () => shouldTrackCoverageProgress && logCtx ? logCtx.getLogsForPhase(phase) : [],
+    [shouldTrackCoverageProgress, logCtx, phase],
+  )
+  const phaseActivationTimestamp = shouldTrackCoverageProgress
     ? findLatestPhaseActivationTimestamp(phase, phaseLogs)
     : undefined
 
-  const basePhaseLabel = useMemo(() => getStatusUserLabel(phase, {
-    currentBead: runtime.currentBead,
-    totalBeads: runtime.totalBeads,
-    errorMessage,
-  }), [errorMessage, phase, runtime.currentBead, runtime.totalBeads])
+  const basePhaseLabel = useMemo(
+    () => getSummaryBasePhaseLabel(phase, errorMessage),
+    [errorMessage, phase],
+  )
   const coverageVersion = useMemo(() => {
-    if (!shouldTrackCoverageVersion) return null
+    if (!shouldTrackCoverageProgress || !isVersionedCoveragePhase(phase)) return null
 
     const runArtifacts = phaseActivationTimestamp
       ? artifacts.filter((artifact) => artifact.phase !== phase || isTimestampOnOrAfter(artifact.createdAt, phaseActivationTimestamp))
@@ -243,10 +423,33 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
     const logVersion = extractCoverageVersionFromLogs(phase, runLogs.map((entry) => entry.line))
 
     return Math.max(artifactVersion ?? 1, logVersion ?? 1)
-  }, [artifacts, phase, phaseActivationTimestamp, phaseLogs, shouldTrackCoverageVersion])
-  const phaseLabel = shouldTrackCoverageVersion && coverageVersion
-    ? `${basePhaseLabel} · ${ticket.status === phase ? 'Live ' : ''}v${coverageVersion}`
-    : basePhaseLabel
+  }, [artifacts, phase, phaseActivationTimestamp, phaseLogs, shouldTrackCoverageProgress])
+  const coveragePass = useMemo(() => {
+    if (!shouldTrackCoverageProgress || !isCoveragePhase(phase)) return null
+
+    const runArtifacts = phaseActivationTimestamp
+      ? artifacts.filter((artifact) => artifact.phase !== phase || isTimestampOnOrAfter(artifact.createdAt, phaseActivationTimestamp))
+      : artifacts
+    const runLogs = phaseActivationTimestamp
+      ? phaseLogs.filter((entry) => isTimestampOnOrAfter(entry.timestamp, phaseActivationTimestamp))
+      : phaseLogs
+    return chooseLatestCoveragePassProgress([
+      extractCoveragePassFromArtifacts(phase, runArtifacts),
+      extractCoveragePassFromLogs(runLogs.map((entry) => entry.line)),
+    ])
+  }, [artifacts, phase, phaseActivationTimestamp, phaseLogs, shouldTrackCoverageProgress])
+  const phaseAttemptLabel = useMemo(
+    () => (shouldTrackPhaseAttempt ? formatLivePhaseAttemptLabel(phaseAttempts) : null),
+    [phaseAttempts, shouldTrackPhaseAttempt],
+  )
+  const phaseLabel = useMemo(() => {
+    if (!isLivePhase) return basePhaseLabel
+    if (phase === 'CODING') return formatCodingLiveLabel(runtime)
+    if (isCoveragePhase(phase)) {
+      return formatCoverageLiveLabel(basePhaseLabel, coverageVersion, coveragePass)
+    }
+    return phaseAttemptLabel ? `${basePhaseLabel} (${phaseAttemptLabel})` : basePhaseLabel
+  }, [basePhaseLabel, coveragePass, coverageVersion, isLivePhase, phase, phaseAttemptLabel, runtime])
   const showLiveCodingCountdown = ticket.status === 'CODING' && phase === 'CODING'
 
   if (!phaseMeta) return null
