@@ -18,6 +18,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Fixed runtime setup rewinds so regeneration starts only the requested setup-plan session instead of racing an automatic draft.
 - Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
+- Fixed stale Current Activity timeout warnings when reviewing phases that already passed.
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
 - Added tooltip to the CMD log tab in phase and full log views, consistent with all other log tabs.
 
@@ -39,6 +40,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - The CMD log tab now shows a descriptive tooltip on hover, matching the tooltip behavior of all other log tabs (ALL, SYS, AI, ERROR, DEBUG).
 - Long ticket descriptions are now independently scrollable (300px max-height with overflow) in the Ticket Details modal, DraftView, and PhaseReviewView. Previously, long descriptions expanded indefinitely and pushed other content off-screen.
 - Viewing the active (latest) version in multi-attempt phases now keeps using realtime SSE logs while filtering to that active `phaseAttempt`. Archived phase versions remain static/read-only and load their durable attempt-scoped log snapshot, preventing both missed live runtime setup logs and cross-attempt log mixing.
+- Current Activity timeout warnings now render only for the ticket's live status, so revisiting an older phase cannot show an obsolete `Approaching timeout` banner until refresh.
 
 #### Changed
 - Renamed Raw retry attempt selectors to the clearer `Attempt N Output - Accepted/Rejected` format.

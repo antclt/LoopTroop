@@ -575,7 +575,11 @@ export function FullLogView({ ticket }: FullLogViewProps) {
       </div>
 
       {/* Log content */}
-      <CurrentActivityStrip entries={allLogs} enabled={!isTerminalTicket} />
+      <CurrentActivityStrip
+        entries={allLogs}
+        enabled={!isTerminalTicket}
+        activeStatus={ticket?.status ?? null}
+      />
       <div className="relative flex-1 min-h-0 flex flex-col">
         <ScrollArea className="h-full flex-1 min-h-0" viewportRef={viewportRef} type="always">
           <div ref={contentRef} className="font-mono text-xs bg-muted rounded-md p-3 min-h-[100px] w-full max-w-full">

@@ -37,6 +37,10 @@ interface DiagnosticCandidate {
   indexedEntry: IndexedEntry
 }
 
+interface CurrentActivityOptions {
+  activeStatus?: string | null
+}
+
 const FIRST_ACTIVITY_KINDS = new Set([
   'reasoning',
   'text',
@@ -310,16 +314,24 @@ export function formatElapsedDuration(elapsedMs: number): string {
   return `${hours}h ${minutes}m`
 }
 
-export function deriveCurrentActivities(entries: LogEntry[], nowMs = Date.now()): CurrentActivity[] {
+export function deriveCurrentActivities(
+  entries: LogEntry[],
+  nowMs = Date.now(),
+  options: CurrentActivityOptions = {},
+): CurrentActivity[] {
   const orderedEntries = sortEntries(entries)
 
-  // Identify the current active status (ignoring BLOCKED_ERROR)
-  let activeStatus: string | undefined = undefined
-  for (let i = orderedEntries.length - 1; i >= 0; i--) {
-    const status = orderedEntries[i]!.entry.status
-    if (status && status !== 'BLOCKED_ERROR') {
-      activeStatus = status
-      break
+  // Identify the current active status (ignoring BLOCKED_ERROR unless supplied
+  // by the ticket). Phase-only log buckets need the ticket status to avoid
+  // resurrecting stale timeout warnings when reviewing earlier phases.
+  let activeStatus: string | undefined = options.activeStatus ?? undefined
+  if (!activeStatus) {
+    for (let i = orderedEntries.length - 1; i >= 0; i--) {
+      const status = orderedEntries[i]!.entry.status
+      if (status && status !== 'BLOCKED_ERROR') {
+        activeStatus = status
+        break
+      }
     }
   }
 

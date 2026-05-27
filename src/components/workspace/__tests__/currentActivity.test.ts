@@ -410,4 +410,23 @@ describe('deriveCurrentActivities', () => {
     const activitiesAfter = deriveCurrentActivities([promptInCouncil, transitionLog], BASE_TIME_MS + 2000)
     expect(activitiesAfter).toHaveLength(0)
   })
+
+  it('clears past phase activities when the current ticket status is supplied', () => {
+    const promptInPrd = makePrompt({
+      id: 'prompt-prd',
+      entryId: 'prompt-prd',
+      sessionId: 'ses-prd',
+      status: 'DRAFTING_PRD',
+      timeoutMs: 100_000,
+      deadlineAt: timestamp(100_000),
+    })
+
+    const activities = deriveCurrentActivities(
+      [promptInPrd],
+      BASE_TIME_MS + 100_000,
+      { activeStatus: 'CODING' },
+    )
+
+    expect(activities).toHaveLength(0)
+  })
 })

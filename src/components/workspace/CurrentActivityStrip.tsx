@@ -8,6 +8,7 @@ import { deriveCurrentActivities, formatElapsedDuration, type CurrentActivity } 
 interface CurrentActivityStripProps {
   entries: LogEntry[]
   enabled?: boolean
+  activeStatus?: string | null
   className?: string
 }
 
@@ -75,7 +76,7 @@ function ActivityRow({ activity }: { activity: CurrentActivity }) {
   )
 }
 
-export function CurrentActivityStrip({ entries, enabled = true, className }: CurrentActivityStripProps) {
+export function CurrentActivityStrip({ entries, enabled = true, activeStatus, className }: CurrentActivityStripProps) {
   const [nowMs, setNowMs] = useState(() => Date.now())
 
   useEffect(() => {
@@ -83,8 +84,8 @@ export function CurrentActivityStrip({ entries, enabled = true, className }: Cur
   }, [entries])
 
   const activities = useMemo(
-    () => (enabled ? deriveCurrentActivities(entries, nowMs) : []),
-    [enabled, entries, nowMs],
+    () => (enabled ? deriveCurrentActivities(entries, nowMs, { activeStatus }) : []),
+    [activeStatus, enabled, entries, nowMs],
   )
 
   const hasAnyActive = useMemo(() => activities.some((a) => a.active), [activities])

@@ -669,4 +669,24 @@ describe('FullLogView', () => {
     expect(strip).toHaveTextContent(/bead bead-2/i)
     expect(Boolean(strip.compareDocumentPosition(viewport) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true)
   })
+
+  it('does not show stale near-timeout activity from older phases in the full log view', () => {
+    getAllLogsMock.mockReturnValue([
+      makeLog('prompt-old-prd', '[PROMPT] openai/gpt-5-codex prompt #1\nDraft the PRD.', 'DRAFTING_PRD', {
+        source: 'model:openai/gpt-5-codex',
+        audience: 'ai',
+        kind: 'prompt',
+        modelId: 'openai/gpt-5-codex',
+        sessionId: 'ses_old_prd',
+        timeoutMs: 100_000,
+        deadlineAt: '2026-03-10T10:01:40.000Z',
+        timeoutKind: 'ai_response',
+      }),
+    ])
+
+    renderWithTooltipProvider(<FullLogView ticket={makeTicket({ status: 'CODING' })} />)
+
+    expect(screen.queryByRole('status', { name: 'Current activity' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/Approaching timeout/i)).not.toBeInTheDocument()
+  })
 })
