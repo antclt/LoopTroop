@@ -503,7 +503,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                       <button
                         type="button"
                         onClick={() => setActiveTab('CMD')}
-                        className="p-0 border-0 bg-transparent m-0 inline-flex cursor-pointer"
+                        className="p-0 border-0 bg-transparent m-0 inline-flex"
                       >
                         <ModelBadge
                           modelId="CMD"
