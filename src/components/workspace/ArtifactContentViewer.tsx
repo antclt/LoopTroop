@@ -263,8 +263,18 @@ function normalizeRawContentVariant(source: RawContentSource, variant: RawConten
   }
 }
 
+/** Find the first non-disabled validated variant. Checks variant.id for `:validated`
+ *  or variant.label for a case-insensitive "validated" match. */
+function findFirstValidatedVariant(variants: RawContentVariant[]): RawContentVariant | undefined {
+  return variants.find(
+    (v) => !v.disabled && (v.id.includes(':validated') || /validated/i.test(v.label)),
+  )
+}
+
 function getRawSourceDefaultSelection(source: RawContentSource): ActiveRawContentSource | null {
   if (source.variants?.length) {
+    const validatedVariant = findFirstValidatedVariant(source.variants)
+    if (validatedVariant) return normalizeRawContentVariant(source, validatedVariant)
     const variant = source.variants.find((entry) => !entry.disabled)
     return variant ? normalizeRawContentVariant(source, variant) : null
   }
@@ -311,6 +321,14 @@ function buildAggregateRawSource(content: string, rawSources: RawContentSource[]
 }
 
 function getRawSourceFallbackSelection(sources: RawContentSource[]): ActiveRawContentSource | null {
+  // First pass: prefer a source that has a validated variant
+  for (const source of sources) {
+    if (source.variants?.length) {
+      const validatedVariant = findFirstValidatedVariant(source.variants)
+      if (validatedVariant) return normalizeRawContentVariant(source, validatedVariant)
+    }
+  }
+  // Fallback: first selectable source
   for (const source of sources) {
     const selection = getRawSourceDefaultSelection(source)
     if (selection) return selection
@@ -1748,13 +1766,15 @@ function FinalPrdDraftView({
   )
   const rawVariantOptions = useMemo(() => rawAttemptSource?.variants ?? [], [rawAttemptSource])
   const activeRawVariant = rawVariantOptions.find((variant) => variant.id === activeRawVariantId && !variant.disabled)
+    ?? findFirstValidatedVariant(rawVariantOptions)
     ?? rawVariantOptions.find((variant) => !variant.disabled)
     ?? rawVariantOptions[0]
   const activeRawContent = activeRawVariant?.content ?? content
   const activeRawDisplayContent = activeRawVariant?.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
   useEffect(() => {
     if (!rawVariantOptions.some((variant) => variant.id === activeRawVariantId && !variant.disabled)) {
-      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'raw-attempts:accepted-latest')
+      const validatedVariant = findFirstValidatedVariant(rawVariantOptions)
+      setActiveRawVariantId(validatedVariant?.id ?? rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'raw-attempts:accepted-latest')
     }
   }, [activeRawVariantId, rawVariantOptions])
   const coverageResult = parseCoverageArtifact(content)
@@ -4387,13 +4407,15 @@ function RelevantFilesScanView({ content }: { content: string }) {
   )
   const rawVariantOptions = useMemo(() => rawAttemptSource?.variants ?? [], [rawAttemptSource])
   const activeRawVariant = rawVariantOptions.find((variant) => variant.id === activeRawVariantId && !variant.disabled)
+    ?? findFirstValidatedVariant(rawVariantOptions)
     ?? rawVariantOptions.find((variant) => !variant.disabled)
     ?? rawVariantOptions[0]
   const activeRawContent = activeRawVariant?.content ?? content
   const activeRawDisplayContent = activeRawVariant?.displayContent ?? buildReadableRawDisplayContent(activeRawContent)
   useEffect(() => {
     if (!rawVariantOptions.some((variant) => variant.id === activeRawVariantId && !variant.disabled)) {
-      setActiveRawVariantId(rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'relevant-files-scan:accepted-latest')
+      const validatedVariant = findFirstValidatedVariant(rawVariantOptions)
+      setActiveRawVariantId(validatedVariant?.id ?? rawVariantOptions.find((variant) => !variant.disabled)?.id ?? 'relevant-files-scan:accepted-latest')
     }
   }, [activeRawVariantId, rawVariantOptions])
   if (!raw?.files) return <RawContentWithCopy content={content} />

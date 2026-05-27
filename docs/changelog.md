@@ -21,10 +21,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Fixed stale Current Activity timeout warnings when reviewing phases that already passed.
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
 - Added tooltip to the CMD log tab in phase and full log views, consistent with all other log tabs.
+- Raw tab in artifact views now defaults to the validated variant (or first accepted attempt) instead of the first non-disabled variant. When multiple model sources exist, the first validated model is auto-selected.
 
 ### Detailed Changes
 
 #### Added
+- Raw artifact tab now defaults to the validated variant when available. When multiple model sources exist (e.g. council drafts, votes), the first source with a validated variant is auto-selected. Falls back to the first non-disabled variant when no validated variant exists.
 - Added an `Initial Prompt` selector to future model-produced Raw attempt views when the first prompt is persisted, making the model input inspectable beside accepted and rejected attempt outputs without inferring legacy prompts from logs.
 - Added a guarded setup-plan rewind while `PREPARING_EXECUTION_ENV` is active, letting users edit or regenerate the approved setup plan after runtime setup starts while preserving archived runtime evidence.
 - Added setup-scoped OpenCode `websearch`/`webfetch` access during `PREPARING_EXECUTION_ENV`, with managed dev OpenCode servers started using `OPENCODE_ENABLE_EXA=1`, so agents can resolve official launcher artifact metadata when local repository evidence is insufficient.

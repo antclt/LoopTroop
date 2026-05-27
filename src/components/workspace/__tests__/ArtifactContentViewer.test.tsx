@@ -2417,6 +2417,11 @@ describe('ArtifactContentViewer', () => {
       'Attempt 1 Output - Rejected',
       'Attempt 2 Validated',
     ])
+    // Validated variant is selected by default now
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === validatedResponse)).toBeInTheDocument()
+
+    fireEvent.click(within(draftGroup).getByRole('button', { name: /Attempt 1 Output - Rejected/i }))
+
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
 
     fireEvent.click(within(draftGroup).getByRole('button', { name: /Attempt 2 Validated/i }))
