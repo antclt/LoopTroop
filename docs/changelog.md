@@ -17,7 +17,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
-- Added Initial Input views to future Raw model attempt diagnostics.
+- Added tooltip to the CMD log tab in phase and full log views, consistent with all other log tabs.
 
 ### Detailed Changes
 
@@ -32,6 +32,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a **"Create and Start"** button to the New Ticket modal, letting users create a ticket and immediately trigger the workflow from a single action.
 
 #### Fixed
+- The CMD log tab now shows a descriptive tooltip on hover, matching the tooltip behavior of all other log tabs (ALL, SYS, AI, ERROR, DEBUG).
 - Long ticket descriptions are now independently scrollable (300px max-height with overflow) in the Ticket Details modal, DraftView, and PhaseReviewView. Previously, long descriptions expanded indefinitely and pushed other content off-screen.
 - Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.
 

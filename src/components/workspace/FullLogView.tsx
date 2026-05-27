@@ -30,6 +30,7 @@ const TAB_TOOLTIPS: Record<string, string> = {
   ALL: 'Shows system milestones, prompts, errors, and canonical AI outputs across all phases.',
   SYS: 'System background events and milestones for the orchestrator.',
   AI: 'Raw inputs (prompts), outputs, reasoning, and tool executions from AI models.',
+  CMD: 'Shell commands executed during the ticket lifecycle, including git operations and build tools.',
   ERROR: 'Errors and exceptions encountered during execution.',
   DEBUG: 'Every log line from LoopTroop and OpenCode — system, AI, debug, and native OpenCode server logs. Loaded on demand.',
 }
@@ -497,15 +498,21 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                   </TooltipContent>
                 </Tooltip>
                 {!sysCollapsed && (
-                  <ModelBadge
-                    key="CMD"
-                    modelId="CMD"
-                    showIcon={false}
-                    active={effectiveTab === 'CMD'}
-                    onClick={() => setActiveTab('CMD')}
-                  >
-                    CMD
-                  </ModelBadge>
+                  <Tooltip key="CMD" delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <ModelBadge
+                        modelId="CMD"
+                        showIcon={false}
+                        active={effectiveTab === 'CMD'}
+                        onClick={() => setActiveTab('CMD')}
+                      >
+                        CMD
+                      </ModelBadge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground border border-border shadow-md font-medium max-w-[200px] text-center">
+                      {TAB_TOOLTIPS.CMD}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </Fragment>
             )

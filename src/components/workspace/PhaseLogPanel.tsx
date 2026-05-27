@@ -48,6 +48,7 @@ const TAB_TOOLTIPS: Record<string, string> = {
   ALL: 'Shows system milestones, prompts, errors, and canonical AI outputs. This does not include absolutely all logs; check the other tabs for more details.',
   SYS: 'System background events and milestones for the orchestrator.',
   AI: 'Raw inputs (prompts), outputs, reasoning, and tool executions from AI models.',
+  CMD: 'Shell commands executed during the phase, including git operations and build tools.',
   ERROR: 'Errors and exceptions encountered during execution.',
   DEBUG: 'Verbose internal debugging events and data.',
 }
@@ -608,15 +609,21 @@ export function PhaseLogPanel({
                   </TooltipContent>
                 </Tooltip>
                 {!sysCollapsed && (
-                  <ModelBadge
-                    key="CMD"
-                    modelId="CMD"
-                    showIcon={false}
-                    active={effectiveTab === 'CMD'}
-                    onClick={() => setActiveTab('CMD')}
-                  >
-                    CMD
-                  </ModelBadge>
+                  <Tooltip key="CMD" delayDuration={300}>
+                    <TooltipTrigger asChild>
+                      <ModelBadge
+                        modelId="CMD"
+                        showIcon={false}
+                        active={effectiveTab === 'CMD'}
+                        onClick={() => setActiveTab('CMD')}
+                      >
+                        CMD
+                      </ModelBadge>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground border border-border shadow-md font-medium max-w-[200px] text-center">
+                      {TAB_TOOLTIPS.CMD}
+                    </TooltipContent>
+                  </Tooltip>
                 )}
               </Fragment>
             )
