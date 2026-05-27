@@ -307,7 +307,7 @@ export function DraftView({ ticket }: DraftViewProps) {
                 )}
               </>
             ) : hasDescription ? (
-              <div className="mt-2">
+              <div className="mt-2 max-h-[300px] overflow-y-auto">
                 <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{descriptionDraft}</p>
               </div>
             ) : (

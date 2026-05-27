@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Fixed long ticket descriptions being unscrollable in backlog and detail views.
 - Enabled setup-scoped online artifact lookup for missing launcher provisioning while keeping real provisioning evidence stricter.
 - Fixed version log isolation: switching to the active version in multi-attempt phases now shows only that version's logs instead of all attempts' logs.
 - Hardened execution setup so missing launcher failures must show persistent provisioning attempts before blocking.
@@ -29,6 +30,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a **"Create and Start"** button to the New Ticket modal, letting users create a ticket and immediately trigger the workflow from a single action.
 
 #### Fixed
+- Long ticket descriptions are now independently scrollable (300px max-height with overflow) in the Ticket Details modal, DraftView, and PhaseReviewView. Previously, long descriptions expanded indefinitely and pushed other content off-screen.
 - Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.
 
 #### Changed

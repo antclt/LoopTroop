@@ -93,7 +93,7 @@ export function PhaseReviewView({ phase, ticket }: PhaseReviewViewProps) {
                               </Tooltip>
               </div>
               {ticket.description && (
-                <div className="rounded-md border border-border p-3">
+                <div className="rounded-md border border-border p-3 max-h-[300px] overflow-y-auto">
                   <h4 className="text-xs font-medium mb-1">Description</h4>
                   <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{ticket.description}</p>
                 </div>

@@ -140,7 +140,7 @@ function CopyableDescription({ description }: { description: string }) {
                 <TooltipContent className="max-w-xs text-center text-balance">Copy description</TooltipContent>
               </Tooltip>
       </div>
-      <div className="mt-1 rounded-md border border-border/50 bg-muted/30 p-3">
+      <div className="mt-1 rounded-md border border-border/50 bg-muted/30 p-3 max-h-[300px] overflow-y-auto">
         <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-muted-foreground">{description}</p>
       </div>
     </div>
