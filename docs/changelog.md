@@ -23,7 +23,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added an `Initial Input` selector to future model-produced Raw attempt views when the first prompt is persisted, making the model input inspectable beside accepted and rejected outputs without inferring legacy prompts from logs.
+- Added an `Initial Prompt` selector to future model-produced Raw attempt views when the first prompt is persisted, making the model input inspectable beside accepted and rejected attempt outputs without inferring legacy prompts from logs.
 - Added a guarded setup-plan rewind while `PREPARING_EXECUTION_ENV` is active, letting users edit or regenerate the approved setup plan after runtime setup starts while preserving archived runtime evidence.
 - Added setup-scoped OpenCode `websearch`/`webfetch` access during `PREPARING_EXECUTION_ENV`, with managed dev OpenCode servers started using `OPENCODE_ENABLE_EXA=1`, so agents can resolve official launcher artifact metadata when local repository evidence is insufficient.
 - Added `tool_requirements.provisioning_attempts` evidence to execution setup profiles so failed required-launcher setup records distinct temp-root provisioning strategies and commands, or why no safe provisioning path exists.
@@ -39,6 +39,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.
 
 #### Changed
+- Renamed Raw retry attempt selectors to the clearer `Attempt N Output - Accepted/Rejected` format.
 - Setup-plan edits and regenerations from active runtime setup now stop the runtime session, archive the approved setup contract and runtime attempt, clear stale runtime profile outputs while preserving the tool cache, and require approval again before setup reruns.
 - Execution setup prompts now state that wrapper creation, cache inspection, PATH edits, and version probes are discovery/scaffolding only, and do not count as provisioning strategies unless the attempt actually obtains, installs, or activates the missing launcher under approved temp roots.
 - Execution setup prompts now treat failed launcher version/info probes as discovery only, replacing single-ecosystem provisioning guidance with non-exhaustive Node, Python, and JavaScript-runtime examples plus permission to use any safe repository-appropriate temp-root provisioning approach.

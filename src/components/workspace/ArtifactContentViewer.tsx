@@ -3640,7 +3640,7 @@ function formatRejectedRawVariantLabel(
   structuredOutput: ArtifactStructuredOutputData | undefined,
 ): string {
   const attemptNumber = inferRejectedRawVariantAttemptNumber(rawAttempts, structuredOutput)
-  return typeof attemptNumber === 'number' ? `Attempt ${attemptNumber} Rejected` : 'Rejected'
+  return typeof attemptNumber === 'number' ? `Attempt ${attemptNumber} Output - Rejected` : 'Rejected'
 }
 
 function buildRawAttemptVariants(
@@ -3661,30 +3661,30 @@ function buildRawAttemptVariants(
     ...(typeof initialInput === 'string'
       ? [{
           id: `${ownerId}:initial-input`,
-          label: 'Initial Input',
+          label: 'Initial Prompt',
           content: initialInput,
           displayContent: initialInput,
-          ariaLabel: `${ownerLabel} Initial Input`,
-          title: `Show initial model input for ${ownerLabel}`,
+          ariaLabel: `${ownerLabel} Initial Prompt`,
+          title: `Show initial model prompt for ${ownerLabel}`,
           skipDedupe: true,
         }]
       : []),
     ...orderedAttempts.flatMap(({ attempt, index, attemptNumber }) => {
-    const content = getRawAttemptContent(attempt)
-    if (typeof content !== 'string') return []
-    const status = getRawAttemptStatus(attempt)
-    const statusLabel = formatRawAttemptStatusLabel(status)
-    const baseLabel = `Attempt ${attemptNumber}`
-    const attemptLabel = attempt.label ?? `${baseLabel}${statusLabel ? ` ${statusLabel}` : ''}`
-    const titleStatus = status ? ` · ${status}` : ''
-    return [{
-      id: `${ownerId}:attempt:${index}`,
-      label: attemptLabel,
-      content,
-      displayContent: content,
-      ariaLabel: `${ownerLabel} ${attemptLabel}`,
-      title: `Show ${attemptLabel.toLowerCase()} raw output from ${ownerLabel}${titleStatus}`,
-    }]
+      const content = getRawAttemptContent(attempt)
+      if (typeof content !== 'string') return []
+      const status = getRawAttemptStatus(attempt)
+      const statusLabel = formatRawAttemptStatusLabel(status)
+      const baseLabel = `Attempt ${attemptNumber} Output`
+      const attemptLabel = attempt.label ?? `${baseLabel}${statusLabel ? ` - ${statusLabel}` : ''}`
+      const titleStatus = status ? ` · ${status}` : ''
+      return [{
+        id: `${ownerId}:attempt:${index}`,
+        label: attemptLabel,
+        content,
+        displayContent: content,
+        ariaLabel: `${ownerLabel} ${attemptLabel}`,
+        title: `Show ${attemptLabel.toLowerCase()} raw output from ${ownerLabel}${titleStatus}`,
+      }]
     }),
   ]
 }
