@@ -500,14 +500,19 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                 {!sysCollapsed && (
                   <Tooltip key="CMD" delayDuration={300}>
                     <TooltipTrigger asChild>
-                      <ModelBadge
-                        modelId="CMD"
-                        showIcon={false}
-                        active={effectiveTab === 'CMD'}
+                      <button
+                        type="button"
                         onClick={() => setActiveTab('CMD')}
+                        className="p-0 border-0 bg-transparent m-0 inline-flex cursor-pointer"
                       >
-                        CMD
-                      </ModelBadge>
+                        <ModelBadge
+                          modelId="CMD"
+                          showIcon={false}
+                          active={effectiveTab === 'CMD'}
+                        >
+                          CMD
+                        </ModelBadge>
+                      </button>
                     </TooltipTrigger>
                     <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground border border-border shadow-md font-medium max-w-[200px] text-center">
                       {TAB_TOOLTIPS.CMD}
