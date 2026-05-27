@@ -6,15 +6,22 @@ import {
   saveExecutionSetupPlan,
   saveExecutionSetupPlanRawContent,
 } from '../../phases/executionSetupPlan/document'
+import {
+  EXECUTION_SETUP_PLAN_RESULT_END,
+  EXECUTION_SETUP_PLAN_RESULT_MARKER,
+  serializeExecutionSetupPlan,
+} from '../../phases/executionSetupPlan/types'
 import { regenerateExecutionSetupPlanDraft } from '../../workflow/phases/executionSetupPlanPhase'
 import { normalizeExecutionSetupPlanOutput } from '../../structuredOutput'
 import { getErrorMessage } from '@shared/typeGuards'
 import { writeUserEditReceipt } from '../../workflow/artifactEditReceipts'
 import {
+  buildRouteStatePayload,
   emitRoutePhaseLog,
   getMachineContext,
   getTicketParam,
   prepareExecutionSetupPlanRestart,
+  prepareExecutionSetupRuntimeRewind,
 } from './routeUtils'
 import {
   rawExecutionSetupPlanSaveSchema,
@@ -24,6 +31,26 @@ import {
 
 function countPlanCommands(plan: { steps: Array<{ commands: unknown[] }> } | null): number | null {
   return plan ? plan.steps.reduce((sum, step) => sum + step.commands.length, 0) : null
+}
+
+function isEditableExecutionSetupPlanStatus(status: string): boolean {
+  return status === 'WAITING_EXECUTION_SETUP_APPROVAL' || status === 'PREPARING_EXECUTION_ENV'
+}
+
+function shouldRewindRuntimeSetup(status: string): boolean {
+  return status === 'PREPARING_EXECUTION_ENV'
+}
+
+function normalizeRawSetupPlanContent(rawContent: string) {
+  const content = rawContent.includes(EXECUTION_SETUP_PLAN_RESULT_MARKER)
+    ? rawContent
+    : `${EXECUTION_SETUP_PLAN_RESULT_MARKER}\n${rawContent}\n${EXECUTION_SETUP_PLAN_RESULT_END}`
+  return normalizeExecutionSetupPlanOutput(content)
+}
+
+function validateRawSetupPlanContent(rawContent: string): string | null {
+  const normalized = normalizeRawSetupPlanContent(rawContent)
+  return normalized.ok ? null : normalized.error
 }
 
 export function handleGetExecutionSetupPlan(c: Context) {
@@ -55,10 +82,14 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
-  if (ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL') {
-    return c.json({ error: 'Ticket is not waiting for execution setup plan approval' }, 409)
+  if (!isEditableExecutionSetupPlanStatus(ticket.status)) {
+    return c.json({ error: 'Ticket is not waiting for execution setup plan approval or preparing workspace runtime' }, 409)
   }
   const phaseAttemptParam = c.req.query('phaseAttempt')
+  const rewindsRuntimeSetup = shouldRewindRuntimeSetup(ticket.status)
+  if (rewindsRuntimeSetup && phaseAttemptParam != null) {
+    return c.json({ error: 'Cannot write an explicit setup-plan version while rewinding workspace runtime setup' }, 409)
+  }
   if (phaseAttemptParam != null) {
     const phaseAttempt = Number(phaseAttemptParam)
     if (!Number.isFinite(phaseAttempt) || phaseAttempt <= 0) {
@@ -96,13 +127,22 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   const body = await c.req.json().catch(() => ({}))
   const rawParsed = rawExecutionSetupPlanSaveSchema.safeParse(body)
   if (rawParsed.success) {
+    const validationError = validateRawSetupPlanContent(rawParsed.data.content)
+    if (validationError) {
+      return c.json({
+        error: 'Failed to save execution setup plan',
+        details: validationError,
+      }, 400)
+    }
+
     try {
+      const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
       const { raw, contentSha256, plan } = saveExecutionSetupPlanRawContent(ticketId, rawParsed.data.content)
       writeUserEditReceipt({
         ticketId,
         artifactType: 'execution_setup_plan',
         phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
-        action: 'save',
+        action: rewindsRuntimeSetup ? 'save_and_rewind' : 'save',
         editSurface: 'raw',
         statusBeforeEdit: ticket.status,
         statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
@@ -110,8 +150,9 @@ export async function handlePutExecutionSetupPlan(c: Context) {
         afterRaw: raw,
         beforeItemCount: beforeCommandCount,
         afterItemCount: countPlanCommands(plan),
+        restart,
       })
-      return c.json({ success: true, raw, contentSha256, plan })
+      return c.json({ success: true, raw, contentSha256, plan, ...buildRouteStatePayload(ticketId) })
     } catch (err) {
       return c.json({
         error: 'Failed to save execution setup plan',
@@ -125,13 +166,22 @@ export async function handlePutExecutionSetupPlan(c: Context) {
     return c.json({ error: 'Invalid execution setup plan payload', details: structuredParsed.error.flatten() }, 400)
   }
 
+  const validationError = validateRawSetupPlanContent(serializeExecutionSetupPlan(structuredParsed.data.plan))
+  if (validationError) {
+    return c.json({
+      error: 'Failed to save execution setup plan',
+      details: validationError,
+    }, 400)
+  }
+
   try {
+    const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
     const { raw, contentSha256, plan } = saveExecutionSetupPlan(ticketId, structuredParsed.data.plan)
     writeUserEditReceipt({
       ticketId,
       artifactType: 'execution_setup_plan',
       phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
-      action: 'save',
+      action: rewindsRuntimeSetup ? 'save_and_rewind' : 'save',
       editSurface: 'structured',
       statusBeforeEdit: ticket.status,
       statusAfterEdit: getTicketByRef(ticketId)?.status ?? null,
@@ -139,8 +189,9 @@ export async function handlePutExecutionSetupPlan(c: Context) {
       afterRaw: raw,
       beforeItemCount: beforeCommandCount,
       afterItemCount: countPlanCommands(plan),
+      restart,
     })
-    return c.json({ success: true, raw, contentSha256, plan })
+    return c.json({ success: true, raw, contentSha256, plan, ...buildRouteStatePayload(ticketId) })
   } catch (err) {
     return c.json({
       error: 'Failed to save execution setup plan',
@@ -153,9 +204,10 @@ export async function handleRegenerateExecutionSetupPlan(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
-  if (ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL') {
-    return c.json({ error: 'Ticket is not waiting for execution setup plan approval' }, 409)
+  if (!isEditableExecutionSetupPlanStatus(ticket.status)) {
+    return c.json({ error: 'Ticket is not waiting for execution setup plan approval or preparing workspace runtime' }, 409)
   }
+  const rewindsRuntimeSetup = shouldRewindRuntimeSetup(ticket.status)
 
   const body = await c.req.json().catch(() => ({}))
   const parsed = regenerateExecutionSetupPlanSchema.safeParse(body)
@@ -166,7 +218,7 @@ export async function handleRegenerateExecutionSetupPlan(c: Context) {
   // Read current plan before archiving (for context in background generation)
   let currentPlan = parsed.data.plan ?? null
   if (!currentPlan && parsed.data.rawContent) {
-    const normalized = normalizeExecutionSetupPlanOutput(parsed.data.rawContent)
+    const normalized = normalizeRawSetupPlanContent(parsed.data.rawContent)
     if (!normalized.ok) {
       return c.json({ error: 'Invalid raw setup plan draft', details: normalized.error }, 400)
     }
@@ -176,10 +228,14 @@ export async function handleRegenerateExecutionSetupPlan(c: Context) {
     currentPlan = readExecutionSetupPlan(ticketId).plan
   }
 
-  const machineContext = getMachineContext(ticketId)
-
   // Archive old attempt, create new empty attempt
-  await prepareExecutionSetupPlanRestart(ticketId)
+  if (rewindsRuntimeSetup) {
+    await prepareExecutionSetupRuntimeRewind(ticketId)
+  } else {
+    await prepareExecutionSetupPlanRestart(ticketId)
+  }
+
+  const machineContext = getMachineContext(ticketId)
 
   // Fire-and-forget: generate new plan in background with commentary + old plan context
   void regenerateExecutionSetupPlanDraft({
@@ -192,5 +248,5 @@ export async function handleRegenerateExecutionSetupPlan(c: Context) {
     emitRoutePhaseLog(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL', 'error', `Background regeneration failed: ${errMsg}`)
   })
 
-  return c.json({ success: true })
+  return c.json({ success: true, ...buildRouteStatePayload(ticketId) })
 }

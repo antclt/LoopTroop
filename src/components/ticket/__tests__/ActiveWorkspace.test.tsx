@@ -66,12 +66,24 @@ describe('ActiveWorkspace', () => {
     expect(await screen.findByText('approval view:live')).toBeInTheDocument()
   })
 
-  it('opens completed execution setup approval as a read-only approval pane', async () => {
+  it('opens execution setup approval as editable while runtime setup can still rewind', async () => {
     renderWithProviders(
       <ActiveWorkspace
         ticket={makeTicket({ status: 'PREPARING_EXECUTION_ENV' })}
         selectedPhase="WAITING_EXECUTION_SETUP_APPROVAL"
         previousStatus="WAITING_EXECUTION_SETUP_APPROVAL"
+      />,
+    )
+
+    expect(await screen.findByText('approval view:live')).toBeInTheDocument()
+  })
+
+  it('opens execution setup approval read-only after runtime setup has advanced', async () => {
+    renderWithProviders(
+      <ActiveWorkspace
+        ticket={makeTicket({ status: 'CODING' })}
+        selectedPhase="WAITING_EXECUTION_SETUP_APPROVAL"
+        previousStatus="PREPARING_EXECUTION_ENV"
       />,
     )
 

@@ -17,11 +17,13 @@ import {
   createFreshPhaseAttempts,
   ensureActivePhaseAttempt,
   EXECUTION_SETUP_PLAN_RESTART_PHASES,
+  EXECUTION_SETUP_RUNTIME_REWIND_PHASES,
   getTicketByRef,
   INTERVIEW_EDIT_RESTART_PHASES,
   PRD_EDIT_RESTART_PHASES,
   type PublicTicketPhaseAttemptRow,
 } from '../../storage/tickets'
+import { clearExecutionSetupRuntimeArtifacts } from '../../phases/executionSetup/storage'
 
 export function getProfileDefaults() {
   return appDb.select().from(profiles).get()
@@ -181,6 +183,34 @@ export async function prepareExecutionSetupPlanRestart(ticketId: string): Promis
   const archivedAttempts = archiveActivePhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES, restartReason)
   const createdAttempts = createFreshPhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES)
   ensureActorForTicket(ticketId)
+
+  return {
+    reason: restartReason,
+    archivedAttempts,
+    createdAttempts,
+  }
+}
+
+export async function prepareExecutionSetupRuntimeRewind(ticketId: string): Promise<PhaseRestartSummary> {
+  const restartReason = 'execution_setup_runtime_rewind'
+  emitRoutePhaseLog(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL', 'info', 'Stopping workspace runtime setup and returning to setup-plan approval.')
+  cancelTicket(ticketId)
+  await abortTicketSessions(ticketId)
+  clearContextCache(ticketId)
+  ensureActivePhaseAttempt(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL')
+  ensureActivePhaseAttempt(ticketId, 'PREPARING_EXECUTION_ENV')
+  const archivedAttempts = archiveActivePhaseAttempts(ticketId, EXECUTION_SETUP_RUNTIME_REWIND_PHASES, restartReason)
+  const createdAttempts = createFreshPhaseAttempts(ticketId, EXECUTION_SETUP_PLAN_RESTART_PHASES)
+  const removedFiles = clearExecutionSetupRuntimeArtifacts(ticketId, { preserveToolCache: true })
+  if (removedFiles.length > 0) {
+    emitRoutePhaseLog(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL', 'info', 'Cleared stale workspace runtime setup outputs after rewind.', {
+      removedFiles,
+      preserveToolCache: true,
+    })
+  }
+
+  ensureActorForTicket(ticketId)
+  revertTicketToApprovalStatus(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL')
 
   return {
     reason: restartReason,

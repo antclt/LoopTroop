@@ -386,6 +386,67 @@ describe('ExecutionSetupPlanApprovalPane', () => {
     expect(screen.queryByLabelText('YAML editor')).not.toBeInTheDocument()
   })
 
+  it('shows a rewind warning before editing setup approval during runtime setup', async () => {
+    renderWithProviders(<ExecutionSetupPlanApprovalPane ticket={makeTicket({ status: 'PREPARING_EXECUTION_ENV' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-content')).toHaveTextContent('execution-setup-plan:with-report:plan')
+    })
+
+    expect(screen.getByRole('button', { name: 'Regenerate ...' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    const warning = await screen.findByRole('dialog')
+    expect(within(warning).getByText('Return to setup approval?')).toBeInTheDocument()
+    expect(within(warning).getByText(/stop Preparing Workspace Runtime/i)).toBeInTheDocument()
+    expect(screen.queryByTestId('execution-setup-plan-editor')).not.toBeInTheDocument()
+
+    fireEvent.click(within(warning).getByRole('button', { name: 'Proceed with Edit' }))
+
+    expect(await screen.findByTestId('execution-setup-plan-editor')).toBeInTheDocument()
+  })
+
+  it('shows a rewind warning before opening runtime setup regeneration', async () => {
+    const queryClient = createTestQueryClient()
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+    renderWithProviders(<ExecutionSetupPlanApprovalPane ticket={makeTicket({ status: 'PREPARING_EXECUTION_ENV' })} />, {
+      queryClient,
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-content')).toHaveTextContent('execution-setup-plan:with-report:plan')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Regenerate ...' }))
+
+    const warning = await screen.findByRole('dialog')
+    expect(within(warning).getByText('Return to setup approval?')).toBeInTheDocument()
+    fireEvent.click(within(warning).getByRole('button', { name: 'Regenerate Plan' }))
+
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText('Regenerate setup plan')).toBeInTheDocument()
+    fireEvent.change(within(dialog).getByRole('textbox'), {
+      target: { value: 'Regenerate after runtime setup started.' },
+    })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Regenerate' }))
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        `/api/tickets/${TEST.ticketId}/regenerate-execution-setup-plan`,
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('Regenerate after runtime setup started.'),
+        }),
+      )
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: getTicketPhaseAttemptsQueryKey(TEST.ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL'),
+    })
+  })
+
   it('shows regenerate commentary on the active approval draft', async () => {
     mockUseTicketArtifacts.mockReturnValue({
       artifacts: [
@@ -452,6 +513,59 @@ describe('ExecutionSetupPlanApprovalPane', () => {
       phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
       phaseAttempt: 1,
     })
+  })
+
+  it('labels archived approved setup plan attempts as superseded contracts', async () => {
+    mockUseTicketArtifacts.mockImplementation((_ticketId: string, options?: { phase?: string; phaseAttempt?: number }) => ({
+      artifacts: options?.phaseAttempt === 1
+        ? [
+          {
+            id: 21,
+            ticketId: TEST.ticketId,
+            phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+            phaseAttempt: 1,
+            artifactType: 'execution_setup_plan_report',
+            filePath: null,
+            content: buildReportContent('auto'),
+            createdAt: '2026-03-25T10:05:00.000Z',
+          },
+          {
+            id: 22,
+            ticketId: TEST.ticketId,
+            phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+            phaseAttempt: 1,
+            artifactType: 'approval_receipt',
+            filePath: null,
+            content: JSON.stringify({
+              approved_by: 'user',
+              approved_at: '2026-03-25T10:30:00.000Z',
+              step_count: 1,
+              command_count: 1,
+            }),
+            createdAt: '2026-03-25T10:30:00.000Z',
+          },
+        ]
+        : [],
+      isLoading: false,
+    }))
+
+    renderWithProviders(
+      <ExecutionSetupPlanApprovalPane
+        ticket={makeTicket({ status: 'WAITING_EXECUTION_SETUP_APPROVAL' })}
+        readOnly
+        phaseAttempt={1}
+      />,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-content')).toHaveTextContent('execution-setup-plan:with-report:plan')
+    })
+
+    expect(screen.getByText('Superseded Execution Setup Contract')).toBeInTheDocument()
+    expect(screen.getByText('Superseded approved setup contract')).toBeInTheDocument()
+    expect(screen.getByText('Superseded')).toBeInTheDocument()
+    expect(screen.getByText(/handed to Preparing Workspace Runtime/i)).toBeInTheDocument()
+    expect(screen.queryByText('Rejected setup draft')).not.toBeInTheDocument()
   })
 
   it('ignores persisted edit mode while rendering read-only setup plan review', async () => {

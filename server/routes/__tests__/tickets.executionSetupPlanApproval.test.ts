@@ -1,3 +1,5 @@
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { initializeDatabase } from '../../db/init'
@@ -6,7 +8,10 @@ import { clearProjectDatabaseCache } from '../../db/project'
 import { attachProject } from '../../storage/projects'
 import {
   createTicket,
+  ensureActivePhaseAttempt,
   getLatestPhaseArtifact,
+  getTicketByRef,
+  getTicketPaths,
   listPhaseAttempts,
   patchTicket,
   upsertLatestPhaseArtifact,
@@ -59,6 +64,47 @@ function buildPlan(ticketId: string, summary = 'Prepare the workspace runtime.')
 
 function serializePlan(ticketId: string, summary?: string): string {
   return JSON.stringify(buildPlan(ticketId, summary), null, 2)
+}
+
+function buildStructuredPlan(ticketId: string, summary = 'Prepare the workspace runtime.') {
+  return {
+    schemaVersion: 1,
+    ticketId,
+    artifact: 'execution_setup_plan' as const,
+    status: 'draft' as const,
+    summary,
+    readiness: {
+      status: 'partial' as const,
+      actionsRequired: true,
+      evidence: ['Repository manifest files are present.'],
+      gaps: ['Reusable workspace setup outputs have not been prepared yet.'],
+    },
+    tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
+    steps: [
+      {
+        id: 'bootstrap-workspace',
+        title: 'Bootstrap workspace',
+        purpose: 'Prepare the runtime for later beads.',
+        commands: ['project bootstrap'],
+        required: true,
+        rationale: 'Repository-native setup is required before later execution can reuse the workspace.',
+        cautions: ['May take a while on the first run.'],
+      },
+    ],
+    projectCommands: {
+      prepare: ['project bootstrap'],
+      testFull: ['project test'],
+      lintFull: ['project lint'],
+      typecheckFull: ['project typecheck'],
+    },
+    qualityGatePolicy: {
+      tests: 'bead-test-commands-first',
+      lint: 'impacted-or-package',
+      typecheck: 'impacted-or-package',
+      fullProjectFallback: 'never-block-on-unrelated-baseline',
+    },
+    cautions: ['Repository-native bootstrap may create local dependency caches.'],
+  }
 }
 
 function approvalPayload(raw: string) {
@@ -192,7 +238,10 @@ vi.mock('../../machines/persistence', async () => {
       }
     }),
     stopActor: vi.fn(() => true),
-    revertTicketToApprovalStatus: vi.fn(),
+    revertTicketToApprovalStatus: vi.fn((ticketRef: string | number, targetStatus: string) => {
+      storage.patchTicket(String(ticketRef), { status: targetStatus })
+      return { id: 'mock-reverted-actor' }
+    }),
   }
 })
 
@@ -230,6 +279,29 @@ function setupExecutionSetupPlanTicket() {
   app.route('/api', ticketRouter)
 
   return { app, ticket }
+}
+
+async function moveTicketToRuntimeSetup(app: Hono, ticket: ReturnType<typeof createTicket>, summary = 'Approved runtime setup plan.') {
+  const raw = serializePlan(ticket.externalId, summary)
+  upsertLatestPhaseArtifact(
+    ticket.id,
+    'execution_setup_plan',
+    'WAITING_EXECUTION_SETUP_APPROVAL',
+    raw,
+  )
+  const approvalResponse = await app.request(`/api/tickets/${ticket.id}/approve-execution-setup-plan`, {
+    method: 'POST',
+    ...approvalPayload(raw),
+  })
+  expect(approvalResponse.status).toBe(200)
+  ensureActivePhaseAttempt(ticket.id, 'PREPARING_EXECUTION_ENV')
+  upsertLatestPhaseArtifact(
+    ticket.id,
+    'execution_setup_report',
+    'PREPARING_EXECUTION_ENV',
+    JSON.stringify({ status: 'running', summary: 'Runtime setup started.' }),
+  )
+  return raw
 }
 
 describe('ticketRouter execution setup plan approval routes', () => {
@@ -529,6 +601,110 @@ describe('ticketRouter execution setup plan approval routes', () => {
     const activePayload = await activeResponse.json() as { exists: boolean; plan: { summary: string } | null }
     expect(activePayload.exists).toBe(true)
     expect(activePayload.plan?.summary).toContain('New run.')
+  })
+
+  it('rewinds from runtime setup when saving an edited setup plan', async () => {
+    const { app, ticket } = setupExecutionSetupPlanTicket()
+    await moveTicketToRuntimeSetup(app, ticket, 'Approved plan handed to runtime.')
+    const paths = getTicketPaths(ticket.id)
+    expect(paths).toBeDefined()
+    mkdirSync(paths!.executionSetupDir, { recursive: true })
+    mkdirSync(join(paths!.executionSetupDir, 'tool-cache'), { recursive: true })
+    writeFileSync(paths!.executionSetupProfilePath, '{"artifact":"execution_setup_profile"}')
+    writeFileSync(join(paths!.executionSetupDir, 'runtime-output.txt'), 'temporary setup output')
+    writeFileSync(join(paths!.executionSetupDir, 'tool-cache', 'cache.txt'), 'tool cache')
+
+    const response = await app.request(`/api/tickets/${ticket.id}/execution-setup-plan`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan: buildStructuredPlan(ticket.externalId, 'Revised setup plan after runtime rewind.'),
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const payload = await response.json() as { status?: string; plan: { summary: string } }
+    expect(payload.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(payload.plan.summary).toBe('Revised setup plan after runtime rewind.')
+    expect(getTicketByRef(ticket.id)?.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+
+    expect(listPhaseAttempts(ticket.id, 'WAITING_EXECUTION_SETUP_APPROVAL')).toEqual([
+      expect.objectContaining({ attemptNumber: 2, state: 'active', archivedReason: null }),
+      expect.objectContaining({ attemptNumber: 1, state: 'archived', archivedReason: 'execution_setup_runtime_rewind' }),
+    ])
+    expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
+      expect.objectContaining({ attemptNumber: 1, state: 'archived', archivedReason: 'execution_setup_runtime_rewind' }),
+    ])
+
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL', 1)?.content)
+      .toContain('Approved plan handed to runtime.')
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')?.content)
+      .toContain('Revised setup plan after runtime rewind.')
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_report', 'PREPARING_EXECUTION_ENV', 1)?.content)
+      .toContain('Runtime setup started.')
+
+    const receipt = getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(receipt).toBeDefined()
+    expect(JSON.parse(receipt!.content)).toMatchObject({
+      action: 'save_and_rewind',
+      ticket_status_before: 'PREPARING_EXECUTION_ENV',
+      ticket_status_after: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      restart: {
+        reason: 'execution_setup_runtime_rewind',
+      },
+    })
+
+    expect(existsSync(paths!.executionSetupProfilePath)).toBe(false)
+    expect(existsSync(join(paths!.executionSetupDir, 'runtime-output.txt'))).toBe(false)
+    expect(existsSync(join(paths!.executionSetupDir, 'tool-cache', 'cache.txt'))).toBe(true)
+  })
+
+  it('rewinds from runtime setup before regenerating the setup plan', async () => {
+    const { app, ticket } = setupExecutionSetupPlanTicket()
+    await moveTicketToRuntimeSetup(app, ticket, 'Approved plan before regenerate rewind.')
+
+    const response = await app.request(`/api/tickets/${ticket.id}/regenerate-execution-setup-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commentary: 'Regenerate after runtime setup started.' }),
+    })
+
+    expect(response.status).toBe(200)
+    const payload = await response.json() as { status?: string; success: boolean }
+    expect(payload.success).toBe(true)
+    expect(payload.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(getTicketByRef(ticket.id)?.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+
+    expect(listPhaseAttempts(ticket.id, 'WAITING_EXECUTION_SETUP_APPROVAL')).toEqual([
+      expect.objectContaining({ attemptNumber: 2, state: 'active', archivedReason: null }),
+      expect.objectContaining({ attemptNumber: 1, state: 'archived', archivedReason: 'execution_setup_runtime_rewind' }),
+    ])
+    expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
+      expect.objectContaining({ attemptNumber: 1, state: 'archived', archivedReason: 'execution_setup_runtime_rewind' }),
+    ])
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')?.content)
+      .toContain('Regenerate after runtime setup started.')
+  })
+
+  it('rejects setup-plan edits and regenerations after runtime setup has advanced', async () => {
+    const { app, ticket } = setupExecutionSetupPlanTicket()
+    patchTicket(ticket.id, { status: 'CODING' })
+
+    const editResponse = await app.request(`/api/tickets/${ticket.id}/execution-setup-plan`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        plan: buildStructuredPlan(ticket.externalId, 'Rejected coding edit.'),
+      }),
+    })
+    expect(editResponse.status).toBe(409)
+
+    const regenerateResponse = await app.request(`/api/tickets/${ticket.id}/regenerate-execution-setup-plan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commentary: 'Too late to rewind.' }),
+    })
+    expect(regenerateResponse.status).toBe(409)
   })
 
   it('approves the execution setup plan, stamps approval receipt, and advances the ticket', async () => {

@@ -38,6 +38,11 @@ export const EXECUTION_SETUP_PLAN_RESTART_PHASES = [
   'WAITING_EXECUTION_SETUP_APPROVAL',
 ] as const
 
+export const EXECUTION_SETUP_RUNTIME_REWIND_PHASES = [
+  'WAITING_EXECUTION_SETUP_APPROVAL',
+  'PREPARING_EXECUTION_ENV',
+] as const
+
 type LocalTicketPhaseAttemptRow = typeof ticketPhaseAttempts.$inferSelect
 
 export class ArchivedArtifactWriteError extends Error {

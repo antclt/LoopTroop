@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { QUERY_STALE_TIME_5M } from '@/lib/constants'
 import { YamlEditor } from '@/components/editor/YamlEditor'
-import { Archive, CheckCircle2 } from 'lucide-react'
+import { AlertTriangle, Archive, CheckCircle2 } from 'lucide-react'
 import { CollapsiblePhaseLogSection } from './CollapsiblePhaseLogSection'
 import { ArtifactContent } from './ArtifactContentViewer'
 import { PhaseArtifactsPanel } from './PhaseArtifactsPanel'
@@ -27,6 +27,7 @@ import { requestWorkspacePhaseNavigation } from '@/lib/workspaceNavigation'
 
 type EditTab = 'structured' | 'raw'
 type DiscardTarget = { type: 'close' } | { type: 'switch-tab'; tab: EditTab } | null
+type RuntimeRewindTarget = 'edit' | 'regenerate' | null
 
 interface ExecutionSetupPlanApprovalResponse {
   exists: boolean
@@ -204,12 +205,92 @@ function RejectedSetupPlanDraftBanner({
   )
 }
 
+function SupersededApprovedSetupPlanBanner({
+  receipt,
+  updatedAt,
+  reportContent,
+}: {
+  receipt: ExecutionSetupApprovalReceipt | null
+  updatedAt?: string | null
+  reportContent?: string | null
+}) {
+  const approvedAtLabel = formatReviewTimestamp(receipt?.approved_at)
+  const updatedAtLabel = formatReviewTimestamp(updatedAt)
+  const detailChips = [
+    'Superseded approved contract',
+    receipt?.approved_by ? `Approved by ${receipt.approved_by}` : 'Approved',
+    approvedAtLabel ? `Approved at ${approvedAtLabel}` : null,
+    typeof receipt?.step_count === 'number' ? `${receipt.step_count} step${receipt.step_count === 1 ? '' : 's'}` : null,
+    typeof receipt?.command_count === 'number' ? `${receipt.command_count} command${receipt.command_count === 1 ? '' : 's'}` : null,
+    ...buildSetupPlanSourceChips(updatedAt, reportContent),
+    updatedAtLabel ? `Saved at ${updatedAtLabel}` : null,
+  ].filter((item): item is string => Boolean(item))
+
+  return (
+    <div className="rounded-md border border-sky-300/70 bg-sky-50/80 px-3 py-3 text-sky-950 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-100">
+      <div className="flex items-start gap-2">
+        <Archive className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-semibold">Superseded approved setup contract</div>
+          <div className="mt-1 text-xs leading-5">
+            This approved plan was handed to Preparing Workspace Runtime, then archived when runtime setup was returned to setup-plan approval.
+          </div>
+          {detailChips.length > 0 ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {detailChips.map((chip) => (
+                <span key={chip} className="rounded-full border border-sky-300/70 bg-background/70 px-2 py-0.5 text-[10px] font-medium text-foreground dark:border-sky-900/60">
+                  {chip}
+                </span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function RuntimeRewindWarningDialog({
+  target,
+  onConfirm,
+  onCancel,
+}: {
+  target: RuntimeRewindTarget
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Dialog open={target !== null} onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-md border-amber-500">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+            <AlertTriangle className="h-4 w-4" />
+            Return to setup approval?
+          </DialogTitle>
+          <DialogDescription className="text-sm text-muted-foreground">
+            This will stop Preparing Workspace Runtime, archive the current runtime attempt and approved setup contract, clear stale runtime profile outputs, and require approval before runtime setup runs again.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="button" size="sm" onClick={onConfirm}>
+            {target === 'regenerate' ? 'Regenerate Plan' : 'Proceed with Edit'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phaseAttempt }: { ticket: Ticket; readOnly?: boolean; phaseAttempt?: number }) {
   const queryClient = useQueryClient()
   const { mutateAsync: saveUiState } = useSaveTicketUIState()
   const uiStateScope = 'approval_execution_setup'
   const { data: persistedUiState } = useTicketUIState<ExecutionSetupPlanApprovalUiState>(ticket.id, uiStateScope, true)
   const isArchivedAttempt = phaseAttempt != null
+  const isRuntimeSetupRewindMode = !readOnly && !isArchivedAttempt && ticket.status === 'PREPARING_EXECUTION_ENV'
   const { artifacts } = useTicketArtifacts(ticket.id, isArchivedAttempt
     ? { phase: 'WAITING_EXECUTION_SETUP_APPROVAL', phaseAttempt }
     : undefined)
@@ -253,11 +334,12 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
     ))
     return parseExecutionSetupApprovalReceipt(matchingArtifact?.content)
   }, [artifacts])
+  const isArchivedApprovedAttempt = isArchivedAttempt && approvalReceipt !== null
   const regenerateNotes = useMemo(
     () => getSetupPlanRegenerateNotes(executionSetupPlanReportContent),
     [executionSetupPlanReportContent],
   )
-  const artifactPanelPhase = readOnly ? 'WAITING_EXECUTION_SETUP_APPROVAL' : ticket.status
+  const artifactPanelPhase = readOnly || isRuntimeSetupRewindMode ? 'WAITING_EXECUTION_SETUP_APPROVAL' : ticket.status
   const isSetupPlanVisible = !isPlanGenerating && rawContent.trim().length > 0
   const shouldExpandSetupPlanLog = !isSetupPlanVisible
 
@@ -274,6 +356,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
   const [regenerateError, setRegenerateError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
+  const [runtimeRewindTarget, setRuntimeRewindTarget] = useState<RuntimeRewindTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -319,6 +402,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
     setIsEditMode(false)
     setDiscardTarget(null)
     setIsRegenerateDialogOpen(false)
+    setRuntimeRewindTarget(null)
   }, [readOnly])
 
   useApprovalFocusAnchor(ticket.id, EXECUTION_SETUP_PLAN_APPROVAL_FOCUS_EVENT)
@@ -427,7 +511,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
       // Close dialog and navigate back to ticket view. The ticket remains in
       // WAITING_EXECUTION_SETUP_APPROVAL, with a fresh active attempt generating.
       setIsRegenerateDialogOpen(false)
-      requestWorkspacePhaseNavigation({ ticketId: ticket.id, phase: ticket.status })
+      requestWorkspacePhaseNavigation({ ticketId: ticket.id, phase: 'WAITING_EXECUTION_SETUP_APPROVAL' })
       setIsRegenerating(false)
     } catch (error) {
       setRegenerateError(error instanceof Error ? error.message : 'Failed to regenerate execution setup plan')
@@ -471,6 +555,11 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
     resetDraftsFromSaved(nextTab)
   }
 
+  function openEditor() {
+    resetDraftsFromSaved('structured')
+    setIsEditMode(true)
+  }
+
   function handleToggleEdit() {
     if (isEditMode) {
       if (hasUnsavedChanges) {
@@ -481,8 +570,33 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
       setIsEditMode(false)
       return
     }
-    resetDraftsFromSaved('structured')
-    setIsEditMode(true)
+    if (isRuntimeSetupRewindMode) {
+      setRuntimeRewindTarget('edit')
+      return
+    }
+    openEditor()
+  }
+
+  function handleOpenRegenerate() {
+    setRegenerateError(null)
+    if (isRuntimeSetupRewindMode) {
+      setRuntimeRewindTarget('regenerate')
+      return
+    }
+    setIsRegenerateDialogOpen(true)
+  }
+
+  function handleConfirmRuntimeRewind() {
+    const target = runtimeRewindTarget
+    setRuntimeRewindTarget(null)
+    if (target === 'edit') {
+      openEditor()
+      return
+    }
+    if (target === 'regenerate') {
+      setRegenerateError(null)
+      setIsRegenerateDialogOpen(true)
+    }
   }
 
   function handleConfirmDiscard() {
@@ -501,6 +615,12 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
 
   return (
     <div ref={containerRef} className="h-full flex flex-col overflow-hidden">
+      <RuntimeRewindWarningDialog
+        target={runtimeRewindTarget}
+        onConfirm={handleConfirmRuntimeRewind}
+        onCancel={() => setRuntimeRewindTarget(null)}
+      />
+
       <Dialog open={!readOnly && discardTarget !== null} onOpenChange={(open) => !open && setDiscardTarget(null)}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -565,21 +685,27 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
         <div className="flex items-center gap-2 text-sm">
           <span className="font-semibold">
             {readOnly
-              ? isArchivedAttempt ? 'Rejected Execution Setup Draft' : 'Approved Execution Setup Plan'
+              ? isArchivedAttempt
+                ? isArchivedApprovedAttempt ? 'Superseded Execution Setup Contract' : 'Rejected Execution Setup Draft'
+                : 'Approved Execution Setup Plan'
               : 'Execution Setup Plan'}
           </span>
           {readOnly ? (
             <span className={isArchivedAttempt
-              ? 'rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200'
+              ? isArchivedApprovedAttempt
+                ? 'rounded-full border border-sky-300 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-sky-800 dark:border-sky-900/60 dark:bg-sky-950/20 dark:text-sky-200'
+                : 'rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-200'
               : 'rounded-full border border-green-300 bg-green-50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green-800 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-200'}
             >
-              {isArchivedAttempt ? 'Rejected Draft' : 'Approved'}
+              {isArchivedAttempt ? isArchivedApprovedAttempt ? 'Superseded' : 'Rejected Draft' : 'Approved'}
             </span>
           ) : null}
           <span className="flex-1 text-xs text-muted-foreground">
             {readOnly
               ? isArchivedAttempt
-                ? 'Review the superseded workspace readiness audit and setup draft.'
+                ? isArchivedApprovedAttempt
+                  ? 'Review the approved setup contract archived by a runtime setup rewind.'
+                  : 'Review the superseded workspace readiness audit and setup draft.'
                 : 'Review the approved workspace readiness audit and setup contract.'
               : 'Review the workspace readiness audit and any setup steps, edit if needed, regenerate with commentary, then approve.'}
           </span>
@@ -588,10 +714,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setRegenerateError(null)
-                  setIsRegenerateDialogOpen(true)
-                }}
+                onClick={handleOpenRegenerate}
                 className="text-xs shrink-0"
                 disabled={isPlanGenerating || isSaving || isApproving || isRegenerating}
               >
@@ -665,10 +788,18 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
         <div className="space-y-3">
           {readOnly ? (
             isArchivedAttempt ? (
-              <RejectedSetupPlanDraftBanner
-                updatedAt={fetchedPlan?.updatedAt}
-                reportContent={executionSetupPlanReportContent}
-              />
+              isArchivedApprovedAttempt ? (
+                <SupersededApprovedSetupPlanBanner
+                  receipt={approvalReceipt}
+                  updatedAt={fetchedPlan?.updatedAt}
+                  reportContent={executionSetupPlanReportContent}
+                />
+              ) : (
+                <RejectedSetupPlanDraftBanner
+                  updatedAt={fetchedPlan?.updatedAt}
+                  reportContent={executionSetupPlanReportContent}
+                />
+              )
             ) : (
               <ApprovedSetupPlanBanner
                 receipt={approvalReceipt}
@@ -722,7 +853,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
               <ArtifactContent
                 artifactId="execution-setup-plan"
                 content={rawContent}
-                phase={ticket.status}
+                phase={artifactPanelPhase}
                 reportContent={executionSetupPlanReportContent}
               />
             </div>
@@ -734,7 +865,7 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
 
       <CollapsiblePhaseLogSection
         key={shouldExpandSetupPlanLog ? 'setup-plan-pending' : 'setup-plan-visible'}
-        phase={ticket.status}
+        phase={artifactPanelPhase}
         ticket={ticket}
         defaultExpanded={shouldExpandSetupPlanLog}
         variant="bottom"

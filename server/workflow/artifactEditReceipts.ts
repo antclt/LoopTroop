@@ -3,7 +3,7 @@ import { contentSha256 } from '../lib/contentHash'
 import { getActivePhaseAttempt, getTicketByRef, getTicketPaths, insertPhaseArtifact } from '../storage/tickets'
 
 type EditedArtifactType = 'interview' | 'prd' | 'beads' | 'execution_setup_plan'
-type UserEditAction = 'save' | 'save_and_restart' | 'regenerate'
+type UserEditAction = 'save' | 'save_and_restart' | 'save_and_rewind' | 'regenerate'
 type EditSurface = 'raw' | 'structured' | 'answers' | 'jsonl' | 'unknown'
 
 interface RestartSummary {
