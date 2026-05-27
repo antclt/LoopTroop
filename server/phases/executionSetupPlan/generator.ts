@@ -6,6 +6,7 @@ import {
   PROM_EXECUTION_SETUP_PLAN_REGENERATE,
 } from '../../prompts/index'
 import {
+  formatPromptText,
   runOpenCodePrompt,
   runOpenCodeSessionPrompt,
   type OpenCodePromptCompletedEvent,
@@ -67,6 +68,7 @@ export async function generateExecutionSetupPlan(
   const template = callbacks?.promptTemplate ?? PROM_EXECUTION_SETUP_PLAN
   const promptContent = buildPromptFromTemplate(template, ticketContext)
   const promptParts = [{ type: 'text', content: promptContent }] as PromptPart[]
+  const initialInput = formatPromptText(promptParts)
   let sessionId = ''
   let activeSessionId: string | null = null
   const sessionManager = callbacks?.ticketId ? new SessionManager(adapter) : null
@@ -143,6 +145,7 @@ export async function generateExecutionSetupPlan(
     const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'execution_setup_plan',
       rawResponse: response,
+      initialInput,
       validationError,
       failureClass: retryDecision.failureClass,
     })
@@ -266,6 +269,7 @@ export async function generateExecutionSetupPlan(
     appendAcceptedRawAttempt(rawAttempts, {
       stage: 'execution_setup_plan',
       rawResponse: response,
+      initialInput,
     })
   }
 

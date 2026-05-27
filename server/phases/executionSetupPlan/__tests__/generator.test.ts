@@ -91,6 +91,9 @@ describe('generateExecutionSetupPlan', () => {
       expect.objectContaining({ attempt: 1, outcome: 'rejected', rawResponse: 'I drafted the setup plan.' }),
       expect.objectContaining({ attempt: 2, outcome: 'accepted', rawResponse: buildReadyPlanResponse() }),
     ])
+    expect(result.rawAttempts?.[0]?.initialInput).toContain('Execution setup plan context')
+    expect(result.rawAttempts?.[0]?.initialInput).not.toContain('Structured Output Retry')
+    expect(result.rawAttempts?.[1]?.initialInput).toBeUndefined()
 
     const messages = adapter.messages.get('mock-session-1') ?? []
     const retryPrompt = messages.find((message) => (

@@ -1182,6 +1182,7 @@ describe('ArtifactContentViewer', () => {
     expect(screen.queryByRole('button', { name: 'Accepted Output' })).not.toBeInTheDocument()
     const rawGroup = screen.getByRole('group', { name: /raw refinement attempts/i })
     expect(within(rawGroup).getByText(/gpt-5.2 · PRD refinement/i)).toBeInTheDocument()
+    expect(within(rawGroup).queryByRole('button', { name: /Initial Input/i })).not.toBeInTheDocument()
     expect(within(rawGroup).getByRole('button', { name: /gpt-5.2 · PRD refinement Attempt 1 Rejected/i })).toBeInTheDocument()
     expect(within(rawGroup).getByRole('button', { name: /gpt-5.2 · PRD refinement Attempt 2 Accepted/i })).toBeInTheDocument()
     expect(within(rawGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
@@ -1198,6 +1199,50 @@ describe('ArtifactContentViewer', () => {
     fireEvent.click(within(rawGroup).getByRole('button', { name: /Attempt 1 Rejected/i }))
 
     expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === rejectedRawResponse)).toBeInTheDocument()
+  })
+
+  it('shows initial input before raw attempt variants when available', () => {
+    const initialInput = '## Task\nDraft the PRD from the approved interview.'
+    const acceptedRawResponse = buildPrdDocumentContent({
+      epicTitle: 'Initial input audit',
+      storyTitle: 'Inspect the initial model prompt',
+      acceptanceCriterion: 'The Initial Input raw variant appears before model outputs.',
+    })
+
+    render(
+      <ArtifactContent
+        artifactId="final-prd-draft"
+        phase="REFINING_PRD"
+        content={JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          winnerDraftContent: acceptedRawResponse,
+          refinedContent: acceptedRawResponse,
+          rawAttempts: [
+            {
+              attempt: 1,
+              stage: 'refine',
+              outcome: 'accepted',
+              initialInput,
+              rawResponse: acceptedRawResponse,
+            },
+          ],
+        })}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+
+    const rawGroup = screen.getByRole('group', { name: /raw refinement attempts/i })
+    expect(within(rawGroup).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      'Initial Input',
+      'Attempt 1 Accepted',
+    ])
+
+    fireEvent.click(within(rawGroup).getByRole('button', { name: /Initial Input/i }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === initialInput)).toBeInTheDocument()
+
+    fireEvent.click(within(rawGroup).getByRole('button', { name: /Attempt 1 Accepted/i }))
+    expect(screen.getByText((_text, element) => element?.tagName === 'PRE' && element.textContent === acceptedRawResponse.trimEnd())).toBeInTheDocument()
   })
 
   it('renders coverage report with changes tab when only revision content is provided', () => {

@@ -16,7 +16,7 @@ import { CancelledError } from './types'
 import type { Message, PromptPart, StreamEvent } from '../opencode/types'
 import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
 import { VOTING_RUBRIC, getVotingRubricForPhase } from './types'
-import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
+import { formatPromptText, runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
 import { buildStructuredRetryPrompt, normalizeVoteScorecardOutput } from '../structuredOutput'
 import { buildStructuredOutputMetadata } from '../structuredOutput/metadata'
 import { resolveStructuredRetryDiagnostic } from '../lib/structuredRetryDiagnostics'
@@ -244,6 +244,7 @@ export async function conductVoting(
             },
           ]
       let promptParts = votingPrompt
+      const initialInput = formatPromptText(votingPrompt)
       let result: Awaited<ReturnType<typeof runOpenCodePrompt>> | undefined
       let attemptCount = 0
       let lastValidationError: string | undefined
@@ -329,6 +330,7 @@ export async function conductVoting(
           appendAcceptedRawAttempt(rawAttempts, {
             stage: 'vote',
             rawResponse: response,
+            initialInput,
           })
           const normalizedResponse = scorecardResult.repairApplied || scorecardResult.normalizedContent.trim() !== response.trim()
             ? scorecardResult.normalizedContent
@@ -366,6 +368,7 @@ export async function conductVoting(
         const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
           stage: 'vote',
           rawResponse: response,
+          initialInput,
           validationError: scorecardResult.error,
           failureClass: retryDecision.failureClass,
         })

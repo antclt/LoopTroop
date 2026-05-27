@@ -2,6 +2,7 @@ import type { OpenCodeAdapter } from '../../opencode/adapter'
 import type { PromptPart, Session, StreamEvent } from '../../opencode/types'
 import { buildPromptFromTemplate, PROM_EXECUTION_SETUP } from '../../prompts/index'
 import {
+  formatPromptText,
   runOpenCodePrompt,
   runOpenCodeSessionPrompt,
   type OpenCodePromptCompletedEvent,
@@ -50,12 +51,14 @@ function buildPromptFailureGeneration(
   error: unknown,
   previousDiagnostics: NonNullable<StructuredOutputMetadata['retryDiagnostics']> = [],
   previousRawAttempts: RawAttempt[] = [],
+  initialInput?: string,
 ): GenerateExecutionSetupResult {
   const validationError = `Execution setup prompt failed: ${errorMessage(error)}`
   const failureClass = classifyStructuredFailureFromError(error)
   const rawAttempts: RawAttempt[] = [...previousRawAttempts]
   const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
     stage: 'execution_setup',
+    initialInput,
     validationError,
     failureClass,
   })
@@ -108,6 +111,7 @@ export async function generateExecutionSetup(
 ): Promise<GenerateExecutionSetupResult> {
   const promptContent = buildPromptFromTemplate(PROM_EXECUTION_SETUP, ticketContext)
   const promptParts = [{ type: 'text', content: promptContent }] as PromptPart[]
+  const initialInput = formatPromptText(promptParts)
   let sessionId = ''
   let activeSessionId: string | null = null
   let activeSession: Session | null = null
@@ -175,6 +179,7 @@ export async function generateExecutionSetup(
       const promptFailureAttempts: RawAttempt[] = []
       appendRejectedRawAttempt(promptFailureAttempts, {
         stage: 'execution_setup',
+        initialInput,
         validationError: `Execution setup prompt failed: ${errorMessage(error)}`,
         failureClass: classifyStructuredFailureFromError(error),
       })
@@ -190,6 +195,7 @@ export async function generateExecutionSetup(
           }),
         ],
         promptFailureAttempts,
+        initialInput,
       )
     }
   }
@@ -217,6 +223,7 @@ export async function generateExecutionSetup(
     const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'execution_setup',
       rawResponse: response,
+      initialInput,
       validationError,
       failureClass: retryDecision.failureClass,
     })
@@ -326,7 +333,7 @@ export async function generateExecutionSetup(
       if (!activeSession) {
         throw error
       }
-      return buildPromptFailureGeneration(activeSession, error, retryDiagnostics, rawAttempts)
+      return buildPromptFailureGeneration(activeSession, error, retryDiagnostics, rawAttempts, initialInput)
     }
 
     parsed = parseExecutionSetupResult(response)
@@ -341,6 +348,7 @@ export async function generateExecutionSetup(
     appendAcceptedRawAttempt(rawAttempts, {
       stage: 'execution_setup',
       rawResponse: response,
+      initialInput,
     })
   }
 

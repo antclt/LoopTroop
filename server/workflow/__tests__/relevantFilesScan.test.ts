@@ -24,6 +24,10 @@ vi.mock('../../opencode/factory', () => ({
 }))
 
 vi.mock('../runOpenCodePrompt', () => ({
+  formatPromptText: (parts: Array<{ type?: string; source?: string; content?: string }>) => {
+    if (parts.length === 1 && !parts[0]?.source) return parts[0]?.content ?? ''
+    return parts.map((part) => `### ${part.source ?? part.type}\n${part.content ?? ''}`).join('\n\n')
+  },
   runOpenCodePrompt: runOpenCodePromptMock,
   runOpenCodeSessionPrompt: runOpenCodeSessionPromptMock,
 }))

@@ -26,6 +26,7 @@ export interface RawAttempt {
   stage: RawAttemptStage
   outcome: RawAttemptOutcome
   rawResponse: string
+  initialInput?: string
   validationError?: string
   failureClass?: StructuredFailureClass
 }

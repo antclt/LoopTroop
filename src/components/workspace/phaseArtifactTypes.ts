@@ -179,6 +179,7 @@ export interface ArtifactRawAttemptData {
   status?: string
   outcome?: string
   stage?: string
+  initialInput?: string
   rawResponse?: string
   modelOutput?: string
   content?: string
@@ -672,6 +673,7 @@ export function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] |
       status: normalizeOptionalString(getValueByAliases(entry, ['status', 'outcome'])),
       outcome: normalizeOptionalString(getValueByAliases(entry, ['outcome', 'status'])),
       stage: normalizeOptionalString(getValueByAliases(entry, ['stage', 'step'])),
+      initialInput: normalizeOptionalString(getValueByAliases(entry, ['initialInput', 'initial_input'])),
       rawResponse: normalizeOptionalString(getValueByAliases(entry, ['rawResponse', 'raw_response'])),
       modelOutput: normalizeOptionalString(getValueByAliases(entry, ['modelOutput', 'model_output'])),
       content: normalizeOptionalString(getValueByAliases(entry, ['content', 'output'])),
@@ -679,7 +681,7 @@ export function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] |
       validationError: normalizeOptionalString(getValueByAliases(entry, ['validationError', 'validation_error'])),
       failureClass: normalizeOptionalString(getValueByAliases(entry, ['failureClass', 'failure_class'])),
     }))
-    .filter((entry) => entry.rawResponse || entry.modelOutput || entry.content || entry.error || entry.validationError)
+    .filter((entry) => entry.initialInput || entry.rawResponse || entry.modelOutput || entry.content || entry.error || entry.validationError)
 
   return attempts.length > 0 ? attempts : undefined
 }

@@ -2,6 +2,7 @@ import type { OpenCodeAdapter } from '../../opencode/adapter'
 import type { PromptPart, StreamEvent } from '../../opencode/types'
 import { buildPromptFromTemplate, PROM52 } from '../../prompts/index'
 import {
+  formatPromptText,
   runOpenCodePrompt,
   runOpenCodeSessionPrompt,
   type OpenCodePromptCompletedEvent,
@@ -58,6 +59,7 @@ export async function generateFinalTests(
 ): Promise<FinalTestGenerationResult> {
   const promptContent = buildPromptFromTemplate(PROM52, ticketContext)
   const promptParts = [{ type: 'text', content: promptContent }] as PromptPart[]
+  const initialInput = formatPromptText(promptParts)
   let sessionId = ''
   let activeSessionId: string | null = null
   const sessionManager = callbacks?.ticketId ? new SessionManager(adapter) : null
@@ -139,6 +141,7 @@ export async function generateFinalTests(
     const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'final_test_generation',
       rawResponse: response,
+      initialInput,
       validationError,
       failureClass: retryDecision.failureClass,
     })
@@ -278,6 +281,7 @@ export async function generateFinalTests(
     appendAcceptedRawAttempt(rawAttempts, {
       stage: 'final_test_generation',
       rawResponse: response,
+      initialInput,
     })
   }
 

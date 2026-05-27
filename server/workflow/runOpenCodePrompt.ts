@@ -152,7 +152,7 @@ export function clearOpenCodePromptDispatchCount(sessionId: string): void {
   sessionPromptDispatchCounts.delete(sessionId)
 }
 
-function formatPromptText(parts: PromptPart[]): string {
+export function formatPromptText(parts: PromptPart[]): string {
   if (parts.length === 1 && !parts[0]?.source) {
     return parts[0]?.content ?? ''
   }

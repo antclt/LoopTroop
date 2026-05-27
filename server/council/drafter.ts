@@ -12,7 +12,7 @@ import type {
 import { CancelledError } from './types'
 import type { Message, PromptPart, StreamEvent } from '../opencode/types'
 import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
-import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
+import { formatPromptText, runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { PHASE_DEADLINE_ERROR, isAbortError, isPhaseDeadlineError, isAiResponseTimeoutError, classifyDraftFailure } from './draftUtils'
 import { getStructuredRetryDecision } from '../lib/structuredOutputRetry'
@@ -170,6 +170,7 @@ export async function generateDrafts(
     const executeDraft = (async () => {
       if (signal?.aborted) throw new CancelledError()
       let promptParts = contextParts
+      const initialInput = formatPromptText(contextParts)
       let result: Awaited<ReturnType<typeof runOpenCodePrompt>> | undefined
       const maxStructuredRetries = normalizeStructuredRetryCount(runtimeOptions?.maxStructuredRetries)
 
@@ -267,6 +268,7 @@ export async function generateDrafts(
           appendAcceptedRawAttempt(rawAttempts, {
             stage: 'draft',
             rawResponse: content,
+            initialInput,
           })
           content = normalizedContent
           break
@@ -278,6 +280,7 @@ export async function generateDrafts(
           const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
             stage: 'draft',
             rawResponse: content,
+            initialInput,
             validationError,
             failureClass: retryDecision.failureClass,
           })
@@ -307,6 +310,7 @@ export async function generateDrafts(
         appendAcceptedRawAttempt(rawAttempts, {
           stage: 'draft',
           rawResponse,
+          initialInput,
         })
       }
 

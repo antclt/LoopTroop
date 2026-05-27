@@ -17,10 +17,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
+- Added Initial Input views to future Raw model attempt diagnostics.
 
 ### Detailed Changes
 
 #### Added
+- Added an `Initial Input` selector to future model-produced Raw attempt views when the first prompt is persisted, making the model input inspectable beside accepted and rejected outputs without inferring legacy prompts from logs.
 - Added setup-scoped OpenCode `websearch`/`webfetch` access during `PREPARING_EXECUTION_ENV`, with managed dev OpenCode servers started using `OPENCODE_ENABLE_EXA=1`, so agents can resolve official launcher artifact metadata when local repository evidence is insufficient.
 - Added `tool_requirements.provisioning_attempts` evidence to execution setup profiles so failed required-launcher setup records distinct temp-root provisioning strategies and commands, or why no safe provisioning path exists.
 - Added `tooling_probe_commands` to execution setup profiles so prepared language/toolchain environments can be verified by model-selected, non-mutating probes before coding starts.

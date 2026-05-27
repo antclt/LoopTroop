@@ -9,6 +9,7 @@ import { buildMinimalContext, type TicketState } from '../../opencode/contextBui
 import { buildPromptFromTemplate, PROM0, PROM13b, PROM24, PROM53 } from '../../prompts/index'
 import { getLatestPhaseArtifact, getTicketPaths, insertPhaseArtifact, countPhaseArtifacts, upsertLatestPhaseArtifact } from '../../storage/tickets'
 import {
+  formatPromptText,
   runOpenCodePrompt,
   runOpenCodeSessionPrompt,
   type OpenCodePromptCompletedEvent,
@@ -624,6 +625,7 @@ async function runPrdCoverageAuditPrompt(params: {
   let response = ''
   let coverageEnvelope: ReturnType<typeof normalizeCoverageResultOutput> | null = null
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
+  const initialInput = formatPromptText(promptParts)
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
   let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
@@ -731,6 +733,7 @@ async function runPrdCoverageAuditPrompt(params: {
         const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
           stage: 'prd_coverage_audit',
           rawResponse: response,
+          initialInput,
           validationError: prdCoverageNormalization.validationError,
           failureClass: retryDecision.failureClass,
         })
@@ -783,6 +786,7 @@ async function runPrdCoverageAuditPrompt(params: {
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'prd_coverage_audit',
         rawResponse: response,
+        initialInput,
       })
       break
     }
@@ -791,6 +795,7 @@ async function runPrdCoverageAuditPrompt(params: {
     const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'prd_coverage_audit',
       rawResponse: response,
+      initialInput,
       validationError: coverageEnvelope.error,
       failureClass: retryDecision.failureClass,
     })
@@ -871,6 +876,7 @@ async function runPrdCoverageResolutionPrompt(params: {
   let sessionId = ''
   let response = ''
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
+  const initialInput = formatPromptText(promptParts)
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
   let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
@@ -976,6 +982,7 @@ async function runPrdCoverageResolutionPrompt(params: {
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'prd_coverage_revision',
         rawResponse: response,
+        initialInput,
       })
 
       return { response, revision, structuredMeta, rawAttempts }
@@ -985,6 +992,7 @@ async function runPrdCoverageResolutionPrompt(params: {
       const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'prd_coverage_revision',
         rawResponse: response,
+        initialInput,
         validationError,
         failureClass: retryDecision.failureClass,
       })
@@ -1055,6 +1063,7 @@ async function runBeadsCoverageAuditPrompt(params: {
   let response = ''
   let coverageEnvelope: ReturnType<typeof normalizeCoverageResultOutput> | null = null
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
+  const initialInput = formatPromptText(promptParts)
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
   let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
@@ -1162,6 +1171,7 @@ async function runBeadsCoverageAuditPrompt(params: {
         const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
           stage: 'beads_coverage_audit',
           rawResponse: response,
+          initialInput,
           validationError: beadsCoverageNormalization.validationError,
           failureClass: retryDecision.failureClass,
         })
@@ -1214,6 +1224,7 @@ async function runBeadsCoverageAuditPrompt(params: {
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'beads_coverage_audit',
         rawResponse: response,
+        initialInput,
       })
       break
     }
@@ -1222,6 +1233,7 @@ async function runBeadsCoverageAuditPrompt(params: {
     const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
       stage: 'beads_coverage_audit',
       rawResponse: response,
+      initialInput,
       validationError: coverageEnvelope.error,
       failureClass: retryDecision.failureClass,
     })
@@ -1301,6 +1313,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
   let sessionId = ''
   let response = ''
   let promptParts: PromptPart[] = [{ type: 'text', content: params.promptContent }]
+  const initialInput = formatPromptText(promptParts)
   let structuredMeta = buildStructuredMetadata({ autoRetryCount: 0, repairApplied: false, repairWarnings: [] })
   const rawAttempts: RawAttempt[] = []
   let latestOpenCodeDiagnostics: OpenCodeDiagnosticResult | null = null
@@ -1404,6 +1417,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'beads_coverage_revision',
         rawResponse: response,
+        initialInput,
       })
 
       return { response, revision, structuredMeta, rawAttempts }
@@ -1413,6 +1427,7 @@ async function runBeadsCoverageResolutionPrompt(params: {
       const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'beads_coverage_revision',
         rawResponse: response,
+        initialInput,
         validationError,
         failureClass: retryDecision.failureClass,
       })
@@ -2295,11 +2310,13 @@ export async function handleRelevantFilesScan(
         openCodeDiagnostics.push(diagnosticResult)
       }
     }
+    const initialPromptParts = [{ type: 'text' as const, content: prompt }]
+    const initialInput = formatPromptText(initialPromptParts)
 
     const result = await runOpenCodePrompt({
       adapter,
       projectPath: worktreePath,
-      parts: [{ type: 'text' as const, content: prompt }],
+      parts: initialPromptParts,
       signal,
       timeoutMs: draftTimeoutMs,
       timeoutKind: 'ai_response',
@@ -2376,6 +2393,7 @@ export async function handleRelevantFilesScan(
       const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'relevant_files_scan',
         rawResponse: finalResponse,
+        initialInput,
         validationError: normalized.error,
         failureClass: retryDecision.failureClass,
       })
@@ -2464,7 +2482,7 @@ export async function handleRelevantFilesScan(
         const freshResult = await runOpenCodePrompt({
           adapter,
           projectPath: worktreePath,
-          parts: [{ type: 'text' as const, content: prompt }],
+          parts: initialPromptParts,
           signal,
           timeoutMs: draftTimeoutMs,
           timeoutKind: 'ai_response',
@@ -2537,6 +2555,7 @@ export async function handleRelevantFilesScan(
       const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: 'relevant_files_scan',
         rawResponse: finalResponse,
+        initialInput,
         validationError: normalized.error,
         failureClass: retryDecision.failureClass,
       })
@@ -2583,6 +2602,7 @@ export async function handleRelevantFilesScan(
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'relevant_files_scan',
         rawResponse: finalResponse,
+        initialInput,
       })
     }
 

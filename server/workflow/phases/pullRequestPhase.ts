@@ -11,7 +11,7 @@ import {
 import { isMockOpenCodeMode } from '../../opencode/factory'
 import { withCommandLoggingAsync } from '../../log/commandLogger'
 import { throwIfAborted } from '../../council/types'
-import { runOpenCodePrompt, runOpenCodeSessionPrompt } from '../runOpenCodePrompt'
+import { formatPromptText, runOpenCodePrompt, runOpenCodeSessionPrompt } from '../runOpenCodePrompt'
 import { buildMinimalContext, type TicketState } from '../../opencode/contextBuilder'
 import { SessionManager } from '../../opencode/sessionManager'
 import { pushBranchRef } from '../../git/push'
@@ -421,6 +421,7 @@ export async function handleCreatePullRequest(
       const streamState = createOpenCodeStreamState()
       const draftSessionManager = new SessionManager(adapter)
       const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
+      const initialInput = formatPromptText([{ type: 'text', content: prompt }])
       let sessionId = ''
       let draftSessionOpen = false
 
@@ -532,6 +533,7 @@ export async function handleCreatePullRequest(
             appendAcceptedRawAttempt(rawAttempts, {
               stage: 'pull_request_draft',
               rawResponse: draftResponse,
+              initialInput,
             })
             break
           } catch (error) {
@@ -540,6 +542,7 @@ export async function handleCreatePullRequest(
             const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
               stage: 'pull_request_draft',
               rawResponse: draftResponse,
+              initialInput,
               validationError,
               failureClass: retryDecision.failureClass,
             })

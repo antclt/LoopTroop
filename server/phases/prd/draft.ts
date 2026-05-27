@@ -16,7 +16,7 @@ import type { Message, PromptPart, Session, StreamEvent } from '../../opencode/t
 import { SessionManager } from '../../opencode/sessionManager'
 import { buildPromptFromTemplate, PROM10a, PROM10b, PROM11, PROM12 } from '../../prompts/index'
 import type { OpenCodePromptDispatchEvent } from '../../workflow/runOpenCodePrompt'
-import { runOpenCodePrompt, runOpenCodeSessionPrompt } from '../../workflow/runOpenCodePrompt'
+import { formatPromptText, runOpenCodePrompt, runOpenCodeSessionPrompt } from '../../workflow/runOpenCodePrompt'
 import { buildStructuredRetryPrompt, normalizeInterviewDocumentOutput } from '../../structuredOutput'
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { validatePrdDraft, validateResolvedInterview } from './validation'
@@ -382,6 +382,7 @@ async function executeStructuredStep(
 ): Promise<StructuredStepSuccess> {
   let session = options.activeSession
   let promptParts = baseParts
+  const initialInput = formatPromptText(baseParts)
   let attemptCount = 0
   const maxStructuredRetries = normalizeStructuredRetryCount(options.maxStructuredRetries)
   let validation: StepValidationResult | undefined
@@ -488,6 +489,7 @@ async function executeStructuredStep(
       appendAcceptedRawAttempt(rawAttempts, {
         stage: options.step,
         rawResponse,
+        initialInput,
       })
       return {
         session: result.session,
@@ -514,6 +516,7 @@ async function executeStructuredStep(
       const rawAttempt = appendRejectedRawAttempt(rawAttempts, {
         stage: options.step,
         rawResponse,
+        initialInput,
         validationError: lastValidationError,
         failureClass: retryDecision.failureClass,
       })

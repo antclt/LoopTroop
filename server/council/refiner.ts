@@ -2,7 +2,7 @@ import type { OpenCodeAdapter } from '../opencode/adapter'
 import type { DraftResult, RawAttempt } from './types'
 import type { Message, PromptPart, StreamEvent } from '../opencode/types'
 import type { OpenCodeToolPolicy } from '../opencode/toolPolicy'
-import { runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
+import { formatPromptText, runOpenCodePrompt, type OpenCodePromptDispatchEvent } from '../workflow/runOpenCodePrompt'
 import { buildStructuredRetryPrompt } from '../structuredOutput'
 import { COUNCIL_RESPONSE_TIMEOUT_MS } from '../lib/constants'
 import { getErrorMessage } from '@shared/typeGuards'
@@ -108,6 +108,7 @@ export async function refineDraft(
         },
       ]
   let promptParts = refineParts
+  const initialInput = formatPromptText(refineParts)
   let attemptCount = 0
   const normalizedMaxStructuredRetries = normalizeStructuredRetryCount(maxStructuredRetries)
   const rawAttempts: RawAttempt[] = []
@@ -156,6 +157,7 @@ export async function refineDraft(
     } catch (error) {
       appendRejectedRawAttempt(rawAttempts, {
         stage: 'refine',
+        initialInput,
         validationError: getErrorMessage(error),
         failureClass: classifyStructuredFailureFromError(error),
       })
@@ -176,6 +178,7 @@ export async function refineDraft(
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'refine',
         rawResponse: refined,
+        initialInput,
       })
       return { content: refined, rawAttempts }
     }
@@ -185,6 +188,7 @@ export async function refineDraft(
       appendAcceptedRawAttempt(rawAttempts, {
         stage: 'refine',
         rawResponse: refined,
+        initialInput,
       })
       return { content: validation.normalizedContent ?? refined, rawAttempts }
     } catch (error) {
@@ -193,6 +197,7 @@ export async function refineDraft(
       appendRejectedRawAttempt(rawAttempts, {
         stage: 'refine',
         rawResponse: refined,
+        initialInput,
         validationError,
         failureClass: retryDecision.failureClass,
       })

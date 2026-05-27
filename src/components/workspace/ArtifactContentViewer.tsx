@@ -234,6 +234,7 @@ interface RawContentVariant {
   title?: string
   ariaLabel?: string
   labelClassName?: string
+  skipDedupe?: boolean
 }
 
 interface ActiveRawContentSource {
@@ -3654,8 +3655,21 @@ function buildRawAttemptVariants(
       attemptNumber: getRawAttemptNumber(attempt, index),
     }))
     .sort((a, b) => a.attemptNumber - b.attemptNumber || a.index - b.index)
+  const initialInput = orderedAttempts.find(({ attempt }) => typeof attempt.initialInput === 'string' && attempt.initialInput.length > 0)?.attempt.initialInput
 
-  return orderedAttempts.flatMap(({ attempt, index, attemptNumber }) => {
+  return [
+    ...(typeof initialInput === 'string'
+      ? [{
+          id: `${ownerId}:initial-input`,
+          label: 'Initial Input',
+          content: initialInput,
+          displayContent: initialInput,
+          ariaLabel: `${ownerLabel} Initial Input`,
+          title: `Show initial model input for ${ownerLabel}`,
+          skipDedupe: true,
+        }]
+      : []),
+    ...orderedAttempts.flatMap(({ attempt, index, attemptNumber }) => {
     const content = getRawAttemptContent(attempt)
     if (typeof content !== 'string') return []
     const status = getRawAttemptStatus(attempt)
@@ -3671,7 +3685,8 @@ function buildRawAttemptVariants(
       ariaLabel: `${ownerLabel} ${attemptLabel}`,
       title: `Show ${attemptLabel.toLowerCase()} raw output from ${ownerLabel}${titleStatus}`,
     }]
-  })
+    }),
+  ]
 }
 
 function getRawVariantRenderedContent(variant: RawContentVariant): string | undefined {
@@ -3705,6 +3720,11 @@ function dedupeRawContentVariants(variants: RawContentVariant[]): RawContentVari
   const unkeyed: Array<{ variant: RawContentVariant; index: number }> = []
 
   variants.forEach((variant, index) => {
+    if (variant.skipDedupe) {
+      unkeyed.push({ variant, index })
+      return
+    }
+
     const renderedContent = getRawVariantRenderedContent(variant)
     if (typeof renderedContent !== 'string') {
       unkeyed.push({ variant, index })

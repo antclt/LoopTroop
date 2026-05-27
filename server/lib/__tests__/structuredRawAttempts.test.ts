@@ -54,4 +54,39 @@ describe.concurrent('structured raw attempts', () => {
       },
     ])
   })
+
+  it('stores initial input only on the first appended attempt', () => {
+    const rawAttempts: RawAttempt[] = []
+
+    appendRejectedRawAttempt(rawAttempts, {
+      stage: 'prd_draft',
+      rawResponse: 'invalid',
+      initialInput: 'initial prompt',
+      validationError: 'Missing sections.',
+      failureClass: 'validation_error',
+    })
+    appendAcceptedRawAttempt(rawAttempts, {
+      stage: 'prd_draft',
+      rawResponse: 'valid',
+      initialInput: 'retry prompt',
+    })
+
+    expect(rawAttempts).toEqual([
+      {
+        attempt: 1,
+        stage: 'prd_draft',
+        outcome: 'rejected',
+        rawResponse: 'invalid',
+        initialInput: 'initial prompt',
+        validationError: 'Missing sections.',
+        failureClass: 'validation_error',
+      },
+      {
+        attempt: 2,
+        stage: 'prd_draft',
+        outcome: 'accepted',
+        rawResponse: 'valid',
+      },
+    ])
+  })
 })
