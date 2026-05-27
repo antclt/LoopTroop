@@ -16,6 +16,7 @@ import { LogEntryRow } from './LogLine'
 import { filterBeadLogEntries, formatLogLine } from './logFormat'
 import { LogColorLegend } from './LogColorLegend'
 import { VerificationSummaryPanel } from './VerificationSummaryPanel'
+import { formatElapsedDuration } from './currentActivity'
 import type { Ticket } from '@/hooks/useTickets'
 import { useTicketAction } from '@/hooks/useTickets'
 import { useTicketArtifacts } from '@/hooks/useTicketArtifacts'
@@ -1084,6 +1085,19 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                           <span>{formatTimestamp(viewedBead.completedAt)} <span className="text-muted-foreground/60">({relativeTime(viewedBead.completedAt)})</span></span>
                         </>
                       )}
+                      {viewedBead.startedAt && viewedBead.completedAt && (() => {
+                        const start = Date.parse(viewedBead.startedAt)
+                        const end = Date.parse(viewedBead.completedAt)
+                        if (Number.isFinite(start) && Number.isFinite(end) && end >= start) {
+                          return (
+                            <>
+                              <span className="text-muted-foreground">Implementation Time</span>
+                              <span>{formatElapsedDuration(end - start)}</span>
+                            </>
+                          )
+                        }
+                        return null
+                      })()}
                     </div>
                   </div>
                 )}

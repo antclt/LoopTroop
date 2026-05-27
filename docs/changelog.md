@@ -23,10 +23,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
 - Added tooltip to the CMD log tab in phase and full log views, consistent with all other log tabs.
 - Raw tab in artifact views now defaults to the validated variant (or first accepted attempt) instead of the first non-disabled variant. When multiple model sources exist, the first validated model is auto-selected.
+- Added dynamically calculated bead implementation time below Completed At in CodingView's bead details panel.
 
 ### Detailed Changes
 
 #### Added
+- Added dynamically calculated bead implementation time (Completed At minus Started At) under the Timeline section in the CodingView's bead details panel, rendered on the fly when both timestamps are available and represent a valid positive duration.
 - Added live-only progress wording to the workspace status title: CODING now names the active bead and iteration, coverage phases show pass/version progress when known, and manually retried non-implementation phases show the active retry attempt while the status is live.
 - Raw artifact tab now defaults to the validated variant when available. When multiple model sources exist (e.g. council drafts, votes), the first source with a validated variant is auto-selected. Falls back to the first non-disabled variant when no validated variant exists.
 - Added an `Initial Prompt` selector to future model-produced Raw attempt views when the first prompt is persisted, making the model input inspectable beside accepted and rejected attempt outputs without inferring legacy prompts from logs.
