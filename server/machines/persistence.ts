@@ -500,7 +500,7 @@ function hydrateTicketActor(
   ticketRef: string | number,
   snapshot: unknown,
   input: TicketActorInput,
-  options?: { skipFirstPersist?: boolean },
+  options?: { skipFirstPersist?: boolean; skipInitialWorkflowRun?: boolean },
 ) {
   const resolvedTicketRef = resolveTicketRef(ticketRef)
   const actor = createActor(ticketMachine, {
@@ -530,7 +530,9 @@ function hydrateTicketActor(
 
   actor.start()
   activeActors.set(resolvedTicketRef, actor)
-  attachWorkflowRunner(resolvedTicketRef, actor, (event) => actor.send(event))
+  attachWorkflowRunner(resolvedTicketRef, actor, (event) => actor.send(event), {
+    processInitialSnapshot: options?.skipInitialWorkflowRun !== true,
+  })
   return actor
 }
 
@@ -618,6 +620,7 @@ export function getTicketState(ticketRef: string | number) {
 export function revertTicketToApprovalStatus(
   ticketRef: string | number,
   targetApprovalStatus: string,
+  options?: { skipInitialWorkflowRun?: boolean },
 ) {
   const resolvedTicketRef = resolveTicketRef(ticketRef)
 
@@ -660,6 +663,7 @@ export function revertTicketToApprovalStatus(
     lockedStructuredRetryCount: ticket.localTicket.lockedStructuredRetryCount ?? null,
   }, {
     skipFirstPersist: false,
+    skipInitialWorkflowRun: options?.skipInitialWorkflowRun,
   })
 }
 

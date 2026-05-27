@@ -15,6 +15,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Hardened setup reuse so final testing automatically runs through validated prepared environments.
 - Improved workspace setup approval logs so generation starts visibly expanded and collapses once the setup plan is ready.
 - Added a one-step rewind from Preparing Workspace Runtime back to setup-plan approval for safe edits and regeneration.
+- Fixed runtime setup rewinds so regeneration starts only the requested setup-plan session instead of racing an automatic draft.
 - Made future bead commits language-agnostic while blocking setup-created project dirt before coding starts.
 - Consolidated concurrent AI status messages and warnings into a premium collapsible activity strip below workspace logs with persistence.
 - Made PRD coverage revisions tolerate safe change-metadata aliases while preserving validated structural review diffs.
@@ -34,6 +35,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a **"Create and Start"** button to the New Ticket modal, letting users create a ticket and immediately trigger the workflow from a single action.
 
 #### Fixed
+- Runtime setup rewinds now suppress the restored approval actor's immediate auto-draft when the route is about to save an edited plan or start a commented regeneration, preventing duplicate setup-plan sessions and last-writer-wins overwrites.
 - The CMD log tab now shows a descriptive tooltip on hover, matching the tooltip behavior of all other log tabs (ALL, SYS, AI, ERROR, DEBUG).
 - Long ticket descriptions are now independently scrollable (300px max-height with overflow) in the Ticket Details modal, DraftView, and PhaseReviewView. Previously, long descriptions expanded indefinitely and pushed other content off-screen.
 - Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.

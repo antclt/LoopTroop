@@ -20,6 +20,7 @@ import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { initializeTicket } from '../../ticket/initialize'
 import { ticketRouter } from '../tickets'
 import { contentSha256 } from '../../lib/contentHash'
+import { revertTicketToApprovalStatus } from '../../machines/persistence'
 
 function buildPlan(ticketId: string, summary = 'Prepare the workspace runtime.'): Record<string, unknown> {
   return {
@@ -308,6 +309,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
   let consoleErrorSpy: ReturnType<typeof vi.spyOn>
 
   beforeEach(() => {
+    vi.clearAllMocks()
     clearProjectDatabaseCache()
     initializeDatabase()
     sqlite.exec('DELETE FROM attached_projects; DELETE FROM profiles;')
@@ -627,6 +629,11 @@ describe('ticketRouter execution setup plan approval routes', () => {
     expect(payload.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
     expect(payload.plan.summary).toBe('Revised setup plan after runtime rewind.')
     expect(getTicketByRef(ticket.id)?.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(vi.mocked(revertTicketToApprovalStatus)).toHaveBeenCalledWith(
+      ticket.id,
+      'WAITING_EXECUTION_SETUP_APPROVAL',
+      { skipInitialWorkflowRun: true },
+    )
 
     expect(listPhaseAttempts(ticket.id, 'WAITING_EXECUTION_SETUP_APPROVAL')).toEqual([
       expect.objectContaining({ attemptNumber: 2, state: 'active', archivedReason: null }),
@@ -674,6 +681,11 @@ describe('ticketRouter execution setup plan approval routes', () => {
     expect(payload.success).toBe(true)
     expect(payload.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
     expect(getTicketByRef(ticket.id)?.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(vi.mocked(revertTicketToApprovalStatus)).toHaveBeenCalledWith(
+      ticket.id,
+      'WAITING_EXECUTION_SETUP_APPROVAL',
+      { skipInitialWorkflowRun: true },
+    )
 
     expect(listPhaseAttempts(ticket.id, 'WAITING_EXECUTION_SETUP_APPROVAL')).toEqual([
       expect.objectContaining({ attemptNumber: 2, state: 'active', archivedReason: null }),

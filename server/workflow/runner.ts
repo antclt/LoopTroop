@@ -231,6 +231,7 @@ export function attachWorkflowRunner(
   ticketId: string,
   actor: ReturnType<typeof createActor<typeof ticketMachine>>,
   sendEvent: (event: TicketEvent) => void,
+  options?: { processInitialSnapshot?: boolean },
 ) {
   const processSnapshot = (snapshot: ReturnType<typeof actor.getSnapshot>) => {
     const state = resolveSnapshotState(snapshot)
@@ -605,5 +606,7 @@ export function attachWorkflowRunner(
   // restored snapshot. Hydrated tickets need the active state to be processed
   // immediately after the runner is attached, otherwise work can sit idle until
   // some unrelated event arrives.
-  processSnapshot(actor.getSnapshot())
+  if (options?.processInitialSnapshot !== false) {
+    processSnapshot(actor.getSnapshot())
+  }
 }

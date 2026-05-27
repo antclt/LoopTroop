@@ -5,6 +5,7 @@ import { patchTicket, getTicketByRef, getTicketPaths } from '../../storage/ticke
 import { TEST, makeTicketContextFromTicket } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
 import { ensureActorForTicket, hydrateAllTickets, revertTicketToApprovalStatus, stopActor } from '../persistence'
+import { attachWorkflowRunner } from '../../workflow/runner'
 
 vi.mock('../../workflow/runner', () => ({
   attachWorkflowRunner: vi.fn(),
@@ -231,6 +232,46 @@ describe('hydrateAllTickets', () => {
       expect(persistedSnapshot.context?.status).toBe('WAITING_INTERVIEW_APPROVAL')
       expect(persistedSnapshot.context?.previousStatus).toBe('REFINING_PRD')
       expect(readFileSync(`${paths.ticketDir}/runtime/state.yaml`, 'utf8')).toContain('status: WAITING_INTERVIEW_APPROVAL')
+    } finally {
+      stopActor(ticket.id)
+    }
+  })
+
+  it('can revert an actor without immediately processing the restored approval snapshot', () => {
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Quiet runtime setup rewind',
+    })
+
+    const snapshot = {
+      status: 'active',
+      value: 'PREPARING_EXECUTION_ENV',
+      historyValue: {},
+      context: makeTicketContextFromTicket(ticket, {
+        status: 'PREPARING_EXECUTION_ENV',
+        previousStatus: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      }),
+      children: {},
+    }
+
+    patchTicket(ticket.id, {
+      status: 'PREPARING_EXECUTION_ENV',
+      xstateSnapshot: JSON.stringify(snapshot),
+    })
+
+    try {
+      expect(ensureActorForTicket(ticket.id).getSnapshot().value).toBe('PREPARING_EXECUTION_ENV')
+      vi.mocked(attachWorkflowRunner).mockClear()
+
+      const rewoundActor = revertTicketToApprovalStatus(ticket.id, 'WAITING_EXECUTION_SETUP_APPROVAL', {
+        skipInitialWorkflowRun: true,
+      })
+      expect(rewoundActor.getSnapshot().value).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+      expect(vi.mocked(attachWorkflowRunner)).toHaveBeenCalledWith(
+        ticket.id,
+        rewoundActor,
+        expect.any(Function),
+        { processInitialSnapshot: false },
+      )
     } finally {
       stopActor(ticket.id)
     }

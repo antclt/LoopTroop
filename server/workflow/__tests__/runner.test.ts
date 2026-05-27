@@ -168,6 +168,35 @@ describe('attachWorkflowRunner', () => {
     })
   })
 
+  it('can attach to a restored snapshot without processing it immediately', async () => {
+    isMockOpenCodeModeMock.mockReturnValue(true)
+
+    const actor = createSnapshotActor('WAITING_EXECUTION_SETUP_APPROVAL', {
+      title: 'Runner deferred setup approval test',
+      status: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      previousStatus: 'PRE_FLIGHT_CHECK',
+      beadProgress: { total: 5, completed: 0, current: null },
+    })
+
+    actor.start()
+    attachWorkflowRunner(TEST.ticketId, actor, (event) => actor.send(event), {
+      processInitialSnapshot: false,
+    })
+
+    expect(handleMockExecutionUnsupportedMock).not.toHaveBeenCalled()
+
+    actor.send({ type: 'APPROVE_EXECUTION_SETUP_PLAN' })
+
+    await vi.waitFor(() => {
+      expect(handleMockExecutionUnsupportedMock).toHaveBeenCalledWith(
+        TEST.ticketId,
+        expect.objectContaining({ status: 'PREPARING_EXECUTION_ENV' }),
+        'PREPARING_EXECUTION_ENV',
+        expect.any(Function),
+      )
+    })
+  })
+
   it('cleans in-memory workflow state when a ticket reaches COMPLETED naturally', async () => {
     const controller = new AbortController()
     ticketAbortControllers.set(TEST.ticketId, controller)

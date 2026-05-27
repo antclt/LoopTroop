@@ -210,7 +210,11 @@ export async function prepareExecutionSetupRuntimeRewind(ticketId: string): Prom
   }
 
   ensureActorForTicket(ticketId)
-  revertTicketToApprovalStatus(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL')
+  // The route that requested this rewind will save the edited plan or start
+  // the explicit regeneration. Avoid also auto-drafting from the empty attempt.
+  revertTicketToApprovalStatus(ticketId, 'WAITING_EXECUTION_SETUP_APPROVAL', {
+    skipInitialWorkflowRun: true,
+  })
 
   return {
     reason: restartReason,
