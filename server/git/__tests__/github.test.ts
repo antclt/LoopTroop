@@ -175,4 +175,95 @@ describe('server/git/github', () => {
     expect(fetchCallIndex).toBeGreaterThanOrEqual(0)
     expect(statusCallIndex).toBeGreaterThan(fetchCallIndex)
   })
+
+  it('allows untracked files during explicit local base sync until Git reports an overwrite conflict', async () => {
+    spawnSyncMock.mockImplementation((_command: string, args: readonly string[]) => {
+      if (args.includes('fetch')) return makeSpawnResult()
+      if (args.includes('status')) return makeSpawnResult({ stdout: '?? scratch.log\n' })
+      if (args.includes('rev-parse') && args.includes('--abbrev-ref')) {
+        return makeSpawnResult({ stdout: 'main\n' })
+      }
+      if (args.includes('rev-parse') && args.includes('refs/remotes/origin/main')) {
+        return makeSpawnResult({ stdout: 'remote-sha\n' })
+      }
+      if (args.includes('merge')) return makeSpawnResult()
+      if (args.includes('rev-parse') && args.includes('HEAD')) {
+        return makeSpawnResult({ stdout: 'local-sha\n' })
+      }
+      return makeSpawnResult()
+    })
+
+    const github = await import('../github')
+    const result = github.syncLocalBaseBranch('/repo', 'main')
+
+    expect(result.remoteBaseHead).toBe('remote-sha')
+    expect(spawnSyncMock.mock.calls.some(([, args]) => (
+      Array.isArray(args)
+      && args.join(' ') === '-C /repo status --porcelain=1 --untracked-files=all -- . :(top,exclude).looptroop'
+    ))).toBe(true)
+  })
+
+  it('reports tracked and untracked dirty files with the checked path', async () => {
+    spawnSyncMock.mockImplementation((_command: string, args: readonly string[]) => {
+      if (args.includes('status')) {
+        return makeSpawnResult({
+          stdout: [
+            'M  staged.ts',
+            ' D deleted.ts',
+            '?? scratch.log',
+          ].join('\n'),
+        })
+      }
+      return makeSpawnResult()
+    })
+
+    const github = await import('../github')
+
+    expect(() => github.ensureWorktreeClean('/repo')).toThrow(
+      'Checked path: /repo Tracked staged files: staged.ts Tracked unstaged files: deleted.ts Untracked files: scratch.log',
+    )
+  })
+
+  it('verifies a remote base contains the merged commit without touching the checkout', async () => {
+    spawnSyncMock.mockImplementation((_command: string, args: readonly string[]) => {
+      if (args.includes('fetch')) return makeSpawnResult()
+      if (args.includes('rev-parse') && args.includes('refs/remotes/origin/main')) {
+        return makeSpawnResult({ stdout: 'remote-base-sha\n' })
+      }
+      if (args.includes('merge-base')) return makeSpawnResult()
+      return makeSpawnResult()
+    })
+
+    const github = await import('../github')
+    const result = github.verifyRemoteBaseContainsCommit('/repo', 'main', 'candidate123')
+
+    expect(result).toEqual({
+      baseBranch: 'main',
+      verifiedCommitSha: 'candidate123',
+      remoteBaseHead: 'remote-base-sha',
+    })
+    expect(spawnSyncMock.mock.calls.some(([, args]) => (
+      Array.isArray(args)
+      && args.join(' ') === '-C /repo merge-base --is-ancestor candidate123 remote-base-sha'
+    ))).toBe(true)
+    expect(spawnSyncMock.mock.calls.some(([, args]) => Array.isArray(args) && args.includes('checkout'))).toBe(false)
+    expect(spawnSyncMock.mock.calls.some(([, args]) => Array.isArray(args) && args.includes('merge'))).toBe(false)
+  })
+
+  it('fails remote merge verification when the base does not contain the commit', async () => {
+    spawnSyncMock.mockImplementation((_command: string, args: readonly string[]) => {
+      if (args.includes('fetch')) return makeSpawnResult()
+      if (args.includes('rev-parse') && args.includes('refs/remotes/origin/main')) {
+        return makeSpawnResult({ stdout: 'remote-base-sha\n' })
+      }
+      if (args.includes('merge-base')) return makeSpawnResult({ status: 1 })
+      return makeSpawnResult()
+    })
+
+    const github = await import('../github')
+
+    expect(() => github.verifyRemoteBaseContainsCommit('/repo', 'main', 'candidate123')).toThrow(
+      'Remote origin/main does not contain commit candidate123. Latest remote base is remote-base-sha.',
+    )
+  })
 })

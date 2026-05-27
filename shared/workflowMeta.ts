@@ -905,9 +905,9 @@ const WORKFLOW_PHASE_DETAILS = {
     steps: [
       'Draft PR Presentation: The workspace shows the PR URL, current PR state, candidate SHA, branch/base refs, integration report, and final test summary.',
       'Manual Review: You inspect the draft PR and the local result. There is no time limit; LoopTroop waits for your decision.',
-      'Merge Path: Choosing Merge PR & Finish marks the PR ready if needed and merges it into the base branch on GitHub. Once GitHub reports the PR merged, the remote merge is treated as complete; local base-branch sync runs afterward as a recoverable follow-up.',
+      'Merge Path: Choosing Merge PR & Finish marks the PR ready if needed and merges it into the base branch on GitHub. Once GitHub reports the PR merged, LoopTroop verifies the remote base branch contains the candidate commit and leaves your local checkout untouched.',
       'Finish Without Merge Path: Choosing Finish Without Merge preserves the PR and remote ticket branch exactly as they are, then proceeds directly to cleanup and terminal completion.',
-      'External Merge Detection: If the PR is merged manually in GitHub while this phase is open, LoopTroop detects that during polling, skips a second remote merge call, syncs the local base branch, and continues automatically.',
+      'External Merge Detection: If the PR is merged manually in GitHub while this phase is open, LoopTroop detects that during polling, skips a second remote merge call, verifies the remote base branch, and continues automatically.',
     ],
     outputs: [
       'A stable draft-PR review gate that exposes the final PR metadata, test results, and integration summary.',
@@ -915,9 +915,9 @@ const WORKFLOW_PHASE_DETAILS = {
       'An explicit human decision before cleanup and terminal completion.',
     ],
     transitions: [
-      'Merge PR & Finish → Cleaning Up: GitHub merge succeeds, local base branch sync succeeds, and cleanup starts.',
+      'Merge PR & Finish → Cleaning Up: GitHub merge succeeds, remote base verification succeeds, and cleanup starts without modifying the local checkout.',
       'Finish Without Merge → Cleaning Up: The ticket closes successfully without merging and cleanup starts.',
-      'System Error → Blocked Error: If the GitHub merge itself fails, the workflow blocks as a PR merge failure. If GitHub reports the PR merged but local base sync fails, the workflow records the PR as merged and blocks with a local-sync failure so retry resumes sync and cleanup without trying to merge the PR again.',
+      'System Error → Blocked Error: If the GitHub merge itself fails or the remote base branch cannot be verified to contain the candidate commit, the workflow blocks as a PR merge failure. Retry rechecks the remote state without trying to merge the PR again when GitHub already reports it merged.',
     ],
     notes: [
       'Context available: PR metadata, final test report, integration summary, and merge controls. No AI prompt context is assembled in this review gate.',

@@ -34,9 +34,6 @@ vi.mock('../../workflow/phases/pullRequestPhase', () => ({
   refreshPullRequestReport: refreshPullRequestReportMock,
   refreshPullRequestState: refreshPullRequestStateMock,
   completeMergedPullRequest: completeMergedPullRequestMock,
-  isPullRequestLocalSyncError: (error: unknown) => (
-    error instanceof Error && error.name === 'PullRequestLocalSyncError'
-  ),
   completeCloseUnmerged: completeCloseUnmergedMock,
 }))
 
@@ -159,10 +156,10 @@ describe('ticketRouter PR review routes', () => {
         prUrl: 'https://github.com/test/repo/pull/42',
         prState: 'merged',
         prHeadSha: 'abc123def456',
-        localBaseHead: 'base123',
+        localBaseHead: null,
         remoteBaseHead: 'base123',
         remoteBranchDeleteWarning: null,
-        message: 'Pull request merged and local main synced to origin/main.',
+        message: 'Pull request merged into origin/main. Local checkout was not modified.',
       }
     })
     completeCloseUnmergedMock.mockImplementation((input: { ticketId: string }) => {
@@ -238,14 +235,12 @@ describe('ticketRouter PR review routes', () => {
     expect(completeMergedPullRequestMock).toHaveBeenCalledOnce()
   })
 
-  it('blocks as a local sync failure when GitHub already merged the pull request', async () => {
+  it('blocks as a merge failure when remote merge verification fails', async () => {
     const { ticket } = createWaitingPrReviewTicket()
     const app = new Hono()
     app.route('/api', ticketRouter)
     completeMergedPullRequestMock.mockImplementationOnce(() => {
-      const error = new Error('Pull request merged; local sync failed for main: dirty worktree')
-      error.name = 'PullRequestLocalSyncError'
-      throw error
+      throw new Error('Remote origin/main does not contain commit abc123def456')
     })
 
     const response = await app.request(`/api/tickets/${ticket.id}/merge`, { method: 'POST' })
@@ -254,9 +249,9 @@ describe('ticketRouter PR review routes', () => {
     const payload = await response.json() as { status?: string; message?: string }
     expect(payload).toMatchObject({
       status: 'BLOCKED_ERROR',
-      message: 'Pull request merged; local sync failed and ticket was blocked',
+      message: 'Merge failed and ticket was blocked',
     })
-    expect(getTicketByRef(ticket.id)?.errorMessage).toContain('Pull request merged; local sync failed')
+    expect(getTicketByRef(ticket.id)?.errorMessage).toContain('Remote origin/main does not contain commit abc123def456')
   })
 
   it('persists a close-unmerged merge report artifact', async () => {

@@ -142,6 +142,12 @@ export interface GitDiffSummary {
   patchError: string | null
 }
 
+export interface RemoteBaseVerification {
+  baseBranch: string
+  verifiedCommitSha: string
+  remoteBaseHead: string
+}
+
 export interface GitRecoveryReceipt {
   phase: string
   step: string
@@ -593,6 +599,35 @@ function parseStatusLines(statusOutput: string): {
   }
 }
 
+function formatFileList(label: string, files: string[]): string | null {
+  if (files.length === 0) return null
+  return `${label}: ${files.join(', ')}`
+}
+
+function formatWorktreeStatusDiagnostic(projectPath: string, parsed: ReturnType<typeof parseStatusLines>): string {
+  const details = [
+    `Checked path: ${projectPath}`,
+    formatFileList('Tracked staged files', parsed.stagedFiles),
+    formatFileList('Tracked unstaged files', parsed.unstagedFiles),
+    formatFileList('Untracked files', parsed.untrackedFiles),
+    'Commit, stash, or restore tracked changes before retrying. Move, ignore, or remove untracked files only if Git reports they would be overwritten.',
+  ].filter((line): line is string => Boolean(line))
+
+  return details.join(' ')
+}
+
+function readWorktreeStatus(projectPath: string): ReturnType<typeof parseStatusLines> & { raw: string } {
+  const raw = runGit(projectPath, FILTERED_STATUS_ARGS)
+  return {
+    ...parseStatusLines(raw),
+    raw,
+  }
+}
+
+function hasTrackedChanges(parsed: ReturnType<typeof parseStatusLines>): boolean {
+  return parsed.stagedFiles.length > 0 || parsed.unstagedFiles.length > 0
+}
+
 function buildNextSafeActions(step: string): string[] {
   switch (step) {
     case 'push_candidate_branch':
@@ -613,9 +648,17 @@ function buildNextSafeActions(step: string): string[] {
       return [
         'Inspect the pull request mergeability in GitHub, resolve blockers, then retry the merge action.',
       ]
+    case 'verify_pull_request_candidate':
+      return [
+        'Confirm the pull request targets the expected base branch and still points at the recorded candidate commit, then retry.',
+      ]
+    case 'verify_remote_merge':
+      return [
+        'Fetch origin and confirm the remote base branch contains the merged pull request commit, then retry.',
+      ]
     case 'sync_local_base_branch':
       return [
-        'Clean the local project worktree and retry so LoopTroop can fast-forward the base branch.',
+        'Resolve tracked local changes or any Git-reported untracked overwrite conflict, then retry the explicit local base-branch sync.',
       ]
     default:
       return [
@@ -672,9 +715,16 @@ export function captureGitRecoveryReceipt(input: {
 }
 
 export function ensureWorktreeClean(projectPath: string): void {
-  const worktreeStatus = runGit(projectPath, FILTERED_STATUS_ARGS)
-  if (worktreeStatus) {
-    throw new Error('Project worktree has uncommitted changes. Clean the worktree before finishing this ticket.')
+  const status = readWorktreeStatus(projectPath)
+  if (status.raw) {
+    throw new Error(`Worktree has uncommitted changes. ${formatWorktreeStatusDiagnostic(projectPath, status)}`)
+  }
+}
+
+function ensureNoTrackedWorktreeChanges(projectPath: string): void {
+  const status = readWorktreeStatus(projectPath)
+  if (hasTrackedChanges(status)) {
+    throw new Error(`Worktree has tracked changes that would make local base-branch sync unsafe. ${formatWorktreeStatusDiagnostic(projectPath, status)}`)
   }
 }
 
@@ -684,7 +734,7 @@ export function syncLocalBaseBranch(projectPath: string, baseBranch: string): {
   remoteBaseHead: string
 } {
   runGit(projectPath, ['fetch', '--no-progress', '--prune', 'origin'])
-  ensureWorktreeClean(projectPath)
+  ensureNoTrackedWorktreeChanges(projectPath)
 
   const originalBranch = getCurrentBranch(projectPath)
   const remoteBaseRef = `origin/${baseBranch}`
@@ -704,6 +754,28 @@ export function syncLocalBaseBranch(projectPath: string, baseBranch: string): {
   return {
     originalBranch,
     localBaseHead,
+    remoteBaseHead,
+  }
+}
+
+export function verifyRemoteBaseContainsCommit(projectPath: string, baseBranch: string, commitSha: string): RemoteBaseVerification {
+  const verifiedCommitSha = normalizeString(commitSha)
+  if (!verifiedCommitSha) {
+    throw new Error('Cannot verify remote merge without a pull request head or candidate commit SHA.')
+  }
+
+  runGit(projectPath, ['fetch', '--no-progress', '--prune', 'origin'])
+
+  const remoteBaseRef = `refs/remotes/origin/${baseBranch}`
+  const remoteBaseHead = runGit(projectPath, ['rev-parse', remoteBaseRef])
+  const ancestor = tryCommand('git', ['-C', projectPath, 'merge-base', '--is-ancestor', verifiedCommitSha, remoteBaseHead])
+  if (!ancestor.ok) {
+    throw new Error(`Remote origin/${baseBranch} does not contain commit ${verifiedCommitSha}. Latest remote base is ${remoteBaseHead}.`)
+  }
+
+  return {
+    baseBranch,
+    verifiedCommitSha,
     remoteBaseHead,
   }
 }

@@ -13,7 +13,6 @@ import {
   buildPullRequestPrompt,
   completeMergedPullRequest,
   handleCreatePullRequest,
-  isPullRequestLocalSyncError,
   readPullRequestReport,
 } from '../phases/pullRequestPhase'
 
@@ -25,10 +24,11 @@ const mocks = vi.hoisted(() => ({
   createOrUpdateDraftPullRequest: vi.fn(),
   captureGitRecoveryReceipt: vi.fn((input: unknown) => input),
   getPullRequestForBranch: vi.fn(),
+  ensureWorktreeClean: vi.fn(),
   markPullRequestReady: vi.fn(),
   mergePullRequest: vi.fn(),
-  syncLocalBaseBranch: vi.fn(),
   tryDeleteRemoteBranch: vi.fn(),
+  verifyRemoteBaseContainsCommit: vi.fn(),
 }))
 
 vi.mock('../runOpenCodePrompt', () => ({
@@ -54,10 +54,11 @@ vi.mock('../../git/github', () => ({
   createOrUpdateDraftPullRequest: mocks.createOrUpdateDraftPullRequest,
   captureGitRecoveryReceipt: mocks.captureGitRecoveryReceipt,
   getPullRequestForBranch: mocks.getPullRequestForBranch,
+  ensureWorktreeClean: mocks.ensureWorktreeClean,
   markPullRequestReady: mocks.markPullRequestReady,
   mergePullRequest: mocks.mergePullRequest,
-  syncLocalBaseBranch: mocks.syncLocalBaseBranch,
   tryDeleteRemoteBranch: mocks.tryDeleteRemoteBranch,
+  verifyRemoteBaseContainsCommit: mocks.verifyRemoteBaseContainsCommit,
 }))
 
 describe('pull request drafting context', () => {
@@ -87,6 +88,13 @@ describe('pull request drafting context', () => {
       closedAt: null,
       mergedAt: null,
     })
+    mocks.ensureWorktreeClean.mockReturnValue(undefined)
+    mocks.verifyRemoteBaseContainsCommit.mockReturnValue({
+      baseBranch: 'main',
+      verifiedCommitSha: 'candidate123',
+      remoteBaseHead: 'remote-base-sha',
+    })
+    mocks.tryDeleteRemoteBranch.mockReturnValue({ deleted: true, warning: null })
   })
 
   afterAll(() => {
@@ -300,15 +308,15 @@ describe('pull request drafting context', () => {
     expect(getLatestPhaseArtifact(ticket.id, 'git_recovery_receipt', 'CREATING_PULL_REQUEST')).toBeDefined()
   })
 
-  it('records a merged PR separately when local base sync fails', () => {
+  it('completes a merged PR by verifying the remote base without syncing the user checkout', () => {
     resetTestDb()
     const { ticket, context } = createInitializedTestTicket(repoManager, {
-      title: 'Merge sync failure',
+      title: 'Remote merge verification',
     })
     const prInfo = {
       number: 42,
       url: 'https://github.example/pulls/42',
-      title: 'Merge sync failure',
+      title: 'Remote merge verification',
       body: 'Body',
       state: 'open' as const,
       baseRefName: 'main',
@@ -325,54 +333,162 @@ describe('pull request drafting context', () => {
       state: 'merged',
       mergedAt: '2026-01-01T00:05:00.000Z',
     })
-    mocks.syncLocalBaseBranch.mockImplementation(() => {
-      throw new Error('Project worktree has uncommitted changes')
-    })
 
-    let thrown: unknown
-    try {
-      completeMergedPullRequest({
-        ticketId: ticket.id,
-        externalId: ticket.externalId,
-        projectPath: context.externalId,
+    completeMergedPullRequest({
+      ticketId: ticket.id,
+      externalId: ticket.externalId,
+      projectPath: context.externalId,
+      baseBranch: 'main',
+      headBranch: ticket.externalId,
+      candidateCommitSha: 'candidate123',
+      prReport: {
+        status: 'passed',
+        completedAt: '2026-01-01T00:00:00.000Z',
         baseBranch: 'main',
         headBranch: ticket.externalId,
         candidateCommitSha: 'candidate123',
-        prReport: {
-          status: 'passed',
-          completedAt: '2026-01-01T00:00:00.000Z',
-          baseBranch: 'main',
-          headBranch: ticket.externalId,
-          candidateCommitSha: 'candidate123',
-          prNumber: 42,
-          prUrl: prInfo.url,
-          prState: 'open',
-          prHeadSha: 'candidate123',
-          title: prInfo.title,
-          body: prInfo.body,
-          createdAt: prInfo.createdAt,
-          updatedAt: prInfo.updatedAt,
-          mergedAt: null,
-          closedAt: null,
-          message: 'Draft PR ready.',
-        },
-      })
-    } catch (error) {
-      thrown = error
-    }
+        prNumber: 42,
+        prUrl: prInfo.url,
+        prState: 'open',
+        prHeadSha: 'candidate123',
+        title: prInfo.title,
+        body: prInfo.body,
+        createdAt: prInfo.createdAt,
+        updatedAt: prInfo.updatedAt,
+        mergedAt: null,
+        closedAt: null,
+        message: 'Draft PR ready.',
+      },
+    })
 
-    expect(isPullRequestLocalSyncError(thrown)).toBe(true)
     expect(mocks.mergePullRequest).toHaveBeenCalledOnce()
-    expect(mocks.tryDeleteRemoteBranch).not.toHaveBeenCalled()
+    expect(mocks.verifyRemoteBaseContainsCommit).toHaveBeenCalledWith(context.externalId, 'main', 'candidate123')
+    expect(mocks.ensureWorktreeClean).not.toHaveBeenCalledWith(context.externalId)
+    expect(mocks.tryDeleteRemoteBranch).toHaveBeenCalledWith(context.externalId, ticket.externalId)
     const mergeReport = getLatestPhaseArtifact(ticket.id, 'merge_report', 'WAITING_PR_REVIEW')
     expect(JSON.parse(mergeReport!.content)).toMatchObject({
-      status: 'local_sync_failed',
+      status: 'passed',
       disposition: 'merged',
-      localSyncError: 'Project worktree has uncommitted changes',
+      localBaseHead: null,
+      remoteBaseHead: 'remote-base-sha',
+      message: 'Pull request merged into origin/main. Local checkout was not modified.',
     })
     expect(readPullRequestReport(ticket.id)).toMatchObject({
       prState: 'merged',
-      message: expect.stringContaining('local sync failed for main'),
+      message: 'Pull request merged into origin/main. Local checkout was not modified.',
+    })
+  })
+
+  it('blocks before merge when the pull request head does not match the candidate commit', () => {
+    resetTestDb()
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Candidate mismatch',
+    })
+    const prInfo = {
+      number: 42,
+      url: 'https://github.example/pulls/42',
+      title: 'Candidate mismatch',
+      body: 'Body',
+      state: 'open' as const,
+      baseRefName: 'main',
+      headRefName: ticket.externalId,
+      headRefOid: 'old-sha',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      closedAt: null,
+      mergedAt: null,
+    }
+    mocks.getPullRequestForBranch.mockReturnValue(prInfo)
+
+    expect(() => completeMergedPullRequest({
+      ticketId: ticket.id,
+      externalId: ticket.externalId,
+      projectPath: context.externalId,
+      baseBranch: 'main',
+      headBranch: ticket.externalId,
+      candidateCommitSha: 'candidate123',
+      prReport: {
+        status: 'passed',
+        completedAt: '2026-01-01T00:00:00.000Z',
+        baseBranch: 'main',
+        headBranch: ticket.externalId,
+        candidateCommitSha: 'candidate123',
+        prNumber: 42,
+        prUrl: prInfo.url,
+        prState: 'open',
+        prHeadSha: 'old-sha',
+        title: prInfo.title,
+        body: prInfo.body,
+        createdAt: prInfo.createdAt,
+        updatedAt: prInfo.updatedAt,
+        mergedAt: null,
+        closedAt: null,
+        message: 'Draft PR ready.',
+      },
+    })).toThrow('does not match candidate candidate123')
+
+    expect(mocks.mergePullRequest).not.toHaveBeenCalled()
+    expect(mocks.verifyRemoteBaseContainsCommit).not.toHaveBeenCalled()
+  })
+
+  it('fails after merge if the remote base does not contain the candidate commit', () => {
+    resetTestDb()
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Remote verification failure',
+    })
+    const prInfo = {
+      number: 42,
+      url: 'https://github.example/pulls/42',
+      title: 'Remote verification failure',
+      body: 'Body',
+      state: 'merged' as const,
+      baseRefName: 'main',
+      headRefName: ticket.externalId,
+      headRefOid: 'candidate123',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+      closedAt: '2026-01-01T00:05:00.000Z',
+      mergedAt: '2026-01-01T00:05:00.000Z',
+    }
+    mocks.getPullRequestForBranch.mockReturnValue(prInfo)
+    mocks.verifyRemoteBaseContainsCommit.mockImplementation(() => {
+      throw new Error('Remote origin/main does not contain commit candidate123.')
+    })
+
+    expect(() => completeMergedPullRequest({
+      ticketId: ticket.id,
+      externalId: ticket.externalId,
+      projectPath: context.externalId,
+      baseBranch: 'main',
+      headBranch: ticket.externalId,
+      candidateCommitSha: 'candidate123',
+      prReport: {
+        status: 'passed',
+        completedAt: '2026-01-01T00:00:00.000Z',
+        baseBranch: 'main',
+        headBranch: ticket.externalId,
+        candidateCommitSha: 'candidate123',
+        prNumber: 42,
+        prUrl: prInfo.url,
+        prState: 'merged',
+        prHeadSha: 'candidate123',
+        title: prInfo.title,
+        body: prInfo.body,
+        createdAt: prInfo.createdAt,
+        updatedAt: prInfo.updatedAt,
+        mergedAt: prInfo.mergedAt,
+        closedAt: prInfo.closedAt,
+        message: 'Draft PR ready.',
+      },
+      skipRemoteMerge: true,
+    })).toThrow('Remote origin/main does not contain commit candidate123')
+
+    expect(mocks.mergePullRequest).not.toHaveBeenCalled()
+    expect(mocks.tryDeleteRemoteBranch).not.toHaveBeenCalled()
+    const receipt = getLatestPhaseArtifact(ticket.id, 'git_recovery_receipt', 'WAITING_PR_REVIEW')
+    expect(JSON.parse(receipt!.content)).toMatchObject({
+      step: 'verify_remote_merge',
+      error: 'Remote origin/main does not contain commit candidate123.',
     })
   })
 })

@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added live-only workspace status progress labels for coding, coverage checks, and retried phases.
+- Made merged PR completion independent of the user's local checkout cleanliness.
 - Fixed long ticket descriptions being unscrollable in backlog and detail views.
 - Enabled setup-scoped online artifact lookup for missing launcher provisioning while keeping real provisioning evidence stricter.
 - Fixed realtime logs for active multi-attempt phases while keeping archived phase versions static and attempt-scoped.
@@ -49,6 +50,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Current Activity timeout warnings now render only for the ticket's live status, so revisiting an older phase cannot show an obsolete `Approaching timeout` banner until refresh.
 
 #### Changed
+- PR merge completion now verifies that `origin/<baseBranch>` contains the candidate commit and proceeds to cleanup without checking out, fast-forwarding, or requiring cleanliness in the user's main project folder.
 - Renamed Raw retry attempt selectors to the clearer `Attempt N Output - Accepted/Rejected` format.
 - Setup-plan edits and regenerations from active runtime setup now stop the runtime session, archive the approved setup contract and runtime attempt, clear stale runtime profile outputs while preserving the tool cache, and require approval again before setup reruns.
 - Execution setup prompts now state that wrapper creation, cache inspection, PATH edits, and version probes are discovery/scaffolding only, and do not count as provisioning strategies unless the attempt actually obtains, installs, or activates the missing launcher under approved temp roots.

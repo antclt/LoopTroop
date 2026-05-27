@@ -30,7 +30,6 @@ import {
 import {
   completeCloseUnmerged,
   completeMergedPullRequest,
-  isPullRequestLocalSyncError,
   readPullRequestReport,
 } from '../../workflow/phases/pullRequestPhase'
 import {
@@ -406,13 +405,8 @@ export function handleMergeTicket(c: Context) {
     sendTicketEvent(ticketId, { type: 'MERGE_COMPLETE' })
   } catch (err) {
     const details = getErrorMessage(err)
-    const localSyncFailure = isPullRequestLocalSyncError(err)
-    const message = localSyncFailure
-      ? details
-      : `Pull request merge failed: ${details}`
-    const codes = localSyncFailure
-      ? ['PULL_REQUEST_LOCAL_SYNC_FAILED']
-      : ['PULL_REQUEST_MERGE_FAILED']
+    const message = `Pull request merge failed: ${details}`
+    const codes = ['PULL_REQUEST_MERGE_FAILED']
     try {
       ensureActorForTicket(ticketId)
       emitRoutePhaseLog(ticketId, phase, 'error', message)
@@ -421,9 +415,7 @@ export function handleMergeTicket(c: Context) {
         message,
         codes,
       })
-      return respondWithState(c, ticketId, localSyncFailure
-        ? 'Pull request merged; local sync failed and ticket was blocked'
-        : 'Merge failed and ticket was blocked')
+      return respondWithState(c, ticketId, 'Merge failed and ticket was blocked')
     } catch (dispatchErr) {
       console.error(`[tickets] Failed to dispatch merge error for ticket ${ticketId}:`, dispatchErr)
       return c.json({ error: 'Failed to merge pull request', details }, 500)
