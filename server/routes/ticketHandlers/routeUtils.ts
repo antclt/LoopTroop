@@ -10,7 +10,7 @@ import {
 import { abortTicketSessions } from '../../opencode/sessionManager'
 import { clearContextCache } from '../../opencode/contextBuilder'
 import { broadcaster } from '../../sse/broadcaster'
-import { appendLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
+import { appendLogEvent, createLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
 import { cancelTicket } from '../../workflow/runner'
 import {
   archiveActivePhaseAttempts,
@@ -61,30 +61,29 @@ export function emitRoutePhaseLog(
   const timestamp = new Date().toISOString()
   const source = type === 'error' ? 'error' : 'system'
   const kind = type === 'error' ? 'error' : 'milestone'
-  const payload = {
-    ticketId,
-    phase,
-    type,
-    content,
-    source,
-    audience: 'all' as const,
-    kind,
-    op: 'append' as const,
-    streaming: false,
-    timestamp,
-    ...(data ?? {}),
-  }
   const emissionData = data ? { ticketId, ...data, timestamp } : { ticketId, timestamp }
-  if (shouldSkipLogEmission(ticketId, type, phase, content, emissionData, source, phase, {
+  const structuredExtra = {
     audience: 'all',
     kind,
     op: 'append',
     streaming: false,
-  })) {
+    ...(typeof data?.phaseAttempt === 'number' && Number.isFinite(data.phaseAttempt) ? { phaseAttempt: data.phaseAttempt } : {}),
+  } as const
+  if (shouldSkipLogEmission(ticketId, type, phase, content, emissionData, source, phase, structuredExtra)) {
     return
   }
 
-  broadcaster.broadcast(ticketId, 'log', payload)
+  const event = createLogEvent(
+    ticketId,
+    type,
+    phase,
+    content,
+    emissionData,
+    source,
+    phase,
+    structuredExtra,
+  )
+  broadcaster.broadcast(ticketId, 'log', { ...event })
   appendLogEvent(
     ticketId,
     type,
@@ -93,12 +92,7 @@ export function emitRoutePhaseLog(
     emissionData,
     source,
     phase,
-    {
-      audience: 'all',
-      kind,
-      op: 'append',
-      streaming: false,
-    },
+    structuredExtra,
   )
 }
 

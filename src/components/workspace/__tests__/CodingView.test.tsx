@@ -48,10 +48,12 @@ vi.mock('../CollapsiblePhaseLogSection', () => ({
   CollapsiblePhaseLogSection: ({
     phase,
     phaseAttempt,
+    logMode,
   }: {
     phase: string
     phaseAttempt?: number
-  }) => <div data-testid="collapsible-log-section">{phase}:{phaseAttempt ?? 'active'}</div>,
+    logMode?: string
+  }) => <div data-testid="collapsible-log-section" data-log-mode={logMode ?? 'live'}>{phase}:{phaseAttempt ?? 'active'}</div>,
 }))
 
 vi.mock('../BeadDiffViewer', () => ({
@@ -222,6 +224,7 @@ describe('CodingView', () => {
     expect(screen.getByText('Archived version 1')).toBeInTheDocument()
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:live')
     expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:2')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-log-mode', 'live')
 
     fireEvent.change(selector, { target: { value: '1' } })
 
@@ -231,11 +234,13 @@ describe('CodingView', () => {
     })
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:archived runtime report')
     expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:1')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-log-mode', 'snapshot')
 
     fireEvent.change(selector, { target: { value: '2' } })
 
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('PREPARING_EXECUTION_ENV:live')
     expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('PREPARING_EXECUTION_ENV:2')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-log-mode', 'live')
   })
 
   it('hides the phase version selector for CODING because bead retry has separate recovery', () => {

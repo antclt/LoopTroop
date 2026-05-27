@@ -1,5 +1,5 @@
 import { broadcaster } from '../../sse/broadcaster'
-import { appendLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
+import { appendLogEvent, createLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
 import type { LogEventType, LogSource } from '../../log/types'
 import { buildOpenCodeQuestionLogIdentity } from '@shared/logIdentity'
 import { type TicketState } from '../../opencode/contextBuilder'
@@ -115,6 +115,7 @@ export function emitPhaseLog(
     ...(typeof data?.sessionId === 'string' ? { sessionId: data.sessionId } : {}),
     ...(typeof data?.beadId === 'string' ? { beadId: data.beadId } : {}),
     ...(typeof data?.streaming === 'boolean' ? { streaming: data.streaming } : {}),
+    ...(typeof data?.phaseAttempt === 'number' && Number.isFinite(data.phaseAttempt) ? { phaseAttempt: data.phaseAttempt } : {}),
   }
   const timestamp = new Date().toISOString()
   const emissionData = data ? { ...data, timestamp } : { timestamp }
@@ -122,14 +123,17 @@ export function emitPhaseLog(
     return
   }
 
-  broadcaster.broadcast(ticketId, 'log', {
+  const event = createLogEvent(
     ticketId,
-    phase,
     type,
+    phase,
     content,
-    ...data,
-    timestamp,
-  })
+    emissionData,
+    source as LogSource | undefined,
+    phase,
+    structuredExtra,
+  )
+  broadcaster.broadcast(ticketId, 'log', { ...event })
   appendLogEvent(
     ticketId,
     type,
@@ -148,7 +152,11 @@ export function emitPhaseLog(
       ticketId,
       phase,
       `app.${type}`,
-      { content, ...(data ? { data } : {}) },
+      {
+        content,
+        ...(data ? { data } : {}),
+        ...(typeof event.phaseAttempt === 'number' ? { phaseAttempt: event.phaseAttempt } : {}),
+      },
       false,
     )
   }
@@ -196,38 +204,34 @@ export function emitDebugLog(
     ? (payload as Record<string, unknown>)
     : (payload !== undefined ? { value: payload } : undefined)
   const timestamp = new Date().toISOString()
-  const logData = debugData ? { ...debugData, timestamp } : { timestamp }
-  if (shouldSkipLogEmission(ticketId, 'debug', phase, content, logData, 'debug', phase, {
-    audience: 'debug',
-    kind: 'session',
-    op: 'append',
+  const logData: Record<string, unknown> = debugData ? { ...debugData, timestamp } : { timestamp }
+  const structuredExtra = {
+    audience: 'debug' as const,
+    kind: 'session' as const,
+    op: 'append' as const,
     streaming: false,
-  })) {
+    ...(typeof logData.phaseAttempt === 'number' && Number.isFinite(logData.phaseAttempt) ? { phaseAttempt: logData.phaseAttempt } : {}),
+  }
+  if (shouldSkipLogEmission(ticketId, 'debug', phase, content, logData, 'debug', phase, structuredExtra)) {
     return
   }
 
   // Always broadcast via SSE so the real-time log viewer DEBUG tab works.
-  broadcaster.broadcast(ticketId, 'log', {
+  const event = createLogEvent(
     ticketId,
+    'debug',
     phase,
-    type: 'debug',
-    content: liveContent,
-    source: 'debug',
-    audience: 'debug',
-    kind: 'session',
-    op: 'append',
-    streaming: false,
-    timestamp,
-  })
+    liveContent,
+    logData,
+    'debug',
+    phase,
+    structuredExtra,
+  )
+  broadcaster.broadcast(ticketId, 'log', { ...event })
 
   // Only persist to disk when this is a direct (non-mirror) debug call.
   if (persist) {
-    appendLogEvent(ticketId, 'debug', phase, content, logData, 'debug', phase, {
-      audience: 'debug',
-      kind: 'session',
-      op: 'append',
-      streaming: false,
-    })
+    appendLogEvent(ticketId, 'debug', phase, content, logData, 'debug', phase, structuredExtra)
   }
 }
 

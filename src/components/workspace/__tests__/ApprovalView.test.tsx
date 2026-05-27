@@ -38,7 +38,23 @@ vi.mock('../PrdApprovalPane', () => ({
 }))
 
 vi.mock('../ExecutionSetupPlanApprovalPane', () => ({
-  ExecutionSetupPlanApprovalPane: ({ ticket }: { ticket: Ticket }) => <div data-testid="execution-setup-plan-approval-pane">{ticket.id}</div>,
+  ExecutionSetupPlanApprovalPane: ({
+    ticket,
+    logPhaseAttempt,
+    logMode,
+  }: {
+    ticket: Ticket
+    logPhaseAttempt?: number
+    logMode?: string
+  }) => (
+    <div
+      data-testid="execution-setup-plan-approval-pane"
+      data-phase-attempt={logPhaseAttempt ?? 'active'}
+      data-log-mode={logMode ?? 'live'}
+    >
+      {ticket.id}
+    </div>
+  ),
 }))
 
 vi.mock('../PhaseLogPanel', () => ({
@@ -50,7 +66,19 @@ vi.mock('../VerticalResizeHandle', () => ({
 }))
 
 vi.mock('../CollapsiblePhaseLogSection', () => ({
-  CollapsiblePhaseLogSection: () => <div data-testid="collapsible-log-section" />,
+  CollapsiblePhaseLogSection: ({
+    phaseAttempt,
+    logMode,
+  }: {
+    phaseAttempt?: number
+    logMode?: string
+  }) => (
+    <div
+      data-testid="collapsible-log-section"
+      data-phase-attempt={phaseAttempt ?? 'active'}
+      data-log-mode={logMode ?? 'live'}
+    />
+  ),
 }))
 
 vi.mock('@/components/editor/YamlEditor', () => ({
@@ -445,11 +473,15 @@ describe('Interview approval UI', () => {
     const selector = await screen.findByRole('combobox', { name: /version/i })
     expect(selector).toHaveValue('2')
     expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-phase-attempt', '2')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-log-mode', 'live')
 
     fireEvent.change(selector, { target: { value: '1' } })
 
     expect(await screen.findByText('This archived attempt is read-only. You can inspect and copy its content, but it can no longer be used by the workflow.')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-phase-attempt', '1')
+    expect(screen.getByTestId('collapsible-log-section')).toHaveAttribute('data-log-mode', 'snapshot')
 
     openFoundationSection()
     expect(screen.getByText('Archived approved answer.')).toBeInTheDocument()

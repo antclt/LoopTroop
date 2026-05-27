@@ -12,16 +12,22 @@ const mockUseTicketArtifacts = vi.fn()
 const mockCollapsiblePhaseLogSection = vi.hoisted(() => vi.fn(({
   defaultExpanded,
   phase,
+  phaseAttempt,
+  logMode,
   variant,
 }: {
   defaultExpanded?: boolean
   phase?: string
+  phaseAttempt?: number
+  logMode?: string
   variant?: string
 }) => (
   <div
     data-testid="phase-log-section"
     data-default-expanded={String(defaultExpanded)}
     data-phase={phase}
+    data-phase-attempt={phaseAttempt ?? 'active'}
+    data-log-mode={logMode ?? 'live'}
     data-variant={variant}
   />
 )))
@@ -307,6 +313,8 @@ describe('ExecutionSetupPlanApprovalPane', () => {
     expect(latestLogProps).toMatchObject({
       phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
       defaultExpanded: false,
+      phaseAttempt: undefined,
+      logMode: 'live',
       variant: 'bottom',
     })
   })
@@ -512,6 +520,12 @@ describe('ExecutionSetupPlanApprovalPane', () => {
     expect(mockUseTicketArtifacts).toHaveBeenCalledWith(TEST.ticketId, {
       phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
       phaseAttempt: 1,
+    })
+    const latestLogProps = mockCollapsiblePhaseLogSection.mock.calls[mockCollapsiblePhaseLogSection.mock.calls.length - 1]?.[0]
+    expect(latestLogProps).toMatchObject({
+      phase: 'WAITING_EXECUTION_SETUP_APPROVAL',
+      phaseAttempt: 1,
+      logMode: 'snapshot',
     })
   })
 

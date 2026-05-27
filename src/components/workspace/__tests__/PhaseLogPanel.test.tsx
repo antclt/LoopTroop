@@ -237,6 +237,97 @@ describe('PhaseLogPanel', () => {
     expect(loadLogsForPhase).toHaveBeenCalledWith('CODING', { channel: 'debug' })
   })
 
+  it('keeps active multi-attempt logs live while filtering by phaseAttempt', () => {
+    const loadLogsForPhase = vi.fn()
+    const getLogsForPhase = vi.fn(() => [
+      makeLog('attempt-2-live', '[SYS] Runtime setup is still streaming.', {
+        status: 'PREPARING_EXECUTION_ENV',
+        phaseAttempt: 2,
+      }),
+    ])
+    const value: LogContextValue = {
+      logsByPhase: {},
+      activePhase: null,
+      isLoadingLogs: false,
+      addLog: vi.fn(),
+      addLogRecord: vi.fn(),
+      getLogsForPhase,
+      getAllLogs: vi.fn(() => []),
+      setActivePhase: vi.fn(),
+      loadLogsForPhase,
+      isLoadingLogScope: vi.fn(() => false),
+      clearLogs: vi.fn(),
+    }
+
+    renderWithTooltipProvider(
+      <LogContext.Provider value={value}>
+        <PhaseLogPanel phase="PREPARING_EXECUTION_ENV" phaseAttempt={2} />
+      </LogContext.Provider>,
+    )
+
+    expect(loadLogsForPhase).toHaveBeenCalledWith('PREPARING_EXECUTION_ENV', { phaseAttempt: 2 })
+    expect(getLogsForPhase).toHaveBeenCalledWith('PREPARING_EXECUTION_ENV', { phaseAttempt: 2 })
+    expect(screen.getByText(/Runtime setup is still streaming/i)).toBeInTheDocument()
+  })
+
+  it('loads snapshot attempts directly instead of subscribing to live logs', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify([
+        {
+          type: 'info',
+          phase: 'PREPARING_EXECUTION_ENV',
+          status: 'PREPARING_EXECUTION_ENV',
+          phaseAttempt: 1,
+          source: 'system',
+          content: 'Archived runtime setup row.',
+          entryId: 'archived-runtime-row',
+          timestamp: '2026-03-13T10:00:01.000Z',
+        },
+      ]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+    )
+    const loadLogsForPhase = vi.fn()
+    const value: LogContextValue = {
+      logsByPhase: {},
+      activePhase: null,
+      isLoadingLogs: false,
+      addLog: vi.fn(),
+      addLogRecord: vi.fn(),
+      getLogsForPhase: vi.fn(() => [
+        makeLog('attempt-2-live', '[SYS] Live row should stay out.', {
+          status: 'PREPARING_EXECUTION_ENV',
+          phaseAttempt: 2,
+        }),
+      ]),
+      getAllLogs: vi.fn(() => []),
+      setActivePhase: vi.fn(),
+      loadLogsForPhase,
+      isLoadingLogScope: vi.fn(() => false),
+      clearLogs: vi.fn(),
+    }
+
+    try {
+      renderWithTooltipProvider(
+        <LogContext.Provider value={value}>
+          <PhaseLogPanel
+            phase="PREPARING_EXECUTION_ENV"
+            ticket={makeTicket()}
+            phaseAttempt={1}
+            logMode="snapshot"
+          />
+        </LogContext.Provider>,
+      )
+
+      await waitFor(() => {
+        expect(screen.getByText(/Archived runtime setup row/i)).toBeInTheDocument()
+      })
+      expect(fetchSpy).toHaveBeenCalledWith('/api/files/ticket-1/logs?phase=PREPARING_EXECUTION_ENV&phaseAttempt=1', expect.any(Object))
+      expect(loadLogsForPhase).not.toHaveBeenCalled()
+      expect(screen.queryByText(/Live row should stay out/i)).not.toBeInTheDocument()
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
   it('asks for phase AI detail logs when AI or model tabs are selected', () => {
     const loadLogsForPhase = vi.fn()
     const logs = [

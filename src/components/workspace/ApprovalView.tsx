@@ -136,7 +136,17 @@ function buildBeadForSave(bead: ParsedBead): Record<string, unknown> {
   }
 }
 
-function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
+function BeadsApprovalPane({
+  ticket,
+  phase,
+  logPhaseAttempt,
+  logMode = 'live',
+}: {
+  ticket: Ticket
+  phase: string
+  logPhaseAttempt?: number
+  logMode?: 'live' | 'snapshot'
+}) {
   const queryClient = useQueryClient()
   const { mutateAsync: saveUiState } = useSaveTicketUIState()
   const uiStateScope = 'approval_beads'
@@ -420,7 +430,7 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
         </div>
 
         <PhaseArtifactsPanel
-          phase={ticket.status}
+          phase={phase}
           isCompleted={false}
           ticketId={ticket.id}
           councilMemberCount={councilMemberCount}
@@ -512,7 +522,9 @@ function BeadsApprovalPane({ ticket }: { ticket: Ticket }) {
       </div>
 
       <CollapsiblePhaseLogSection
-        phase={ticket.status}
+        phase={phase}
+        phaseAttempt={logPhaseAttempt}
+        logMode={logMode}
         ticket={ticket}
         defaultExpanded={false}
         variant="bottom"
@@ -664,6 +676,7 @@ function ReadOnlyApprovalAttemptView({
       <CollapsiblePhaseLogSection
         phase={phase}
         phaseAttempt={logPhaseAttempt ?? (archivedAttempt ? phaseAttempt : undefined)}
+        logMode={archivedAttempt ? 'snapshot' : 'live'}
         ticket={ticket}
         defaultExpanded={false}
         variant="bottom"
@@ -701,6 +714,7 @@ export function ApprovalView({ ticket, phase, artifactType, readOnly }: Approval
 
   const archivedAttemptNumber = selectedAttempt?.state === 'archived' ? selectedAttempt.attemptNumber : undefined
   const logPhaseAttempt = attempts.length > 1 ? selectedAttemptNumber ?? undefined : undefined
+  const logMode = archivedAttemptNumber != null ? 'snapshot' : 'live'
   const selector = attempts.length > 1 ? (
     <div className="px-4 pt-4 shrink-0">
       <PhaseAttemptSelector
@@ -721,6 +735,8 @@ export function ApprovalView({ ticket, phase, artifactType, readOnly }: Approval
             ticket={ticket}
             readOnly={readOnly || isArchivedAttempt}
             phaseAttempt={isArchivedAttempt ? archivedAttemptNumber : undefined}
+            logPhaseAttempt={logPhaseAttempt}
+            logMode={logMode}
           />
         </div>
       </div>
@@ -749,10 +765,10 @@ export function ApprovalView({ ticket, phase, artifactType, readOnly }: Approval
       {selector}
       <div className="flex-1 min-h-0">
         {artifactType === 'interview'
-          ? <InterviewApprovalPane ticket={ticket} phase={resolvedPhase} />
+          ? <InterviewApprovalPane ticket={ticket} phase={resolvedPhase} logPhaseAttempt={logPhaseAttempt} logMode={logMode} />
           : artifactType === 'prd'
-            ? <PrdApprovalPane ticket={ticket} phase={resolvedPhase} />
-            : <BeadsApprovalPane ticket={ticket} />}
+            ? <PrdApprovalPane ticket={ticket} phase={resolvedPhase} logPhaseAttempt={logPhaseAttempt} logMode={logMode} />
+            : <BeadsApprovalPane ticket={ticket} phase={resolvedPhase} logPhaseAttempt={logPhaseAttempt} logMode={logMode} />}
       </div>
     </div>
   )

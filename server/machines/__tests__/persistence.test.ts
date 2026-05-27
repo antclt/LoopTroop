@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { appendLogEvent } from '../../log/executionLog'
+import { broadcaster } from '../../sse/broadcaster'
 import { patchTicket, getTicketByRef, getTicketPaths } from '../../storage/tickets'
 import { TEST, makeTicketContextFromTicket } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
@@ -96,6 +97,7 @@ describe('hydrateAllTickets', () => {
     const { ticket } = createInitializedTestTicket(repoManager, {
       title: 'Persist blocked diagnostics',
     })
+    const broadcastSpy = vi.spyOn(broadcaster, 'broadcast')
 
     try {
       const actor = ensureActorForTicket(ticket.id)
@@ -133,8 +135,26 @@ describe('hydrateAllTickets', () => {
           isRetryable: true,
         }),
       })
+      expect(broadcastSpy).toHaveBeenCalledWith(
+        ticket.id,
+        'state_change',
+        expect.objectContaining({
+          to: 'BLOCKED_ERROR',
+          phaseAttempt: 1,
+        }),
+      )
+      expect(broadcastSpy).toHaveBeenCalledWith(
+        ticket.id,
+        'log',
+        expect.objectContaining({
+          type: 'error',
+          phase: 'BLOCKED_ERROR',
+          phaseAttempt: 1,
+        }),
+      )
     } finally {
       stopActor(ticket.id)
+      broadcastSpy.mockRestore()
     }
   })
 

@@ -38,10 +38,12 @@ vi.mock('../CollapsiblePhaseLogSection', () => ({
   CollapsiblePhaseLogSection: ({
     phase,
     phaseAttempt,
+    logMode,
   }: {
     phase: string
     phaseAttempt?: number
-  }) => <div data-testid="phase-log-section">{phase}:{phaseAttempt ?? 'active'}</div>,
+    logMode?: string
+  }) => <div data-testid="phase-log-section" data-log-mode={logMode ?? 'live'}>{phase}:{phaseAttempt ?? 'active'}</div>,
 }))
 
 describe('CouncilView', () => {
@@ -113,6 +115,7 @@ describe('CouncilView', () => {
     expect(screen.getByText('Archived version 1')).toBeInTheDocument()
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('current-prd-draft')
     expect(screen.getByTestId('phase-log-section')).toHaveTextContent('DRAFTING_PRD:2')
+    expect(screen.getByTestId('phase-log-section')).toHaveAttribute('data-log-mode', 'live')
 
     fireEvent.change(selector, { target: { value: '1' } })
 
@@ -122,5 +125,6 @@ describe('CouncilView', () => {
     })
     expect(screen.getByTestId('phase-artifacts-panel')).toHaveTextContent('archived-prd-draft')
     expect(screen.getByTestId('phase-log-section')).toHaveTextContent('DRAFTING_PRD:1')
+    expect(screen.getByTestId('phase-log-section')).toHaveAttribute('data-log-mode', 'snapshot')
   })
 })

@@ -284,12 +284,25 @@ function RuntimeRewindWarningDialog({
   )
 }
 
-export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phaseAttempt }: { ticket: Ticket; readOnly?: boolean; phaseAttempt?: number }) {
+export function ExecutionSetupPlanApprovalPane({
+  ticket,
+  readOnly = false,
+  phaseAttempt,
+  logPhaseAttempt,
+  logMode,
+}: {
+  ticket: Ticket
+  readOnly?: boolean
+  phaseAttempt?: number
+  logPhaseAttempt?: number
+  logMode?: 'live' | 'snapshot'
+}) {
   const queryClient = useQueryClient()
   const { mutateAsync: saveUiState } = useSaveTicketUIState()
   const uiStateScope = 'approval_execution_setup'
   const { data: persistedUiState } = useTicketUIState<ExecutionSetupPlanApprovalUiState>(ticket.id, uiStateScope, true)
   const isArchivedAttempt = phaseAttempt != null
+  const effectiveLogMode = logMode ?? (isArchivedAttempt ? 'snapshot' : 'live')
   const isRuntimeSetupRewindMode = !readOnly && !isArchivedAttempt && ticket.status === 'PREPARING_EXECUTION_ENV'
   const { artifacts } = useTicketArtifacts(ticket.id, isArchivedAttempt
     ? { phase: 'WAITING_EXECUTION_SETUP_APPROVAL', phaseAttempt }
@@ -866,6 +879,8 @@ export function ExecutionSetupPlanApprovalPane({ ticket, readOnly = false, phase
       <CollapsiblePhaseLogSection
         key={shouldExpandSetupPlanLog ? 'setup-plan-pending' : 'setup-plan-visible'}
         phase={artifactPanelPhase}
+        phaseAttempt={logPhaseAttempt ?? phaseAttempt}
+        logMode={effectiveLogMode}
         ticket={ticket}
         defaultExpanded={shouldExpandSetupPlanLog}
         variant="bottom"

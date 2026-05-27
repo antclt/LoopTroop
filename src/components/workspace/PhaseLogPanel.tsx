@@ -23,6 +23,7 @@ interface PhaseLogPanelProps {
   logs?: LogEntry[]
   ticket?: Ticket
   phaseAttempt?: number
+  logMode?: 'live' | 'snapshot'
   hideHeader?: boolean
   toolbarPrefix?: ReactNode
   onNaturalHeightChange?: (height: number) => void
@@ -58,6 +59,7 @@ export function PhaseLogPanel({
   logs: propLogs,
   ticket,
   phaseAttempt,
+  logMode = 'live',
   hideHeader = false,
   toolbarPrefix,
   onNaturalHeightChange,
@@ -77,7 +79,46 @@ export function PhaseLogPanel({
     key: null,
     entries: [],
   })
-  const shouldLoadArchivedLogs = Boolean(ticket?.id) && typeof phaseAttempt === 'number' && phaseAttempt > 0
+  const liveLogOptions = useMemo(
+    () => (typeof phaseAttempt === 'number' && phaseAttempt > 0 ? { phaseAttempt } : undefined),
+    [phaseAttempt],
+  )
+  const liveDebugLogOptions = useMemo(
+    () => (typeof phaseAttempt === 'number' && phaseAttempt > 0
+      ? { channel: 'debug' as const, phaseAttempt }
+      : { channel: 'debug' as const }),
+    [phaseAttempt],
+  )
+  const liveAiLogOptions = useMemo(
+    () => (typeof phaseAttempt === 'number' && phaseAttempt > 0
+      ? { channel: 'ai' as const, phaseAttempt }
+      : { channel: 'ai' as const }),
+    [phaseAttempt],
+  )
+  const liveNormalScope = useMemo(
+    () => ({
+      status: phase,
+      ...(typeof phaseAttempt === 'number' && phaseAttempt > 0 ? { phaseAttempt } : {}),
+    }),
+    [phase, phaseAttempt],
+  )
+  const liveDebugScope = useMemo(
+    () => ({
+      status: phase,
+      channel: 'debug' as const,
+      ...(typeof phaseAttempt === 'number' && phaseAttempt > 0 ? { phaseAttempt } : {}),
+    }),
+    [phase, phaseAttempt],
+  )
+  const liveAiScope = useMemo(
+    () => ({
+      status: phase,
+      channel: 'ai' as const,
+      ...(typeof phaseAttempt === 'number' && phaseAttempt > 0 ? { phaseAttempt } : {}),
+    }),
+    [phase, phaseAttempt],
+  )
+  const shouldLoadArchivedLogs = logMode === 'snapshot' && Boolean(ticket?.id) && typeof phaseAttempt === 'number' && phaseAttempt > 0
   const archivedLogsKey = useMemo(() => {
     if (!shouldLoadArchivedLogs || !ticket?.id || typeof phaseAttempt !== 'number') {
       return null
@@ -195,18 +236,22 @@ export function PhaseLogPanel({
 
   useEffect(() => {
     if (propLogs || shouldLoadArchivedLogs) return
-    logCtx?.loadLogsForPhase?.(phase)
-  }, [logCtx, phase, propLogs, shouldLoadArchivedLogs])
+    if (liveLogOptions) {
+      logCtx?.loadLogsForPhase?.(phase, liveLogOptions)
+    } else {
+      logCtx?.loadLogsForPhase?.(phase)
+    }
+  }, [liveLogOptions, logCtx, phase, propLogs, shouldLoadArchivedLogs])
 
   useEffect(() => {
     if (shouldLoadArchivedLogs || activeTab !== 'DEBUG') return
-    logCtx?.loadLogsForPhase?.(phase, { channel: 'debug' })
-  }, [activeTab, logCtx, phase, shouldLoadArchivedLogs])
+    logCtx?.loadLogsForPhase?.(phase, liveDebugLogOptions)
+  }, [activeTab, liveDebugLogOptions, logCtx, phase, shouldLoadArchivedLogs])
 
   useEffect(() => {
     if (shouldLoadArchivedLogs || !isAiLogTab(activeTab)) return
-    logCtx?.loadLogsForPhase?.(phase, { channel: 'ai' })
-  }, [activeTab, logCtx, phase, shouldLoadArchivedLogs])
+    logCtx?.loadLogsForPhase?.(phase, liveAiLogOptions)
+  }, [activeTab, liveAiLogOptions, logCtx, phase, shouldLoadArchivedLogs])
 
   const isLoadingLogs = propLogs
     ? false
@@ -217,15 +262,15 @@ export function PhaseLogPanel({
           ? archivedLogsState.key !== archivedLogsKey || archivedAiLogsState.key !== archivedLogsKey
           : archivedLogsState.key !== archivedLogsKey
       : activeTab === 'DEBUG'
-        ? (logCtx?.isLoadingLogScope?.({ status: phase, channel: 'debug' }) ?? false)
+        ? (logCtx?.isLoadingLogScope?.(liveDebugScope) ?? false)
         : isAiLogTab(activeTab)
-          ? ((logCtx?.isLoadingLogScope?.({ status: phase }) ?? false) || (logCtx?.isLoadingLogScope?.({ status: phase, channel: 'ai' }) ?? false))
-          : (logCtx?.isLoadingLogScope?.({ status: phase }) ?? (logCtx?.isLoadingLogs ?? false))
+          ? ((logCtx?.isLoadingLogScope?.(liveNormalScope) ?? false) || (logCtx?.isLoadingLogScope?.(liveAiScope) ?? false))
+          : (logCtx?.isLoadingLogScope?.(liveNormalScope) ?? (logCtx?.isLoadingLogs ?? false))
   const phaseLogs: LogEntry[] = useMemo(
     () => {
       if (propLogs) {
         if (activeTab !== 'DEBUG') return propLogs
-        const debugEntries = (logCtx?.getLogsForPhase(phase) ?? []).filter((entry) => isDebugLogEntry(entry))
+        const debugEntries = (logCtx?.getLogsForPhase(phase, liveLogOptions) ?? []).filter((entry) => isDebugLogEntry(entry))
         const seenEntryIds = new Set(propLogs.map((entry) => entry.entryId))
         return [
           ...propLogs,
@@ -238,9 +283,9 @@ export function PhaseLogPanel({
         const debugEntries = archivedDebugLogsState.key === archivedLogsKey ? archivedDebugLogsState.entries : []
         return mergeLogEntryList([...normalEntries, ...aiEntries, ...debugEntries])
       }
-      return logCtx?.getLogsForPhase(phase) ?? []
+      return logCtx?.getLogsForPhase(phase, liveLogOptions) ?? []
     },
-    [activeTab, archivedAiLogsState.entries, archivedAiLogsState.key, archivedDebugLogsState.entries, archivedDebugLogsState.key, archivedLogsKey, archivedLogsState.entries, archivedLogsState.key, logCtx, phase, propLogs, shouldLoadArchivedLogs],
+    [activeTab, archivedAiLogsState.entries, archivedAiLogsState.key, archivedDebugLogsState.entries, archivedDebugLogsState.key, archivedLogsKey, archivedLogsState.entries, archivedLogsState.key, liveLogOptions, logCtx, phase, propLogs, shouldLoadArchivedLogs],
   )
   const hasToolbarPrefix = toolbarPrefix != null
   const [modelsCollapsed, setModelsCollapsed] = useState(true)

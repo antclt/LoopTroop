@@ -69,7 +69,17 @@ function normalizePersistedAnswerDrafts(
   return baseDrafts
 }
 
-export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPROVAL' }: { ticket: Ticket; phase?: string }) {
+export function InterviewApprovalPane({
+  ticket,
+  phase = 'WAITING_INTERVIEW_APPROVAL',
+  logPhaseAttempt,
+  logMode = 'live',
+}: {
+  ticket: Ticket
+  phase?: string
+  logPhaseAttempt?: number
+  logMode?: 'live' | 'snapshot'
+}) {
   const queryClient = useQueryClient()
   const { mutateAsync: saveUiState } = useSaveTicketUIState()
   const uiStateScope = 'approval_interview'
@@ -474,6 +484,8 @@ export function InterviewApprovalPane({ ticket, phase = 'WAITING_INTERVIEW_APPRO
 
       <CollapsiblePhaseLogSection
         phase={phase}
+        phaseAttempt={logPhaseAttempt}
+        logMode={logMode}
         ticket={ticket}
         defaultExpanded={false}
         variant="bottom"

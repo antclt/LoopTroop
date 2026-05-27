@@ -9,6 +9,7 @@ export interface LogEntry {
   line: string
   source: string
   status: string
+  phaseAttempt?: number
   timestamp?: string
   audience: 'all' | 'ai' | 'debug'
   kind: string
@@ -40,6 +41,7 @@ export interface PlainLogOptions {
   kind?: string
   modelId?: string
   sessionId?: string
+  phaseAttempt?: number
   timeoutMs?: number
   deadlineAt?: string
   timeoutKind?: PromptTimeoutKind
@@ -55,10 +57,10 @@ export interface LogContextValue {
   isLoadingLogs: boolean
   addLog: (phase: string, line: string, options?: PlainLogOptions) => void
   addLogRecord: (phase: string, data: Record<string, unknown>) => void
-  getLogsForPhase: (phase: string) => LogEntry[]
+  getLogsForPhase: (phase: string, options?: { phaseAttempt?: number }) => LogEntry[]
   getAllLogs: () => LogEntry[]
   setActivePhase: (phase: string | null) => void
-  loadLogsForPhase?: (phase: string, options?: { channel?: LogChannel }) => void
+  loadLogsForPhase?: (phase: string, options?: { channel?: LogChannel; phaseAttempt?: number }) => void
   loadAllLogs?: (options?: { channel?: LogChannel }) => void
   isLoadingLogScope?: (scope: ServerLogScope) => boolean
   clearLogs: () => void
@@ -224,6 +226,13 @@ function deriveTimeoutKind(data: Record<string, unknown>): PromptTimeoutKind | u
   return undefined
 }
 
+function normalizePhaseAttempt(value: unknown): number | undefined {
+  const phaseAttempt = typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : Number(value)
+  return Number.isFinite(phaseAttempt) && phaseAttempt > 0 ? phaseAttempt : undefined
+}
+
 function formatLine(type: string, kind: string, content: string, fallback: unknown): string {
   if (kind === 'reasoning' && content) {
     return content
@@ -263,6 +272,7 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
   const timeoutKind = deriveTimeoutKind(data)
   const op = deriveOperation(data)
   const streaming = typeof data.streaming === 'boolean' ? data.streaming : op !== 'append'
+  const phaseAttempt = normalizePhaseAttempt(data.phaseAttempt)
 
   return {
     id: entryId,
@@ -270,6 +280,7 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
     line,
     source,
     status,
+    ...(phaseAttempt !== undefined ? { phaseAttempt } : {}),
     ...(timestamp ? { timestamp } : {}),
     ...(fingerprint ? { fingerprint } : {}),
     audience,
@@ -301,6 +312,7 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
     ? entry.deadlineAt
     : undefined
   const timeoutKind = deriveTimeoutKind(entry as Record<string, unknown>)
+  const phaseAttempt = normalizePhaseAttempt(entry.phaseAttempt)
   const audience = entry.audience === 'all' || entry.audience === 'ai' || entry.audience === 'debug'
     ? entry.audience
     : source === 'debug'
@@ -318,6 +330,7 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
     line,
     source,
     status,
+    ...(phaseAttempt !== undefined ? { phaseAttempt } : {}),
     ...(timestamp ? { timestamp } : {}),
     ...(fingerprint ? { fingerprint } : {}),
     audience,
@@ -394,9 +407,15 @@ export function isBenignGitProbeErrorLine(line: string): boolean {
 }
 
 export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
-  const existingIndex = bucket.findIndex(existing =>
-    hasMatchingLogFingerprint(existing, entry) || existing.entryId === entry.entryId,
-  )
+  const sameAttempt = (existing: LogEntry) => existing.phaseAttempt === entry.phaseAttempt
+  const hasSameIdentity = (existing: LogEntry) => hasMatchingLogFingerprint(existing, entry) || existing.entryId === entry.entryId
+  const legacyExistingIndex = entry.phaseAttempt !== undefined
+    ? bucket.findIndex(existing => existing.phaseAttempt === undefined && hasSameIdentity(existing))
+    : -1
+  let existingIndex = bucket.findIndex(existing => sameAttempt(existing) && hasSameIdentity(existing))
+  if (existingIndex === -1 && legacyExistingIndex >= 0) {
+    existingIndex = legacyExistingIndex
+  }
 
   if (entry.op === 'append') {
     if (existingIndex >= 0) {
@@ -421,13 +440,24 @@ export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
         return next
       }
 
+      if (legacyExistingIndex === existingIndex) {
+        const next = [...bucket]
+        next[existingIndex] = {
+          ...existing,
+          ...entry,
+          timestamp: existing.timestamp ?? entry.timestamp,
+        }
+        return next
+      }
+
       if (hasMatchingLogFingerprint(existing, entry)) {
         return bucket
       }
     }
 
     const isDuplicate = bucket.some(existing =>
-      hasMatchingLogFingerprint(existing, entry)
+      sameAttempt(existing)
+      && (hasMatchingLogFingerprint(existing, entry)
       || (
         existing.line === entry.line
         && existing.source === entry.source
@@ -441,8 +471,9 @@ export function mergeEntry(bucket: LogEntry[], entry: LogEntry): LogEntry[] {
             && (timestampDistanceMs(existing.timestamp, entry.timestamp) ?? 0) <= 2000
           )
         )
-      ))
+      )))
     if (isDuplicate) return bucket
+
     return [...bucket, entry]
   }
 

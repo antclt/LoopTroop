@@ -129,7 +129,17 @@ function resolveWinnerFullAnswers(artifacts: DBartifact[]): FullAnswersArtifact 
   }
 }
 
-export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ticket: Ticket; phase?: string }) {
+export function PrdApprovalPane({
+  ticket,
+  phase = 'WAITING_PRD_APPROVAL',
+  logPhaseAttempt,
+  logMode = 'live',
+}: {
+  ticket: Ticket
+  phase?: string
+  logPhaseAttempt?: number
+  logMode?: 'live' | 'snapshot'
+}) {
   const queryClient = useQueryClient()
   const { mutateAsync: saveUiState } = useSaveTicketUIState()
   const uiStateScope = 'approval_prd'
@@ -585,6 +595,8 @@ export function PrdApprovalPane({ ticket, phase = 'WAITING_PRD_APPROVAL' }: { ti
 
       <CollapsiblePhaseLogSection
         phase={phase}
+        phaseAttempt={logPhaseAttempt}
+        logMode={logMode}
         ticket={ticket}
         defaultExpanded={false}
         variant="bottom"

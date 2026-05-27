@@ -243,10 +243,11 @@ describe('OpenCode log canonicalization', () => {
         content: payload.content,
         op: payload.op,
         streaming: payload.streaming,
+        phaseAttempt: payload.phaseAttempt,
       }))).toEqual([
-        { content: 'a', op: 'upsert', streaming: true },
-        { content: 'abc', op: 'upsert', streaming: true },
-        { content: 'abc', op: 'finalize', streaming: false },
+        { content: 'a', op: 'upsert', streaming: true, phaseAttempt: 1 },
+        { content: 'abc', op: 'upsert', streaming: true, phaseAttempt: 1 },
+        { content: 'abc', op: 'finalize', streaming: false, phaseAttempt: 1 },
       ])
       expect(getPersistedTextEntries()).toEqual([
         expect.objectContaining({
@@ -284,6 +285,7 @@ describe('OpenCode log canonicalization', () => {
       .find((payload) => payload.type === 'debug' && String(payload.content).includes('opencode.draft.response'))
     expect(String(debugBroadcast?.content)).toContain('debug payload truncated for live stream')
     expect(String(debugBroadcast?.content).length).toBeLessThan(9000)
+    expect(debugBroadcast?.phaseAttempt).toBe(1)
 
     const persistedDebug = getPersistedEntries()
       .find((entry) => entry.type === 'debug' && String(entry.content).includes('opencode.draft.response'))

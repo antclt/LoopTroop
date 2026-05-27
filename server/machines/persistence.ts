@@ -4,7 +4,7 @@ import { STATUS_TO_PHASE, TERMINAL_STATES, type TicketContext } from './types'
 import { PROFILE_DEFAULTS } from '../db/defaults'
 import { attachWorkflowRunner } from '../workflow/runner'
 import { broadcaster } from '../sse/broadcaster'
-import { appendLogEvent } from '../log/executionLog'
+import { appendLogEvent, createLogEvent } from '../log/executionLog'
 import {
   ensureActivePhaseAttempt,
   findTicketRefByLocalId,
@@ -276,16 +276,26 @@ function emitAppErrorLog(
   data?: Record<string, unknown>,
 ) {
   const timestamp = new Date().toISOString()
-  broadcaster.broadcast(ticketRef, 'log', {
-    ticketId: ticketRef,
+  const emissionData = data ? { ...data, timestamp } : { timestamp }
+  const structuredExtra = {
+    audience: 'all' as const,
+    kind: 'error' as const,
+    op: 'append' as const,
+    streaming: false,
+    ...(typeof data?.phaseAttempt === 'number' && Number.isFinite(data.phaseAttempt) ? { phaseAttempt: data.phaseAttempt } : {}),
+  }
+  const event = createLogEvent(
+    ticketRef,
+    'error',
     phase,
-    type: 'error',
     content,
-    timestamp,
-    source: 'error',
-    ...(data ? { data } : {}),
-  })
-  appendLogEvent(ticketRef, 'error', phase, content, data ? { ...data, timestamp } : { timestamp }, 'error', phase)
+    emissionData,
+    'error',
+    phase,
+    structuredExtra,
+  )
+  broadcaster.broadcast(ticketRef, 'log', { ...event })
+  appendLogEvent(ticketRef, 'error', phase, content, emissionData, 'error', phase, structuredExtra)
 }
 
 function attachPersistenceSubscription(
@@ -408,12 +418,13 @@ function persistSnapshot(
   if (!updated) return
 
   if (previousStatus !== stateValue) {
-    ensureActivePhaseAttempt(resolvedTicketRef, stateValue)
+    const phaseAttempt = ensureActivePhaseAttempt(resolvedTicketRef, stateValue)
     const payload = {
       ticketId: ticketRef,
       from: previousStatus ?? 'unknown',
       to: stateValue,
       previousStatus: previousStatus ?? null,
+      phaseAttempt,
     }
     broadcaster.broadcast(resolvedTicketRef, 'state_change', payload)
     appendLogEvent(
@@ -424,7 +435,7 @@ function persistSnapshot(
       { ...payload, timestamp: new Date().toISOString() },
       'system',
       stateValue,
-      { audience: 'all', kind: 'milestone', op: 'append', streaming: false },
+      { audience: 'all', kind: 'milestone', op: 'append', streaming: false, phaseAttempt },
     )
 
     if (stateValue === 'BLOCKED_ERROR') {
@@ -444,6 +455,7 @@ function persistSnapshot(
           message: blockedMessage,
           blockedFrom: payload.from,
           blockedTo: payload.to,
+          phaseAttempt,
           errorCodes,
           ...(errorDiagnostics ? { diagnostics: errorDiagnostics } : {}),
         },

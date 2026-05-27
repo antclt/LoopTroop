@@ -57,6 +57,7 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
   )
   const archivedAttemptNumber = selectedAttempt?.state === 'archived' ? selectedAttempt.attemptNumber : undefined
   const logPhaseAttempt = attempts.length > 1 ? selectedAttempt?.attemptNumber : undefined
+  const logMode = archivedAttemptNumber != null ? 'snapshot' : 'live'
   const { artifacts: phaseArtifacts } = useTicketArtifacts(ticket.id, archivedAttemptNumber != null
     ? {
         phase,
@@ -112,6 +113,7 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
       <CollapsiblePhaseLogSection
         phase={phase}
         phaseAttempt={logPhaseAttempt}
+        logMode={logMode}
         ticket={ticket}
         className="px-4 pb-4"
       />

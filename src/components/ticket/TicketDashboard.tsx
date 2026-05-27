@@ -51,6 +51,9 @@ function SSELogConnector({
     if (event.type === 'state_change') {
       const from = String(event.data.from ?? '')
       const to = String(event.data.to ?? '')
+      const phaseAttempt = typeof event.data.phaseAttempt === 'number' && Number.isFinite(event.data.phaseAttempt)
+        ? event.data.phaseAttempt
+        : undefined
       if (to) {
         onStateChange?.({
           status: to,
@@ -66,6 +69,7 @@ function SSELogConnector({
             timestamp: typeof event.data.timestamp === 'string' ? event.data.timestamp : undefined,
             audience: 'debug',
             kind: 'session',
+            ...(phaseAttempt !== undefined ? { phaseAttempt } : {}),
           },
         )
         logCtx?.addLog(
@@ -77,6 +81,7 @@ function SSELogConnector({
             timestamp: typeof event.data.timestamp === 'string' ? event.data.timestamp : undefined,
             audience: 'all',
             kind: 'milestone',
+            ...(phaseAttempt !== undefined ? { phaseAttempt } : {}),
           },
         )
       }
@@ -93,6 +98,9 @@ function SSELogConnector({
 
     if (event.type === 'app_error') {
       const phase = String(event.data.phase ?? logCtx?.activePhase ?? currentStatus ?? '')
+      const phaseAttempt = typeof event.data.phaseAttempt === 'number' && Number.isFinite(event.data.phaseAttempt)
+        ? event.data.phaseAttempt
+        : undefined
       if (phase) {
         logCtx?.addLog(
           phase,
@@ -103,6 +111,7 @@ function SSELogConnector({
             timestamp: typeof event.data.timestamp === 'string' ? event.data.timestamp : undefined,
             audience: 'debug',
             kind: 'error',
+            ...(phaseAttempt !== undefined ? { phaseAttempt } : {}),
           },
         )
         logCtx?.addLogRecord(phase, {
@@ -114,6 +123,7 @@ function SSELogConnector({
           kind: 'error',
           content: String(event.data.message ?? 'Unknown error'),
           timestamp: typeof event.data.timestamp === 'string' ? event.data.timestamp : undefined,
+          ...(phaseAttempt !== undefined ? { phaseAttempt } : {}),
         })
       }
       return

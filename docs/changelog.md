@@ -10,7 +10,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Summary
 - Fixed long ticket descriptions being unscrollable in backlog and detail views.
 - Enabled setup-scoped online artifact lookup for missing launcher provisioning while keeping real provisioning evidence stricter.
-- Fixed version log isolation: switching to the active version in multi-attempt phases now shows only that version's logs instead of all attempts' logs.
+- Fixed realtime logs for active multi-attempt phases while keeping archived phase versions static and attempt-scoped.
 - Hardened execution setup so missing launcher failures must show persistent provisioning attempts before blocking.
 - Hardened setup reuse so final testing automatically runs through validated prepared environments.
 - Improved workspace setup approval logs so generation starts visibly expanded and collapses once the setup plan is ready.
@@ -38,7 +38,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Runtime setup rewinds now suppress the restored approval actor's immediate auto-draft when the route is about to save an edited plan or start a commented regeneration, preventing duplicate setup-plan sessions and last-writer-wins overwrites.
 - The CMD log tab now shows a descriptive tooltip on hover, matching the tooltip behavior of all other log tabs (ALL, SYS, AI, ERROR, DEBUG).
 - Long ticket descriptions are now independently scrollable (300px max-height with overflow) in the Ticket Details modal, DraftView, and PhaseReviewView. Previously, long descriptions expanded indefinitely and pushed other content off-screen.
-- Viewing the active (latest) version in multi-attempt phases now correctly shows only that version's logs. Previously, selecting the active version after a retry would show logs from all prior attempts mixed together because the live `LogContext` had no attempt-level segmentation. All views (`CodingView`, `CouncilView`, `PhaseReviewView`, `ApprovalView`) now pass the selected attempt number to the log panel when multiple attempts exist, scoping the fetch to the correct attempt.
+- Viewing the active (latest) version in multi-attempt phases now keeps using realtime SSE logs while filtering to that active `phaseAttempt`. Archived phase versions remain static/read-only and load their durable attempt-scoped log snapshot, preventing both missed live runtime setup logs and cross-attempt log mixing.
 
 #### Changed
 - Renamed Raw retry attempt selectors to the clearer `Attempt N Output - Accepted/Rejected` format.

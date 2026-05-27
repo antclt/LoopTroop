@@ -682,6 +682,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
   )
   const archivedAttemptNumber = selectedAttempt?.state === 'archived' ? selectedAttempt.attemptNumber : undefined
   const logPhaseAttempt = phaseAttempts.length > 1 ? selectedAttempt?.attemptNumber : undefined
+  const logMode = archivedAttemptNumber != null ? 'snapshot' : 'live'
   const { artifacts: archivedPhaseArtifacts } = useTicketArtifacts(
     archivedAttemptNumber != null ? ticket.id : undefined,
     archivedAttemptNumber != null
@@ -1265,7 +1266,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
             )}
           </div>
         ) : (
-          <CollapsiblePhaseLogSection phase={phaseForView} phaseAttempt={logPhaseAttempt} ticket={ticket} />
+          <CollapsiblePhaseLogSection phase={phaseForView} phaseAttempt={logPhaseAttempt} logMode={logMode} ticket={ticket} />
         )}
       </div>
     </div>

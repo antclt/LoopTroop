@@ -41,6 +41,7 @@ export function PhaseReviewView({ phase, ticket }: PhaseReviewViewProps) {
   )
   const archivedAttemptNumber = selectedAttempt?.state === 'archived' ? selectedAttempt.attemptNumber : undefined
   const logPhaseAttempt = attempts.length > 1 ? selectedAttempt?.attemptNumber : undefined
+  const logMode = archivedAttemptNumber != null ? 'snapshot' : 'live'
   const { artifacts: preloadedArtifacts, isLoading: isLoadingArtifacts } = useTicketArtifacts(ticket.id, archivedAttemptNumber != null
     ? {
         phase,
@@ -103,6 +104,7 @@ export function PhaseReviewView({ phase, ticket }: PhaseReviewViewProps) {
           <CollapsiblePhaseLogSection
             phase={phase}
             phaseAttempt={logPhaseAttempt}
+            logMode={logMode}
             ticket={ticket}
             className="px-4 pb-4"
           />
@@ -111,6 +113,7 @@ export function PhaseReviewView({ phase, ticket }: PhaseReviewViewProps) {
         <CollapsiblePhaseLogSection
           phase={phase}
           phaseAttempt={logPhaseAttempt}
+          logMode={logMode}
           ticket={ticket}
           className="px-4 pb-4"
         />

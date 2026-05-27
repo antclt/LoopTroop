@@ -99,9 +99,15 @@ function entryMatchesScope(rawEntry: Record<string, unknown>, entry: LogEntry, s
     if (entryPhase !== scope.phase) return false
   }
   if (typeof scope.phaseAttempt === 'number' && Number.isFinite(scope.phaseAttempt)) {
-    if (getRawPhaseAttempt(rawEntry) !== scope.phaseAttempt) return false
+    const rawPhaseAttempt = getRawPhaseAttempt(rawEntry) ?? entry.phaseAttempt ?? null
+    if (rawPhaseAttempt !== scope.phaseAttempt) return false
   }
   return true
+}
+
+function entryMatchesPhaseAttempt(entry: LogEntry, phaseAttempt?: number): boolean {
+  if (typeof phaseAttempt !== 'number' || !Number.isFinite(phaseAttempt)) return true
+  return entry.phaseAttempt === phaseAttempt
 }
 
 function shouldIncludeEntryForScope(entry: LogEntry, scope: ServerLogScope): boolean {
@@ -318,6 +324,7 @@ export function LogProvider({
               kind: 'milestone',
               content: `[SYS] Status ${syntheticStatus} is active.`,
               timestamp: new Date().toISOString(),
+              ...(typeof scope.phaseAttempt === 'number' && Number.isFinite(scope.phaseAttempt) ? { phaseAttempt: scope.phaseAttempt } : {}),
             }, syntheticStatus)
             const nextBucket = mergeEntry(bucket, synthetic)
             if (nextBucket !== bucket) {
@@ -420,6 +427,7 @@ export function LogProvider({
       ...(options?.op ? { op: options.op } : {}),
       ...(options?.modelId ? { modelId: options.modelId } : {}),
       ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(typeof options?.phaseAttempt === 'number' && Number.isFinite(options.phaseAttempt) ? { phaseAttempt: options.phaseAttempt } : {}),
       ...(typeof options?.timeoutMs === 'number' ? { timeoutMs: options.timeoutMs } : {}),
       ...(options?.deadlineAt ? { deadlineAt: options.deadlineAt } : {}),
       ...(options?.timeoutKind ? { timeoutKind: options.timeoutKind } : {}),
@@ -440,7 +448,10 @@ export function LogProvider({
   }, [mergeLiveEntry, queueCacheEntry])
 
   const getLogsForPhase = useCallback(
-    (phase: string) => (logsByPhase[phase] ?? []).slice().sort((a, b) => compareTimestamps(a.timestamp, b.timestamp)),
+    (phase: string, options?: { phaseAttempt?: number }) => (logsByPhase[phase] ?? [])
+      .filter((entry) => entryMatchesPhaseAttempt(entry, options?.phaseAttempt))
+      .slice()
+      .sort((a, b) => compareTimestamps(a.timestamp, b.timestamp)),
     [logsByPhase],
   )
 
@@ -450,9 +461,9 @@ export function LogProvider({
       .sort((a, b) => compareTimestamps(a.timestamp, b.timestamp))
   }, [logsByPhase])
 
-  const loadLogsForPhase = useCallback((phase: string, options?: { channel?: LogChannel }) => {
+  const loadLogsForPhase = useCallback((phase: string, options?: { channel?: LogChannel; phaseAttempt?: number }) => {
     if (!phase) return
-    requestServerLogs({ status: phase, channel: options?.channel })
+    requestServerLogs({ status: phase, channel: options?.channel, phaseAttempt: options?.phaseAttempt })
   }, [requestServerLogs])
 
   const loadAllLogs = useCallback((options?: { channel?: LogChannel }) => {

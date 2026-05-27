@@ -12,6 +12,7 @@ export interface StateChangeEvent {
   ticketId: string
   from: string
   to: string
+  phaseAttempt?: number
   previousStatus?: string | null
 }
 

@@ -230,6 +230,107 @@ describe('LogProvider', () => {
     ]))
   })
 
+  it('preserves live phaseAttempt values and filters phase logs by attempt', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => createJsonResponse([]))
+
+    render(createElement(
+      LogProvider,
+      {
+        ticketId: '1:T-live-attempt',
+        currentStatus: 'PREPARING_EXECUTION_ENV',
+        children: createElement(LogHarness),
+      },
+    ))
+
+    await flushMicrotasks()
+
+    await act(async () => {
+      latestLogApi?.addLogRecord('PREPARING_EXECUTION_ENV', {
+        type: 'info',
+        phase: 'PREPARING_EXECUTION_ENV',
+        status: 'PREPARING_EXECUTION_ENV',
+        source: 'system',
+        audience: 'all',
+        kind: 'milestone',
+        content: 'Attempt 1 row.',
+        entryId: 'attempt-1-row',
+        phaseAttempt: 1,
+        timestamp: '2026-03-13T10:00:01.000Z',
+      })
+      latestLogApi?.addLogRecord('PREPARING_EXECUTION_ENV', {
+        type: 'info',
+        phase: 'PREPARING_EXECUTION_ENV',
+        status: 'PREPARING_EXECUTION_ENV',
+        source: 'system',
+        audience: 'all',
+        kind: 'milestone',
+        content: 'Attempt 2 row.',
+        entryId: 'attempt-2-row',
+        phaseAttempt: 2,
+        timestamp: '2026-03-13T10:00:02.000Z',
+      })
+    })
+
+    expect(latestLogApi?.getLogsForPhase('PREPARING_EXECUTION_ENV', { phaseAttempt: 2 })).toEqual([
+      expect.objectContaining({
+        entryId: 'attempt-2-row',
+        phaseAttempt: 2,
+      }),
+    ])
+  })
+
+  it('loads persisted phase logs with phaseAttempt in the URL and scope key', async () => {
+    vi.spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(() => createJsonResponse([]))
+      .mockImplementationOnce(() => createJsonResponse([
+        {
+          type: 'info',
+          phase: 'PREPARING_EXECUTION_ENV',
+          status: 'PREPARING_EXECUTION_ENV',
+          source: 'system',
+          content: 'Attempt 1 persisted row.',
+          entryId: 'persisted-attempt-1',
+          phaseAttempt: 1,
+          timestamp: '2026-03-13T10:00:01.000Z',
+        },
+        {
+          type: 'info',
+          phase: 'PREPARING_EXECUTION_ENV',
+          status: 'PREPARING_EXECUTION_ENV',
+          source: 'system',
+          content: 'Attempt 2 persisted row.',
+          entryId: 'persisted-attempt-2',
+          phaseAttempt: 2,
+          timestamp: '2026-03-13T10:00:02.000Z',
+        },
+      ]))
+
+    render(createElement(
+      LogProvider,
+      {
+        ticketId: '1:T-persisted-attempt',
+        currentStatus: 'PREPARING_EXECUTION_ENV',
+        children: createElement(LogHarness),
+      },
+    ))
+
+    await flushMicrotasks()
+
+    await act(async () => {
+      latestLogApi?.loadLogsForPhase?.('PREPARING_EXECUTION_ENV', { phaseAttempt: 2 })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(globalThis.fetch).toHaveBeenLastCalledWith('/api/files/1:T-persisted-attempt/logs?status=PREPARING_EXECUTION_ENV&phaseAttempt=2')
+    expect(latestLogApi?.getLogsForPhase('PREPARING_EXECUTION_ENV', { phaseAttempt: 2 })).toEqual([
+      expect.objectContaining({
+        entryId: 'persisted-attempt-2',
+        phaseAttempt: 2,
+      }),
+    ])
+  })
+
   it('ignores debug rows from normal server fetches but keeps live debug rows', async () => {
     vi.useFakeTimers()
     vi.spyOn(globalThis, 'fetch').mockImplementation(() => createJsonResponse([{

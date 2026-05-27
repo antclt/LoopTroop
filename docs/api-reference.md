@@ -491,7 +491,7 @@ These routes are intentionally narrow.
 | `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd`; existing file responses include `contentSha256` |
 | `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
 
-Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. The `channel=all` endpoint merges and deduplicates entries from all channels server-side, then sorts by timestamp; phase/status filters still apply to LoopTroop log entries but OpenCode native log entries (which have no ticket phase) are always included. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry.
+Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. The `channel=all` endpoint merges and deduplicates entries from all channels server-side, then sorts by timestamp; phase/status filters still apply to LoopTroop log entries but OpenCode native log entries (which have no ticket phase) are always included. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry. Live `log` and `state_change` SSE payloads carry the resolved `phaseAttempt` used for the durable JSONL row so active multi-attempt phase views can keep streaming while filtering to the selected attempt.
 
 There is no generic filesystem browser or arbitrary file read route under `/api/files`.
 
@@ -533,6 +533,7 @@ Example `state_change` event payload:
   "ticketId": "AUTH-12",
   "from": "DRAFTING_PRD",
   "to": "WAITING_PRD_APPROVAL",
+  "phaseAttempt": 1,
   "previousStatus": "VERIFYING_PRD_COVERAGE",
   "timestamp": "2026-04-23T09:00:00.000Z"
 }

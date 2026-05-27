@@ -3,7 +3,7 @@ import { buildOpenCodeQuestionLogIdentity, type OpenCodeQuestionLogAction } from
 import { listOpenCodeSessionsForTicket } from '../../opencode/sessionManager'
 import { getOpenCodeAdapter } from '../../opencode/factory'
 import { broadcaster } from '../../sse/broadcaster'
-import { appendLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
+import { appendLogEvent, createLogEvent, shouldSkipLogEmission } from '../../log/executionLog'
 import {
   getTicketByRef,
   getTicketContext,
@@ -25,6 +25,7 @@ function emitOpenCodeQuestionLog(
     requestId: string
     sessionId?: string
     modelId?: string
+    phaseAttempt?: number
     kind?: 'session' | 'error'
     type?: 'info' | 'error'
     action: OpenCodeQuestionLogAction
@@ -38,12 +39,7 @@ function emitOpenCodeQuestionLog(
     requestId: data.requestId,
     action: data.action,
   })
-  const payload = {
-    ticketId,
-    phase,
-    type: logType,
-    content,
-    source,
+  const structuredExtra = {
     audience: 'ai' as const,
     kind: data.kind ?? 'session',
     op: 'append' as const,
@@ -52,23 +48,30 @@ function emitOpenCodeQuestionLog(
     fingerprint: identity.fingerprint,
     ...(data.modelId ? { modelId: data.modelId } : {}),
     ...(data.sessionId ? { sessionId: data.sessionId } : {}),
-    timestamp,
+    ...(typeof data.phaseAttempt === 'number' && Number.isFinite(data.phaseAttempt) ? { phaseAttempt: data.phaseAttempt } : {}),
   }
-  const emissionData = { ticketId, requestId: data.requestId, fingerprint: identity.fingerprint, timestamp }
-  if (shouldSkipLogEmission(ticketId, logType, phase, content, emissionData, source, phase, {
-    audience: 'ai',
-    kind: data.kind ?? 'session',
-    op: 'append',
-    streaming: false,
-    entryId: identity.entryId,
+  const emissionData = {
+    ticketId,
+    requestId: data.requestId,
     fingerprint: identity.fingerprint,
-    ...(data.modelId ? { modelId: data.modelId } : {}),
-    ...(data.sessionId ? { sessionId: data.sessionId } : {}),
-  })) {
+    timestamp,
+    ...(typeof data.phaseAttempt === 'number' && Number.isFinite(data.phaseAttempt) ? { phaseAttempt: data.phaseAttempt } : {}),
+  }
+  if (shouldSkipLogEmission(ticketId, logType, phase, content, emissionData, source, phase, structuredExtra)) {
     return
   }
 
-  broadcaster.broadcast(ticketId, 'log', payload)
+  const event = createLogEvent(
+    ticketId,
+    logType,
+    phase,
+    content,
+    emissionData,
+    source,
+    phase,
+    structuredExtra,
+  )
+  broadcaster.broadcast(ticketId, 'log', { ...event })
   appendLogEvent(
     ticketId,
     logType,
@@ -77,16 +80,7 @@ function emitOpenCodeQuestionLog(
     emissionData,
     source,
     phase,
-    {
-      audience: 'ai',
-      kind: data.kind ?? 'session',
-      op: 'append',
-      streaming: false,
-      entryId: identity.entryId,
-      fingerprint: identity.fingerprint,
-      ...(data.modelId ? { modelId: data.modelId } : {}),
-      ...(data.sessionId ? { sessionId: data.sessionId } : {}),
-    },
+    structuredExtra,
   )
 }
 
@@ -112,6 +106,7 @@ async function getTicketPendingOpenCodeQuestions(ticketId: string) {
         ticketTitle: ticketContext.localTicket.title,
         status: ticketContext.localTicket.status,
         phase: session?.phase ?? ticketContext.localTicket.status,
+        phaseAttempt: session?.phaseAttempt ?? undefined,
         modelId: session?.memberId ?? undefined,
         sessionId: request.sessionID,
         requestId: request.id,
@@ -184,6 +179,7 @@ export async function handleReplyOpenCodeQuestion(c: Context) {
       requestId,
       sessionId: question.sessionId,
       modelId: question.modelId,
+      phaseAttempt: question.phaseAttempt,
       action: 'replied',
     })
     broadcaster.broadcast(ticketId, 'needs_input', {
@@ -201,6 +197,7 @@ export async function handleReplyOpenCodeQuestion(c: Context) {
       requestId,
       sessionId: question.sessionId,
       modelId: question.modelId,
+      phaseAttempt: question.phaseAttempt,
       kind: 'error',
       type: 'error',
       action: 'reply_failed',
@@ -224,6 +221,7 @@ export async function handleRejectOpenCodeQuestion(c: Context) {
       requestId,
       sessionId: question.sessionId,
       modelId: question.modelId,
+      phaseAttempt: question.phaseAttempt,
       action: 'rejected',
     })
     broadcaster.broadcast(ticketId, 'needs_input', {
@@ -241,6 +239,7 @@ export async function handleRejectOpenCodeQuestion(c: Context) {
       requestId,
       sessionId: question.sessionId,
       modelId: question.modelId,
+      phaseAttempt: question.phaseAttempt,
       kind: 'error',
       type: 'error',
       action: 'reject_failed',
