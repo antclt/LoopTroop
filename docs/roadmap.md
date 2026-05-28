@@ -1401,6 +1401,41 @@ search: false
 
 ## Medium Priority
 
+*   **Project Git Hook Policy (configurable validation vs internal bookkeeping):** Add a project/ticket-level policy for how LoopTroop handles target-repository Git hooks such as `pre-commit`, `commit-msg`, `pre-push`, Husky, Lefthook, Python `pre-commit`, Overcommit, and custom shell hooks. The goal is to stay language- and toolchain-agnostic while avoiding hidden failures from project hooks during LoopTroop-owned internal commits.
+    *   Add a hook-discovery audit during execution setup planning and runtime setup:
+        *   inspect `core.hooksPath`, `.git/hooks`, committed hook directories such as `.husky/`, `.lefthook/`, `.pre-commit-config.yaml`, and other detectable hook managers without assuming JavaScript, Python, Rust, Go, or any other ecosystem;
+        *   record discovered hook files, hook manager hints, configured hook path, executable state, and whether setup commands activated or changed hook configuration;
+        *   persist the audit in the execution setup profile/report and show a concise warning in the setup approval UI.
+    *   Add a configurable hook policy with explicit modes:
+        *   `ignore_internal_only`: bypass hooks for LoopTroop-owned internal Git operations, but do not run hook-equivalent validation automatically;
+        *   `validate_explicitly`: bypass hooks for internal commits/pushes, then run detected hook-equivalent commands as explicit validation during final test or before integration;
+        *   `use_on_internal_commits`: allow target-repo hooks to run during bead/final candidate commits for projects that intentionally require hook side effects;
+        *   `ask_when_detected`: pause at execution setup approval when active hooks are found and require the user to choose a policy;
+        *   `project_default`: inherit the policy from project configuration, with per-ticket override.
+    *   Default recommendation should be conservative and generic:
+        *   LoopTroop-owned bookkeeping commits, bead commits, squash commits, and branch pushes should be able to bypass hooks unless the selected policy explicitly opts into running them;
+        *   project quality expectations should be represented as explicit commands/checks, not as surprising side effects of internal Git snapshots;
+        *   if hooks are bypassed, record that fact in command logs and receipts so audits are honest.
+    *   For `validate_explicitly`, build hook validation as a first-class check:
+        *   run known hook-manager commands when safely detectable, such as `pre-commit run --all-files`, `lefthook run pre-commit`, or documented project scripts, without hardcoding one ecosystem as special;
+        *   for unknown/custom hooks, either run the hook through a controlled wrapper only when configured or surface a "manual hook validation required" warning;
+        *   apply command timeout, output capture, and file-effect auditing just like final-test commands;
+        *   if hook validation mutates files, classify those changes as candidate, temporary, or unexpected before integration.
+    *   Avoid making execution setup silently patch project-specific hook assumptions:
+        *   do not create language-specific generated files only to satisfy one hook unless the selected policy or approved setup plan explicitly says to;
+        *   if a hook requires missing local/generated files, report the missing prerequisite and propose a setup-plan action or policy decision;
+        *   keep hook remediation suggestions project-scoped and reviewable.
+    *   Persist policy and evidence:
+        *   project config stores the default hook policy;
+        *   ticket runtime stores the resolved policy, detected hooks, commands executed or skipped, hook validation outcomes, and any user override receipt;
+        *   PR/final review surfaces whether hooks were bypassed, run explicitly, failed, or waived.
+    *   Add tests with synthetic repositories covering:
+        *   a failing generic `.git/hooks/pre-commit`;
+        *   a Husky-style `core.hooksPath`;
+        *   a Python `pre-commit` config;
+        *   a hook that mutates files;
+        *   a project that opts into `use_on_internal_commits`;
+        *   a project that bypasses hooks internally but runs explicit hook validation before integration.
 *   **User background:** Users can write their background, and the interview will be tailored to their knowledge (e.g., carpenter, SRE, doctor), making the interview less or more technical. (It is implemented partially, but it is hidden right now.)
 *   **Community playbooks/presets (typed overlay + visual workflow + safe merge contract):** add a new category, besides projects and tickets, called playbooks. It will contain reusable workflows organized in categories (security, marketing, i18n, documentation, refactoring, optimization) and usable across many project types.
     *   Add workflow-oriented preset taxonomy (Ralph-style) alongside domain categories:
