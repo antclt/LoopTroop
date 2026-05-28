@@ -38,12 +38,13 @@ It captures:
 - **Disk Write Latency** — Direct measurement of storage responsiveness (crucial for WSL/mounted drive diagnostics).
 - frontend, backend, ticket-list, project-list, startup-status, and OpenCode health probe latency
 - repeated backend health and ticket-list samples
-- a 3-minute runtime observation window that samples backend health, `/api/tickets`, watched process CPU/RSS/I/O, Linux pressure deltas, and app/project DB/WAL/log growth
+- a 3-minute runtime observation window that samples backend health, `/api/tickets`, watched process CPU/RSS/I/O, Linux pressure deltas, app/project DB/WAL/log growth, and trend-wide top system CPU/RSS/read/write leaders
 - backend, frontend, and OpenCode process memory, thread, wait-state, file descriptor, CPU, and I/O activity
-- whole-system top CPU, RSS, read-I/O, and write-I/O consumers during the sample window
+- whole-system top CPU, RSS, read-I/O, and write-I/O consumers during the sample window and across the runtime trend
 - system load, memory, Linux pressure-stall metrics, cgroup resource state, `vmstat`, and `iostat` or `/proc/diskstats`
 - workspace, app DB, and attached-project mount, disk, inode, SQLite, WAL, and filesystem latency data
 - attached project ticket counts, active OpenCode sessions, recent ticket states, execution-log tail, and git responsiveness
+- optional focused ticket runtime artifact checks when `--ticket-path` is provided, including log growth, runtime disk usage, largest directories, and large files such as build outputs
 - **Advanced Diagnostics**: event-loop lag, DNS probe, FD limits, TCP connection states, zombie process count, diagnostic heap snapshot, and swap pressure
 - macOS-specific: `vm_stat`, load average, CPU count, and top processes (macOS only)
 
@@ -76,6 +77,12 @@ npm run diagnose:stall -- --trend-ms 120000 --trend-interval-ms 1000
 Use a different trend window when you need to catch changing latency, process spikes, pressure-stall movement, or growing DB/WAL/log files over time. The default is `180000ms` (3 minutes); pass `--trend-ms 0` to disable it.
 
 ```bash
+npm run diagnose:stall -- --ticket-path /path/to/worktree/.ticket
+```
+
+Focus the report on one ticket runtime. You can pass the `.ticket` directory, its `runtime` directory, or the ticket worktree root. The trend watches that ticket's runtime logs, and the storage section reports the runtime directory's largest subdirectories and files.
+
+```bash
 npm run diagnose:stall -- --backend-port 3001 --frontend-port 5175 --opencode-url http://127.0.0.1:4097
 ```
 
@@ -94,10 +101,10 @@ Read the report by category:
 - **🔍 ENVIRONMENT & CONFIGURATION**: Resolved ports, PIDs, shell startup latency, and backend env vars.
 - **🌐 NETWORK & ENDPOINT HEALTH**: HTTP probe results for frontend, backend, and OpenCode.
 - **🔁 STALL CORRELATION SAMPLES**: Repeated backend/ticket probes — whether the app was actually unresponsive during capture.
-- **Runtime Observation Trend**: Per-interval backend health, `/api/tickets`, watched process, pressure, and file-growth changes, plus aggregate spikes and totals.
+- **Runtime Observation Trend**: Per-interval backend health, `/api/tickets`, watched process, pressure, and file-growth changes, plus watched-process totals and trend-wide whole-system top CPU/RSS/read/write consumers.
 - **⚙️ APPLICATION PROCESS ACTIVITY**: Per-process CPU, I/O, FD counts, and memory for backend, frontend, and OpenCode.
 - **💻 SYSTEM RESOURCES**: Pressure-stall metrics, cgroup state, uptime, memory, and top process consumers.
-- **💾 STORAGE, MOUNTS & FILESYSTEM**: Mount type, disk space, inodes, and filesystem latency for workspace and project paths.
+- **💾 STORAGE, MOUNTS & FILESYSTEM**: Mount type, disk space, inodes, and filesystem latency for workspace and project paths. When `--ticket-path` is used, this section also shows focused ticket runtime artifact sizes and large-file suspects.
 - **🗄️ DATABASE & PROJECT STATE**: App DB and project DB inspection, WAL/SHM file sizes, ticket and session state.
 - **🔀 GIT RESPONSIVENESS**: Git status, Trace2 perf output, and branch resolution for attached projects.
 - **🧬 ADVANCED DIAGNOSTICS**: Event-loop lag, DNS probe for localhost, FD limits, TCP states, zombie count, diagnostic heap, and swap pressure.

@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process'
 import { promises as dnsPromises } from 'node:dns'
 import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 import Database from 'better-sqlite3'
 import { getErrorMessage } from '../shared/typeGuards'
 
@@ -14,6 +14,7 @@ interface CliOptions {
   sampleMs?: number
   trendMs?: number
   trendIntervalMs?: number
+  ticketPath?: string
   noColor?: boolean
 }
 
@@ -154,6 +155,19 @@ interface SystemProcessActivitySnapshot {
   topWriteBytes: SystemProcessUsage[]
 }
 
+interface SystemTrendUsageAggregate {
+  key: string
+  pid: number
+  command: string
+  samples: number
+  firstSeenAt: string
+  lastSeenAt: string
+  peakCpuPercent: number | null
+  peakRssKb: number | null
+  totalReadBytes: number
+  totalWriteBytes: number
+}
+
 interface TrendFileTarget {
   label: string
   path: string
@@ -206,6 +220,16 @@ interface RuntimeTrendReport {
   durationMs: number
   intervalMs: number
   samples: RuntimeTrendSample[]
+}
+
+interface TicketRuntimeTarget {
+  inputPath: string
+  resolvedInputPath: string
+  ticketRootPath: string
+  runtimePath: string
+  worktreePath: string | null
+  ticketId: string | null
+  notes: string[]
 }
 
 interface ProcessRecord {
@@ -587,6 +611,12 @@ function parseCliArgs(args: string[]): CliOptions {
       continue
     }
 
+    if (arg === '--ticket-path' && next) {
+      options.ticketPath = next
+      i += 1
+      continue
+    }
+
     if (arg === '--no-color') {
       options.noColor = true
       continue
@@ -610,6 +640,7 @@ Optional flags:
   --sample-ms <ms>
   --trend-ms <ms>            Runtime observation window duration. Default: 180000 (3m). Use 0 to disable.
   --trend-interval-ms <ms>   Trend sample interval. Default: 1000.
+  --ticket-path <path>       Focus artifact and log diagnostics on a ticket .ticket, runtime, or worktree path.
   --no-color         Disable colored output (also respects NO_COLOR env var)
 
 What it checks:
@@ -617,7 +648,7 @@ What it checks:
   - Relevant running processes, backend listener details, and fallback watcher/candidate detection
   - Backend thread wait states when available
   - One-window CPU, memory, I/O, and file-descriptor activity for backend/frontend/OpenCode
-  - Whole-system top CPU/RSS/read-I/O/write-I/O consumers during the sample window
+  - Whole-system top CPU/RSS/read-I/O/write-I/O consumers during the sample window and trend window
   - Per-process memory snapshots from /proc (RSS/HWM/threads/OOM score)
   - System load, memory, and Linux pressure stall metrics
   - Linux cgroup resource snapshot when available
@@ -630,6 +661,7 @@ What it checks:
   - Git responsiveness for attached projects
   - A short repeated backend sampler across HTTP probes
   - A multi-minute trend sampler for process CPU/RSS/I/O, HTTP latency, pressure deltas, and growing files
+  - Optional ticket-focused runtime artifact size, largest files, and execution-log growth checks
   - Shell startup baseline to separate diagnostic overhead from real probe latency
   - Git Trace2 perf output for repo status calls
   - Direct filesystem latency probes for project metadata paths
@@ -846,6 +878,18 @@ function measureDiskWriteLatency(dirPath: string): FsLatencyProbe {
 
 function runPowerShell(command: string, timeoutMs = 5000): CommandResult {
   return runProcess('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], timeoutMs)
+}
+
+function skippedCommandResult(command: string, message: string): CommandResult {
+  return {
+    command,
+    durationMs: 0,
+    exitCode: null,
+    signal: null,
+    stdout: message,
+    stderr: '',
+    timedOut: false,
+  }
 }
 
 function parseNetstatListeningPid(output: string, port: number): number | null {
@@ -1622,7 +1666,11 @@ function buildPressureTrendDelta(start: PressureTrendTotals, end: PressureTrendT
   }
 }
 
-function buildTrendFileTargets(appDbPath: string, projectSnapshots: ProjectSnapshot[]): TrendFileTarget[] {
+function buildTrendFileTargets(
+  appDbPath: string,
+  projectSnapshots: ProjectSnapshot[],
+  ticketRuntimeTarget: TicketRuntimeTarget | null,
+): TrendFileTarget[] {
   const targets: TrendFileTarget[] = [
     { label: 'app db', path: appDbPath },
     { label: 'app db wal', path: `${appDbPath}-wal` },
@@ -1638,6 +1686,18 @@ function buildTrendFileTargets(appDbPath: string, projectSnapshots: ProjectSnaps
         label: `project ${project.id} ${project.latestNonTerminalTicketLog.externalId} log`,
         path: project.latestNonTerminalTicketLog.logPath,
       })
+    }
+  }
+
+  if (ticketRuntimeTarget) {
+    for (const [label, path] of [
+      ['focused ticket state', resolve(ticketRuntimeTarget.runtimePath, 'state.yaml')],
+      ['focused ticket execution log', resolve(ticketRuntimeTarget.runtimePath, 'execution-log.jsonl')],
+      ['focused ticket debug log', resolve(ticketRuntimeTarget.runtimePath, 'execution-log.debug.jsonl')],
+      ['focused ticket ai log', resolve(ticketRuntimeTarget.runtimePath, 'execution-log.ai.jsonl')],
+      ['focused ticket setup profile', resolve(ticketRuntimeTarget.runtimePath, 'execution-setup-profile.json')],
+    ] as const) {
+      targets.push({ label, path })
     }
   }
 
@@ -2171,6 +2231,106 @@ function resolveAppDbPath(env: Record<string, string>): string {
   return resolve(resolveAppConfigDir(env), 'app.sqlite')
 }
 
+function findAncestorNamed(startPath: string, targetName: string): string | null {
+  let current = startPath
+
+  for (let depth = 0; depth < 64; depth += 1) {
+    if (basename(current) === targetName) return current
+    const parent = dirname(current)
+    if (parent === current) return null
+    current = parent
+  }
+
+  return null
+}
+
+function resolveTicketRuntimeTarget(inputPath: string): TicketRuntimeTarget {
+  const resolvedInputPath = resolvePortablePath(inputPath)
+  const notes: string[] = []
+  const resolutionNote = describePortablePathResolution(inputPath, resolvedInputPath)
+  if (resolutionNote) notes.push(resolutionNote)
+
+  const ticketAncestor = findAncestorNamed(resolvedInputPath, '.ticket')
+  const ticketRootPath = ticketAncestor
+    ?? (existsSync(resolve(resolvedInputPath, '.ticket')) ? resolve(resolvedInputPath, '.ticket') : resolvedInputPath)
+  const runtimePath = basename(ticketRootPath) === 'runtime'
+    ? ticketRootPath
+    : resolve(ticketRootPath, 'runtime')
+  const worktreePath = basename(ticketRootPath) === '.ticket' ? dirname(ticketRootPath) : null
+  const ticketId = worktreePath ? basename(worktreePath) : null
+
+  if (!existsSync(ticketRootPath)) {
+    notes.push('Resolved ticket root path does not exist.')
+  }
+  if (!existsSync(runtimePath)) {
+    notes.push('Resolved ticket runtime path does not exist.')
+  }
+  if (basename(ticketRootPath) !== '.ticket') {
+    notes.push('Input did not resolve to a .ticket directory; runtime checks use the resolved path as the ticket root.')
+  }
+
+  return {
+    inputPath,
+    resolvedInputPath,
+    ticketRootPath,
+    runtimePath,
+    worktreePath,
+    ticketId,
+    notes,
+  }
+}
+
+function collectTicketRuntimeTopDirectories(runtimePath: string): CommandResult {
+  if (!existsSync(runtimePath)) {
+    return skippedCommandResult('ticket runtime directory scan', 'Runtime path does not exist.')
+  }
+
+  const platform = detectPlatform()
+  const runtimeArg = commandShellQuote(runtimePath)
+
+  if (platform === 'windows') {
+    return skippedCommandResult(
+      'ticket runtime top directories',
+      'Top directory sizing is skipped on Windows because recursive per-directory measurement is too expensive for this diagnostic.',
+    )
+  }
+
+  const command = platform === 'macos'
+    ? `du -k -d 3 ${runtimeArg} 2>/dev/null | sort -nr | head -n 30`
+    : `du -k --max-depth=3 ${runtimeArg} 2>/dev/null | sort -nr | head -n 30`
+
+  return runShell(command, 20000)
+}
+
+function collectTicketRuntimeLargestFiles(runtimePath: string): CommandResult {
+  if (!existsSync(runtimePath)) {
+    return skippedCommandResult('ticket runtime largest files', 'Runtime path does not exist.')
+  }
+
+  const platform = detectPlatform()
+  const runtimeArg = commandShellQuote(runtimePath)
+
+  if (platform === 'windows') {
+    return runPowerShell(
+      [
+        `$root = ${powerShellQuote(runtimePath)}`,
+        'Get-ChildItem -LiteralPath $root -Recurse -File -ErrorAction SilentlyContinue',
+        '  | Where-Object { $_.Length -ge 104857600 }',
+        '  | Sort-Object Length -Descending',
+        '  | Select-Object -First 30 @{Name="Bytes";Expression={$_.Length}}, FullName',
+        '  | Format-Table -AutoSize | Out-String',
+      ].join(' '),
+      20000,
+    )
+  }
+
+  const command = platform === 'macos'
+    ? `find ${runtimeArg} -type f -size +100M -exec stat -f '%z %N' {} + 2>/dev/null | sort -nr | head -n 30`
+    : `find ${runtimeArg} -type f -size +100M -printf '%s %p\\n' 2>/dev/null | sort -nr | head -n 30`
+
+  return runShell(command, 20000)
+}
+
 function openReadonlyDatabase(path: string): Database.Database {
   return new Database(path, {
     readonly: true,
@@ -2545,6 +2705,36 @@ function printFileStats(title: string, filePath: string) {
   }
 }
 
+function printTicketRuntimeSnapshot(target: TicketRuntimeTarget) {
+  heading('Focused Ticket Runtime')
+  kv('Input path', target.inputPath)
+  kv('Resolved input path', target.resolvedInputPath)
+  kv('Ticket id', target.ticketId ?? 'n/a')
+  kv('Worktree path', target.worktreePath ?? 'n/a')
+  kv('Ticket root path', target.ticketRootPath)
+  kv('Runtime path', target.runtimePath)
+  kv('Ticket root exists', existsSync(target.ticketRootPath))
+  kv('Runtime path exists', existsSync(target.runtimePath))
+  if (target.notes.length > 0) {
+    print('Notes:')
+    for (const note of target.notes) {
+      print(`- ${note}`)
+    }
+  }
+
+  printMountSnapshot('Focused Ticket Runtime Mount Snapshot', inspectMount(target.runtimePath))
+  printDiskUsageSnapshot('Focused Ticket Runtime Disk Usage', inspectDiskUsage(target.runtimePath))
+  printInodeUsageSnapshot('Focused Ticket Runtime Inode Usage', inspectInodeUsage(target.runtimePath))
+  printFileStats('Focused Ticket State File Stats', resolve(target.runtimePath, 'state.yaml'))
+  printFileStats('Focused Ticket Execution Log Stats', resolve(target.runtimePath, 'execution-log.jsonl'))
+  printFileStats('Focused Ticket Debug Log Stats', resolve(target.runtimePath, 'execution-log.debug.jsonl'))
+  printFileStats('Focused Ticket AI Log Stats', resolve(target.runtimePath, 'execution-log.ai.jsonl'))
+  printFileStats('Focused Ticket Setup Profile Stats', resolve(target.runtimePath, 'execution-setup-profile.json'))
+  printFileStats('Focused Ticket Execution Setup Target Stats', resolve(target.runtimePath, 'execution-setup', 'target'))
+  printCommandResult('Focused Ticket Runtime Top Directories by KiB', collectTicketRuntimeTopDirectories(target.runtimePath))
+  printCommandResult('Focused Ticket Runtime Largest Files >= 100 MiB', collectTicketRuntimeLargestFiles(target.runtimePath))
+}
+
 function printHttpProbe(result: HttpProbeResult) {
   heading(`HTTP Probe: ${result.label}`)
   kv('URL', result.url)
@@ -2763,10 +2953,12 @@ function hasPressureDelta(delta: PressureTrendDelta): boolean {
   return Object.values(delta).some((value) => (value ?? 0) > 0)
 }
 
-function formatSystemUsageShort(usage: SystemProcessUsage | undefined, metric: 'cpu' | 'read' | 'write'): string {
+function formatSystemUsageShort(usage: SystemProcessUsage | undefined, metric: 'cpu' | 'rss' | 'read' | 'write'): string {
   if (!usage) return 'n/a'
   const metricText = metric === 'cpu'
     ? formatPercent(usage.cpuPercent)
+    : metric === 'rss'
+      ? formatBytes(usage.rssKb !== null ? usage.rssKb * 1024 : null)
     : metric === 'read'
       ? formatBytes(usage.readBytesDelta)
       : formatBytes(usage.writeBytesDelta)
@@ -2813,6 +3005,7 @@ function formatTrendSampleSummary(sample: RuntimeTrendSample): string {
     ` health=${formatTrendHttpProbe(sample.health)}` +
     ` tickets=${formatTrendHttpProbe(sample.tickets)}` +
     ` top_cpu=${formatSystemUsageShort(sample.systemActivity.topCpu[0], 'cpu')}` +
+    ` top_rss=${formatSystemUsageShort(sample.systemActivity.topRss[0], 'rss')}` +
     ` top_write=${formatSystemUsageShort(sample.systemActivity.topWriteBytes[0], 'write')}`
   )
 }
@@ -2827,6 +3020,108 @@ function pressureDeltaTotal(samples: RuntimeTrendSample[], key: keyof PressureTr
     total += value
   }
   return sawValue ? total : null
+}
+
+function aggregateSystemUsageAcrossTrend(samples: RuntimeTrendSample[]): SystemTrendUsageAggregate[] {
+  const aggregates = new Map<string, SystemTrendUsageAggregate>()
+
+  for (const sample of samples) {
+    const sampleUsages = new Map<string, SystemProcessUsage>()
+    for (const usage of [
+      ...sample.systemActivity.topCpu,
+      ...sample.systemActivity.topRss,
+      ...sample.systemActivity.topReadBytes,
+      ...sample.systemActivity.topWriteBytes,
+    ]) {
+      const key = `${usage.pid}\0${usage.command}`
+      const existing = sampleUsages.get(key)
+      if (!existing) {
+        sampleUsages.set(key, { ...usage })
+        continue
+      }
+
+      sampleUsages.set(key, {
+        ...existing,
+        cpuPercent: Math.max(existing.cpuPercent ?? -Infinity, usage.cpuPercent ?? -Infinity),
+        rssKb: Math.max(existing.rssKb ?? -Infinity, usage.rssKb ?? -Infinity),
+        readBytesDelta: Math.max(existing.readBytesDelta ?? 0, usage.readBytesDelta ?? 0),
+        writeBytesDelta: Math.max(existing.writeBytesDelta ?? 0, usage.writeBytesDelta ?? 0),
+      })
+    }
+
+    for (const [key, usage] of sampleUsages) {
+      const aggregate = aggregates.get(key)
+      if (!aggregate) {
+        aggregates.set(key, {
+          key,
+          pid: usage.pid,
+          command: usage.command,
+          samples: 1,
+          firstSeenAt: sample.at,
+          lastSeenAt: sample.at,
+          peakCpuPercent: usage.cpuPercent,
+          peakRssKb: usage.rssKb,
+          totalReadBytes: usage.readBytesDelta ?? 0,
+          totalWriteBytes: usage.writeBytesDelta ?? 0,
+        })
+        continue
+      }
+
+      aggregate.samples += 1
+      aggregate.lastSeenAt = sample.at
+      aggregate.peakCpuPercent = Math.max(aggregate.peakCpuPercent ?? -Infinity, usage.cpuPercent ?? -Infinity)
+      aggregate.peakRssKb = Math.max(aggregate.peakRssKb ?? -Infinity, usage.rssKb ?? -Infinity)
+      aggregate.totalReadBytes += usage.readBytesDelta ?? 0
+      aggregate.totalWriteBytes += usage.writeBytesDelta ?? 0
+    }
+  }
+
+  return [...aggregates.values()].map((aggregate) => ({
+    ...aggregate,
+    peakCpuPercent: aggregate.peakCpuPercent === -Infinity ? null : aggregate.peakCpuPercent,
+    peakRssKb: aggregate.peakRssKb === -Infinity ? null : aggregate.peakRssKb,
+  }))
+}
+
+function printSystemTrendAggregateList(
+  title: string,
+  aggregates: SystemTrendUsageAggregate[],
+  metric: 'cpu' | 'rss' | 'read' | 'write',
+) {
+  print(title)
+  const sorted = aggregates
+    .filter((aggregate) => {
+      if (metric === 'cpu') return (aggregate.peakCpuPercent ?? 0) > 0
+      if (metric === 'rss') return (aggregate.peakRssKb ?? 0) > 0
+      if (metric === 'read') return aggregate.totalReadBytes > 0
+      return aggregate.totalWriteBytes > 0
+    })
+    .sort((left, right) => {
+      if (metric === 'cpu') return (right.peakCpuPercent ?? 0) - (left.peakCpuPercent ?? 0)
+      if (metric === 'rss') return (right.peakRssKb ?? 0) - (left.peakRssKb ?? 0)
+      if (metric === 'read') return right.totalReadBytes - left.totalReadBytes
+      return right.totalWriteBytes - left.totalWriteBytes
+    })
+    .slice(0, 8)
+
+  if (sorted.length === 0) {
+    print('- (none observed during trend)')
+    return
+  }
+
+  for (const aggregate of sorted) {
+    print(
+      `- pid=${aggregate.pid}` +
+      ` peak_cpu=${formatPercent(aggregate.peakCpuPercent)}` +
+      ` peak_rss=${formatBytes(aggregate.peakRssKb !== null ? aggregate.peakRssKb * 1024 : null)}` +
+      ` read_total=${formatBytes(aggregate.totalReadBytes)}` +
+      ` write_total=${formatBytes(aggregate.totalWriteBytes)}` +
+      ` samples=${aggregate.samples}` +
+      ` first=${aggregate.firstSeenAt}` +
+      ` last=${aggregate.lastSeenAt}` +
+      ` cmd=${formatBodyPreview(aggregate.command, 140)}`,
+    )
+  }
 }
 
 function printRuntimeTrendReport(title: string, report: RuntimeTrendReport) {
@@ -2862,6 +3157,7 @@ function printRuntimeTrendReport(title: string, report: RuntimeTrendReport) {
       return right.health.durationMs - left.health.durationMs
     })
     .slice(0, 5)
+  const systemTrendAggregates = aggregateSystemUsageAcrossTrend(report.samples)
 
   kv('Trend window', formatDuration(report.durationMs))
   kv('Trend interval target', formatDuration(report.intervalMs))
@@ -2874,6 +3170,12 @@ function printRuntimeTrendReport(title: string, report: RuntimeTrendReport) {
   if (maxFileGrowth) {
     print(`Largest watched-file growth: ${maxFileGrowth.label} delta=${formatBytes(maxFileGrowth.sizeDeltaBytes)} size=${formatBytes(maxFileGrowth.sizeBytes)}`)
   }
+
+  heading('Whole-System Trend Leaders')
+  printSystemTrendAggregateList('Top peak RSS consumers across trend:', systemTrendAggregates, 'rss')
+  printSystemTrendAggregateList('Top cumulative write I/O consumers across trend:', systemTrendAggregates, 'write')
+  printSystemTrendAggregateList('Top cumulative read I/O consumers across trend:', systemTrendAggregates, 'read')
+  printSystemTrendAggregateList('Top peak CPU consumers across trend:', systemTrendAggregates, 'cpu')
 
   heading('Top Latency Samples')
   print('Slowest /api/tickets samples:')
@@ -3301,6 +3603,7 @@ async function main() {
     ? Math.floor(cli.trendIntervalMs!)
     : 1000
   const appDbPath = resolveAppDbPath(effectiveEnv)
+  const ticketRuntimeTarget = cli.ticketPath ? resolveTicketRuntimeTarget(cli.ticketPath) : null
   const frontendPid = findListeningPid(effectiveFrontendPort)
   const opencodePort = parseLocalPortFromUrl(effectiveOpenCodeUrl)
   const opencodePid = opencodePort ? findListeningPid(opencodePort) : null
@@ -3374,7 +3677,7 @@ async function main() {
     ticketsUrl,
     probeTimeoutMs: trendProbeTimeoutMs,
     processTargets: watchedProcessTargets,
-    fileTargets: buildTrendFileTargets(appDbPath, projectSnapshots),
+    fileTargets: buildTrendFileTargets(appDbPath, projectSnapshots, ticketRuntimeTarget),
   })
   const [processActivities, systemActivity] = await Promise.all([
     sampleProcessActivities(watchedProcessTargets, sampleMs),
@@ -3404,6 +3707,8 @@ async function main() {
   kv('Detected frontend cwd', frontendCwd ?? 'n/a')
   kv('Detected OpenCode cwd', opencodeCwd ?? 'n/a')
   kv('Resolved app DB path', appDbPath)
+  kv('Focused ticket path', ticketRuntimeTarget?.inputPath ?? 'n/a')
+  kv('Focused ticket runtime path', ticketRuntimeTarget?.runtimePath ?? 'n/a')
 
   printShellLatencyBaselines(shellLatencyBaselines)
 
@@ -3571,6 +3876,9 @@ async function main() {
   printDiskUsageSnapshot('App DB Disk Usage', appDbDiskUsage)
   printInodeUsageSnapshot('App DB Inode Usage', appDbInodeUsage)
   printLatencyProbes('App DB Filesystem Latency Probes', appDbLatency)
+  if (ticketRuntimeTarget) {
+    printTicketRuntimeSnapshot(ticketRuntimeTarget)
+  }
 
   banner('🗄️   DATABASE & PROJECT STATE')
   printFileStats('App DB File Stats', appDbPath)

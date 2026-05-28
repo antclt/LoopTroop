@@ -230,7 +230,7 @@ If the UI feels slow, tickets disappear after refresh, or the app appears to sta
 npm run diagnose:stall
 ```
 
-The report is saved under `tmp/diagnostics/` and includes endpoint latency, backend/frontend/OpenCode activity, whole-system CPU/RSS/I/O consumers, pressure-stall metrics, SQLite/WAL state, attached project health, active sessions, Git responsiveness, and a likely-causes summary.
+The report is saved under `tmp/diagnostics/` and includes endpoint latency, backend/frontend/OpenCode activity, trend-wide whole-system CPU/RSS/I/O consumers, pressure-stall metrics, SQLite/WAL state, attached project health, active sessions, Git responsiveness, and optional focused ticket runtime artifact sizing.
 
 Useful options:
 
@@ -238,6 +238,7 @@ Useful options:
 npm run diagnose:stall -- --sample-ms 5000
 npm run diagnose:stall -- --timeout-ms 8000
 npm run diagnose:stall -- --trend-ms 120000 --trend-interval-ms 1000
+npm run diagnose:stall -- --ticket-path /path/to/worktree/.ticket
 ```
 
 For the full report guide, see [Runtime Diagnostics](diagnostics.md).
