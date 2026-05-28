@@ -213,6 +213,46 @@ describe.concurrent('parseYamlOrJsonCandidate', () => {
       'Preserve the emitted body text exactly.',
     ].join('\n'))
   })
+
+  it('repairs inner double quotes inside one-line scalars before parsing', () => {
+    const repairWarnings: string[] = []
+
+    const parsed = parseYamlOrJsonCandidate([
+      'questions:',
+      '  - id: Q06',
+      '    answer:',
+      '      skipped: false',
+      '      selected_option_ids: []',
+      '      free_text: "Errors must include `origin: "date"`, `minimum`, and `maximum` metadata."',
+    ].join('\n'), { repairWarnings }) as {
+      questions: Array<{ answer: { free_text: string } }>
+    }
+
+    expect(repairWarnings).toContain('Repaired improperly quoted YAML scalar value.')
+    expect(parsed.questions[0]?.answer.free_text).toBe('Errors must include `origin: "date"`, `minimum`, and `maximum` metadata.')
+  })
+
+  it('repairs unclosed quoted list items before parsing', () => {
+    const repairWarnings: string[] = []
+
+    const parsed = parseYamlOrJsonCandidate([
+      'scope:',
+      '  out_of_scope:',
+      '    - "Integration with other date helpers beyond min/max',
+      'technical_requirements:',
+      '  architecture_constraints:',
+      '    - Must extend the existing date schema interface',
+    ].join('\n'), { repairWarnings }) as {
+      scope: { out_of_scope: string[] }
+      technical_requirements: { architecture_constraints: string[] }
+    }
+
+    expect(repairWarnings).toContain('Fixed unbalanced YAML quote before reparsing.')
+    expect(parsed.scope.out_of_scope).toEqual(['Integration with other date helpers beyond min/max'])
+    expect(parsed.technical_requirements.architecture_constraints).toEqual([
+      'Must extend the existing date schema interface',
+    ])
+  })
 })
 
 describe.concurrent('getValueByAliases', () => {

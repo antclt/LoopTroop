@@ -11,6 +11,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added AI-assisted candidate-file auditing before PR creation so unrelated byproducts can be excluded with visible reasons.
 - Added bead-level raw Input and Output inspection with per-iteration history.
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
+- Hardened structured-output parsing for common YAML quote mistakes before implementation planning.
 
 ### Detailed Changes
 
@@ -24,6 +25,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Changed PR review diff handling to default to the final net diff while keeping bead-level and by-file activity available for audit.
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.
 - Removed the empty artifact spacer between live coding beads and the log viewer, leaving a single separator at that boundary.
+
+#### Fixed
+- Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.
 
 ---
 

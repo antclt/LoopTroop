@@ -204,13 +204,23 @@ questions:
 
 **Warning:** *Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.*
 
-#### 12. Unclosed double-quote repair
+#### 12. Inner double-quote scalar repair
 
-**Trigger:** A `key: "value` line has an opening `"` with no matching closing `"`, and the next non-blank line is clearly a new YAML structural element (list item, sibling key, code fence, document marker `---`, or end of file).
+**Trigger:** A one-line double-quoted scalar contains unescaped inner quotes, usually in code-like prose such as `free_text: "Errors include origin: "date" metadata."`.
 
-**Repair:** A closing `"` is appended to the line.
+**Repair:** The first and last unescaped quotes are kept as delimiters and existing unescaped quotes inside the scalar are escaped. The visible scalar text is unchanged, and block scalar bodies are skipped.
 
-#### 13. Quoted scalar fragment repair
+**Warning:** *Repaired improperly quoted YAML scalar value.*
+
+#### 13. Unclosed double-quote repair
+
+**Trigger:** A `key: "value` mapping line or a `- "value` list item has an opening `"` with no matching closing `"`, and the next non-blank line is clearly a new YAML structural element (list item, sibling key, code fence, document marker `---`, or end of file).
+
+**Repair:** A closing `"` is appended to the line. This repair only closes the scalar when the boundary is structural and does not add or infer missing text.
+
+**Warning:** *Fixed unbalanced YAML quote before reparsing.*
+
+#### 14. Quoted scalar fragment repair
 
 Two sub-cases:
 
@@ -224,13 +234,13 @@ Two sub-cases:
 
 **Warning:** *Repaired improperly quoted YAML scalar value.*
 
-#### 14. Type-union scalar repair
+#### 15. Type-union scalar repair
 
 **Trigger:** Schema-like values such as `type: "epic" | "user_story"` or `- "unit" | "integration"`. YAML interprets the `|` as a block-scalar indicator after a quoted token.
 
 **Repair:** The entire scalar is wrapped in double quotes.
 
-#### 15. Reserved indicator scalar repair
+#### 16. Reserved indicator scalar repair
 
 **Trigger:** Plain scalars starting with `` ` `` (backtick) or `@`. YAML reserves these characters and rejects plain scalars that begin with them.
 
@@ -247,13 +257,13 @@ question: "`repo_git_mutex` behavior?"
 
 **Warning:** *Quoted plain YAML scalars that began with reserved indicator characters (`` ` `` or `@`) before reparsing.*
 
-#### 16. Sequence entry indent drift repair
+#### 17. Sequence entry indent drift repair
 
 **Trigger:** After a block scalar (`>-`, `|`), subsequent sibling list items drift by 1–3 spaces relative to the first item in the sequence.
 
 **Repair:** All sibling dashes are normalized to the indent of the first `- ` in each sequence level.
 
-#### 17. Indentation repair
+#### 18. Indentation repair
 
 **Trigger:** Property lines inside a list item are indented by the wrong amount (off by 1–2 spaces relative to `dash_indent + 2`).
 

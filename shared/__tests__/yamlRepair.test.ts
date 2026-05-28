@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import jsYaml from 'js-yaml'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDoubleQuotedScalarInnerQuotes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
 
 describe.concurrent('repairYamlListDashSpace', () => {
   it.each([
@@ -421,6 +421,47 @@ describe('repairYamlDoubleQuotedInvalidEscapes', () => {
     ].join('\n')
 
     expect(repairYamlDoubleQuotedInvalidEscapes(input)).toBe(input)
+  })
+})
+
+describe('repairYamlDoubleQuotedScalarInnerQuotes', () => {
+  it('escapes unescaped inner quotes inside one-line mapping scalars', () => {
+    const input = [
+      'answer:',
+      '  free_text: "Errors include `origin: "date"`, `minimum`, and `maximum` metadata."',
+    ].join('\n')
+
+    const repaired = repairYamlDoubleQuotedScalarInnerQuotes(input)
+
+    expect(repaired).toBe([
+      'answer:',
+      '  free_text: "Errors include `origin: \\"date\\"`, `minimum`, and `maximum` metadata."',
+    ].join('\n'))
+    const parsed = jsYaml.load(repaired) as { answer: { free_text: string } }
+    expect(parsed.answer.free_text).toBe('Errors include `origin: "date"`, `minimum`, and `maximum` metadata.')
+  })
+
+  it('escapes unescaped inner quotes inside one-line list scalars', () => {
+    const input = [
+      'risks:',
+      '  - "Error metadata includes `origin: "date"` and `maximum`."',
+    ].join('\n')
+
+    const repaired = repairYamlDoubleQuotedScalarInnerQuotes(input)
+    const parsed = jsYaml.load(repaired) as { risks: string[] }
+
+    expect(parsed.risks).toEqual(['Error metadata includes `origin: "date"` and `maximum`.'])
+  })
+
+  it('does not modify escaped quotes or block scalar bodies', () => {
+    const input = [
+      'answer:',
+      '  free_text: "Errors include `origin: \\"date\\"`."',
+      '  notes: |-',
+      '    Errors include `origin: "date"`.',
+    ].join('\n')
+
+    expect(repairYamlDoubleQuotedScalarInnerQuotes(input)).toBe(input)
   })
 })
 
@@ -954,6 +995,11 @@ describe('repairYamlUnclosedQuotes', () => {
       'on list item first key (- key: "value)',
       ['  - question: "What is the goal?', '  - question: "Who are users?"'].join('\n'),
       ['  - question: "What is the goal?"', '  - question: "Who are users?"'].join('\n'),
+    ],
+    [
+      'on bare quoted list item',
+      ['scope:', '  out_of_scope:', '    - "Integration with other helpers', 'technical_requirements:', '  architecture_constraints: []'].join('\n'),
+      ['scope:', '  out_of_scope:', '    - "Integration with other helpers"', 'technical_requirements:', '  architecture_constraints: []'].join('\n'),
     ],
   ])('closes unclosed quote when %s', (_, input, expected) => {
     expect(repairYamlUnclosedQuotes(input)).toBe(expected)

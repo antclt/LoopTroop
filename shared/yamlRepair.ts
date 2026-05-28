@@ -503,6 +503,15 @@ function hasOddTrailingBackslashes(value: string, index: number): boolean {
   return backslashes % 2 === 1
 }
 
+function findLastUnescapedDoubleQuote(value: string): number {
+  for (let index = value.length - 1; index >= 0; index -= 1) {
+    if (value[index] === '"' && !hasOddTrailingBackslashes(value, index)) {
+      return index
+    }
+  }
+  return -1
+}
+
 function isHexDigit(value: string | undefined): boolean {
   return Boolean(value && /^[0-9a-fA-F]$/.test(value))
 }
@@ -620,6 +629,106 @@ export function repairYamlDoubleQuotedInvalidEscapes(yaml: string): string {
         blockScalarBaseIndent = indent
       }
     }
+  }
+
+  return result.join('\n')
+}
+
+/**
+ * Escape unescaped inner quotes inside one-line double-quoted scalars.
+ *
+ * Models often emit prose like:
+ *
+ *   free_text: "Errors include `origin: "date"`, `minimum`, and `maximum`."
+ *
+ * The visible text is clear, but YAML treats the quote before `date` as the
+ * end of the scalar. This repair keeps the first and last unescaped quotes as
+ * delimiters and escapes existing unescaped quotes between them. It never
+ * creates new text and skips block scalar bodies.
+ */
+export function repairYamlDoubleQuotedScalarInnerQuotes(yaml: string): string {
+  const lines = yaml.split('\n')
+  const result: string[] = []
+  const BLOCK_SCALAR_PATTERN = /:\s*[>|][+-]?(?:\s+#.*)?$|^-\s*[>|][+-]?(?:\s+#.*)?$/
+
+  let insideBlockScalar = false
+  let blockScalarBaseIndent = -1
+
+  const repairValue = (value: string): string | null => {
+    if (!value.startsWith('"')) return null
+
+    const closingQuoteIndex = findLastUnescapedDoubleQuote(value)
+    if (closingQuoteIndex <= 0) return null
+
+    const afterClosing = value.slice(closingQuoteIndex + 1)
+    if (!/^\s*(?:#.*)?$/.test(afterClosing)) return null
+
+    const body = value.slice(1, closingQuoteIndex)
+    let repairedBody = ''
+    let changed = false
+
+    for (let index = 0; index < body.length; index += 1) {
+      const char = body[index]!
+      if (char === '"' && !hasOddTrailingBackslashes(body, index)) {
+        repairedBody += '\\"'
+        changed = true
+        continue
+      }
+      repairedBody += char
+    }
+
+    return changed ? `"${repairedBody}"${afterClosing}` : null
+  }
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+
+    if (!trimmed || trimmed.startsWith('#')) {
+      result.push(line)
+      continue
+    }
+
+    const indent = getLineIndent(line)
+    if (insideBlockScalar) {
+      if (indent > blockScalarBaseIndent) {
+        result.push(line)
+        continue
+      }
+      insideBlockScalar = false
+      blockScalarBaseIndent = -1
+    }
+
+    const mappingMatch = line.match(/^(\s*(?:-\s+)?[A-Za-z_][\w_-]*\s*:\s*)(.+)$/)
+    if (mappingMatch) {
+      if (BLOCK_SCALAR_PATTERN.test(trimmed)) {
+        insideBlockScalar = true
+        blockScalarBaseIndent = indent
+        result.push(line)
+        continue
+      }
+
+      const repaired = repairValue(mappingMatch[2]!)
+      if (repaired !== null) {
+        result.push(`${mappingMatch[1]}${repaired}`)
+        continue
+      }
+    }
+
+    const listScalarMatch = line.match(/^(\s*-\s+)(.+)$/)
+    if (listScalarMatch && !/^[A-Za-z_][\w_-]*\s*:/.test(listScalarMatch[2]!)) {
+      const repaired = repairValue(listScalarMatch[2]!)
+      if (repaired !== null) {
+        result.push(`${listScalarMatch[1]}${repaired}`)
+        continue
+      }
+    }
+
+    if (BLOCK_SCALAR_PATTERN.test(trimmed)) {
+      insideBlockScalar = true
+      blockScalarBaseIndent = indent
+    }
+
+    result.push(line)
   }
 
   return result.join('\n')
@@ -2292,6 +2401,7 @@ export function repairYamlUnclosedQuotes(yaml: string): string {
   const BLOCK_SCALAR_PATTERN = /:\s*[>|][+-]?\s*$/
   // Match `key: "value` with optional leading `- ` for list item first keys
   const QUOTED_VALUE_PATTERN = /^(\s*(?:-\s+)?[A-Za-z_][\w_-]*\s*:\s+)"(.*)$/
+  const LIST_QUOTED_VALUE_PATTERN = /^(\s*-\s+)"(.*)$/
 
   let insideBlockScalar = false
   let blockScalarBaseIndent = -1
@@ -2331,6 +2441,18 @@ export function repairYamlUnclosedQuotes(yaml: string): string {
       const valueAfterOpenQuote = quotedMatch[2]!
       // If the value has an even number of unescaped double-quotes after the
       // opening one, the total is odd — meaning the opening quote is unclosed.
+      if (countUnescapedDoubleQuotes(valueAfterOpenQuote) % 2 === 0) {
+        const nextLine = findNextNonBlankLine(lines, i + 1)
+        if (nextLine === null || looksLikeYamlStructuralLine(nextLine, lineIndent)) {
+          result.push(line + '"')
+          continue
+        }
+      }
+    }
+
+    const listQuotedMatch = line.match(LIST_QUOTED_VALUE_PATTERN)
+    if (listQuotedMatch) {
+      const valueAfterOpenQuote = listQuotedMatch[2]!
       if (countUnescapedDoubleQuotes(valueAfterOpenQuote) % 2 === 0) {
         const nextLine = findNextNonBlankLine(lines, i + 1)
         if (nextLine === null || looksLikeYamlStructuralLine(nextLine, lineIndent)) {
