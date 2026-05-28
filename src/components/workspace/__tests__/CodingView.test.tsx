@@ -272,6 +272,13 @@ describe('CodingView', () => {
     expect(screen.queryByRole('combobox', { name: /version/i })).toBeNull()
   })
 
+  it('omits the empty artifact strip during live coding', () => {
+    renderCoding({ status: 'CODING' })
+
+    expect(screen.queryByTestId('phase-artifacts-panel')).toBeNull()
+    expect(screen.getByTestId('collapsible-log-section')).toHaveTextContent('CODING:active')
+  })
+
   describe('status normalization', () => {
     it('maps server "done" status to completed (green icon)', () => {
       renderCoding({

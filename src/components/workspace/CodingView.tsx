@@ -749,6 +749,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
     errorMessage: ticket.errorMessage,
   })
   const isCompleted = shouldShowCompletedCodingState(ticket, readOnly)
+  const shouldShowArtifactsPanel = phaseForView !== 'CODING' || isCompleted
   const isAwaitingManualVerification = !readOnly && ticket.status === 'WAITING_PR_REVIEW'
   const viewedBead = useMemo(
     () => beads.find((bead) => bead.id === viewingBeadId) ?? null,
@@ -852,14 +853,16 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
         </div>
       )}
 
-      <div className="px-3 py-1.5 border-b border-border shrink-0">
-        <PhaseArtifactsPanel
-          phase={phaseForView}
-          isCompleted={isCompleted}
-          ticketId={ticket.id}
-          preloadedArtifacts={archivedAttemptNumber != null ? archivedPhaseArtifacts : undefined}
-        />
-      </div>
+      {shouldShowArtifactsPanel && (
+        <div className="px-3 py-1.5 border-b border-border shrink-0">
+          <PhaseArtifactsPanel
+            phase={phaseForView}
+            isCompleted={isCompleted}
+            ticketId={ticket.id}
+            preloadedArtifacts={archivedAttemptNumber != null ? archivedPhaseArtifacts : undefined}
+          />
+        </div>
+      )}
 
       <div className="flex-1 min-h-0 px-2 py-2 flex flex-col">
         {viewedBead ? (

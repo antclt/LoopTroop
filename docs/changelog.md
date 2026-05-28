@@ -8,12 +8,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Removed redundant bead progress summary text from the coding workspace.
+- Cleaned up redundant coding workspace chrome around bead progress and logs.
 
 ### Detailed Changes
 
 #### Changed
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.
+- Removed the empty artifact spacer between live coding beads and the log viewer, leaving a single separator at that boundary.
 
 ---
 
