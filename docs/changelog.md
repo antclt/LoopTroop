@@ -26,6 +26,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Raw tab in artifact views now defaults to the validated variant (or first accepted attempt) instead of the first non-disabled variant. When multiple model sources exist, the first validated model is auto-selected.
 - Added dynamically calculated bead implementation time below Completed At in CodingView's bead details panel.
 - Improved stall diagnostics with trend-wide process attribution and focused ticket runtime artifact sizing.
+- Fixed completed ticket navigation so the historical Implementing row shows the final bead count.
 
 ### Detailed Changes
 
@@ -45,6 +46,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a **"Create and Start"** button to the New Ticket modal, letting users create a ticket and immediately trigger the workflow from a single action.
 
 #### Fixed
+- Completed and later-phase tickets now keep the last known bead progress on the left-panel Implementing timeline row, showing labels such as `Implementing (Bead 8/8)` instead of the generic `Bead ?/?` fallback.
 - Runtime setup rewinds now suppress the restored approval actor's immediate auto-draft when the route is about to save an edited plan or start a commented regeneration, preventing duplicate setup-plan sessions and last-writer-wins overwrites.
 - The CMD log tab now shows a descriptive tooltip on hover, matching the tooltip behavior of all other log tabs (ALL, SYS, AI, ERROR, DEBUG).
 - Long ticket descriptions are now independently scrollable (300px max-height with overflow) in the Ticket Details modal, DraftView, and PhaseReviewView. Previously, long descriptions expanded indefinitely and pushed other content off-screen.

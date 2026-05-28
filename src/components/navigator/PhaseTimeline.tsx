@@ -116,6 +116,21 @@ function getPhaseTooltip(phaseId: string): string {
   return STATUS_DESCRIPTIONS[phaseId] ?? phaseId.replace(/_/g, ' ')
 }
 
+function resolvePositiveNumber(...values: Array<number | null | undefined>): number | null {
+  return values.find((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0) ?? null
+}
+
+function getPhaseLabel(phaseId: string, ticket?: Ticket): string {
+  if (phaseId === 'CODING') {
+    return getStatusUserLabel(phaseId, {
+      currentBead: resolvePositiveNumber(ticket?.runtime?.currentBead, ticket?.currentBead),
+      totalBeads: resolvePositiveNumber(ticket?.runtime?.totalBeads, ticket?.totalBeads),
+    })
+  }
+
+  return getStatusUserLabel(phaseId)
+}
+
 export function PhaseTimeline({
   currentStatus,
   reviewCutoffStatus,
@@ -214,12 +229,7 @@ export function PhaseTimeline({
                     const isCurrent = phase.id === currentStatus
                     const isSelectable = !isFuture || isCurrent
 
-                    const phaseLabel = getStatusUserLabel(phase.id, phase.id === currentStatus
-                      ? {
-                          currentBead: ticket?.runtime?.currentBead ?? ticket?.currentBead,
-                          totalBeads: ticket?.runtime?.totalBeads ?? ticket?.totalBeads,
-                        }
-                      : {})
+                    const phaseLabel = getPhaseLabel(phase.id, ticket)
 
                     return (
                       <Tooltip key={phase.id}>

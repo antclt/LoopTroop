@@ -53,24 +53,25 @@ describe('PhaseTimeline', () => {
     expect(screen.getByText('Testing Implementation')).toBeInTheDocument()
   })
 
-  it('uses bead progress only for the live CODING timeline row', () => {
+  it('shows persisted bead progress for a historical CODING timeline row', () => {
     const ticket = makeTicket({
-      status: 'RUNNING_FINAL_TEST',
+      status: 'COMPLETED',
       runtime: {
         ...makeTicket().runtime,
-        currentBead: 3,
-        totalBeads: 10,
+        currentBead: 8,
+        completedBeads: 8,
+        totalBeads: 8,
       },
     })
 
     renderWithProviders(
-      <PhaseTimeline currentStatus="RUNNING_FINAL_TEST" ticket={ticket} />,
+      <PhaseTimeline currentStatus="COMPLETED" ticket={ticket} />,
     )
 
     fireEvent.click(screen.getByText('Implementation'))
 
-    expect(screen.queryByText('Implementing (Bead 3/10)')).not.toBeInTheDocument()
-    expect(screen.getByText(/Implementing \(Bead \?\/\?\)/)).toBeInTheDocument()
+    expect(screen.getByText('Implementing (Bead 8/8)')).toBeInTheDocument()
+    expect(screen.queryByText(/Implementing \(Bead \?\/\?\)/)).not.toBeInTheDocument()
   })
 
   it('hides the error phase once a ticket is no longer actively blocked', () => {
