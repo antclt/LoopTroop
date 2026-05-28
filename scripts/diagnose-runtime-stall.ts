@@ -2730,7 +2730,7 @@ function printTicketRuntimeSnapshot(target: TicketRuntimeTarget) {
   printFileStats('Focused Ticket Debug Log Stats', resolve(target.runtimePath, 'execution-log.debug.jsonl'))
   printFileStats('Focused Ticket AI Log Stats', resolve(target.runtimePath, 'execution-log.ai.jsonl'))
   printFileStats('Focused Ticket Setup Profile Stats', resolve(target.runtimePath, 'execution-setup-profile.json'))
-  printFileStats('Focused Ticket Execution Setup Target Stats', resolve(target.runtimePath, 'execution-setup', 'target'))
+  printFileStats('Focused Ticket Execution Setup Directory Stats', resolve(target.runtimePath, 'execution-setup'))
   printCommandResult('Focused Ticket Runtime Top Directories by KiB', collectTicketRuntimeTopDirectories(target.runtimePath))
   printCommandResult('Focused Ticket Runtime Largest Files >= 100 MiB', collectTicketRuntimeLargestFiles(target.runtimePath))
 }
