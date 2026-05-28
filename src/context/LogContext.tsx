@@ -427,6 +427,8 @@ export function LogProvider({
       ...(options?.op ? { op: options.op } : {}),
       ...(options?.modelId ? { modelId: options.modelId } : {}),
       ...(options?.sessionId ? { sessionId: options.sessionId } : {}),
+      ...(options?.beadId ? { beadId: options.beadId } : {}),
+      ...(typeof options?.beadIteration === 'number' && Number.isFinite(options.beadIteration) ? { beadIteration: options.beadIteration } : {}),
       ...(typeof options?.phaseAttempt === 'number' && Number.isFinite(options.phaseAttempt) ? { phaseAttempt: options.phaseAttempt } : {}),
       ...(typeof options?.timeoutMs === 'number' ? { timeoutMs: options.timeoutMs } : {}),
       ...(options?.deadlineAt ? { deadlineAt: options.deadlineAt } : {}),

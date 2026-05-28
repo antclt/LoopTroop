@@ -10,7 +10,7 @@ type PersistedLogChannel = 'normal' | 'debug' | 'ai'
 // They are stripped from `data` before serialization to avoid redundant storage.
 const STRUCTURED_KEYS: ReadonlySet<string> = new Set([
   'content', 'source', 'status', 'entryId', 'fingerprint', 'op', 'audience',
-  'kind', 'modelId', 'sessionId', 'beadId', 'timeoutMs', 'deadlineAt',
+  'kind', 'modelId', 'sessionId', 'beadId', 'beadIteration', 'timeoutMs', 'deadlineAt',
   'timeoutKind', 'streaming', 'phaseAttempt',
 ])
 
@@ -36,6 +36,7 @@ function pickStructuredFields(data?: Record<string, unknown>): Partial<LogEvent>
     ...(typeof data.modelId === 'string' ? { modelId: data.modelId } : {}),
     ...(typeof data.sessionId === 'string' ? { sessionId: data.sessionId } : {}),
     ...(typeof data.beadId === 'string' ? { beadId: data.beadId } : {}),
+    ...(typeof data.beadIteration === 'number' && Number.isFinite(data.beadIteration) ? { beadIteration: data.beadIteration } : {}),
     ...(typeof data.timeoutMs === 'number' && Number.isFinite(data.timeoutMs) ? { timeoutMs: data.timeoutMs } : {}),
     ...(typeof data.deadlineAt === 'string' ? { deadlineAt: data.deadlineAt } : {}),
     ...(typeof data.timeoutKind === 'string' ? { timeoutKind: data.timeoutKind as LogEvent['timeoutKind'] } : {}),

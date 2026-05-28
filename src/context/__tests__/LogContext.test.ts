@@ -105,6 +105,8 @@ describe('normalizeStoredEntry', () => {
       kind: 'prompt',
       modelId: 'openai/gpt-5.2',
       sessionId: 'ses_timeout_metadata',
+      beadId: 'bead-1',
+      beadIteration: 3,
       timeoutMs: 1_200_000,
       deadlineAt,
       timeoutKind: 'ai_response',
@@ -116,6 +118,8 @@ describe('normalizeStoredEntry', () => {
       timeoutMs: 1_200_000,
       deadlineAt,
       timeoutKind: 'ai_response',
+      beadId: 'bead-1',
+      beadIteration: 3,
     })
   })
 })

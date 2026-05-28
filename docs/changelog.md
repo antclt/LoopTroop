@@ -8,9 +8,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added bead-level raw Input and Output inspection with per-iteration history.
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
 
 ### Detailed Changes
+
+#### Added
+- Added bead-level `Input` and `Output` tabs in the Coding view, including raw prompt/output formatting, copy actions, line/character/token counts, tooltips, and a version selector for previous bead iterations.
+- Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.

@@ -16,6 +16,7 @@ export interface LogEntry {
   modelId?: string
   sessionId?: string
   beadId?: string
+  beadIteration?: number
   timeoutMs?: number
   deadlineAt?: string
   timeoutKind?: PromptTimeoutKind
@@ -41,6 +42,8 @@ export interface PlainLogOptions {
   kind?: string
   modelId?: string
   sessionId?: string
+  beadId?: string
+  beadIteration?: number
   phaseAttempt?: number
   timeoutMs?: number
   deadlineAt?: string
@@ -233,6 +236,13 @@ function normalizePhaseAttempt(value: unknown): number | undefined {
   return Number.isFinite(phaseAttempt) && phaseAttempt > 0 ? phaseAttempt : undefined
 }
 
+function normalizePositiveNumber(value: unknown): number | undefined {
+  const normalized = typeof value === 'number' && Number.isFinite(value)
+    ? value
+    : Number(value)
+  return Number.isFinite(normalized) && normalized > 0 ? normalized : undefined
+}
+
 function formatLine(type: string, kind: string, content: string, fallback: unknown): string {
   if (kind === 'reasoning' && content) {
     return content
@@ -263,6 +273,10 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
   const modelId = deriveModelId(data, source)
   const sessionId = typeof data.sessionId === 'string' ? data.sessionId : undefined
   const beadId = typeof data.beadId === 'string' ? data.beadId : undefined
+  const nested = data.data && typeof data.data === 'object'
+    ? (data.data as Record<string, unknown>)
+    : null
+  const beadIteration = normalizePositiveNumber(data.beadIteration ?? nested?.beadIteration)
   const timeoutMs = typeof data.timeoutMs === 'number' && Number.isFinite(data.timeoutMs)
     ? data.timeoutMs
     : undefined
@@ -288,6 +302,7 @@ export function normalizeLogRecord(data: Record<string, unknown>, fallbackPhase:
     ...(modelId ? { modelId } : {}),
     ...(sessionId ? { sessionId } : {}),
     ...(beadId ? { beadId } : {}),
+    ...(beadIteration !== undefined ? { beadIteration } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(deadlineAt ? { deadlineAt } : {}),
     ...(timeoutKind ? { timeoutKind } : {}),
@@ -313,6 +328,7 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
     : undefined
   const timeoutKind = deriveTimeoutKind(entry as Record<string, unknown>)
   const phaseAttempt = normalizePhaseAttempt(entry.phaseAttempt)
+  const beadIteration = normalizePositiveNumber(entry.beadIteration)
   const audience = entry.audience === 'all' || entry.audience === 'ai' || entry.audience === 'debug'
     ? entry.audience
     : source === 'debug'
@@ -338,6 +354,7 @@ export function normalizeStoredEntry(entry: Partial<LogEntry>, fallbackStatus: s
     ...(entry.modelId ? { modelId: String(entry.modelId) } : {}),
     ...(entry.sessionId ? { sessionId: String(entry.sessionId) } : {}),
     ...(entry.beadId ? { beadId: String(entry.beadId) } : {}),
+    ...(beadIteration !== undefined ? { beadIteration } : {}),
     ...(timeoutMs !== undefined ? { timeoutMs } : {}),
     ...(deadlineAt ? { deadlineAt } : {}),
     ...(timeoutKind ? { timeoutKind } : {}),

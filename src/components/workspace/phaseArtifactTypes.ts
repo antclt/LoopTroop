@@ -175,6 +175,7 @@ export interface ArtifactStructuredOutputData {
 
 export interface ArtifactRawAttemptData {
   attempt?: number
+  iteration?: number
   label?: string
   status?: string
   outcome?: string
@@ -186,6 +187,8 @@ export interface ArtifactRawAttemptData {
   error?: string
   validationError?: string
   failureClass?: string
+  modelId?: string
+  sessionId?: string
 }
 
 export interface CouncilDraftData {
@@ -669,6 +672,7 @@ export function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] |
     .filter((entry): entry is Record<string, unknown> => isRecord(entry))
     .map((entry) => ({
       attempt: normalizeNumber(getValueByAliases(entry, ['attempt', 'attemptNumber', 'attempt_number'])),
+      iteration: normalizeNumber(getValueByAliases(entry, ['iteration', 'beadIteration', 'bead_iteration'])),
       label: normalizeOptionalString(getValueByAliases(entry, ['label', 'name'])),
       status: normalizeOptionalString(getValueByAliases(entry, ['status', 'outcome'])),
       outcome: normalizeOptionalString(getValueByAliases(entry, ['outcome', 'status'])),
@@ -680,6 +684,8 @@ export function normalizeRawAttempts(value: unknown): ArtifactRawAttemptData[] |
       error: normalizeOptionalString(getValueByAliases(entry, ['error', 'message'])),
       validationError: normalizeOptionalString(getValueByAliases(entry, ['validationError', 'validation_error'])),
       failureClass: normalizeOptionalString(getValueByAliases(entry, ['failureClass', 'failure_class'])),
+      modelId: normalizeOptionalString(getValueByAliases(entry, ['modelId', 'model_id', 'model'])),
+      sessionId: normalizeOptionalString(getValueByAliases(entry, ['sessionId', 'session_id'])),
     }))
     .filter((entry) => entry.initialInput || entry.rawResponse || entry.modelOutput || entry.content || entry.error || entry.validationError)
 

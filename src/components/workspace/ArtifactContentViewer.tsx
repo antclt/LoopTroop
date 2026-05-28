@@ -12,7 +12,6 @@ import {
   mergeStructuredRetryDiagnostics,
   type StructuredRetryDiagnostic,
 } from '@shared/structuredRetryDiagnostics'
-import { encode } from 'gpt-tokenizer'
 import { ChevronDown, ChevronRight, Trophy, Copy, Check, Lightbulb, CheckCircle2, XCircle, AlertTriangle, FileCode2, ExternalLink, GitPullRequest } from 'lucide-react'
 import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
 import { ModelBadge, ModelIcon } from '@/components/shared/ModelBadge'
@@ -92,6 +91,7 @@ import type {
   ArtifactProcessingStatus,
 } from './artifactProcessingNotice'
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
+import { CopyButton, RawContentWithCopy, RawDisplayPre, RawDisplayStats } from './RawTextDisplay'
 import { getSafeGitHubPullRequestUrl } from '@/lib/githubUrls'
 
 const COVERAGE_ATTRIBUTION_HIDDEN_PHASES = new Set([
@@ -165,30 +165,7 @@ export function CollapsibleSection({
   )
 }
 
-export function CopyButton({ content, className = '', title = 'Copy raw output' }: { content: string; className?: string; title?: string }) {
-  const [copied, copyToClipboard] = useCopyToClipboard()
-
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation()
-    e.preventDefault()
-    copyToClipboard(content)
-  }
-
-  return (
-    <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            aria-label={title}
-            onClick={handleCopy}
-            className={`inline-flex items-center justify-center p-1 rounded hover:bg-muted transition-colors ${className}`}
-          >
-            {copied ? <Check className="h-3.5 w-3.5 text-green-500" /> : <Copy className="h-3.5 w-3.5 text-muted-foreground" />}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent className="max-w-xs text-center text-balance">{title}</TooltipContent>
-      </Tooltip>
-  )
-}
+export { CopyButton }
 
 export function TextCopyButton({ content, title, className = '' }: { content: string; title: string; className?: string }) {
   const [copied, copyToClipboard] = useCopyToClipboard()
@@ -334,30 +311,6 @@ function getRawSourceFallbackSelection(sources: RawContentSource[]): ActiveRawCo
     if (selection) return selection
   }
   return sources[0] ? normalizeRawContentSource(sources[0]) : null
-}
-
-function RawDisplayStats({ content }: { content: string }) {
-  const tokenCount = useMemo(() => encode(content).length, [content])
-  const lineCount = content.split('\n').length
-  const charCount = content.length
-
-  return (
-    <div className="flex flex-wrap gap-2 text-[10px] uppercase tracking-wider">
-      <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{lineCount.toLocaleString()} Lines</span>
-      <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{charCount.toLocaleString()} Characters</span>
-      <span className="rounded-full border border-border bg-background px-2 py-1 text-foreground">{tokenCount.toLocaleString()} Tokens (GPT-5 tokenizer)</span>
-    </div>
-  )
-}
-
-function RawDisplayPre({ content }: { content: string }) {
-  return (
-    <div className="min-w-0 max-w-full w-full overflow-hidden">
-      <pre className="min-w-0 max-w-full w-full overflow-x-hidden overflow-y-auto whitespace-pre-wrap break-words break-all [overflow-wrap:anywhere] rounded border border-border bg-background p-2 font-mono text-[11px]">
-        {content}
-      </pre>
-    </div>
-  )
 }
 
 function RawAttemptVariantSelector({
@@ -669,20 +622,6 @@ export function RawContentView({ content }: { content: string }) {
         if (line.trim() === '') return <div key={i} className="h-2" />
         return <div key={i}>{line}</div>
       })}
-    </div>
-  )
-}
-
-function RawContentWithCopy({ content }: { content: string }) {
-  const displayContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
-
-  return (
-    <div className="min-w-0 max-w-full space-y-3">
-      <div className="flex items-center gap-2">
-        <CopyButton content={content} />
-        <RawDisplayStats content={displayContent} />
-      </div>
-      <RawDisplayPre content={displayContent} />
     </div>
   )
 }

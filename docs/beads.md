@@ -144,6 +144,16 @@ Two fields matter for retry behavior:
 
 The stored bead model uses a single `notes` string. Some runtime context assembly logic may split or project note material into prompt slices, but the canonical bead object itself stores one notes field.
 
+## Execution Artifacts
+
+Execution writes per-bead execution artifacts with artifact types like:
+
+```text
+bead_execution:<beadId>
+```
+
+These artifacts preserve the bead-level attempt history, not every inner same-session prompt turn. Each raw attempt records the bead iteration number, the initial prompt sent at the start of that iteration, the final model response when captured, the outcome (`accepted`, `rejected`, `failed`, `timed_out`, etc.), and diagnostic fields when no model text was available. The Coding view uses this history for the bead `Input`/`Output` tabs and version selector.
+
 ## Diffs And Review
 
 Execution writes bead diff artifacts with artifact types like:

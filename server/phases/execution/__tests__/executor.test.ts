@@ -169,6 +169,16 @@ describe('executeBead', () => {
     expect(firstPrompt).toContain('BEAD_STATUS')
     expect(firstPrompt).toContain('System Role')
     expect(firstPrompt).toContain('quality gates')
+    expect(result.rawAttempts).toHaveLength(1)
+    expect(result.rawAttempts?.[0]).toMatchObject({
+      attempt: 1,
+      iteration: 1,
+      status: 'accepted',
+      outcome: 'accepted',
+      rawResponse: result.output,
+      modelOutput: result.output,
+    })
+    expect(result.rawAttempts?.[0]?.initialInput).toContain('BEAD_STATUS')
   })
 
   it('continues the same session when the model reports status:error before eventually succeeding', async () => {
@@ -251,6 +261,15 @@ describe('executeBead', () => {
     expect(notesUpdates[0]!.beadId).toBe('bead-1')
     expect(notesUpdates[0]!.notes).toContain('failed')
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
+    expect(result.rawAttempts).toHaveLength(1)
+    expect(result.rawAttempts?.[0]).toMatchObject({
+      attempt: 1,
+      iteration: 1,
+      status: 'failed',
+      outcome: 'failed',
+    })
+    expect(result.rawAttempts?.[0]?.initialInput).toContain('BEAD_STATUS')
+    expect(result.rawAttempts?.[0]?.error).toContain('tests still failing')
   })
 
   it('preserves usage-limit retry diagnostics when completion markers exhaust the bead window', async () => {
@@ -603,6 +622,22 @@ describe('executeBead', () => {
 
     expect(result.success).toBe(true)
     expect(result.iteration).toBe(2)
+    expect(result.rawAttempts).toMatchObject([
+      {
+        attempt: 1,
+        iteration: 1,
+        status: 'timed_out',
+        outcome: 'timed_out',
+      },
+      {
+        attempt: 2,
+        iteration: 2,
+        status: 'accepted',
+        outcome: 'accepted',
+      },
+    ])
+    expect(result.rawAttempts?.[0]?.initialInput).toContain('BEAD_STATUS')
+    expect(result.rawAttempts?.[1]?.rawResponse).toContain('"status":"done"')
     expect(contextWipes).toEqual([
       { reason: 'iteration_timeout', attempt: 1, nextAttempt: 2, maxAttempts: 2 },
     ])

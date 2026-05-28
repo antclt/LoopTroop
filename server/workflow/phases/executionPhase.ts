@@ -445,10 +445,11 @@ export async function handleCoding(
               sessionId,
               source: `model:${codingModelId}`,
               beadId: executingBead.id,
+              beadIteration: iteration,
             },
           )
         },
-        onOpenCodeStreamEvent: ({ sessionId, event }) => {
+        onOpenCodeStreamEvent: ({ sessionId, iteration, event }) => {
           const streamState = streamStates.get(sessionId) ?? createOpenCodeStreamState()
           streamStates.set(sessionId, streamState)
           emitOpenCodeStreamEvent(
@@ -460,9 +461,10 @@ export async function handleCoding(
             event,
             streamState,
             executingBead.id,
+            iteration,
           )
         },
-        onPromptDispatched: ({ event }) => {
+        onPromptDispatched: ({ iteration, event }) => {
           emitOpenCodePromptLog(
             ticketId,
             context.externalId,
@@ -470,9 +472,10 @@ export async function handleCoding(
             codingModelId,
             event,
             executingBead.id,
+            iteration,
           )
         },
-        onPromptCompleted: ({ stage, event }) => {
+        onPromptCompleted: ({ iteration, stage, event }) => {
           emitOpenCodeSessionLogs(
             ticketId,
             context.externalId,
@@ -484,16 +487,17 @@ export async function handleCoding(
             event.messages,
             streamStates.get(event.session.id),
             executingBead.id,
+            iteration,
           )
         },
-        onContinuableTimeoutPreserved: ({ beadId, message }) => {
+        onContinuableTimeoutPreserved: ({ beadId, iteration, message }) => {
           emitPhaseLog(
             ticketId,
             context.externalId,
             'CODING',
             'info',
             message,
-            { source: 'system', modelId: codingModelId, beadId },
+            { source: 'system', modelId: codingModelId, beadId, beadIteration: iteration },
           )
         },
         onContextWipe: async ({ beadId, notes, iteration, reason, attempt, nextAttempt, maxAttempts }) => {
@@ -525,7 +529,7 @@ export async function handleCoding(
               'CODING',
               'error',
               `Could not reset bead ${beadId} to bead start commit: ${err instanceof Error ? err.message : 'Unknown error'}`,
-              { source: 'system', modelId: codingModelId, beadId },
+              { source: 'system', modelId: codingModelId, beadId, beadIteration: iteration },
             )
             throw err
           }
@@ -546,7 +550,7 @@ export async function handleCoding(
             'CODING',
             'info',
             resetMessage,
-            { source: 'system', modelId: codingModelId, beadId },
+            { source: 'system', modelId: codingModelId, beadId, beadIteration: iteration },
           )
         },
       },

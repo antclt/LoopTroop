@@ -31,6 +31,7 @@ export interface StructuredLogFields extends Record<string, unknown> {
   modelId?: string
   sessionId?: string
   beadId?: string
+  beadIteration?: number
   timeoutMs?: number
   deadlineAt?: string
   timeoutKind?: PromptTimeoutKind

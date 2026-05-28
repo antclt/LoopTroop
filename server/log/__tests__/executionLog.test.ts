@@ -139,6 +139,8 @@ describe('appendLogEvent', () => {
         suppressDebugMirror: true,
         entryId: 'e1',
         sessionId: 's1',
+        beadId: 'bead-1',
+        beadIteration: 2,
         source: 'opencode',
         modelId: 'm1',
         timeoutMs: 1_200_000,
@@ -162,6 +164,8 @@ describe('appendLogEvent', () => {
     // Structured keys should be gone from data (they're top-level)
     expect(written.data?.entryId).toBeUndefined()
     expect(written.data?.sessionId).toBeUndefined()
+    expect(written.data?.beadId).toBeUndefined()
+    expect(written.data?.beadIteration).toBeUndefined()
     expect(written.data?.source).toBeUndefined()
     expect(written.data?.timeoutMs).toBeUndefined()
     expect(written.data?.deadlineAt).toBeUndefined()
@@ -171,6 +175,8 @@ describe('appendLogEvent', () => {
     // Structured fields should be at top level
     expect(written.entryId).toBe('e1')
     expect(written.sessionId).toBe('s1')
+    expect(written.beadId).toBe('bead-1')
+    expect(written.beadIteration).toBe(2)
     expect(written.timeoutMs).toBe(1_200_000)
     expect(written.deadlineAt).toBe('2026-03-13T12:20:00.000Z')
     expect(written.timeoutKind).toBe('council_response')

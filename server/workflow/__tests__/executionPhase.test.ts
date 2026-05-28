@@ -182,6 +182,19 @@ describe('handleCoding', () => {
       iteration: 1,
       output: 'done',
       errors: [],
+      rawAttempts: [
+        {
+          attempt: 1,
+          iteration: 1,
+          status: 'accepted',
+          outcome: 'accepted',
+          initialInput: 'raw bead prompt',
+          rawResponse: 'done',
+          modelOutput: 'done',
+          modelId: 'model-a',
+          sessionId: 'session-1',
+        },
+      ],
     })
 
     await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
@@ -255,6 +268,19 @@ describe('handleCoding', () => {
       iteration: 1,
       output: 'done',
       errors: [],
+      rawAttempts: [
+        {
+          attempt: 1,
+          iteration: 1,
+          status: 'accepted',
+          outcome: 'accepted',
+          initialInput: 'raw bead prompt',
+          rawResponse: 'done',
+          modelOutput: 'done',
+          modelId: 'model-a',
+          sessionId: 'session-1',
+        },
+      ],
     })
 
     await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
@@ -771,6 +797,19 @@ describe('handleCoding', () => {
       iteration: 1,
       output: 'done',
       errors: [],
+      rawAttempts: [
+        {
+          attempt: 1,
+          iteration: 1,
+          status: 'accepted',
+          outcome: 'accepted',
+          initialInput: 'raw bead prompt',
+          rawResponse: 'done',
+          modelOutput: 'done',
+          modelId: 'model-a',
+          sessionId: 'session-1',
+        },
+      ],
     })
 
     await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
@@ -780,10 +819,24 @@ describe('handleCoding', () => {
     const execPayload = JSON.parse(execArtifact!.content) as {
       success: boolean
       beadId: string
+      rawAttempts?: unknown[]
       checkpoint?: { beadId?: string; beadStartCommit?: string | null }
     }
     expect(execPayload.success).toBe(true)
     expect(execPayload.beadId).toBe('bead-1')
+    expect(execPayload.rawAttempts).toEqual([
+      {
+        attempt: 1,
+        iteration: 1,
+        status: 'accepted',
+        outcome: 'accepted',
+        initialInput: 'raw bead prompt',
+        rawResponse: 'done',
+        modelOutput: 'done',
+        modelId: 'model-a',
+        sessionId: 'session-1',
+      },
+    ])
     expect(execPayload.checkpoint).toMatchObject({
       beadId: 'bead-1',
       beadStartCommit: 'abc123',
@@ -807,6 +860,16 @@ describe('handleCoding', () => {
       iteration: 1,
       output: '',
       errors: ['lint failed'],
+      rawAttempts: [
+        {
+          attempt: 1,
+          iteration: 1,
+          status: 'failed',
+          outcome: 'failed',
+          initialInput: 'raw bead prompt',
+          error: 'lint failed',
+        },
+      ],
     })
 
     await handleCoding(ticket.id, context, sendEvent, new AbortController().signal)
@@ -815,9 +878,20 @@ describe('handleCoding', () => {
     expect(execArtifact).toBeDefined()
     const execPayload = JSON.parse(execArtifact!.content) as {
       success: boolean
+      rawAttempts?: unknown[]
       checkpoint?: { beadId?: string; beadStartCommit?: string | null }
     }
     expect(execPayload.success).toBe(false)
+    expect(execPayload.rawAttempts).toEqual([
+      {
+        attempt: 1,
+        iteration: 1,
+        status: 'failed',
+        outcome: 'failed',
+        initialInput: 'raw bead prompt',
+        error: 'lint failed',
+      },
+    ])
     expect(execPayload.checkpoint).toMatchObject({
       beadId: 'bead-1',
       beadStartCommit: 'abc123',

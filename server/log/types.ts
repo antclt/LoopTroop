@@ -25,6 +25,7 @@ export interface LogEvent {
   modelId?: string
   sessionId?: string
   beadId?: string
+  beadIteration?: number
   timeoutMs?: number
   deadlineAt?: string
   timeoutKind?: PromptTimeoutKind

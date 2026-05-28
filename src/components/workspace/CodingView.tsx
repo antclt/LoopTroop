@@ -1,8 +1,9 @@
 import { useMemo, useState, useRef, useEffect, useCallback } from 'react'
 import { useLogs } from '@/context/useLogContext'
+import type { LogEntry } from '@/context/logUtils'
 import { useQuery } from '@tanstack/react-query'
 import { QUERY_STALE_TIME_5M, COPY_SUCCESS_DISPLAY_SHORT_MS } from '@/lib/constants'
-import { Loader2, CheckCircle2, Circle, Play, Eye, FileCode2, List, Brain, Clock, GitCommit, Tag, Link2, ArrowRight, ArrowUpToLine, ArrowDownToLine, Copy, Check } from 'lucide-react'
+import { Loader2, CheckCircle2, Circle, Play, Eye, FileCode2, List, Brain, Clock, GitCommit, Tag, Link2, ArrowRight, ArrowUpToLine, ArrowDownToLine, Copy, Check, FileInput, FileOutput } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { HoverCard, HoverCardTrigger, HoverCardContent } from '@/components/ui/hover-card'
@@ -27,6 +28,9 @@ import { parsePrdDocument, parsePrdDocumentContent, normalizePrdDocumentLike } f
 import type { PrdDocument } from '@/lib/prdDocument'
 import { isStatusAtOrPast } from '@shared/workflowMeta'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
+import { buildReadableRawDisplayContent } from './rawDisplayContent'
+import { CopyButton as RawCopyButton, RawDisplayPre, RawDisplayStats } from './RawTextDisplay'
+import { normalizeRawAttempts, tryParseStructuredContent, type ArtifactRawAttemptData } from './phaseArtifactTypes'
 
 interface CodingViewProps {
   ticket: Ticket
@@ -310,6 +314,250 @@ function statusIcon(status: TicketBead['status']) {
 }
 
 const COMPACT_THRESHOLD = 15
+type BeadDetailTab = 'details' | 'changes' | 'model' | 'input' | 'output'
+
+interface BeadRawAttempt {
+  attempt: number
+  iteration: number
+  initialInput: string
+  rawResponse?: string
+  modelOutput?: string
+  content?: string
+  error?: string
+  validationError?: string
+  failureClass?: string
+  status?: string
+  outcome?: string
+  modelId?: string
+  sessionId?: string
+  source: 'artifact' | 'log' | 'merged'
+  terminal: boolean
+}
+
+const TERMINAL_BEAD_STATUSES = new Set<TicketBead['status']>(['completed', 'failed', 'skipped'])
+const TERMINAL_RAW_OUTCOMES = new Set(['accepted', 'rejected', 'failed', 'timed_out', 'timed-out', 'timeout', 'cancelled', 'canceled', 'error', 'invalid_output'])
+
+const BEAD_TAB_TOOLTIPS: Record<BeadDetailTab, string> = {
+  details: 'Bead metadata, requirements, dependencies, and notes.',
+  changes: 'Captured code diff for this bead. Available after the bead is done or skipped.',
+  model: 'Bead-scoped execution transcript.',
+  input: 'Raw initial prompt sent for the selected bead iteration.',
+  output: 'Final model response or captured diagnostic for the selected bead iteration.',
+}
+
+function normalizeRawAttemptNumber(value: unknown, fallback: number): number {
+  const parsed = typeof value === 'number' && Number.isFinite(value) ? value : Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function getRawAttemptKey(attempt: Pick<BeadRawAttempt, 'iteration' | 'attempt'>): number {
+  return attempt.iteration > 0 ? attempt.iteration : attempt.attempt
+}
+
+function getRawAttemptOutcome(attempt: Pick<BeadRawAttempt, 'outcome' | 'status'>): string {
+  return (attempt.outcome || attempt.status || '').trim().toLowerCase()
+}
+
+function formatRawAttemptOutcome(attempt: Pick<BeadRawAttempt, 'outcome' | 'status'>): string {
+  const outcome = getRawAttemptOutcome(attempt)
+  if (!outcome) return 'Captured'
+  if (outcome === 'timed_out' || outcome === 'timed-out' || outcome === 'timeout') return 'Timed out'
+  if (outcome === 'invalid_output') return 'Rejected'
+  return outcome
+    .split(/[_\s-]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+}
+
+function stripPromptLogHeader(line: string): string {
+  const trimmed = line.trimStart()
+  if (!trimmed.startsWith('[PROMPT]')) return line
+  const newlineIndex = trimmed.indexOf('\n')
+  return newlineIndex >= 0 ? trimmed.slice(newlineIndex + 1) : ''
+}
+
+function stripOutputLogTag(line: string): string {
+  return line.replace(/^\s*\[(?:MODEL|ERROR)\]\s*/i, '')
+}
+
+function buildAttemptDiagnostic(attempt: Pick<BeadRawAttempt, 'error' | 'validationError' | 'failureClass'>): string {
+  const sections: string[] = []
+  if (attempt.validationError?.trim()) {
+    sections.push(['Validation error:', attempt.validationError.trim()].join('\n'))
+  }
+  if (attempt.error?.trim()) {
+    sections.push(['Error:', attempt.error.trim()].join('\n'))
+  }
+  if (attempt.failureClass?.trim()) {
+    sections.push(`Failure class: ${attempt.failureClass.trim()}`)
+  }
+  return sections.join('\n\n')
+}
+
+function getRawAttemptInput(attempt: BeadRawAttempt | null | undefined): string {
+  return attempt?.initialInput?.trimEnd() ?? ''
+}
+
+function getRawAttemptOutput(attempt: BeadRawAttempt | null | undefined): string {
+  if (!attempt) return ''
+  const modelText = attempt.rawResponse ?? attempt.modelOutput ?? attempt.content ?? ''
+  if (modelText.trim()) return modelText.trimEnd()
+  return buildAttemptDiagnostic(attempt)
+}
+
+function isRawAttemptTerminal(attempt: BeadRawAttempt | null | undefined, bead: TicketBead | null): boolean {
+  if (!attempt) return false
+  if (attempt.terminal) return true
+  const outcome = getRawAttemptOutcome(attempt)
+  if (TERMINAL_RAW_OUTCOMES.has(outcome)) return true
+  return bead ? TERMINAL_BEAD_STATUSES.has(bead.status) : false
+}
+
+function normalizeArtifactAttempt(entry: ArtifactRawAttemptData, index: number): BeadRawAttempt {
+  const fallback = index + 1
+  const iteration = normalizeRawAttemptNumber(entry.iteration ?? entry.attempt, fallback)
+  const attempt = normalizeRawAttemptNumber(entry.attempt ?? entry.iteration, iteration)
+  return {
+    attempt,
+    iteration,
+    initialInput: entry.initialInput ?? '',
+    rawResponse: entry.rawResponse,
+    modelOutput: entry.modelOutput,
+    content: entry.content,
+    error: entry.error,
+    validationError: entry.validationError,
+    failureClass: entry.failureClass,
+    status: entry.status,
+    outcome: entry.outcome,
+    modelId: entry.modelId,
+    sessionId: entry.sessionId,
+    source: 'artifact',
+    terminal: true,
+  }
+}
+
+function parseBeadExecutionAttempts(
+  artifacts: Array<{ artifactType: string; content: string | null }>,
+  beadId: string,
+): BeadRawAttempt[] {
+  const artifact = artifacts.find((entry) => entry.artifactType === `bead_execution:${beadId}`)
+  if (!artifact?.content) return []
+
+  const parsed = tryParseStructuredContent(artifact.content)
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return []
+  const record = parsed as Record<string, unknown>
+  const rawAttemptsValue = record.rawAttempts ?? record.raw_attempts
+  const attempts = normalizeRawAttempts(rawAttemptsValue)
+  if (attempts?.length) {
+    return attempts.map(normalizeArtifactAttempt)
+  }
+
+  const iteration = normalizeRawAttemptNumber(record.iteration, 1)
+  const output = typeof record.output === 'string' ? record.output : ''
+  const errors = Array.isArray(record.errors)
+    ? record.errors.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : []
+  const diagnostics = record.diagnostics && typeof record.diagnostics === 'object'
+    ? JSON.stringify(record.diagnostics, null, 2)
+    : ''
+  if (!output.trim() && errors.length === 0 && !diagnostics) return []
+  const outcome = record.success === true ? 'accepted' : 'failed'
+  return [{
+    attempt: iteration,
+    iteration,
+    status: outcome,
+    outcome,
+    initialInput: '',
+    ...(output ? { rawResponse: output, modelOutput: output } : {}),
+    ...(errors.length > 0 ? { error: errors.join('\n') } : diagnostics ? { error: diagnostics } : {}),
+    source: 'artifact',
+    terminal: true,
+  }]
+}
+
+function buildLogDerivedRawAttempts(entries: LogEntry[], fallbackIteration: number): BeadRawAttempt[] {
+  const byIteration = new Map<number, BeadRawAttempt>()
+  const ensureAttempt = (iteration: number) => {
+    const existing = byIteration.get(iteration)
+    if (existing) return existing
+    const created: BeadRawAttempt = {
+      attempt: iteration,
+      iteration,
+      initialInput: '',
+      source: 'log',
+      terminal: false,
+    }
+    byIteration.set(iteration, created)
+    return created
+  }
+
+  for (const entry of entries) {
+    const iteration = normalizeRawAttemptNumber(entry.beadIteration, fallbackIteration)
+    const attempt = ensureAttempt(iteration)
+    if (entry.modelId && !attempt.modelId) attempt.modelId = entry.modelId
+    if (entry.sessionId && !attempt.sessionId) attempt.sessionId = entry.sessionId
+
+    if (entry.kind === 'prompt') {
+      const promptBody = stripPromptLogHeader(entry.line).trimEnd()
+      if (promptBody && !attempt.initialInput) {
+        attempt.initialInput = promptBody
+      }
+      continue
+    }
+
+    if ((entry.kind === 'text' || entry.kind === 'error') && !entry.streaming && entry.op !== 'upsert') {
+      const output = stripOutputLogTag(entry.line).trimEnd()
+      if (output) {
+        if (entry.kind === 'error') {
+          attempt.error = output
+          attempt.status = attempt.status ?? 'failed'
+          attempt.outcome = attempt.outcome ?? 'failed'
+        } else {
+          attempt.rawResponse = output
+          attempt.modelOutput = output
+        }
+      }
+    }
+  }
+
+  return Array.from(byIteration.values())
+}
+
+function mergeRawAttempts(persisted: BeadRawAttempt[], logDerived: BeadRawAttempt[]): BeadRawAttempt[] {
+  const byIteration = new Map<number, BeadRawAttempt>()
+
+  for (const attempt of logDerived) {
+    byIteration.set(getRawAttemptKey(attempt), attempt)
+  }
+
+  for (const attempt of persisted) {
+    const key = getRawAttemptKey(attempt)
+    const existing = byIteration.get(key)
+    byIteration.set(key, {
+      ...(existing ?? attempt),
+      ...attempt,
+      initialInput: attempt.initialInput || existing?.initialInput || '',
+      modelId: attempt.modelId || existing?.modelId,
+      sessionId: attempt.sessionId || existing?.sessionId,
+      source: existing ? 'merged' : attempt.source,
+      terminal: true,
+    })
+  }
+
+  return Array.from(byIteration.values())
+    .filter((attempt) => getRawAttemptInput(attempt).trim() || getRawAttemptOutput(attempt).trim())
+    .sort((left, right) => getRawAttemptKey(left) - getRawAttemptKey(right))
+}
+
+function selectDefaultRawAttemptKey(attempts: BeadRawAttempt[], bead: TicketBead | null): number | null {
+  const sorted = [...attempts].sort((left, right) => getRawAttemptKey(right) - getRawAttemptKey(left))
+  const meaningfulOutput = sorted.find((attempt) => getRawAttemptOutput(attempt).trim() && isRawAttemptTerminal(attempt, bead))
+  if (meaningfulOutput) return getRawAttemptKey(meaningfulOutput)
+  const inputAttempt = sorted.find((attempt) => getRawAttemptInput(attempt).trim())
+  if (inputAttempt) return getRawAttemptKey(inputAttempt)
+  return sorted[0] ? getRawAttemptKey(sorted[0]) : null
+}
 
 function usePrdDocument(ticketId: string): { prd: PrdDocument | null; isLoading: boolean; isError: boolean } {
   const { data: fetchedContent, isLoading, isError } = useQuery({
@@ -548,6 +796,85 @@ function TargetFileRow({ file }: { file: string }) {
   )
 }
 
+function BeadDetailTabButton({
+  tab,
+  activeTab,
+  disabled = false,
+  onSelect,
+  icon,
+  children,
+}: {
+  tab: BeadDetailTab
+  activeTab: BeadDetailTab
+  disabled?: boolean
+  onSelect: (tab: BeadDetailTab) => void
+  icon: React.ReactNode
+  children: React.ReactNode
+}) {
+  const button = (
+    <button
+      type="button"
+      onClick={() => {
+        if (!disabled) onSelect(tab)
+      }}
+      disabled={disabled}
+      className={cn(
+        'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-b-2',
+        activeTab === tab
+          ? 'border-primary text-foreground'
+          : 'border-transparent text-muted-foreground hover:text-foreground',
+        disabled && 'opacity-40 cursor-not-allowed hover:text-muted-foreground',
+      )}
+    >
+      {icon}
+      {children}
+    </button>
+  )
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex" title={BEAD_TAB_TOOLTIPS[tab]}>{button}</span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-xs text-center text-balance">{BEAD_TAB_TOOLTIPS[tab]}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+function BeadRawAttemptPanel({
+  mode,
+  attempt,
+  content,
+  emptyMessage,
+}: {
+  mode: 'input' | 'output'
+  attempt: BeadRawAttempt | null
+  content: string
+  emptyMessage: string
+}) {
+  const displayContent = useMemo(() => buildReadableRawDisplayContent(content), [content])
+
+  return (
+    <div className="flex-1 min-h-0 overflow-auto p-3">
+      {content.trim() ? (
+        <div className="min-w-0 max-w-full space-y-3">
+          <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+            {attempt ? <span className="rounded border border-border bg-background px-2 py-1">Iteration {attempt.iteration}</span> : null}
+            {attempt?.modelId ? <span className="rounded border border-border bg-background px-2 py-1">Model {attempt.modelId}</span> : null}
+            {attempt?.sessionId ? <span className="rounded border border-border bg-background px-2 py-1">Session {attempt.sessionId}</span> : null}
+          </div>
+          <RawDisplayStats content={displayContent} />
+          <RawDisplayPre content={displayContent} />
+        </div>
+      ) : (
+        <div className="rounded-md border border-dashed border-border bg-background/60 p-4 text-xs text-muted-foreground">
+          {emptyMessage || `No raw ${mode} captured for this bead yet.`}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function BeadGrid({
   beads,
   viewingBeadId,
@@ -626,9 +953,11 @@ function BeadGrid({
 
 export function CodingView({ ticket, readOnly }: CodingViewProps) {
   const [rawViewingBeadId, setViewingBeadId] = useState<string | null>(null)
-  const [detailTab, setDetailTab] = useState<'details' | 'changes' | 'model'>('details')
+  const [detailTab, setDetailTab] = useState<BeadDetailTab>('details')
+  const [selectedRawIteration, setSelectedRawIteration] = useState<number | null>(null)
   const phaseForView = readOnly ? 'CODING' : ticket.status
   const hasBeadControls = phaseForView === 'CODING'
+  const viewingBeadId = hasBeadControls ? rawViewingBeadId : null
   const shouldShowPhaseVersionSelector = phaseForView !== 'CODING'
   const { data: phaseAttempts = [] } = useTicketPhaseAttempts(
     shouldShowPhaseVersionSelector ? ticket.id : undefined,
@@ -660,7 +989,10 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
       ? { phase: phaseForView, phaseAttempt: archivedAttemptNumber }
       : undefined,
   )
-  const viewingBeadId = hasBeadControls ? rawViewingBeadId : null
+  const { artifacts: codingPhaseArtifacts } = useTicketArtifacts(
+    viewingBeadId ? ticket.id : undefined,
+    viewingBeadId ? { phase: 'CODING' } : undefined,
+  )
   
   // -- Auto-scroll state for the model log tab --
   const viewportRef = useRef<HTMLDivElement>(null)
@@ -758,10 +1090,73 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
   const { prd, isLoading: prdLoading, isError: prdError } = usePrdDocument(ticket.id)
   const beadLogEntries = useMemo(() => {
     if (!viewedBead) return []
-    const phaseLogs = logCtx?.getLogsForPhase(phaseForView) ?? []
+    const phaseLogs = logCtx?.getLogsForPhase(phaseForView, { phaseAttempt: logPhaseAttempt }) ?? []
     const beadLogs = phaseLogs.filter((entry) => entry.beadId === viewedBead.id)
     return filterBeadLogEntries(beadLogs)
-  }, [logCtx, phaseForView, viewedBead])
+  }, [logCtx, logPhaseAttempt, phaseForView, viewedBead])
+
+  useEffect(() => {
+    if (!viewedBead || !logCtx?.loadLogsForPhase) return
+    logCtx.loadLogsForPhase('CODING', { channel: 'ai', phaseAttempt: logPhaseAttempt })
+  }, [logCtx, logPhaseAttempt, viewedBead])
+
+  useEffect(() => {
+    setSelectedRawIteration(null)
+  }, [viewedBead?.id])
+
+  const beadRawAttempts = useMemo(() => {
+    if (!viewedBead) return []
+    const persisted = parseBeadExecutionAttempts(codingPhaseArtifacts, viewedBead.id)
+    const logDerived = buildLogDerivedRawAttempts(beadLogEntries, viewedBead.iteration > 0 ? viewedBead.iteration : 1)
+    return mergeRawAttempts(persisted, logDerived)
+  }, [beadLogEntries, codingPhaseArtifacts, viewedBead])
+
+  const defaultRawAttemptKey = useMemo(
+    () => selectDefaultRawAttemptKey(beadRawAttempts, viewedBead),
+    [beadRawAttempts, viewedBead],
+  )
+
+  useEffect(() => {
+    if (!viewedBead) return
+    if (selectedRawIteration !== null && beadRawAttempts.some((attempt) => getRawAttemptKey(attempt) === selectedRawIteration)) return
+    setSelectedRawIteration(defaultRawAttemptKey)
+  }, [beadRawAttempts, defaultRawAttemptKey, selectedRawIteration, viewedBead])
+
+  const activeRawAttempt = useMemo(() => {
+    if (beadRawAttempts.length === 0) return null
+    const selected = selectedRawIteration !== null
+      ? beadRawAttempts.find((attempt) => getRawAttemptKey(attempt) === selectedRawIteration)
+      : null
+    return selected
+      ?? (defaultRawAttemptKey !== null ? beadRawAttempts.find((attempt) => getRawAttemptKey(attempt) === defaultRawAttemptKey) : null)
+      ?? beadRawAttempts[beadRawAttempts.length - 1]
+      ?? null
+  }, [beadRawAttempts, defaultRawAttemptKey, selectedRawIteration])
+
+  const activeRawInput = getRawAttemptInput(activeRawAttempt)
+  const activeRawOutput = getRawAttemptOutput(activeRawAttempt)
+  const outputContextIsTerminal = isRawAttemptTerminal(activeRawAttempt, viewedBead)
+    || ticket.status === 'CANCELED'
+    || ticket.status === 'BLOCKED_ERROR'
+  const outputTabEnabled = Boolean(activeRawOutput.trim()) && outputContextIsTerminal
+  const activeRawCopyContent = detailTab === 'input'
+    ? activeRawInput
+    : detailTab === 'output' && outputTabEnabled
+      ? activeRawOutput
+      : ''
+  const changesTabEnabled = viewedBead ? (viewedBead.status === 'completed' || viewedBead.status === 'skipped') : false
+
+  useEffect(() => {
+    if (detailTab === 'output' && !outputTabEnabled) {
+      setDetailTab('input')
+    }
+  }, [detailTab, outputTabEnabled])
+
+  useEffect(() => {
+    if (detailTab === 'changes' && !changesTabEnabled) {
+      setDetailTab('details')
+    }
+  }, [changesTabEnabled, detailTab])
 
   const [copied, copyToClipboard] = useCopyToClipboard()
   const handleCopyLogs = useCallback(() => {
@@ -868,44 +1263,43 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
         {viewedBead ? (
           <div className="flex-1 min-h-0 flex flex-col rounded-md border border-border bg-muted/30 overflow-hidden">
             <div className="flex items-center border-b border-border shrink-0">
-              <button
-                onClick={() => setDetailTab('details')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-b-2',
-                  detailTab === 'details'
-                    ? 'border-primary text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <List className="h-3 w-3" />
+              <BeadDetailTabButton tab="details" activeTab={detailTab} onSelect={setDetailTab} icon={<List className="h-3 w-3" />}>
                 Details
-              </button>
-              <button
-                onClick={() => setDetailTab('changes')}
-                disabled={viewedBead.status !== 'completed' && viewedBead.status !== 'skipped'}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-b-2',
-                  detailTab === 'changes'
-                    ? 'border-primary text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                  (viewedBead.status !== 'completed' && viewedBead.status !== 'skipped') && 'opacity-40 cursor-not-allowed',
-                )}
+              </BeadDetailTabButton>
+              <BeadDetailTabButton
+                tab="changes"
+                activeTab={detailTab}
+                onSelect={setDetailTab}
+                disabled={!changesTabEnabled}
+                icon={<FileCode2 className="h-3 w-3" />}
               >
-                <FileCode2 className="h-3 w-3" />
                 Changes
-              </button>
-              <button
-                onClick={() => setDetailTab('model')}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors border-b-2',
-                  detailTab === 'model'
-                    ? 'border-primary text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-                )}
-              >
-                <Brain className="h-3 w-3" />
+              </BeadDetailTabButton>
+              <BeadDetailTabButton tab="model" activeTab={detailTab} onSelect={setDetailTab} icon={<Brain className="h-3 w-3" />}>
                 Log
-              </button>
+              </BeadDetailTabButton>
+              <BeadDetailTabButton tab="input" activeTab={detailTab} onSelect={setDetailTab} icon={<FileInput className="h-3 w-3" />}>
+                Input
+              </BeadDetailTabButton>
+              {detailTab === 'input' && activeRawCopyContent.trim() && (
+                <div className="flex items-center pr-1">
+                  <RawCopyButton content={activeRawCopyContent} title="Copy bead input" />
+                </div>
+              )}
+              <BeadDetailTabButton
+                tab="output"
+                activeTab={detailTab}
+                onSelect={setDetailTab}
+                disabled={!outputTabEnabled}
+                icon={<FileOutput className="h-3 w-3" />}
+              >
+                Output
+              </BeadDetailTabButton>
+              {detailTab === 'output' && activeRawCopyContent.trim() && (
+                <div className="flex items-center pr-1">
+                  <RawCopyButton content={activeRawCopyContent} title="Copy bead output" />
+                </div>
+              )}
 
               {detailTab === 'model' && (
                 <div className="ml-auto flex items-center pr-2 gap-2 text-xs text-muted-foreground">
@@ -939,6 +1333,43 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                 </div>
               )}
             </div>
+
+            {beadRawAttempts.length > 1 && (
+              <div className="flex min-w-0 items-center gap-2 border-b border-border bg-background/70 px-2 py-1.5 text-xs">
+                <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Versions</span>
+                <div role="group" aria-label="Bead raw versions" className="flex min-w-0 flex-wrap gap-1">
+                  {beadRawAttempts.map((attempt) => {
+                    const key = getRawAttemptKey(attempt)
+                    const active = activeRawAttempt ? getRawAttemptKey(activeRawAttempt) === key : false
+                    const label = `Iteration ${attempt.iteration}`
+                    const outcomeLabel = formatRawAttemptOutcome(attempt)
+                    return (
+                      <Tooltip key={`${attempt.iteration}-${attempt.attempt}`}>
+                        <TooltipTrigger asChild>
+                          <button
+                            type="button"
+                            aria-pressed={active}
+                            onClick={() => setSelectedRawIteration(key)}
+                            className={cn(
+                              'inline-flex min-w-0 max-w-full items-center gap-1 rounded border px-2 py-1 text-[10px] font-medium transition-colors',
+                              active
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border bg-background text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+                            )}
+                          >
+                            <span className="truncate">{label}</span>
+                            <span className="text-[9px] opacity-80">{outcomeLabel}</span>
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs text-center text-balance">
+                          {`${label} - ${outcomeLabel}`}
+                        </TooltipContent>
+                      </Tooltip>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {detailTab === 'model' ? (
               <div className="relative flex-1 min-h-0 flex flex-col">
@@ -986,7 +1417,21 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                   </Tooltip>
                 )}
               </div>
-            ) : detailTab === 'changes' && (viewedBead.status === 'completed' || viewedBead.status === 'skipped') ? (
+            ) : detailTab === 'input' ? (
+              <BeadRawAttemptPanel
+                mode="input"
+                attempt={activeRawAttempt}
+                content={activeRawInput}
+                emptyMessage="No raw input captured for this bead yet."
+              />
+            ) : detailTab === 'output' ? (
+              <BeadRawAttemptPanel
+                mode="output"
+                attempt={activeRawAttempt}
+                content={outputTabEnabled ? activeRawOutput : ''}
+                emptyMessage="No model output captured for this bead yet."
+              />
+            ) : detailTab === 'changes' && changesTabEnabled ? (
               <div className="flex-1 min-h-0 overflow-auto">
                 <BeadDiffViewer ticketId={ticket.id} beadId={viewedBead.id} />
               </div>

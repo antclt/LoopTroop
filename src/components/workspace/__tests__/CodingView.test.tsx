@@ -90,6 +90,20 @@ function renderCoding(overrides: CodingTestOverrides = {}) {
   )
 }
 
+function makeBeadExecutionArtifact(beadId: string, payload: Record<string, unknown>) {
+  return {
+    id: 10,
+    ticketId: TEST.ticketId,
+    phase: 'CODING',
+    phaseAttempt: 1,
+    artifactType: `bead_execution:${beadId}`,
+    filePath: null,
+    content: JSON.stringify(payload),
+    createdAt: '2026-05-28T10:00:00.000Z',
+    updatedAt: '2026-05-28T10:00:00.000Z',
+  }
+}
+
 let fetchSpy: ReturnType<typeof vi.spyOn>
 
 beforeEach(() => {
@@ -626,6 +640,167 @@ describe('CodingView', () => {
     expect(screen.getByText((content) => content.includes('prompt #1'))).toBeTruthy()
     expect(screen.getByText(/Checking the failing test output/)).toBeTruthy()
     expect(screen.queryByText(/hidden debug row/)).toBeNull()
+  })
+
+  it('shows bead raw tabs in order with tooltips', () => {
+    renderCoding({
+      runtime: {
+        beads: [
+          { id: 'bead-1', title: 'Raw tabs bead', status: 'pending', iteration: 0 },
+        ],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Raw tabs bead/ }))
+
+    const detailsTab = screen.getByRole('button', { name: 'Details' })
+    const changesTab = screen.getByRole('button', { name: 'Changes' })
+    const logTab = screen.getByRole('button', { name: 'Log' })
+    const inputTab = screen.getByRole('button', { name: 'Input' })
+    const outputTab = screen.getByRole('button', { name: 'Output' })
+
+    expect(detailsTab.compareDocumentPosition(changesTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(changesTab.compareDocumentPosition(logTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(logTab.compareDocumentPosition(inputTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(inputTab.compareDocumentPosition(outputTab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    expect(detailsTab.parentElement).toHaveAttribute('title', 'Bead metadata, requirements, dependencies, and notes.')
+    expect(changesTab.parentElement).toHaveAttribute('title', 'Captured code diff for this bead. Available after the bead is done or skipped.')
+    expect(logTab.parentElement).toHaveAttribute('title', 'Bead-scoped execution transcript.')
+    expect(inputTab.parentElement).toHaveAttribute('title', 'Raw initial prompt sent for the selected bead iteration.')
+    expect(outputTab.parentElement).toHaveAttribute('title', 'Final model response or captured diagnostic for the selected bead iteration.')
+  })
+
+  it('renders bead raw Input with copy and raw stats from execution attempts', () => {
+    const prompt = 'Accepted prompt line 1\nAccepted prompt line 2'
+    const response = 'Accepted final output'
+    mockUseTicketArtifacts.mockImplementation((_ticketId?: string, options?: { phase?: string }) => ({
+      artifacts: options?.phase === 'CODING'
+        ? [
+            makeBeadExecutionArtifact('bead-1', {
+              beadId: 'bead-1',
+              success: true,
+              iteration: 1,
+              output: response,
+              errors: [],
+              rawAttempts: [
+                {
+                  attempt: 1,
+                  iteration: 1,
+                  status: 'accepted',
+                  outcome: 'accepted',
+                  initialInput: prompt,
+                  rawResponse: response,
+                  modelOutput: response,
+                  modelId: 'openai/gpt-5.4',
+                  sessionId: 'session-raw-1',
+                },
+              ],
+            }),
+          ]
+        : [],
+      isLoading: false,
+    }))
+    const writeTextMock = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+      writable: true,
+    })
+
+    renderCoding({
+      runtime: {
+        beads: [
+          { id: 'bead-1', title: 'Raw input bead', status: 'done', iteration: 1 },
+        ],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Raw input bead/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Input' }))
+
+    expect(screen.getByText((content) => content.includes('Accepted prompt line 1'))).toBeTruthy()
+    expect(screen.getByText('2 Lines')).toBeTruthy()
+    expect(screen.getByText(`${prompt.length.toLocaleString()} Characters`)).toBeTruthy()
+    expect(screen.getByText(/Tokens \(GPT-5 tokenizer\)/)).toBeTruthy()
+    expect(screen.getByText('Iteration 1')).toBeTruthy()
+    expect(screen.getByText('Model openai/gpt-5.4')).toBeTruthy()
+    expect(screen.getByText('Session session-raw-1')).toBeTruthy()
+
+    const copyBtn = screen.getByRole('button', { name: 'Copy bead input' })
+    fireEvent.click(copyBtn)
+    expect(writeTextMock).toHaveBeenCalledWith(prompt)
+  })
+
+  it('keeps Output disabled before raw output or diagnostics exist', () => {
+    renderCoding({
+      runtime: {
+        beads: [
+          { id: 'bead-1', title: 'Pending raw bead', status: 'pending', iteration: 0 },
+        ],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Pending raw bead/ }))
+
+    expect(screen.getByRole('button', { name: 'Output' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Input' }))
+    expect(screen.getByText('No raw input captured for this bead yet.')).toBeTruthy()
+  })
+
+  it('defaults to the latest meaningful raw output and keeps failed previous versions clickable', () => {
+    mockUseTicketArtifacts.mockImplementation((_ticketId?: string, options?: { phase?: string }) => ({
+      artifacts: options?.phase === 'CODING'
+        ? [
+            makeBeadExecutionArtifact('bead-1', {
+              beadId: 'bead-1',
+              success: true,
+              iteration: 2,
+              output: 'accepted output',
+              errors: [],
+              rawAttempts: [
+                {
+                  attempt: 1,
+                  iteration: 1,
+                  status: 'failed',
+                  outcome: 'failed',
+                  initialInput: 'failed input',
+                  rawResponse: 'failed output',
+                },
+                {
+                  attempt: 2,
+                  iteration: 2,
+                  status: 'accepted',
+                  outcome: 'accepted',
+                  initialInput: 'accepted input',
+                  rawResponse: 'accepted output',
+                },
+              ],
+            }),
+          ]
+        : [],
+      isLoading: false,
+    }))
+
+    renderCoding({
+      runtime: {
+        beads: [
+          { id: 'bead-1', title: 'Retried raw bead', status: 'done', iteration: 2 },
+        ],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Retried raw bead/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Output' }))
+
+    expect(screen.getByText((content) => content.includes('accepted output'))).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Iteration 2/ })).toHaveAttribute('aria-pressed', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: /Iteration 1/ }))
+
+    expect(screen.getByText((content) => content.includes('failed output'))).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Iteration 1/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Output' })).toBeEnabled()
   })
 
   it('keeps blocked coding reviews on the interrupted bead progress instead of forcing completion', () => {

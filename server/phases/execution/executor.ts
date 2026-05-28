@@ -56,6 +56,26 @@ export interface ExecutionResult {
   iteration: number
   output: string
   errors: string[]
+  rawAttempts?: ExecutionRawAttempt[]
+  errorCodes?: string[]
+  diagnostics?: BlockedErrorDiagnostics | null
+}
+
+export type ExecutionRawAttemptOutcome = 'accepted' | 'rejected' | 'failed' | 'timed_out' | 'cancelled'
+
+export interface ExecutionRawAttempt {
+  attempt: number
+  iteration: number
+  status: ExecutionRawAttemptOutcome
+  outcome: ExecutionRawAttemptOutcome
+  initialInput: string
+  rawResponse?: string
+  modelOutput?: string
+  error?: string
+  validationError?: string
+  failureClass?: string
+  modelId?: string
+  sessionId?: string
   errorCodes?: string[]
   diagnostics?: BlockedErrorDiagnostics | null
 }
@@ -112,6 +132,13 @@ function shouldUseStructuredRetry(result: ReturnType<typeof parseCompletionMarke
 function shouldRememberOpenCodeDiagnostics(result: OpenCodeBlockedErrorDiagnosticsResult): boolean {
   const kind = result.diagnostics?.kind
   return Boolean(kind && kind !== 'runtime' && kind !== 'unknown')
+}
+
+function classifyFailedRawAttempt(reason: ContextWipeReason, errors: string[]): ExecutionRawAttemptOutcome {
+  if (reason === 'iteration_timeout') return 'timed_out'
+  const combined = errors.join('\n')
+  if (/completion marker|validation|structured retry|schema/i.test(combined)) return 'rejected'
+  return 'failed'
 }
 
 function truncateForNote(text: string, maxLength = EXECUTOR_NOTE_TRUNCATION_LENGTH): string {
@@ -295,13 +322,64 @@ export async function executeBead(
   let lastAttemptIteration = startingIteration - 1
   let lastOutput = ''
   const errors: string[] = []
+  const rawAttempts: ExecutionRawAttempt[] = []
   const latestOpenCodeDiagnostics: { current: OpenCodeBlockedErrorDiagnosticsResult | null } = { current: null }
+  const currentIterationOpenCodeDiagnostics: { current: OpenCodeBlockedErrorDiagnosticsResult | null } = { current: null }
   const sessionManager = callbacks?.ticketId ? new SessionManager(adapter) : null
   const structuredRetryCount = normalizeStructuredRetryCount(callbacks?.structuredRetryCount)
+
+  const recordRawAttempt = (input: {
+    iteration: number
+    status: ExecutionRawAttemptOutcome
+    initialInput: string
+    rawResponse?: string
+    errors?: string[]
+    validationError?: string
+    failureClass?: string
+    sessionId?: string | null
+    diagnostics?: BlockedErrorDiagnostics | null
+    errorCodes?: string[]
+  }) => {
+    const attempt = input.iteration - startingIteration + 1
+    const existingIndex = rawAttempts.findIndex((entry) => entry.iteration === input.iteration)
+    const errorText = input.errors?.filter(Boolean).join('\n')
+    const entry: ExecutionRawAttempt = {
+      attempt,
+      iteration: input.iteration,
+      status: input.status,
+      outcome: input.status,
+      initialInput: input.initialInput,
+      ...(input.rawResponse ? { rawResponse: input.rawResponse, modelOutput: input.rawResponse } : {}),
+      ...(errorText ? { error: errorText } : {}),
+      ...(input.validationError ? { validationError: input.validationError } : {}),
+      ...(input.failureClass ? { failureClass: input.failureClass } : {}),
+      ...(callbacks?.model ? { modelId: callbacks.model } : {}),
+      ...(input.sessionId ? { sessionId: input.sessionId } : {}),
+      ...(input.errorCodes && input.errorCodes.length > 0 ? { errorCodes: input.errorCodes } : {}),
+      ...(input.diagnostics ? { diagnostics: input.diagnostics } : {}),
+    }
+
+    if (existingIndex >= 0) {
+      const existing = rawAttempts[existingIndex]!
+      const rawResponse = entry.rawResponse ?? existing.rawResponse
+      const modelOutput = entry.modelOutput ?? existing.modelOutput
+      rawAttempts[existingIndex] = {
+        ...existing,
+        ...entry,
+        initialInput: entry.initialInput || existing.initialInput,
+        ...(rawResponse ? { rawResponse } : {}),
+        ...(modelOutput ? { modelOutput } : {}),
+      }
+      return
+    }
+
+    rawAttempts.push(entry)
+  }
 
   const rememberOpenCodeDiagnostics = (result: OpenCodeBlockedErrorDiagnosticsResult) => {
     if (shouldRememberOpenCodeDiagnostics(result)) {
       latestOpenCodeDiagnostics.current = result
+      currentIterationOpenCodeDiagnostics.current = result
     }
   }
 
@@ -360,17 +438,21 @@ export async function executeBead(
 
   while (maxAttemptIteration == null || iteration <= maxAttemptIteration) {
     lastAttemptIteration = iteration
+    currentIterationOpenCodeDiagnostics.current = null
     throwIfAborted(signal)
     let activeSessionId: string | null = null
     let activeSession: Session | null = null
     const iterationErrors: string[] = []
     let contextWipeReason: ContextWipeReason = 'failure'
     let latestMessages: Message[] = []
+    let iterationInitialInput = ''
+    let iterationOutput = ''
     const deadlineAt = timeout > 0 ? Date.now() + timeout : undefined
 
     try {
       let sessionId = ''
       const promptContent = buildPromptFromTemplate(PROM_CODING, await resolveContextParts(contextParts))
+      iterationInitialInput = promptContent
       const beadPrompt: PromptPart[] = [
         {
           type: 'text',
@@ -452,17 +534,25 @@ export async function executeBead(
         activeSessionId = runResult.session.id
         activeSession = runResult.session
         lastOutput = runResult.response
+        iterationOutput = runResult.response
         latestMessages = runResult.messages
 
         const result = parseCompletionMarker(lastOutput)
         if (result.complete && result.gatesValid) {
+          recordRawAttempt({
+            iteration,
+            status: 'accepted',
+            initialInput: iterationInitialInput,
+            rawResponse: iterationOutput,
+            sessionId: activeSessionId,
+          })
           if (activeSessionId && sessionManager) {
             await sessionManager.completeSession(activeSessionId)
             clearOpenCodePromptDispatchCount(activeSessionId)
             activeSessionId = null
           }
           activeSession = null
-          return { beadId: bead.id, success: true, iteration, output: lastOutput, errors: [] }
+          return { beadId: bead.id, success: true, iteration, output: lastOutput, errors: [], rawAttempts }
         }
 
         const incompleteSummary = result.errors.join(', ') || 'Incomplete'
@@ -641,9 +731,23 @@ export async function executeBead(
 
     const formattedIterationErrors = iterationErrors.map((msg) => `Iteration ${iteration}: ${msg}`)
     errors.push(...formattedIterationErrors)
-
     const contextWipeSession = activeSession
     const contextWipeSessionId = activeSessionId
+    const openCodeDiagnosticsForAttempt = currentIterationOpenCodeDiagnostics.current as OpenCodeBlockedErrorDiagnosticsResult | null
+    const attemptFailureStatus = classifyFailedRawAttempt(contextWipeReason, formattedIterationErrors)
+    recordRawAttempt({
+      iteration,
+      status: attemptFailureStatus,
+      initialInput: iterationInitialInput,
+      rawResponse: iterationOutput,
+      errors: formattedIterationErrors,
+      validationError: attemptFailureStatus === 'rejected' ? formattedIterationErrors.join('\n') : undefined,
+      failureClass: openCodeDiagnosticsForAttempt?.diagnostics?.kind ?? attemptFailureStatus,
+      sessionId: contextWipeSessionId,
+      diagnostics: openCodeDiagnosticsForAttempt?.diagnostics ?? null,
+      errorCodes: openCodeDiagnosticsForAttempt?.errorCodes,
+    })
+
     activeSession = null
     activeSessionId = null
 
@@ -731,6 +835,7 @@ export async function executeBead(
     iteration: lastAttemptIteration,
     output: lastOutput,
     errors,
+    rawAttempts,
     ...(errorCodes.length > 0 ? { errorCodes } : {}),
     ...(openCodeDiagnostics?.diagnostics ? { diagnostics: openCodeDiagnostics.diagnostics } : {}),
   }

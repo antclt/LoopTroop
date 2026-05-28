@@ -610,16 +610,17 @@ describe('OpenCode log canonicalization', () => {
       text: '<BEAD_STATUS>{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}</BEAD_STATUS>',
       streaming: true,
       complete: true,
-    }, state, 'bead-1')
+    }, state, 'bead-1', 2)
     emitOpenCodeStreamEvent('1:T-42', 'T-42', 'CODING', 'openai/gpt-5.4', 'ses-bead', {
       type: 'done',
       sessionId: 'ses-bead',
-    }, state, 'bead-1')
+    }, state, 'bead-1', 2)
 
     expect(getPersistedEntries()).toEqual(expect.arrayContaining([
       expect.objectContaining({
         entryId: 'ses-bead:msg-bead:text',
         beadId: 'bead-1',
+        beadIteration: 2,
         kind: 'text',
         op: 'finalize',
       }),
@@ -644,12 +645,14 @@ describe('OpenCode log canonicalization', () => {
       ],
       createOpenCodeStreamState(),
       'bead-1',
+      3,
     )
 
     expect(getPersistedEntries()).toEqual(expect.arrayContaining([
       expect.objectContaining({
         entryId: 'ses-fallback:msg-fallback:text',
         beadId: 'bead-1',
+        beadIteration: 3,
         kind: 'text',
         op: 'append',
       }),
