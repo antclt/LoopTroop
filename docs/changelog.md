@@ -8,16 +8,20 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added AI-assisted candidate-file auditing before PR creation so unrelated byproducts can be excluded with visible reasons.
 - Added bead-level raw Input and Output inspection with per-iteration history.
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
 
 ### Detailed Changes
 
 #### Added
+- Added candidate-file auditing during pull request creation: final changed files are classified as include, exclude, or review before the branch is pushed; evidence-backed exclusions rewrite the local candidate and are recorded in a `candidate_file_audit` artifact.
+- Added candidate net-diff capture for PR review so the review surface can distinguish the actual final PR diff from cumulative bead activity.
 - Added bead-level `Input` and `Output` tabs in the Coding view, including raw prompt/output formatting, copy actions, line/character/token counts, tooltips, and a version selector for previous bead iterations.
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Changed PR review diff handling to default to the final net diff while keeping bead-level and by-file activity available for audit.
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.
 - Removed the empty artifact spacer between live coding beads and the log viewer, leaving a single separator at that boundary.
 

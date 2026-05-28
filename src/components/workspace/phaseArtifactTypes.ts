@@ -494,6 +494,36 @@ export interface PullRequestReportData {
   mergedAt?: string | null
   closedAt?: string | null
   message?: string
+  candidateFileAudit?: PullRequestCandidateFileAuditData
+}
+
+export interface PullRequestCandidateFileAuditEntry {
+  path: string
+  decision: string
+  reason?: string
+}
+
+export interface PullRequestCandidateFileAuditStats {
+  totalFiles?: number
+  includedFiles?: number
+  excludedFiles?: number
+  reviewedFiles?: number
+}
+
+export interface PullRequestCandidateFileAuditData {
+  status?: string
+  auditedAt?: string
+  baseCommit?: string
+  originalCandidateCommitSha?: string
+  candidateCommitSha?: string | null
+  includedFiles: string[]
+  excludedFiles: string[]
+  ignoredFiles: string[]
+  reviewedFiles: string[]
+  entries: PullRequestCandidateFileAuditEntry[]
+  stats?: PullRequestCandidateFileAuditStats
+  message?: string
+  warnings: string[]
 }
 
 export interface CleanupReportData {
@@ -758,6 +788,175 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return trimmed ? trimmed : undefined
 }
 
+function normalizeCandidateAuditPath(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed ? trimmed : undefined
+  }
+  if (!isRecord(value)) return undefined
+  return normalizeOptionalString(getValueByAliases(value, ['path', 'file', 'filePath', 'file_path']))
+}
+
+function uniqueStrings(values: string[]): string[] {
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
+}
+
+function normalizeCandidateAuditPathList(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return uniqueStrings(value.map(normalizeCandidateAuditPath).filter((path): path is string => Boolean(path)))
+}
+
+function readCandidateAuditReason(reasonMaps: unknown[], path: string): string | undefined {
+  for (const map of reasonMaps) {
+    if (!isRecord(map)) continue
+    const reason = normalizeOptionalString(map[path])
+    if (reason) return reason
+  }
+  return undefined
+}
+
+function normalizeCandidateAuditEntries(
+  value: unknown,
+  fallbackDecision: string,
+  reasonMaps: unknown[] = [],
+): PullRequestCandidateFileAuditEntry[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((entry): PullRequestCandidateFileAuditEntry | null => {
+      const path = normalizeCandidateAuditPath(entry)
+      if (!path) return null
+
+      if (!isRecord(entry)) {
+        const reason = readCandidateAuditReason(reasonMaps, path)
+        return {
+          path,
+          decision: fallbackDecision,
+          ...(reason ? { reason } : {}),
+        }
+      }
+
+      const decision = normalizeOptionalString(getValueByAliases(entry, ['decision', 'intent', 'classification', 'status']))
+        ?? fallbackDecision
+      const reason = normalizeOptionalString(getValueByAliases(entry, ['reason', 'rationale', 'explanation', 'message']))
+        ?? readCandidateAuditReason(reasonMaps, path)
+
+      return {
+        path,
+        decision,
+        ...(reason ? { reason } : {}),
+      }
+    })
+    .filter((entry): entry is PullRequestCandidateFileAuditEntry => entry !== null)
+}
+
+function normalizeCandidateAuditStats(value: unknown): PullRequestCandidateFileAuditStats | undefined {
+  if (!isRecord(value)) return undefined
+  const stats: PullRequestCandidateFileAuditStats = {}
+  const totalFiles = normalizeNumber(getValueByAliases(value, ['totalFiles', 'total_files']))
+  const includedFiles = normalizeNumber(getValueByAliases(value, ['includedFiles', 'included_files']))
+  const excludedFiles = normalizeNumber(getValueByAliases(value, ['excludedFiles', 'excluded_files']))
+  const reviewedFiles = normalizeNumber(getValueByAliases(value, ['reviewedFiles', 'reviewed_files']))
+
+  if (totalFiles != null) stats.totalFiles = totalFiles
+  if (includedFiles != null) stats.includedFiles = includedFiles
+  if (excludedFiles != null) stats.excludedFiles = excludedFiles
+  if (reviewedFiles != null) stats.reviewedFiles = reviewedFiles
+
+  return Object.keys(stats).length > 0 ? stats : undefined
+}
+
+function isIncludedCandidateAuditDecision(decision: string): boolean {
+  const normalized = decision.toLowerCase()
+  return normalized === 'include' || normalized === 'included'
+}
+
+function isExcludedCandidateAuditDecision(decision: string): boolean {
+  const normalized = decision.toLowerCase()
+  return normalized === 'exclude' || normalized === 'excluded' || normalized === 'ignore' || normalized === 'ignored'
+}
+
+function isReviewedCandidateAuditDecision(decision: string): boolean {
+  const normalized = decision.toLowerCase()
+  return normalized === 'review' || normalized === 'reviewed'
+}
+
+function normalizeCandidateFileAudit(value: unknown): PullRequestCandidateFileAuditData | undefined {
+  if (!isRecord(value)) return undefined
+
+  const ignoredReasonMaps = [
+    getValueByAliases(value, ['ignoredReasons', 'ignored_reasons']),
+    getValueByAliases(value, ['excludedReasons', 'excluded_reasons']),
+  ]
+  const includedEntries = normalizeCandidateAuditEntries(
+    getValueByAliases(value, ['includedFiles', 'included_files', 'candidateFiles', 'candidate_files']),
+    'include',
+  )
+  const excludedEntries = normalizeCandidateAuditEntries(
+    getValueByAliases(value, ['excludedFiles', 'excluded_files', 'excludedCandidateFiles', 'excluded_candidate_files']),
+    'exclude',
+    ignoredReasonMaps,
+  )
+  const ignoredEntries = normalizeCandidateAuditEntries(
+    getValueByAliases(value, ['ignoredFiles', 'ignored_files', 'ignoredCandidateFiles', 'ignored_candidate_files']),
+    'ignored',
+    ignoredReasonMaps,
+  )
+  const reviewedEntries = normalizeCandidateAuditEntries(
+    getValueByAliases(value, ['reviewedFiles', 'reviewed_files']),
+    'review',
+  )
+  const recordedEntries = normalizeCandidateAuditEntries(value.entries, 'review', ignoredReasonMaps)
+  const entries = [...recordedEntries]
+  const seenEntries = new Set(entries.map((entry) => `${entry.decision.toLowerCase()}:${entry.path}`))
+
+  for (const entry of [...includedEntries, ...excludedEntries, ...ignoredEntries, ...reviewedEntries]) {
+    const key = `${entry.decision.toLowerCase()}:${entry.path}`
+    if (seenEntries.has(key)) continue
+    seenEntries.add(key)
+    entries.push(entry)
+  }
+
+  const includedFiles = uniqueStrings([
+    ...normalizeCandidateAuditPathList(getValueByAliases(value, ['includedFiles', 'included_files', 'candidateFiles', 'candidate_files'])),
+    ...entries.filter((entry) => isIncludedCandidateAuditDecision(entry.decision)).map((entry) => entry.path),
+  ])
+  const ignoredFiles = uniqueStrings([
+    ...normalizeCandidateAuditPathList(getValueByAliases(value, ['ignoredFiles', 'ignored_files', 'ignoredCandidateFiles', 'ignored_candidate_files'])),
+    ...entries.filter((entry) => {
+      const normalized = entry.decision.toLowerCase()
+      return normalized === 'ignore' || normalized === 'ignored'
+    }).map((entry) => entry.path),
+  ])
+  const excludedFiles = uniqueStrings([
+    ...normalizeCandidateAuditPathList(getValueByAliases(value, ['excludedFiles', 'excluded_files', 'excludedCandidateFiles', 'excluded_candidate_files'])),
+    ...ignoredFiles,
+    ...entries.filter((entry) => isExcludedCandidateAuditDecision(entry.decision)).map((entry) => entry.path),
+  ])
+  const reviewedFiles = uniqueStrings([
+    ...normalizeCandidateAuditPathList(getValueByAliases(value, ['reviewedFiles', 'reviewed_files'])),
+    ...entries.filter((entry) => isReviewedCandidateAuditDecision(entry.decision)).map((entry) => entry.path),
+  ])
+  const stats = normalizeCandidateAuditStats(value.stats)
+  const candidateCommitSha = normalizeNullableString(getValueByAliases(value, ['candidateCommitSha', 'candidate_commit_sha']))
+
+  return {
+    status: normalizeOptionalString(value.status),
+    auditedAt: normalizeOptionalString(getValueByAliases(value, ['auditedAt', 'audited_at', 'capturedAt', 'captured_at'])),
+    baseCommit: normalizeOptionalString(getValueByAliases(value, ['baseCommit', 'base_commit'])),
+    originalCandidateCommitSha: normalizeOptionalString(getValueByAliases(value, ['originalCandidateCommitSha', 'original_candidate_commit_sha'])),
+    ...(candidateCommitSha !== undefined ? { candidateCommitSha } : {}),
+    includedFiles,
+    excludedFiles,
+    ignoredFiles,
+    reviewedFiles,
+    entries,
+    ...(stats ? { stats } : {}),
+    message: normalizeOptionalString(value.message),
+    warnings: normalizeStringArray(value.warnings),
+  }
+}
+
 export function parsePullRequestReport(content: string): PullRequestReportData | null {
   const parsed = tryParseStructuredContent(content)
   if (!isRecord(parsed)) return null
@@ -775,6 +974,7 @@ export function parsePullRequestReport(content: string): PullRequestReportData |
     && !('title' in parsed)
     && !('body' in parsed)
     && !('message' in parsed)
+    && !('candidateFileAudit' in parsed)
   ) {
     return null
   }
@@ -802,6 +1002,7 @@ export function parsePullRequestReport(content: string): PullRequestReportData |
     mergedAt: normalizeNullableString(parsed.mergedAt),
     closedAt: normalizeNullableString(parsed.closedAt),
     message: normalizeOptionalString(parsed.message),
+    candidateFileAudit: normalizeCandidateFileAudit(parsed.candidateFileAudit),
   }
 }
 

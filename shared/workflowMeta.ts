@@ -874,8 +874,10 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   CREATING_PULL_REQUEST: {
-    overview: 'LoopTroop pushes the final candidate SHA to the remote ticket branch and creates or updates a draft pull request on GitHub. This is an automatic GitHub-sync phase: it packages the final diff, the ticket intent, and the validation results into a reviewer-facing draft PR without merging anything yet.',
+    overview: 'LoopTroop audits the final candidate files, pushes the approved candidate SHA to the remote ticket branch, and creates or updates a draft pull request on GitHub. This is an automatic GitHub-sync phase: it packages the final diff, the ticket intent, validation results, and any ignored-file decisions into a reviewer-facing draft PR without merging anything yet.',
     steps: [
+      'Candidate File Audit: Before any remote side effects, the locked main implementer classifies every final changed file as include, exclude, or review using ticket scope, diff metadata, final-test results, and conservative generated-file rules. Exclusions require evidence; generated or tracked files are kept unless the audit can explain why they are unrelated byproducts.',
+      'Filtered Candidate Rewrite: If the audit excludes files, LoopTroop rewrites the local candidate from the merge base using only include/review files, records the ignored files and reasons in `candidate_file_audit`, updates the integration handoff SHA, and captures the final net diff in `candidate_diff` before pushing.',
       'PR Drafting: Before any git or GitHub side effects, the locked main implementer generates a draft PR title and body in a fresh session under the configured AI Response Timeout using only ticket details and PRD as context, with integration report, final test report, diff stat, changed-file status, and diff patch appended as explicit prompt sections. The interview and beads artifacts are not fed to PR drafting.',
       'PR Draft Validation: The draft title/body response is parsed as structured output before branch push or PR create/update. If parsing fails, the ticket\'s configured Structured Output Retries count applies; validation errors may use a continued session prompt, while empty/provider/session failures use a fresh session. If parsing still fails, LoopTroop records diagnostics/raw attempts and falls back to the deterministic title/body instead of blocking the ticket.',
       'Remote Candidate Push: LoopTroop force-pushes the final candidate SHA to the remote ticket branch using a lease, replacing the bead-level backup branch state with the single reviewable candidate commit. Internal push logging records the final result without progress output.',
@@ -885,6 +887,8 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     outputs: [
       'Pull Request report artifact with PR URL, state, number, generated title/body, head SHA, and timestamps.',
+      'Candidate file audit artifact listing included, excluded, and reviewed files with reasons.',
+      'Candidate net diff artifact used by PR review as the default diff view.',
       'Remote ticket branch updated to the final candidate commit.',
       'A draft GitHub pull request ready for human review.',
     ],
@@ -894,23 +898,25 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
     notes: [
       'Context available: Ticket Details + PRD, plus explicit integration report, final test report, diff stat, diff name/status, and diff patch sections.',
-      'PR drafting starts in a fresh session. If a matching active CREATING_PULL_REQUEST session exists, LoopTroop aborts and abandons it before creating the first draft session; AI Response Timeout bounds both the initial draft and structured retry prompts, and the draft session is completed before remote side effects begin.',
+      'Candidate file audit starts in its own fresh session and falls back to including all files if the audit output cannot be parsed, so malformed audit text cannot silently remove files.',
+      'PR drafting starts in a fresh session after candidate-file auditing. If a matching active CREATING_PULL_REQUEST session exists, LoopTroop aborts and abandons it before creating the first draft session; AI Response Timeout bounds both the initial draft and structured retry prompts, and the draft session is completed before remote side effects begin.',
       'Structured PR draft retries happen before the remote branch push and before PR creation/update. PR draft parse exhaustion records diagnostics and uses fallback text; git/GitHub failures still route to Blocked Error without auto retry.',
       'This is the GitHub-native handoff point between execution and review.',
       'The PR is draft-first by design so later automated review or human review can happen before merge.',
     ],
   },
   WAITING_PR_REVIEW: {
-    overview: 'LoopTroop stops automation and waits for you to review the draft pull request before finishing the ticket. This is the last human gate: you can inspect the PR in GitHub, review the candidate diff and test results locally, and then either merge the PR or finish the ticket without merging.',
+    overview: 'LoopTroop stops automation and waits for you to review the draft pull request before finishing the ticket. This is the last human gate: you can inspect the PR in GitHub, review the net candidate diff, bead activity, ignored-file audit, and test results locally, and then either merge the PR or finish the ticket without merging.',
     steps: [
-      'Draft PR Presentation: The workspace shows the PR URL, current PR state, candidate SHA, branch/base refs, integration report, and final test summary.',
+      'Draft PR Presentation: The workspace shows the PR URL, current PR state, candidate SHA, branch/base refs, integration report, final test summary, candidate-file audit, and final net diff.',
+      'Diff Review Modes: The bead commits modal defaults to Net Diff for the actual base-to-candidate PR review surface, while By Bead preserves cumulative implementation activity and By File groups repeated bead touches.',
       'Manual Review: You inspect the draft PR and the local result. There is no time limit; LoopTroop waits for your decision.',
       'Merge Path: Choosing Merge PR & Finish marks the PR ready if needed and merges it into the base branch on GitHub. Once GitHub reports the PR merged, LoopTroop verifies the remote base branch contains the candidate commit and leaves your local checkout untouched.',
       'Finish Without Merge Path: Choosing Finish Without Merge preserves the PR and remote ticket branch exactly as they are, then proceeds directly to cleanup and terminal completion.',
       'External Merge Detection: If the PR is merged manually in GitHub while this phase is open, LoopTroop detects that during polling, skips a second remote merge call, verifies the remote base branch, and continues automatically.',
     ],
     outputs: [
-      'A stable draft-PR review gate that exposes the final PR metadata, test results, and integration summary.',
+      'A stable draft-PR review gate that exposes the final PR metadata, test results, integration summary, ignored-file audit, and net candidate diff.',
       'A merge report artifact recording whether the ticket completed as merged or closed unmerged.',
       'An explicit human decision before cleanup and terminal completion.',
     ],
@@ -1415,7 +1421,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'CREATING_PULL_REQUEST',
     label: 'Creating Pull Request',
-    description: 'Drafting and validating PR title/body under AI Response Timeout before any remote side effects, then pushing the final candidate branch and creating or updating the draft PR without retrying git/GitHub operations.',
+    description: 'Auditing candidate files, recording ignored-file reasons, drafting PR title/body under AI Response Timeout, then pushing the final candidate branch and creating or updating the draft PR.',
     details: WORKFLOW_PHASE_DETAILS.CREATING_PULL_REQUEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1427,7 +1433,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_PR_REVIEW',
     label: 'Reviewing Pull Request',
-    description: 'Review the draft pull request on GitHub, then choose Merge PR & Finish or Finish Without Merge; merge/sync commands are audited as concise CMD summaries before cleanup.',
+    description: 'Review the draft PR, final net diff, bead activity views, ignored-file audit, and test results before choosing Merge PR & Finish or Finish Without Merge.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_PR_REVIEW,
     kanbanPhase: 'needs_input',
     groupId: 'post_implementation',

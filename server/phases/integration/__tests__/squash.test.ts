@@ -3,7 +3,7 @@ import { afterAll, describe, expect, it } from 'vitest'
 import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { createFixtureRepoManager } from '../../../test/fixtureRepo'
-import { prepareSquashCandidate, pushSquashedCandidate } from '../squash'
+import { prepareSquashCandidate, pushSquashedCandidate, rewriteCandidateCommitWithFiles } from '../squash'
 import { TEST } from '../../../test/factories'
 
 const BRANCH = TEST.externalId
@@ -133,6 +133,38 @@ describe('prepareSquashCandidate', () => {
     const showFiles = git(repoDir, ['show', '--pretty=', '--name-only', 'HEAD'])
     expect(showFiles).toContain('feature.ts')
     expect(showFiles).not.toContain('.ticket/prd.yaml')
+  })
+
+  it('rewrites a candidate commit with only AI-audited included files', () => {
+    const repoDir = repoManager.createRepo()
+
+    git(repoDir, ['checkout', '-b', BRANCH])
+    writeFileSync(resolve(repoDir, 'src.ts'), 'export const feature = true\n')
+    writeFileSync(resolve(repoDir, 'tmp.log'), 'temporary output\n')
+    writeFileSync(resolve(repoDir, 'generated.js'), 'generated output\n')
+    git(repoDir, ['add', 'src.ts', 'tmp.log', 'generated.js'])
+    git(repoDir, ['commit', '-m', 'candidate with byproducts'])
+
+    const candidate = git(repoDir, ['rev-parse', 'HEAD'])
+    const mergeBase = git(repoDir, ['merge-base', 'HEAD', 'main'])
+    const result = rewriteCandidateCommitWithFiles(
+      repoDir,
+      mergeBase,
+      candidate,
+      'Filtered candidate',
+      BRANCH,
+      ['src.ts', 'generated.js'],
+    )
+
+    expect(result.success).toBe(true)
+    expect(result.commitHash).toMatch(/^[0-9a-f]{40}$/)
+    expect(result.commitHash).not.toBe(candidate)
+
+    const showFiles = git(repoDir, ['show', '--pretty=', '--name-only', 'HEAD'])
+    expect(showFiles).toContain('src.ts')
+    expect(showFiles).toContain('generated.js')
+    expect(showFiles).not.toContain('tmp.log')
+    expect(git(repoDir, ['status', '--porcelain'])).toBe('')
   })
 })
 

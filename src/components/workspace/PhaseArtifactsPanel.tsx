@@ -13,6 +13,7 @@ import {
 import type { ArtifactDef, CouncilOutcome, ViewingArtifact, ViewingArtifactSelection } from './phaseArtifactTypes'
 import {
   tryParseCouncilResult,
+  tryParseStructuredContent,
   extractDraftDetail,
   extractCompiledInterviewDetail,
   extractCanonicalInterviewDetail,
@@ -28,6 +29,10 @@ import {
   shouldCollapseVotingMemberArtifacts,
 } from './phaseArtifactTypes'
 import {
+  CANDIDATE_DIFF_ARTIFACT,
+  CANDIDATE_FILE_AUDIT_ARTIFACT,
+} from '@shared/candidateFileAudit'
+import {
   buildUiArtifactCompanionArtifactType,
 } from '@shared/artifactCompanions'
 import {
@@ -39,10 +44,39 @@ import { ArtifactContent, RawContentView, InterviewAnswersView, PrdDraftView } f
 import { ArtifactList } from './ArtifactList'
 import { ArtifactTypeFilter } from './ArtifactTypeFilter'
 import { getSupplementalArtifacts } from './supplementalArtifacts'
-import { parseDiffStats } from './diffUtils'
+import { getBeadCommitsDiffStats, serializeBeadCommitsDiffContent } from './diffUtils'
 
 // Re-export viewer components so existing imports from this module continue to work
 export { RawContentView, InterviewAnswersView, PrdDraftView }
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function attachCandidateFileAuditToPullRequestReport(reportContent: string | null | undefined, auditContent: string | null | undefined): string | null {
+  if (!reportContent) return null
+  if (!auditContent?.trim()) return reportContent
+
+  const report = tryParseStructuredContent(reportContent)
+  if (!isRecord(report) || 'candidateFileAudit' in report) return reportContent
+
+  const audit = tryParseStructuredContent(auditContent)
+  if (!isRecord(audit)) return reportContent
+
+  return JSON.stringify({
+    ...report,
+    candidateFileAudit: audit,
+  }, null, 2)
+}
+
+function extractCandidateDiffPatch(content: string | null | undefined): string | null {
+  if (!content?.trim()) return null
+  const parsed = tryParseStructuredContent(content)
+  if (isRecord(parsed) && typeof parsed.patch === 'string' && parsed.patch.trim()) {
+    return parsed.patch.trim()
+  }
+  return content.trim()
+}
 
 interface PhaseArtifactsPanelProps {
   phase: string
@@ -333,11 +367,32 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
         ?? null
     }
     if (artifactDef.id === 'bead-commits') {
-      const diffs = reversedArtifacts
+      const beads = reversedArtifacts
         .filter((a) => a.artifactType.startsWith('bead_diff:'))
-        .map((a) => a.content?.trim())
-        .filter(Boolean)
-      return diffs.length > 0 ? diffs.join('\n\n') : null
+        .map((artifact) => {
+          const diff = artifact.content?.trim()
+          if (!diff) return null
+          const beadId = artifact.artifactType.slice('bead_diff:'.length).trim()
+          return {
+            beadId: beadId || `bead-${artifact.id}`,
+            diff,
+            createdAt: artifact.createdAt,
+            updatedAt: artifact.updatedAt,
+          }
+        })
+        .filter((entry): entry is NonNullable<typeof entry> => entry !== null)
+      const netDiff = extractCandidateDiffPatch(
+        findExactArtifact(CANDIDATE_DIFF_ARTIFACT)?.content
+        ?? reversedArtifacts.find((artifact) => artifact.artifactType === CANDIDATE_DIFF_ARTIFACT)?.content,
+      )
+      if (beads.length === 0 && !netDiff) return null
+      return serializeBeadCommitsDiffContent({ netDiff, beads })
+    }
+    if (artifactDef.id === 'pull-request-report') {
+      const reportArtifact = resolveStaticArtifact(artifactDef, phase, reversedArtifacts)
+      const auditContent = findExactArtifact(CANDIDATE_FILE_AUDIT_ARTIFACT)?.content
+        ?? reversedArtifacts.find((artifact) => artifact.artifactType === CANDIDATE_FILE_AUDIT_ARTIFACT)?.content
+      return attachCandidateFileAuditToPullRequestReport(reportArtifact?.content, auditContent)
     }
 
     const match = resolveStaticArtifact(artifactDef, phase, reversedArtifacts)
@@ -425,7 +480,7 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
     const council = tryParseCouncilResult(content)
 
     if (artifact.id === 'bead-commits') {
-      const stats = parseDiffStats(content)
+      const stats = getBeadCommitsDiffStats(content)
       return {
         outcome: 'completed',
         detail: (

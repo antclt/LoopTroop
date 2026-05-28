@@ -5,6 +5,7 @@ import { encode } from 'gpt-tokenizer'
 import { deriveStructuredInterventions } from '@shared/structuredInterventions'
 import { ArtifactContent, CollapsibleSection, InterviewAnswersView } from '../ArtifactContentViewer'
 import { buildArtifactProcessingNoticeCopy } from '../artifactProcessingNotice'
+import { serializeBeadCommitsDiffContent } from '../diffUtils'
 import type { ArtifactStructuredOutputData } from '../phaseArtifactTypes'
 import { LogContext } from '@/context/logContextDef'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
@@ -369,6 +370,64 @@ describe('ArtifactContentViewer', () => {
       'whitespace-pre-wrap',
       'break-all',
     )
+  })
+
+  it('defaults bead commits to the final net diff and keeps bead/file activity views available', () => {
+    render(
+      <ArtifactContent
+        artifactId="bead-commits"
+        content={serializeBeadCommitsDiffContent({
+          netDiff: [
+            'diff --git a/src/final.ts b/src/final.ts',
+            '--- a/src/final.ts',
+            '+++ b/src/final.ts',
+            '@@ -1 +1 @@',
+            '-draft',
+            '+final',
+          ].join('\n'),
+          beads: [
+            {
+              beadId: 'bead-1',
+              label: 'First pass',
+              diff: [
+                'diff --git a/src/final.ts b/src/final.ts',
+                '--- a/src/final.ts',
+                '+++ b/src/final.ts',
+                '@@ -1 +1 @@',
+                '-draft',
+                '+middle',
+              ].join('\n'),
+            },
+            {
+              beadId: 'bead-2',
+              label: 'Second pass',
+              diff: [
+                'diff --git a/src/final.ts b/src/final.ts',
+                '--- a/src/final.ts',
+                '+++ b/src/final.ts',
+                '@@ -1 +1 @@',
+                '-middle',
+                '+final',
+              ].join('\n'),
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Net Diff' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'By Bead' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'By File' })).toBeInTheDocument()
+    expect(screen.getByText('Final PR net diff')).toBeInTheDocument()
+    expect(screen.queryByText('Cumulative bead activity')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'By Bead' }))
+    expect(screen.getByText('Cumulative bead activity')).toBeInTheDocument()
+    expect(screen.getByText(/bead-1/)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'By File' }))
+    expect(screen.getByText('Grouped bead file touches')).toBeInTheDocument()
+    expect(screen.getByText(/touched in 2 beads/)).toBeInTheDocument()
   })
 
   it('hides the interview summary when the canonical interview summary is empty', () => {
@@ -3585,6 +3644,60 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('Generated PR Description')).toBeInTheDocument()
     expect(screen.getByText('Adds the scoped theme regression test.')).toBeInTheDocument()
     expect(screen.getByText('npm test -- src/theme-scope.test.js')).toBeInTheDocument()
+  })
+
+  it('renders ignored candidate files and reasons in pull request reports', () => {
+    render(
+      <ArtifactContent
+        artifactId="pull-request-report"
+        phase="CREATING_PULL_REQUEST"
+        content={JSON.stringify({
+          status: 'passed',
+          completedAt: '2026-04-10T15:58:47.116Z',
+          candidateCommitSha: 'filtered123',
+          prUrl: 'https://github.com/looptroop-ai/pocketbase-master/pull/42',
+          prState: 'draft',
+          title: 'POBA-9: t13',
+          body: '## Summary\n- Adds the scoped theme regression test.',
+          candidateFileAudit: {
+            status: 'passed',
+            includedFiles: ['src/feature.ts'],
+            excludedFiles: ['tmp/output.log'],
+            reviewedFiles: ['dist/bundle.js'],
+            entries: [
+              {
+                path: 'src/feature.ts',
+                decision: 'include',
+                reason: 'Implements the requested feature.',
+              },
+              {
+                path: 'tmp/output.log',
+                decision: 'exclude',
+                reason: 'Temporary test log output.',
+              },
+              {
+                path: 'dist/bundle.js',
+                decision: 'review',
+                reason: 'Generated tracked artifact kept for review.',
+              },
+            ],
+            stats: {
+              totalFiles: 3,
+              includedFiles: 2,
+              excludedFiles: 1,
+              reviewedFiles: 1,
+            },
+            message: 'Candidate file audit excluded 1 file from the final PR.',
+            warnings: [],
+          },
+        })}
+      />,
+    )
+
+    expect(screen.getByText('Candidate File Audit')).toBeInTheDocument()
+    expect(screen.getByText('tmp/output.log')).toBeInTheDocument()
+    expect(screen.getByText('Temporary test log output.')).toBeInTheDocument()
+    expect(screen.getByText('Reviewed')).toBeInTheDocument()
   })
 
   it('does not render unsafe pull request report URLs as links', () => {

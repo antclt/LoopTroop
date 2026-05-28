@@ -2,7 +2,13 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BeadDiffViewer } from '../BeadDiffViewer'
-import { computeLineNumbersWithWordDiff, parseDiffStats } from '../diffUtils'
+import {
+  computeLineNumbersWithWordDiff,
+  groupFileDiffsByPath,
+  parseBeadCommitsDiffContent,
+  parseDiffStats,
+  serializeBeadCommitsDiffContent,
+} from '../diffUtils'
 import { TEST } from '@/test/factories'
 
 function renderBeadDiffViewer() {
@@ -92,6 +98,83 @@ describe('parseDiffStats', () => {
     expect(numbered[1]?.wordDiffSegments?.filter((segment) => segment.changed).map((segment) => segment.text)).toEqual(['draft'])
     expect(numbered[2]?.wordDiffSegments?.filter((segment) => segment.changed).map((segment) => segment.text)).toEqual(['refined'])
     expect(numbered[4]?.wordDiffSegments).toBeUndefined()
+  })
+
+  it('keeps net diff stats separate from cumulative bead touches', () => {
+    const netDiff = [
+      'diff --git a/src/feature.ts b/src/feature.ts',
+      '--- a/src/feature.ts',
+      '+++ b/src/feature.ts',
+      '@@ -1 +1 @@',
+      '-old',
+      '+new',
+    ].join('\n')
+    const content = serializeBeadCommitsDiffContent({
+      netDiff,
+      beads: [
+        {
+          beadId: 'bead-1',
+          diff: [
+            'diff --git a/src/feature.ts b/src/feature.ts',
+            '--- a/src/feature.ts',
+            '+++ b/src/feature.ts',
+            '@@ -1 +1 @@',
+            '-old',
+            '+middle',
+          ].join('\n'),
+        },
+        {
+          beadId: 'bead-2',
+          diff: [
+            'diff --git a/src/feature.ts b/src/feature.ts',
+            '--- a/src/feature.ts',
+            '+++ b/src/feature.ts',
+            '@@ -1 +1 @@',
+            '-middle',
+            '+new',
+          ].join('\n'),
+        },
+      ],
+    })
+
+    const parsed = parseBeadCommitsDiffContent(content)
+    expect(parseDiffStats(parsed.netDiff ?? '')).toEqual({ files: 1, additions: 1, deletions: 1 })
+    expect(parseDiffStats(parsed.beads.map((bead) => bead.diff).join('\n\n'))).toEqual({ files: 2, additions: 2, deletions: 2 })
+  })
+
+  it('groups repeated bead file touches by path', () => {
+    const groups = groupFileDiffsByPath([
+      {
+        beadId: 'bead-1',
+        diff: [
+          'diff --git a/src/feature.ts b/src/feature.ts',
+          '--- a/src/feature.ts',
+          '+++ b/src/feature.ts',
+          '@@ -1 +1 @@',
+          '-old',
+          '+middle',
+        ].join('\n'),
+      },
+      {
+        beadId: 'bead-2',
+        diff: [
+          'diff --git a/src/feature.ts b/src/feature.ts',
+          '--- a/src/feature.ts',
+          '+++ b/src/feature.ts',
+          '@@ -1 +1 @@',
+          '-middle',
+          '+new',
+        ].join('\n'),
+      },
+    ])
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({
+      filename: 'src/feature.ts',
+      additions: 2,
+      deletions: 2,
+    })
+    expect(groups[0]?.occurrences.map((occurrence) => occurrence.beadId)).toEqual(['bead-1', 'bead-2'])
   })
 })
 

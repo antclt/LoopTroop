@@ -14,6 +14,17 @@ import { throwIfAborted } from '../../council/types'
 import { formatPromptText, runOpenCodePrompt, runOpenCodeSessionPrompt } from '../runOpenCodePrompt'
 import { buildMinimalContext, type TicketState } from '../../opencode/contextBuilder'
 import { SessionManager } from '../../opencode/sessionManager'
+import { rewriteCandidateCommitWithFiles } from '../../phases/integration/squash'
+import {
+  buildCandidateFileAuditPrompt,
+  buildCandidateFileAuditReport,
+  buildIncludeAllCandidateFileAudit,
+  CANDIDATE_DIFF_ARTIFACT,
+  CANDIDATE_FILE_AUDIT_ARTIFACT,
+  parseCandidateChangedFiles,
+  parseCandidateFileAuditResponse,
+  type CandidateFileAuditReport,
+} from '../../phases/integration/candidateFileAudit'
 import { pushBranchRef } from '../../git/push'
 import {
   captureGitRecoveryReceipt,
@@ -81,6 +92,7 @@ export interface PullRequestReport {
   prHeadSha: string | null
   title: string | null
   body: string | null
+  candidateFileAudit?: CandidateFileAuditReport | null
   structuredOutput?: StructuredOutputMetadata
   rawAttempts?: RawAttempt[]
   createdAt: string | null
@@ -88,6 +100,18 @@ export interface PullRequestReport {
   mergedAt: string | null
   closedAt: string | null
   message: string
+}
+
+export interface CandidateDiffReport {
+  status: 'passed'
+  capturedAt: string
+  baseCommit: string
+  candidateCommitSha: string
+  stat: string
+  nameStatus: string
+  patch: string
+  patchTruncated: boolean
+  patchError: string | null
 }
 
 export interface MergeCompletionReport {
@@ -224,12 +248,7 @@ export function buildPullRequestPrompt(input: {
   diffNameStatus: string
   diffPatch: string
 }): string {
-  const contextSections = input.contextParts
-    .map((part) => {
-      const label = part.source ?? 'context'
-      return `### ${label}\n${part.content.trim() || '[empty]'}`
-    })
-    .join('\n\n')
+  const contextSections = formatContextSections(input.contextParts)
 
   return [
     'You are the main implementer who just finished this ticket and now need to write the draft pull request.',
@@ -264,6 +283,15 @@ export function buildPullRequestPrompt(input: {
   ].join('\n')
 }
 
+function formatContextSections(contextParts: Array<{ source?: string; content: string }>): string {
+  return contextParts
+    .map((part) => {
+      const label = part.source ?? 'context'
+      return `### ${label}\n${part.content.trim() || '[empty]'}`
+    })
+    .join('\n\n')
+}
+
 function buildPullRequestReport(input: {
   baseBranch: string
   headBranch: string
@@ -271,6 +299,7 @@ function buildPullRequestReport(input: {
   pr: PullRequestInfo
   title: string
   body: string
+  candidateFileAudit?: CandidateFileAuditReport | null
   structuredOutput?: StructuredOutputMetadata
   rawAttempts?: RawAttempt[]
   message: string
@@ -287,6 +316,7 @@ function buildPullRequestReport(input: {
     prHeadSha: input.pr.headRefOid,
     title: input.title,
     body: input.body,
+    ...(input.candidateFileAudit ? { candidateFileAudit: input.candidateFileAudit } : {}),
     ...(input.structuredOutput ? { structuredOutput: input.structuredOutput } : {}),
     ...(input.rawAttempts && input.rawAttempts.length > 0 ? { rawAttempts: input.rawAttempts } : {}),
     createdAt: input.pr.createdAt,
@@ -310,7 +340,7 @@ function readIntegrationArtifact(ticketId: string) {
   const parsed = JSON.parse(artifact.content) as {
     candidateCommitSha?: unknown
     mergeBase?: unknown
-  }
+  } & Record<string, unknown>
   const candidateCommitSha = typeof parsed.candidateCommitSha === 'string' && parsed.candidateCommitSha.trim().length > 0
     ? parsed.candidateCommitSha.trim()
     : null
@@ -324,8 +354,181 @@ function readIntegrationArtifact(ticketId: string) {
 
   return {
     raw: artifact.content,
+    record: parsed,
     candidateCommitSha,
     mergeBase,
+  }
+}
+
+function buildCandidateDiffReport(input: {
+  baseCommit: string
+  candidateCommitSha: string
+  diff: ReturnType<typeof readGitDiff>
+}): CandidateDiffReport {
+  return {
+    status: 'passed',
+    capturedAt: new Date().toISOString(),
+    baseCommit: input.baseCommit,
+    candidateCommitSha: input.candidateCommitSha,
+    stat: input.diff.stat,
+    nameStatus: input.diff.nameStatus,
+    patch: input.diff.patch,
+    patchTruncated: input.diff.patchTruncated,
+    patchError: input.diff.patchError,
+  }
+}
+
+function persistIntegrationReportWithAudit(input: {
+  ticketId: string
+  integrationRecord: Record<string, unknown>
+  candidateCommitSha: string
+  candidateFileAudit: CandidateFileAuditReport
+}): string {
+  const nextRecord = {
+    ...input.integrationRecord,
+    candidateCommitSha: input.candidateCommitSha,
+    candidateFileAudit: input.candidateFileAudit,
+  }
+  const content = JSON.stringify(nextRecord)
+  upsertLatestPhaseArtifact(input.ticketId, 'integration_report', 'INTEGRATING_CHANGES', content)
+  return content
+}
+
+async function runCandidateFileAudit(input: {
+  ticketId: string
+  context: TicketContext
+  worktreePath: string
+  fallbackTitle: string
+  contextParts: Array<{ source?: string; content: string }>
+  integrationRaw: string
+  finalTestReport: string
+  diff: ReturnType<typeof readGitDiff>
+  mergeBase: string
+  candidateCommitSha: string
+  model: string
+  variant?: string
+  timeoutMs: number
+  signal?: AbortSignal
+}): Promise<CandidateFileAuditReport> {
+  const changedFiles = parseCandidateChangedFiles(input.diff.nameStatus)
+  if (changedFiles.length === 0) {
+    return buildCandidateFileAuditReport({
+      status: 'passed',
+      baseCommit: input.mergeBase,
+      originalCandidateCommitSha: input.candidateCommitSha,
+      candidateCommitSha: input.candidateCommitSha,
+      entries: [],
+    })
+  }
+
+  const prompt = buildCandidateFileAuditPrompt({
+    fallbackTitle: input.fallbackTitle,
+    contextSections: formatContextSections(input.contextParts),
+    integrationReport: input.integrationRaw,
+    finalTestReport: input.finalTestReport,
+    diffStat: input.diff.stat,
+    diffNameStatus: input.diff.nameStatus,
+    diffPatch: truncateText(input.diff.patch, MAX_DIFF_PATCH_LENGTH),
+  })
+  const streamState = createOpenCodeStreamState()
+  let sessionId = ''
+
+  try {
+    const auditResult = await runOpenCodePrompt({
+      adapter,
+      projectPath: input.worktreePath,
+      parts: [{ type: 'text', content: prompt }],
+      signal: input.signal,
+      timeoutMs: input.timeoutMs,
+      timeoutKind: 'ai_response',
+      model: input.model,
+      variant: input.variant,
+      toolPolicy: 'disabled',
+      sessionOwnership: {
+        ticketId: input.ticketId,
+        phase: 'CREATING_PULL_REQUEST',
+        phaseAttempt: 1,
+        forceFresh: true,
+        memberId: input.model,
+        step: 'candidate_file_audit',
+      },
+      onSessionCreated: (session) => {
+        sessionId = session.id
+        emitAiMilestone(
+          input.ticketId,
+          input.context.externalId,
+          'CREATING_PULL_REQUEST',
+          `Candidate file audit session created for ${input.model} (session=${session.id}).`,
+          `${session.id}:candidate-file-audit-created`,
+          {
+            modelId: input.model,
+            sessionId: session.id,
+            source: `model:${input.model}`,
+          },
+        )
+      },
+      onStreamEvent: (event) => {
+        if (!sessionId) return
+        emitOpenCodeStreamEvent(
+          input.ticketId,
+          input.context.externalId,
+          'CREATING_PULL_REQUEST',
+          input.model,
+          sessionId,
+          event,
+          streamState,
+        )
+      },
+      onPromptDispatched: (event) => {
+        emitOpenCodePromptLog(
+          input.ticketId,
+          input.context.externalId,
+          'CREATING_PULL_REQUEST',
+          input.model,
+          event,
+        )
+      },
+      onPromptCompleted: (event) => {
+        emitOpenCodeSessionLogs(
+          input.ticketId,
+          input.context.externalId,
+          'CREATING_PULL_REQUEST',
+          input.model,
+          event.session.id,
+          'candidate_file_audit',
+          event.response,
+          event.messages,
+          streamState,
+        )
+      },
+    })
+
+    const entries = parseCandidateFileAuditResponse(auditResult.response, changedFiles)
+    return buildCandidateFileAuditReport({
+      status: 'passed',
+      baseCommit: input.mergeBase,
+      originalCandidateCommitSha: input.candidateCommitSha,
+      candidateCommitSha: input.candidateCommitSha,
+      entries,
+    })
+  } catch (error) {
+    if (input.signal?.aborted) throw error
+    const warning = `Candidate file audit fell back to including all files: ${getErrorMessage(error)}`
+    emitPhaseLog(
+      input.ticketId,
+      input.context.externalId,
+      'CREATING_PULL_REQUEST',
+      'info',
+      warning,
+      { source: 'system', audience: 'all' },
+    )
+    return buildIncludeAllCandidateFileAudit({
+      changedFiles,
+      baseCommit: input.mergeBase,
+      originalCandidateCommitSha: input.candidateCommitSha,
+      candidateCommitSha: input.candidateCommitSha,
+      warning,
+    })
   }
 }
 
@@ -388,25 +591,91 @@ export async function handleCreatePullRequest(
         context,
         ticket?.description ?? '',
       )
-      const diff = readGitDiff(worktreePath, integration.mergeBase, integration.candidateCommitSha)
+      const mainImplementer = context.lockedMainImplementer
+      if (!mainImplementer) {
+        throw new Error('No locked main implementer is configured for pull request drafting.')
+      }
+
+      const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
+      let candidateCommitSha = integration.candidateCommitSha
+      let integrationRaw = integration.raw
+      let diff = readGitDiff(worktreePath, integration.mergeBase, candidateCommitSha)
+
+      let candidateFileAudit = await runCandidateFileAudit({
+        ticketId,
+        context,
+        worktreePath,
+        fallbackTitle,
+        contextParts,
+        integrationRaw,
+        finalTestReport,
+        diff,
+        mergeBase: integration.mergeBase,
+        candidateCommitSha,
+        model: mainImplementer,
+        variant: context.lockedMainImplementerVariant ?? undefined,
+        timeoutMs: aiResponseSettings.timeoutMs,
+        signal,
+      })
+
+      if (candidateFileAudit.excludedFiles.length > 0) {
+        const rewrite = rewriteCandidateCommitWithFiles(
+          worktreePath,
+          integration.mergeBase,
+          candidateCommitSha,
+          context.title,
+          context.externalId,
+          candidateFileAudit.includedFiles,
+        )
+        if (!rewrite.success || !rewrite.commitHash) {
+          throw new Error(`Candidate file audit rewrite failed: ${rewrite.message}`)
+        }
+        candidateCommitSha = rewrite.commitHash
+        candidateFileAudit = {
+          ...candidateFileAudit,
+          candidateCommitSha,
+        }
+        emitPhaseLog(
+          ticketId,
+          context.externalId,
+          'CREATING_PULL_REQUEST',
+          'info',
+          `Candidate file audit excluded ${candidateFileAudit.excludedFiles.length} file(s) before PR push.`,
+          {
+            source: 'system',
+            audience: 'all',
+            excludedFiles: candidateFileAudit.excludedFiles,
+            candidateCommitSha,
+          },
+        )
+        diff = readGitDiff(worktreePath, integration.mergeBase, candidateCommitSha)
+      }
+
+      upsertLatestPhaseArtifact(ticketId, CANDIDATE_FILE_AUDIT_ARTIFACT, 'CREATING_PULL_REQUEST', JSON.stringify(candidateFileAudit))
+      integrationRaw = persistIntegrationReportWithAudit({
+        ticketId,
+        integrationRecord: integration.record,
+        candidateCommitSha,
+        candidateFileAudit,
+      })
+      upsertLatestPhaseArtifact(ticketId, CANDIDATE_DIFF_ARTIFACT, 'CREATING_PULL_REQUEST', JSON.stringify(buildCandidateDiffReport({
+        baseCommit: integration.mergeBase,
+        candidateCommitSha,
+        diff,
+      })))
+
       const prompt = buildPullRequestPrompt({
         fallbackTitle,
         contextParts,
-        integrationReport: integration.raw,
+        integrationReport: integrationRaw,
         finalTestReport,
         diffStat: diff.stat,
         diffNameStatus: diff.nameStatus,
         diffPatch: truncateText(diff.patch, MAX_DIFF_PATCH_LENGTH),
       })
 
-      const mainImplementer = context.lockedMainImplementer
-      if (!mainImplementer) {
-        throw new Error('No locked main implementer is configured for pull request drafting.')
-      }
-
       const streamState = createOpenCodeStreamState()
       const draftSessionManager = new SessionManager(adapter)
-      const aiResponseSettings = resolveAiResponseRuntimeSettings(context)
       const initialInput = formatPromptText([{ type: 'text', content: prompt }])
       let sessionId = ''
       let draftSessionOpen = false
@@ -642,7 +911,7 @@ export async function handleCreatePullRequest(
         const pushResult = pushBranchRef({
           projectPath: worktreePath,
           destinationBranch: headBranch,
-          sourceRef: integration.candidateCommitSha,
+          sourceRef: candidateCommitSha,
           forceWithLease: true,
           maxRetries: 1,
         })
@@ -655,7 +924,7 @@ export async function handleCreatePullRequest(
           context.externalId,
           'CREATING_PULL_REQUEST',
           'info',
-          `Updated remote ticket branch ${headBranch} to candidate ${integration.candidateCommitSha}.`,
+          `Updated remote ticket branch ${headBranch} to candidate ${candidateCommitSha}.`,
         )
 
         currentStep = 'create_or_update_pull_request'
@@ -677,7 +946,7 @@ export async function handleCreatePullRequest(
             error: message,
             branch: headBranch,
             baseBranch,
-            candidateSha: integration.candidateCommitSha,
+            candidateSha: candidateCommitSha,
             pr: pullRequest,
           }),
           'CREATING_PULL_REQUEST',
@@ -688,10 +957,11 @@ export async function handleCreatePullRequest(
       const report = buildPullRequestReport({
         baseBranch,
         headBranch,
-        candidateCommitSha: integration.candidateCommitSha,
+        candidateCommitSha,
         pr: pullRequest,
         title: prDraft.title,
         body: prDraft.body,
+        candidateFileAudit,
         structuredOutput: prDraftStructuredOutput,
         rawAttempts,
         message: `Draft pull request ready at ${pullRequest.url}.`,

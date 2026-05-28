@@ -535,11 +535,12 @@ export function mergePullRequest(projectPath: string, prNumber: number, title: s
 
 export function readGitDiff(projectPath: string, fromRef: string, toRef: string): GitDiffSummary {
   const exclusion = ':(top,exclude).ticket'
-  const stat = runGit(projectPath, ['diff', '--stat', `${fromRef}..${toRef}`, '--', '.', exclusion])
-  const nameStatus = runGit(projectPath, ['diff', '--name-status', `${fromRef}..${toRef}`, '--', '.', exclusion])
+  const looptroopExclusion = ':(top,exclude).looptroop'
+  const stat = runGit(projectPath, ['diff', '--stat', `${fromRef}..${toRef}`, '--', '.', exclusion, looptroopExclusion])
+  const nameStatus = runGit(projectPath, ['diff', '--name-status', `${fromRef}..${toRef}`, '--', '.', exclusion, looptroopExclusion])
   const patchResult = tryCommand(
     'git',
-    ['-C', projectPath, 'diff', '--no-ext-diff', '--unified=0', `${fromRef}..${toRef}`, '--', '.', exclusion],
+    ['-C', projectPath, 'diff', '--no-ext-diff', '--unified=0', `${fromRef}..${toRef}`, '--', '.', exclusion, looptroopExclusion],
     { maxBuffer: GIT_PATCH_MAX_BUFFER_BYTES },
   )
 

@@ -99,7 +99,7 @@ Execution is built around beads, not around one monolithic coding prompt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path.
 7. If the attempt stalls or fails, LoopTroop generates a context wipe note, resets the worktree to the bead start commit, and retries in fresh context.
 8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
-9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper when one was declared.
+9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper and PR creation auditing the final candidate files before anything is pushed.
 
 See [Execution Loop](execution-loop.md) and [Beads](beads.md).
 

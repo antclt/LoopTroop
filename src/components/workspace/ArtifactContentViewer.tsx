@@ -42,6 +42,8 @@ import type {
   ExecutionSetupRuntimeReportData,
   FinalTestExecutionReportData,
   IntegrationReportData,
+  PullRequestCandidateFileAuditData,
+  PullRequestCandidateFileAuditEntry,
   PullRequestReportData,
   RelevantFileScanEntry,
   RelevantFilesScanData,
@@ -69,7 +71,16 @@ import {
 } from './phaseArtifactTypes'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 import { parseInterviewDocument, normalizeInterviewDocumentLike } from '@/lib/interviewDocument'
-import { parseDiffStats, computeLineNumbersWithWordDiff } from './diffUtils'
+import {
+  buildCombinedDiffFromBeads,
+  groupFileDiffsByPath,
+  parseBeadCommitsDiffContent,
+  parseDiffStats,
+  parseFileDiffs,
+  computeLineNumbersWithWordDiff,
+  type FileDiff,
+  type FileDiffGroup,
+} from './diffUtils'
 import { renderWordDiffSegments, renderUnifiedDiffLineText } from './diffWordHighlights'
 import { InterviewDocumentView } from './InterviewDocumentView'
 import {
@@ -5768,6 +5779,132 @@ function PullRequestBodyPreview({ body }: { body: string }) {
   )
 }
 
+function normalizeCandidateAuditDecisionLabel(decision: string): string {
+  const normalized = decision.toLowerCase()
+  if (normalized === 'include' || normalized === 'included') return 'Included'
+  if (normalized === 'exclude' || normalized === 'excluded') return 'Excluded'
+  if (normalized === 'ignore' || normalized === 'ignored') return 'Ignored'
+  if (normalized === 'review' || normalized === 'reviewed') return 'Reviewed'
+  return decision
+    .replace(/[_-]+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase())
+}
+
+function isExcludedCandidateAuditEntry(entry: PullRequestCandidateFileAuditEntry): boolean {
+  const normalized = entry.decision.toLowerCase()
+  return normalized === 'exclude' || normalized === 'excluded' || normalized === 'ignore' || normalized === 'ignored'
+}
+
+function buildCandidateAuditEntriesForPaths(
+  audit: PullRequestCandidateFileAuditData,
+  paths: string[],
+  fallbackDecision: string,
+  predicate: (entry: PullRequestCandidateFileAuditEntry) => boolean,
+): PullRequestCandidateFileAuditEntry[] {
+  const byPath = new Map<string, PullRequestCandidateFileAuditEntry>()
+  for (const entry of audit.entries) {
+    if (predicate(entry) || paths.includes(entry.path)) {
+      byPath.set(entry.path, entry)
+    }
+  }
+  for (const path of paths) {
+    if (!byPath.has(path)) byPath.set(path, { path, decision: fallbackDecision })
+  }
+  return Array.from(byPath.values()).sort((a, b) => a.path.localeCompare(b.path))
+}
+
+function CandidateAuditEntryList({
+  entries,
+  emptyLabel,
+}: {
+  entries: PullRequestCandidateFileAuditEntry[]
+  emptyLabel: string
+}) {
+  if (entries.length === 0) {
+    return (
+      <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+        {emptyLabel}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      {entries.map((entry) => (
+        <div key={`${entry.decision}:${entry.path}`} className="rounded-md border border-border bg-background px-3 py-2">
+          <div className="flex min-w-0 items-start gap-2">
+            <FileCode2 className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="min-w-0 break-all font-mono text-[11px] font-semibold text-foreground">{entry.path}</span>
+                <span className="rounded border border-border bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  {normalizeCandidateAuditDecisionLabel(entry.decision)}
+                </span>
+              </div>
+              <div className="mt-1 text-[11px] leading-4 text-muted-foreground">
+                {entry.reason || 'No reason recorded.'}
+              </div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function PullRequestCandidateFileAuditView({ audit }: { audit: PullRequestCandidateFileAuditData }) {
+  const excludedEntries = buildCandidateAuditEntriesForPaths(
+    audit,
+    audit.excludedFiles,
+    audit.ignoredFiles.length > 0 ? 'ignored' : 'exclude',
+    isExcludedCandidateAuditEntry,
+  )
+  const includedCount = audit.stats?.includedFiles ?? audit.includedFiles.length
+  const excludedCount = audit.stats?.excludedFiles ?? audit.excludedFiles.length
+  const reviewedCount = audit.stats?.reviewedFiles ?? audit.reviewedFiles.length
+  const totalCount = audit.stats?.totalFiles
+    ?? new Set([...audit.includedFiles, ...audit.excludedFiles, ...audit.reviewedFiles]).size
+
+  return (
+    <CollapsibleSection
+      title="Candidate File Audit"
+      defaultOpen={excludedEntries.length > 0 || audit.warnings.length > 0}
+    >
+      <div className="space-y-3">
+        {audit.message ? (
+          <div className="rounded-md border border-border bg-background px-3 py-2 text-xs leading-5 text-muted-foreground">
+            {audit.message}
+          </div>
+        ) : null}
+
+        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+          <MetadataCard label="Total Files" value={totalCount.toLocaleString()} />
+          <MetadataCard label="Included" value={includedCount.toLocaleString()} tone={includedCount > 0 ? 'success' : 'default'} />
+          <MetadataCard label="Excluded" value={excludedCount.toLocaleString()} tone={excludedCount > 0 ? 'warning' : 'default'} />
+          <MetadataCard label="Reviewed" value={reviewedCount.toLocaleString()} tone={reviewedCount > 0 ? 'info' : 'default'} />
+        </div>
+
+        <div className="space-y-2">
+          <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Ignored / Excluded Files</div>
+          <CandidateAuditEntryList
+            entries={excludedEntries}
+            emptyLabel="No ignored or excluded candidate files were recorded."
+          />
+        </div>
+
+        {audit.warnings.length > 0 ? (
+          <ArtifactListSection
+            title="Audit Warnings"
+            items={audit.warnings}
+            emptyLabel="No audit warnings were recorded."
+            tone="warning"
+          />
+        ) : null}
+      </div>
+    </CollapsibleSection>
+  )
+}
+
 function PullRequestReportView({ content }: { content: string }) {
   const parsed: PullRequestReportData | null = parsePullRequestReport(content)
   if (!parsed) {
@@ -5900,6 +6037,10 @@ function PullRequestReportView({ content }: { content: string }) {
             {parsed.mergedAt ? <MetadataCard label="Merged At" value={formatArtifactTimestampLabel(parsed.mergedAt)} tone="success" /> : null}
             {parsed.closedAt ? <MetadataCard label="Closed At" value={formatArtifactTimestampLabel(parsed.closedAt)} tone="warning" /> : null}
           </div>
+        ) : null}
+
+        {parsed.candidateFileAudit ? (
+          <PullRequestCandidateFileAuditView audit={parsed.candidateFileAudit} />
         ) : null}
 
         <CollapsibleSection
@@ -6096,35 +6237,7 @@ function PreFlightReportView({ content }: { content: string }) {
   )
 }
 
-interface DiffFileEntry {
-  path: string
-  lines: string[]
-  additions: number
-  deletions: number
-}
-
-function parseDiffFiles(content: string): DiffFileEntry[] {
-  const allLines = content.split('\n')
-  const files: DiffFileEntry[] = []
-  let current: DiffFileEntry | null = null
-
-  for (const line of allLines) {
-    if (line.startsWith('diff --git')) {
-      if (current) files.push(current)
-      const match = line.match(/b\/(.+)$/)
-      current = { path: match?.[1] ?? 'unknown', lines: [], additions: 0, deletions: 0 }
-      continue
-    }
-    if (!current) continue
-    current.lines.push(line)
-    if (line.startsWith('+') && !line.startsWith('+++')) current.additions++
-    else if (line.startsWith('-') && !line.startsWith('---')) current.deletions++
-  }
-  if (current) files.push(current)
-  return files
-}
-
-function DiffFileSection({ file }: { file: DiffFileEntry }) {
+function DiffFileSection({ file }: { file: FileDiff }) {
   const [isOpen, setIsOpen] = useState(false)
 
   return (
@@ -6138,7 +6251,7 @@ function DiffFileSection({ file }: { file: DiffFileEntry }) {
           ? <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
           : <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />}
         <FileCode2 className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        <span className="text-xs font-mono font-medium text-foreground truncate flex-1">{file.path}</span>
+        <span className="text-xs font-mono font-medium text-foreground truncate flex-1">{file.filename}</span>
         <span className="text-[11px] font-mono text-green-600 dark:text-green-400 shrink-0">+{file.additions}</span>
         <span className="text-[11px] font-mono text-red-600 dark:text-red-400 shrink-0">-{file.deletions}</span>
       </button>
@@ -6177,20 +6290,164 @@ function DiffFileSection({ file }: { file: DiffFileEntry }) {
   )
 }
 
-function BeadCommitsDiffView({ content }: { content: string }) {
-  const files = useMemo(() => parseDiffFiles(content), [content])
-  const stats = parseDiffStats(content)
+function DiffStatsRow({ label, stats }: { label: string; stats: ReturnType<typeof parseDiffStats> }) {
+  return (
+    <div className="flex flex-wrap items-center gap-3 px-1 py-1 text-xs text-muted-foreground">
+      <span className="font-medium">{label}</span>
+      <span>{stats.files} file{stats.files !== 1 ? 's' : ''}</span>
+      <span className="text-green-600 dark:text-green-400 font-mono">+{stats.additions}</span>
+      <span className="text-red-600 dark:text-red-400 font-mono">-{stats.deletions}</span>
+    </div>
+  )
+}
+
+function EmptyDiffState({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-md border border-border bg-background px-3 py-2 text-xs text-muted-foreground">
+      {children}
+    </div>
+  )
+}
+
+function DiffFileList({ diff }: { diff: string }) {
+  const files = useMemo(() => parseFileDiffs(diff), [diff])
+
+  if (files.length === 0) {
+    return <EmptyDiffState>No changed files were found in this diff.</EmptyDiffState>
+  }
 
   return (
     <div className="flex flex-col gap-1.5">
-      <div className="flex items-center gap-3 px-1 py-1 text-xs text-muted-foreground">
-        <span className="font-medium">{stats.files} file{stats.files !== 1 ? 's' : ''} changed</span>
-        <span className="text-green-600 dark:text-green-400 font-mono">+{stats.additions}</span>
-        <span className="text-red-600 dark:text-red-400 font-mono">-{stats.deletions}</span>
-      </div>
-      {files.map((file) => (
-        <DiffFileSection key={file.path} file={file} />
+      {files.map((file, index) => (
+        <DiffFileSection key={`${file.filename}:${index}`} file={file} />
       ))}
+    </div>
+  )
+}
+
+function BeadDiffSection({ bead, index }: { bead: ReturnType<typeof parseBeadCommitsDiffContent>['beads'][number]; index: number }) {
+  const stats = parseDiffStats(bead.diff)
+  const label = bead.label ? `${bead.beadId} · ${bead.label}` : bead.beadId
+
+  return (
+    <CollapsibleSection
+      title={(
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="font-mono text-[11px]">{label || `bead-${index + 1}`}</span>
+          <span className="text-[10px] text-muted-foreground">
+            {stats.files} file{stats.files !== 1 ? 's' : ''} · +{stats.additions} -{stats.deletions}
+          </span>
+        </span>
+      )}
+      defaultOpen={index === 0}
+      scrollOnOpen={false}
+    >
+      <DiffFileList diff={bead.diff} />
+    </CollapsibleSection>
+  )
+}
+
+function FileGroupSection({ group }: { group: FileDiffGroup }) {
+  return (
+    <CollapsibleSection
+      title={(
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="truncate font-mono text-[11px]">{group.filename}</span>
+          <span className="text-[10px] text-muted-foreground">
+            touched in {group.occurrences.length} bead{group.occurrences.length !== 1 ? 's' : ''} · +{group.additions} -{group.deletions}
+          </span>
+        </span>
+      )}
+      defaultOpen={false}
+      scrollOnOpen={false}
+    >
+      <div className="space-y-2">
+        {group.occurrences.map((occurrence, index) => (
+          <div key={`${group.filename}:${occurrence.beadId ?? occurrence.beadIndex}:${index}`} className="space-y-1">
+            <div className="px-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              {occurrence.beadLabel
+                ? `${occurrence.beadId ?? `bead-${occurrence.beadIndex + 1}`} · ${occurrence.beadLabel}`
+                : occurrence.beadId ?? `bead-${occurrence.beadIndex + 1}`}
+            </div>
+            <DiffFileSection file={occurrence} />
+          </div>
+        ))}
+      </div>
+    </CollapsibleSection>
+  )
+}
+
+function BeadCommitsDiffView({ content }: { content: string }) {
+  const parsed = useMemo(() => parseBeadCommitsDiffContent(content), [content])
+  const netDiff = parsed.netDiff ?? ''
+  const hasNetDiff = netDiff.trim().length > 0
+  const hasBeadDiffs = parsed.beads.length > 0
+  const defaultMode = hasNetDiff ? 'net' : hasBeadDiffs ? 'bead' : 'net'
+  const [viewMode, setViewMode] = useState<'net' | 'bead' | 'file'>(defaultMode)
+  const netStats = parseDiffStats(netDiff)
+  const beadDiff = useMemo(() => buildCombinedDiffFromBeads(parsed.beads), [parsed.beads])
+  const beadStats = useMemo(() => parseDiffStats(beadDiff), [beadDiff])
+  const fileGroups = useMemo(() => groupFileDiffsByPath(parsed.beads), [parsed.beads])
+
+  useEffect(() => {
+    setViewMode(defaultMode)
+  }, [defaultMode, content])
+
+  const tabs = [
+    { id: 'net' as const, label: 'Net Diff', disabled: !hasNetDiff },
+    { id: 'bead' as const, label: 'By Bead', disabled: !hasBeadDiffs },
+    { id: 'file' as const, label: 'By File', disabled: !hasBeadDiffs },
+  ]
+  const effectiveMode = tabs.some((tab) => tab.id === viewMode && !tab.disabled) ? viewMode : defaultMode
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="inline-flex rounded-md border border-border bg-muted/40 p-0.5">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              disabled={tab.disabled}
+              onClick={() => setViewMode(tab.id)}
+              className={cn(
+                'rounded px-2 py-1 text-xs font-medium transition-colors',
+                effectiveMode === tab.id
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
+                tab.disabled && 'cursor-not-allowed opacity-40 hover:text-muted-foreground',
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {effectiveMode === 'net' ? (
+        <div className="flex flex-col gap-1.5">
+          <DiffStatsRow label="Final PR net diff" stats={netStats} />
+          {hasNetDiff ? <DiffFileList diff={netDiff} /> : <EmptyDiffState>No final net diff was captured.</EmptyDiffState>}
+        </div>
+      ) : null}
+
+      {effectiveMode === 'bead' ? (
+        <div className="flex flex-col gap-1.5">
+          <DiffStatsRow label="Cumulative bead activity" stats={beadStats} />
+          {parsed.beads.map((bead, index) => (
+            <BeadDiffSection key={`${bead.beadId}:${index}`} bead={bead} index={index} />
+          ))}
+        </div>
+      ) : null}
+
+      {effectiveMode === 'file' ? (
+        <div className="flex flex-col gap-1.5">
+          <DiffStatsRow label="Grouped bead file touches" stats={beadStats} />
+          {fileGroups.length > 0
+            ? fileGroups.map((group) => <FileGroupSection key={group.filename} group={group} />)
+            : <EmptyDiffState>No bead file touches were captured.</EmptyDiffState>}
+        </div>
+      ) : null}
     </div>
   )
 }

@@ -1,6 +1,12 @@
 import { buildTextDiffSegments, type TextDiffSegment } from './textDiffSegments'
 
-export function parseDiffStats(diff: string): { files: number; additions: number; deletions: number } {
+export interface DiffStats {
+  files: number
+  additions: number
+  deletions: number
+}
+
+export function parseDiffStats(diff: string): DiffStats {
   let files = 0
   let additions = 0
   let deletions = 0
@@ -27,6 +33,163 @@ export interface FileDiff {
   additions: number
   deletions: number
   lines: string[]
+}
+
+export interface BeadCommitDiffEntry {
+  beadId: string
+  label?: string
+  diff: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface BeadCommitsDiffContent {
+  isStructured: boolean
+  netDiff?: string
+  beads: BeadCommitDiffEntry[]
+  fallbackDiff: string
+}
+
+export interface FileDiffOccurrence extends FileDiff {
+  beadId?: string
+  beadLabel?: string
+  beadIndex: number
+}
+
+export interface FileDiffGroup {
+  filename: string
+  additions: number
+  deletions: number
+  occurrences: FileDiffOccurrence[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeDiffContent(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+function normalizeBeadDiffEntry(value: unknown, index: number): BeadCommitDiffEntry | null {
+  if (!isRecord(value)) return null
+
+  const diff = normalizeDiffContent(value.diff)
+    ?? normalizeDiffContent(value.content)
+    ?? normalizeDiffContent(value.patch)
+  if (!diff) return null
+
+  const beadId = normalizeOptionalString(value.beadId)
+    ?? normalizeOptionalString(value.id)
+    ?? normalizeOptionalString(value.bead_id)
+    ?? `bead-${index + 1}`
+  const label = normalizeOptionalString(value.label)
+    ?? normalizeOptionalString(value.title)
+  const createdAt = normalizeOptionalString(value.createdAt)
+    ?? normalizeOptionalString(value.created_at)
+  const updatedAt = normalizeOptionalString(value.updatedAt)
+    ?? normalizeOptionalString(value.updated_at)
+
+  return {
+    beadId,
+    ...(label ? { label } : {}),
+    diff,
+    ...(createdAt ? { createdAt } : {}),
+    ...(updatedAt ? { updatedAt } : {}),
+  }
+}
+
+function readBeadEntries(value: unknown): BeadCommitDiffEntry[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map((entry, index) => normalizeBeadDiffEntry(entry, index))
+    .filter((entry): entry is BeadCommitDiffEntry => entry !== null)
+}
+
+function joinDiffs(diffs: string[]): string {
+  return diffs
+    .map((diff) => diff.trim())
+    .filter(Boolean)
+    .join('\n\n')
+}
+
+function parseDiffHeaderFilename(line: string): string {
+  const pairMatch = line.match(/^diff --git a\/(.+) b\/(.+)$/)
+  if (pairMatch?.[2]) return pairMatch[2]
+  const fallbackMatch = line.match(/b\/(.+)$/)
+  return fallbackMatch?.[1] ?? 'unknown'
+}
+
+export function serializeBeadCommitsDiffContent(input: {
+  netDiff?: string | null
+  beads: BeadCommitDiffEntry[]
+}): string {
+  const netDiff = normalizeDiffContent(input.netDiff)
+  const beads = input.beads
+    .map((bead, index) => normalizeBeadDiffEntry(bead, index))
+    .filter((bead): bead is BeadCommitDiffEntry => bead !== null)
+
+  return JSON.stringify({
+    artifact: 'bead_commits_diff',
+    version: 1,
+    ...(netDiff ? { netDiff } : {}),
+    beads,
+  }, null, 2)
+}
+
+export function parseBeadCommitsDiffContent(content: string): BeadCommitsDiffContent {
+  const trimmed = content.trim()
+  if (!trimmed) {
+    return { isStructured: false, beads: [], fallbackDiff: '' }
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (isRecord(parsed)) {
+      const netDiff = normalizeDiffContent(parsed.netDiff)
+        ?? normalizeDiffContent(parsed.candidateDiff)
+        ?? normalizeDiffContent(parsed.patch)
+      const beads = readBeadEntries(parsed.beads)
+        .concat(readBeadEntries(parsed.beadDiffs))
+        .concat(readBeadEntries(parsed.diffs))
+      const fallbackDiff = netDiff ?? joinDiffs(beads.map((bead) => bead.diff))
+
+      if (netDiff || beads.length > 0) {
+        return {
+          isStructured: true,
+          ...(netDiff ? { netDiff } : {}),
+          beads,
+          fallbackDiff,
+        }
+      }
+    }
+  } catch {
+    // Plain unified diffs are still supported for older content and direct tests.
+  }
+
+  return {
+    isStructured: false,
+    netDiff: trimmed,
+    beads: [],
+    fallbackDiff: trimmed,
+  }
+}
+
+export function getBeadCommitsDiffStats(content: string): DiffStats {
+  const parsed = parseBeadCommitsDiffContent(content)
+  return parseDiffStats(parsed.netDiff ?? parsed.fallbackDiff)
+}
+
+export function buildCombinedDiffFromBeads(beads: BeadCommitDiffEntry[]): string {
+  return joinDiffs(beads.map((bead) => bead.diff))
 }
 
 function isAdditionLine(line: string): boolean {
@@ -148,8 +311,7 @@ export function parseFileDiffs(diff: string): FileDiff[] {
 
   for (const line of diff.split('\n')) {
     if (line.startsWith('diff --git')) {
-      const match = line.match(/b\/(.+)$/)
-      current = { filename: match?.[1] ?? 'unknown', additions: 0, deletions: 0, lines: [line] }
+      current = { filename: parseDiffHeaderFilename(line), additions: 0, deletions: 0, lines: [line] }
       result.push(current)
     } else if (current) {
       current.lines.push(line)
@@ -159,4 +321,31 @@ export function parseFileDiffs(diff: string): FileDiff[] {
   }
 
   return result
+}
+
+export function groupFileDiffsByPath(beads: BeadCommitDiffEntry[]): FileDiffGroup[] {
+  const groups = new Map<string, FileDiffGroup>()
+
+  beads.forEach((bead, beadIndex) => {
+    for (const file of parseFileDiffs(bead.diff)) {
+      const existing = groups.get(file.filename) ?? {
+        filename: file.filename,
+        additions: 0,
+        deletions: 0,
+        occurrences: [],
+      }
+
+      existing.additions += file.additions
+      existing.deletions += file.deletions
+      existing.occurrences.push({
+        ...file,
+        beadId: bead.beadId,
+        beadLabel: bead.label,
+        beadIndex,
+      })
+      groups.set(file.filename, existing)
+    }
+  })
+
+  return Array.from(groups.values()).sort((a, b) => a.filename.localeCompare(b.filename))
 }

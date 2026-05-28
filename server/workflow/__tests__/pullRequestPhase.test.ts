@@ -137,6 +137,15 @@ describe('pull request drafting context', () => {
     }
   }
 
+  function validCandidateAuditResponse(path = 'src/example.ts') {
+    return [
+      'files:',
+      `  - path: ${path}`,
+      '    decision: include',
+      '    reason: Source change belongs in the requested PR.',
+    ].join('\n')
+  }
+
   it('uses only ticket details and PRD as context while appending reports and diff sections explicitly', () => {
     resetTestDb()
     const { ticket, context, paths } = createInitializedTestTicket(repoManager, {
@@ -193,6 +202,11 @@ describe('pull request drafting context', () => {
     updateProject(project.id, { councilResponseTimeout: 456_000 })
 
     mocks.runOpenCodePrompt.mockResolvedValueOnce({
+      session: { id: 'candidate-audit-1' },
+      response: validCandidateAuditResponse(),
+      messages: [],
+    })
+    mocks.runOpenCodePrompt.mockResolvedValueOnce({
       session: { id: 'pr-draft-1' },
       response: 'title: Missing sections',
       messages: [],
@@ -216,7 +230,7 @@ describe('pull request drafting context', () => {
 
     await handleCreatePullRequest(ticket.id, context, sendEvent, new AbortController().signal)
 
-    expect(mocks.runOpenCodePrompt).toHaveBeenCalledTimes(1)
+    expect(mocks.runOpenCodePrompt).toHaveBeenCalledTimes(2)
     expect(mocks.runOpenCodeSessionPrompt).toHaveBeenCalledTimes(1)
     expect(mocks.runOpenCodePrompt).toHaveBeenCalledWith(expect.objectContaining({
       timeoutMs: 456_000,
@@ -240,6 +254,7 @@ describe('pull request drafting context', () => {
     expect(sendEvent).toHaveBeenCalledWith({ type: 'PULL_REQUEST_READY' })
 
     const report = readPullRequestReport(ticket.id)
+    expect(report?.candidateFileAudit?.includedFiles).toEqual(['src/example.ts'])
     expect(report?.structuredOutput?.autoRetryCount).toBe(1)
     expect(report?.rawAttempts).toEqual([
       expect.objectContaining({ attempt: 1, outcome: 'rejected' }),
@@ -252,6 +267,11 @@ describe('pull request drafting context', () => {
     const { ticket, context } = createPullRequestReadyTicket({ structuredRetryCount: 0 })
     const sendEvent = vi.fn()
 
+    mocks.runOpenCodePrompt.mockResolvedValueOnce({
+      session: { id: 'candidate-audit-fallback' },
+      response: validCandidateAuditResponse(),
+      messages: [],
+    })
     mocks.runOpenCodePrompt.mockResolvedValueOnce({
       session: { id: 'pr-draft-fallback' },
       response: 'not: enough',
@@ -277,6 +297,11 @@ describe('pull request drafting context', () => {
     resetTestDb()
     const { ticket, context } = createPullRequestReadyTicket({ structuredRetryCount: 1 })
 
+    mocks.runOpenCodePrompt.mockResolvedValueOnce({
+      session: { id: 'candidate-audit-valid' },
+      response: validCandidateAuditResponse(),
+      messages: [],
+    })
     mocks.runOpenCodePrompt.mockResolvedValueOnce({
       session: { id: 'pr-draft-valid' },
       response: [
