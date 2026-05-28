@@ -548,30 +548,6 @@ function TargetFileRow({ file }: { file: string }) {
   )
 }
 
-function BeadProgressSummary({ beads }: { beads: TicketBead[] }) {
-  const done = beads.filter((b) => b.status === 'completed' || b.status === 'skipped').length
-  const active = beads.find((b) => b.status === 'in_progress')
-  const failed = beads.filter((b) => b.status === 'failed').length
-  return (
-    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-      <span className="font-medium text-foreground">{done}/{beads.length}</span>
-      <span>done</span>
-      {active && (
-        <>
-          <span>•</span>
-          <span className="text-primary font-medium truncate max-w-[200px]">{active.title}</span>
-        </>
-      )}
-      {failed > 0 && (
-        <>
-          <span>•</span>
-          <span className="text-red-600 dark:text-red-400">{failed} failed</span>
-        </>
-      )}
-    </div>
-  )
-}
-
 function BeadGrid({
   beads,
   viewingBeadId,
@@ -585,71 +561,65 @@ function BeadGrid({
 
   if (compact) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <BeadProgressSummary beads={beads} />
-        <div
-          className="grid gap-1"
-          style={{ gridTemplateColumns: `repeat(auto-fill, minmax(28px, 1fr))` }}
-        >
-          {beads.map((bead, index) => (
-            <Tooltip key={bead.id}>
-                <TooltipTrigger asChild>
-                  <button
-                            onClick={() => onSelect(viewingBeadId === bead.id ? null : bead.id)}
-                            className={cn(
-                              'h-7 w-full rounded text-[10px] font-mono font-medium transition-colors',
-                              bead.status === 'completed' || bead.status === 'skipped'
-                                ? 'bg-green-500/20 text-green-700 dark:text-green-400 border border-green-600/20'
-                                : bead.status === 'in_progress'
-                                  ? 'bg-primary/20 text-primary border border-primary/40 animate-pulse'
-                                  : bead.status === 'failed'
-                                    ? 'bg-red-500/20 text-red-700 dark:text-red-400 border border-red-600/20'
-                                    : 'bg-muted text-muted-foreground border border-border opacity-60',
-                              viewingBeadId === bead.id && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
-                            )}
-                          >
-                            {index + 1}
-                          </button>
-                </TooltipTrigger>
-                <TooltipContent className="max-w-xs text-center text-balance">{`#${index + 1}: ${bead.title}${bead.iteration > 0 ? ` (${bead.iteration}x)` : ''}`}</TooltipContent>
-              </Tooltip>
-          ))}
-        </div>
+      <div
+        className="grid gap-1"
+        style={{ gridTemplateColumns: `repeat(auto-fill, minmax(28px, 1fr))` }}
+      >
+        {beads.map((bead, index) => (
+          <Tooltip key={bead.id}>
+              <TooltipTrigger asChild>
+                <button
+                          onClick={() => onSelect(viewingBeadId === bead.id ? null : bead.id)}
+                          className={cn(
+                            'h-7 w-full rounded text-[10px] font-mono font-medium transition-colors',
+                            bead.status === 'completed' || bead.status === 'skipped'
+                              ? 'bg-green-500/20 text-green-700 dark:text-green-400 border border-green-600/20'
+                              : bead.status === 'in_progress'
+                                ? 'bg-primary/20 text-primary border border-primary/40 animate-pulse'
+                                : bead.status === 'failed'
+                                  ? 'bg-red-500/20 text-red-700 dark:text-red-400 border border-red-600/20'
+                                  : 'bg-muted text-muted-foreground border border-border opacity-60',
+                            viewingBeadId === bead.id && 'ring-2 ring-primary ring-offset-1 ring-offset-background',
+                          )}
+                        >
+                          {index + 1}
+                        </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center text-balance">{`#${index + 1}: ${bead.title}${bead.iteration > 0 ? ` (${bead.iteration}x)` : ''}`}</TooltipContent>
+            </Tooltip>
+        ))}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <BeadProgressSummary beads={beads} />
-      <div className="flex flex-wrap gap-1.5">
-        {beads.map((bead, index) => (
-          <Tooltip key={bead.id}>
-              <TooltipTrigger asChild>
-                <button
-                        onClick={() => onSelect(viewingBeadId === bead.id ? null : bead.id)}
-                        className={cn(
-                          'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs whitespace-nowrap transition-colors',
-                          bead.status === 'in_progress' && 'border-primary bg-primary/10 font-medium animate-pulse',
-                          (bead.status === 'completed' || bead.status === 'skipped') && 'border-green-600/30 bg-green-50 dark:bg-green-900/20',
-                          bead.status === 'failed' && 'border-red-600/30 bg-red-50 dark:bg-red-900/20',
-                          bead.status === 'pending' && 'border-border opacity-70',
-                          viewingBeadId === bead.id && 'ring-2 ring-primary',
-                        )}
-                      >
-                        {statusIcon(bead.status)}
-                        <span>{bead.title || `Bead ${index + 1}`}</span>
-                        {bead.iteration > 0 && (
-                          <Badge variant="outline" className="text-[10px] h-4 px-1">
-                            {bead.iteration}x
-                          </Badge>
-                        )}
-                      </button>
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs text-center text-balance">{bead.title}</TooltipContent>
-            </Tooltip>
-        ))}
-      </div>
+    <div className="flex flex-wrap gap-1.5">
+      {beads.map((bead, index) => (
+        <Tooltip key={bead.id}>
+            <TooltipTrigger asChild>
+              <button
+                      onClick={() => onSelect(viewingBeadId === bead.id ? null : bead.id)}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs whitespace-nowrap transition-colors',
+                        bead.status === 'in_progress' && 'border-primary bg-primary/10 font-medium animate-pulse',
+                        (bead.status === 'completed' || bead.status === 'skipped') && 'border-green-600/30 bg-green-50 dark:bg-green-900/20',
+                        bead.status === 'failed' && 'border-red-600/30 bg-red-50 dark:bg-red-900/20',
+                        bead.status === 'pending' && 'border-border opacity-70',
+                        viewingBeadId === bead.id && 'ring-2 ring-primary',
+                      )}
+                    >
+                      {statusIcon(bead.status)}
+                      <span>{bead.title || `Bead ${index + 1}`}</span>
+                      {bead.iteration > 0 && (
+                        <Badge variant="outline" className="text-[10px] h-4 px-1">
+                          {bead.iteration}x
+                        </Badge>
+                      )}
+                    </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-center text-balance">{bead.title}</TooltipContent>
+          </Tooltip>
+      ))}
     </div>
   )
 }

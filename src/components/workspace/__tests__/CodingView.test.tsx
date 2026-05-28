@@ -390,7 +390,7 @@ describe('CodingView', () => {
       expect(screen.queryByText('Bead number 1')).toBeNull()
     })
 
-    it('shows progress summary with done count', () => {
+    it('omits redundant bead progress summary', () => {
       renderCoding({
         runtime: {
           baseBranch: 'main',
@@ -414,11 +414,9 @@ describe('CodingView', () => {
         },
       })
 
-      // The progress summary shows "X/Y done"
-      expect(screen.getAllByText('done').length).toBeGreaterThanOrEqual(1)
-      // Check summary line shows done count
-      const summaryElements = screen.getAllByText('2/5')
-      expect(summaryElements.length).toBeGreaterThanOrEqual(1)
+      expect(screen.getByText('Implementing (Bead 2/5)')).toBeTruthy()
+      expect(screen.getByText('2/5')).toBeTruthy()
+      expect(screen.queryByText('done')).toBeNull()
     })
   })
 
