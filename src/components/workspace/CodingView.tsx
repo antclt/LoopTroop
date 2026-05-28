@@ -411,6 +411,7 @@ function isRawAttemptTerminal(attempt: BeadRawAttempt | null | undefined, bead: 
   if (attempt.terminal) return true
   const outcome = getRawAttemptOutcome(attempt)
   if (TERMINAL_RAW_OUTCOMES.has(outcome)) return true
+  if (bead && attempt.iteration > 0 && bead.iteration > attempt.iteration) return true
   return bead ? TERMINAL_BEAD_STATUSES.has(bead.status) : false
 }
 
@@ -538,6 +539,12 @@ function mergeRawAttempts(persisted: BeadRawAttempt[], logDerived: BeadRawAttemp
       ...(existing ?? attempt),
       ...attempt,
       initialInput: attempt.initialInput || existing?.initialInput || '',
+      rawResponse: attempt.rawResponse || existing?.rawResponse,
+      modelOutput: attempt.modelOutput || existing?.modelOutput,
+      content: attempt.content || existing?.content,
+      error: attempt.error || existing?.error,
+      validationError: attempt.validationError || existing?.validationError,
+      failureClass: attempt.failureClass || existing?.failureClass,
       modelId: attempt.modelId || existing?.modelId,
       sessionId: attempt.sessionId || existing?.sessionId,
       source: existing ? 'merged' : attempt.source,
@@ -552,6 +559,13 @@ function mergeRawAttempts(persisted: BeadRawAttempt[], logDerived: BeadRawAttemp
 
 function selectDefaultRawAttemptKey(attempts: BeadRawAttempt[], bead: TicketBead | null): number | null {
   const sorted = [...attempts].sort((left, right) => getRawAttemptKey(right) - getRawAttemptKey(left))
+  const currentRunningInput = bead?.status === 'in_progress'
+    ? sorted.find((attempt) =>
+        attempt.iteration === bead.iteration
+        && getRawAttemptInput(attempt).trim()
+        && !getRawAttemptOutput(attempt).trim())
+    : undefined
+  if (currentRunningInput) return getRawAttemptKey(currentRunningInput)
   const meaningfulOutput = sorted.find((attempt) => getRawAttemptOutput(attempt).trim() && isRawAttemptTerminal(attempt, bead))
   if (meaningfulOutput) return getRawAttemptKey(meaningfulOutput)
   const inputAttempt = sorted.find((attempt) => getRawAttemptInput(attempt).trim())

@@ -803,6 +803,159 @@ describe('CodingView', () => {
     expect(screen.getByRole('button', { name: 'Output' })).toBeEnabled()
   })
 
+  it('falls back to the current live input while a retry is running and keeps prior log output clickable', () => {
+    const beadLogs: LogEntry[] = [
+      {
+        id: 'prompt-1',
+        entryId: 'session-1:prompt:1',
+        line: '[PROMPT] openai/gpt-5.4 prompt #1\nprevious failed input',
+        source: 'model:openai/gpt-5.4',
+        status: 'CODING',
+        audience: 'ai',
+        kind: 'prompt',
+        modelId: 'openai/gpt-5.4',
+        sessionId: 'session-1',
+        beadId: 'bead-1',
+        beadIteration: 1,
+        streaming: false,
+        op: 'append',
+      },
+      {
+        id: 'text-1',
+        entryId: 'session-1:msg:text',
+        line: '[MODEL] previous failed output',
+        source: 'model:openai/gpt-5.4',
+        status: 'CODING',
+        audience: 'ai',
+        kind: 'text',
+        modelId: 'openai/gpt-5.4',
+        sessionId: 'session-1',
+        beadId: 'bead-1',
+        beadIteration: 1,
+        streaming: false,
+        op: 'finalize',
+      },
+      {
+        id: 'prompt-2',
+        entryId: 'session-2:prompt:1',
+        line: '[PROMPT] openai/gpt-5.4 prompt #1\ncurrent retry input',
+        source: 'model:openai/gpt-5.4',
+        status: 'CODING',
+        audience: 'ai',
+        kind: 'prompt',
+        modelId: 'openai/gpt-5.4',
+        sessionId: 'session-2',
+        beadId: 'bead-1',
+        beadIteration: 2,
+        streaming: false,
+        op: 'append',
+      },
+    ]
+    vi.mocked(useLogs).mockReturnValue({
+      logsByPhase: { CODING: beadLogs },
+      activePhase: 'CODING',
+      isLoadingLogs: false,
+      addLog: vi.fn(),
+      addLogRecord: vi.fn(),
+      getLogsForPhase: vi.fn(() => beadLogs),
+      getAllLogs: vi.fn(() => beadLogs),
+      setActivePhase: vi.fn(),
+      loadLogsForPhase: vi.fn(),
+      clearLogs: vi.fn(),
+    })
+
+    renderCoding({
+      runtime: {
+        activeBeadId: 'bead-1',
+        activeBeadIteration: 2,
+        beads: [
+          { id: 'bead-1', title: 'Live retry bead', status: 'in_progress', iteration: 2 },
+        ],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Live retry bead/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Input' }))
+
+    expect(screen.getByText((content) => content.includes('current retry input'))).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Iteration 2/ })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Output' })).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /Iteration 1/ }))
+
+    expect(screen.getByRole('button', { name: 'Output' })).toBeEnabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Output' }))
+    expect(screen.getByText((content) => content.includes('previous failed output'))).toBeTruthy()
+  })
+
+  it('uses log-derived output as a fallback when a persisted attempt only has input', () => {
+    const beadLogs: LogEntry[] = [
+      {
+        id: 'text-1',
+        entryId: 'session-1:msg:text',
+        line: '[MODEL] fallback log output',
+        source: 'model:openai/gpt-5.4',
+        status: 'CODING',
+        audience: 'ai',
+        kind: 'text',
+        modelId: 'openai/gpt-5.4',
+        sessionId: 'session-1',
+        beadId: 'bead-1',
+        beadIteration: 1,
+        streaming: false,
+        op: 'finalize',
+      },
+    ]
+    vi.mocked(useLogs).mockReturnValue({
+      logsByPhase: { CODING: beadLogs },
+      activePhase: 'CODING',
+      isLoadingLogs: false,
+      addLog: vi.fn(),
+      addLogRecord: vi.fn(),
+      getLogsForPhase: vi.fn(() => beadLogs),
+      getAllLogs: vi.fn(() => beadLogs),
+      setActivePhase: vi.fn(),
+      loadLogsForPhase: vi.fn(),
+      clearLogs: vi.fn(),
+    })
+    mockUseTicketArtifacts.mockImplementation((_ticketId?: string, options?: { phase?: string }) => ({
+      artifacts: options?.phase === 'CODING'
+        ? [
+            makeBeadExecutionArtifact('bead-1', {
+              beadId: 'bead-1',
+              success: false,
+              iteration: 1,
+              output: '',
+              errors: [],
+              rawAttempts: [
+                {
+                  attempt: 1,
+                  iteration: 1,
+                  status: 'failed',
+                  outcome: 'failed',
+                  initialInput: 'persisted input only',
+                },
+              ],
+            }),
+          ]
+        : [],
+      isLoading: false,
+    }))
+
+    renderCoding({
+      runtime: {
+        beads: [
+          { id: 'bead-1', title: 'Fallback raw bead', status: 'error', iteration: 1 },
+        ],
+      },
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Fallback raw bead/ }))
+    fireEvent.click(screen.getByRole('button', { name: 'Output' }))
+
+    expect(screen.getByText((content) => content.includes('fallback log output'))).toBeTruthy()
+  })
+
   it('keeps blocked coding reviews on the interrupted bead progress instead of forcing completion', () => {
     const blockedTicket = makeTicket({
       status: 'BLOCKED_ERROR',
