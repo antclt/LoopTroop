@@ -8,6 +8,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+
+### Detailed Changes
+
+---
+
+## 0.2.4 (2026-05-28)
+
+### Summary
 - Added live-only workspace status progress labels for coding, coverage checks, and retried phases.
 - Made merged PR completion independent of the user's local checkout cleanliness.
 - Fixed long ticket descriptions being unscrollable in backlog and detail views.
