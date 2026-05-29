@@ -44,14 +44,6 @@ export const MESSAGE_LIST_LIMIT = 10_000
 /** Max model IDs in catalog request */
 export const MAX_CATALOG_MODEL_IDS = 50
 
-/** Max reason text display length */
-export const MAX_REASON_DISPLAY_LENGTH = 56
-export const TRUNCATED_REASON_LENGTH = 53
-/** Max output preview length */
-export const MAX_OUTPUT_PREVIEW_LENGTH = 160
-/** Max file content preview length */
-export const MAX_FILE_CONTENT_PREVIEW_LENGTH = 200
-
 /** Default truncation length for command log output */
 export const LOG_TRUNCATION_LENGTH = 800
 /** Truncation length for command stdout/stderr in verification */

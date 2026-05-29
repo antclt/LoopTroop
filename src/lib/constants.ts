@@ -61,3 +61,6 @@ export const BYTES_PER_KIB = 1_024
 
 /** Maximum value (in seconds) for timeout configuration fields */
 export const MAX_TIMEOUT_SECONDS = 3_600
+
+/** Grace period (ms) to distinguish a user edit from auto-save after plan generation */
+export const EXECUTION_SETUP_EDIT_GRACE_MS = 1000

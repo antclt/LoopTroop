@@ -128,8 +128,8 @@ export function FullLogView({ ticket }: FullLogViewProps) {
   )
 
   const [activeTab, setActiveTab] = useState<string>('ALL')
-  const [modelsCollapsed, setModelsCollapsed] = useState(true)
-  const [sysCollapsed, setSysCollapsed] = useState(true)
+  const [isModelsCollapsed, setIsModelsCollapsed] = useState(true)
+  const [isSysCollapsed, setIsSysCollapsed] = useState(true)
 
   useEffect(() => {
     loadAllLogs?.()
@@ -431,14 +431,14 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                                   <TooltipTrigger asChild>
                                     <button
                                                         type="button"
-                                                        aria-label={modelsCollapsed ? 'Show models' : 'Hide models'}
-                                                        onClick={() => setModelsCollapsed(!modelsCollapsed)}
+                                                        aria-label={isModelsCollapsed ? 'Show models' : 'Hide models'}
+                                                        onClick={() => setIsModelsCollapsed(!isModelsCollapsed)}
                                                         className="pr-1.5 pl-0.5 py-0.5 flex items-center justify-center hover:text-foreground transition-colors opacity-70 hover:opacity-100"
                                                       >
-                                                        {modelsCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                                                        {isModelsCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
                                                       </button>
                                   </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs text-center text-balance">{modelsCollapsed ? 'Show models' : 'Hide models'}</TooltipContent>
+                                  <TooltipContent className="max-w-xs text-center text-balance">{isModelsCollapsed ? 'Show models' : 'Hide models'}</TooltipContent>
                                 </Tooltip>
                     </div>
                   </TooltipTrigger>
@@ -446,7 +446,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                     {tooltipContent}
                   </TooltipContent>
                 </Tooltip>
-                {!modelsCollapsed && modelTabs.map((modelTab) => (
+                {!isModelsCollapsed && modelTabs.map((modelTab) => (
                   <ModelBadge
                     key={modelTab}
                     modelId={modelTab}
@@ -482,14 +482,14 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                                   <TooltipTrigger asChild>
                                     <button
                                                         type="button"
-                                                        aria-label={sysCollapsed ? 'Show commands' : 'Hide commands'}
-                                                        onClick={() => setSysCollapsed(!sysCollapsed)}
+                                                        aria-label={isSysCollapsed ? 'Show commands' : 'Hide commands'}
+                                                        onClick={() => setIsSysCollapsed(!isSysCollapsed)}
                                                         className="pr-1.5 pl-0.5 py-0.5 flex items-center justify-center hover:text-foreground transition-colors opacity-70 hover:opacity-100"
                                                       >
-                                                        {sysCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                                                        {isSysCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
                                                       </button>
                                   </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs text-center text-balance">{sysCollapsed ? 'Show commands' : 'Hide commands'}</TooltipContent>
+                                  <TooltipContent className="max-w-xs text-center text-balance">{isSysCollapsed ? 'Show commands' : 'Hide commands'}</TooltipContent>
                                 </Tooltip>
                     </div>
                   </TooltipTrigger>
@@ -497,7 +497,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                     {tooltipContent}
                   </TooltipContent>
                 </Tooltip>
-                {!sysCollapsed && (
+                {!isSysCollapsed && (
                   <Tooltip key="CMD" delayDuration={300}>
                     <TooltipTrigger asChild>
                       <button

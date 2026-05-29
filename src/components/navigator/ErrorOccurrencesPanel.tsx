@@ -104,14 +104,14 @@ export function ErrorOccurrencesPanel({
     : selectedOccurrence?.resolvedAt
       ? `selected:${selectedOccurrence.id}`
       : null
-  const [userExpandedOverride, setUserExpandedOverride] = useState<boolean | null>(null)
+  const [isUserExpanded, setIsUserExpanded] = useState<boolean | null>(null)
   const lastAutoExpandKeyRef = useRef(autoExpandKey)
   useEffect(() => {
     if (lastAutoExpandKeyRef.current === autoExpandKey) return
     lastAutoExpandKeyRef.current = autoExpandKey
-    setUserExpandedOverride(null)
+    setIsUserExpanded(null)
   }, [autoExpandKey])
-  const expanded = userExpandedOverride ?? Boolean(autoExpandKey)
+  const expanded = isUserExpanded ?? Boolean(autoExpandKey)
   const statusLabelOptions = useMemo(() => ({
     currentBead: ticket.runtime.currentBead ?? ticket.currentBead,
     totalBeads: ticket.runtime.totalBeads ?? ticket.totalBeads,
@@ -123,7 +123,7 @@ export function ErrorOccurrencesPanel({
     <div className="space-y-1.5">
       <button
         type="button"
-        onClick={() => setUserExpandedOverride(!expanded)}
+        onClick={() => setIsUserExpanded(!expanded)}
         aria-expanded={expanded}
         className="flex w-full items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
       >

@@ -2,7 +2,7 @@ import { startTransition, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { QUERY_STALE_TIME_5M } from '@/lib/constants'
+import { QUERY_STALE_TIME_5M, EXECUTION_SETUP_EDIT_GRACE_MS } from '@/lib/constants'
 import { YamlEditor } from '@/components/editor/YamlEditor'
 import { AlertTriangle, Archive, CheckCircle2 } from 'lucide-react'
 import { CollapsiblePhaseLogSection } from './CollapsiblePhaseLogSection'
@@ -81,7 +81,7 @@ function buildSetupPlanSourceChips(updatedAt?: string | null, reportContent?: st
   const generatedAtMs = report?.generatedAt ? Date.parse(report.generatedAt) : Number.NaN
   const editedAfterGeneration = Number.isFinite(updatedAtMs)
     && Number.isFinite(generatedAtMs)
-    && updatedAtMs - generatedAtMs > 1000
+    && updatedAtMs - generatedAtMs > EXECUTION_SETUP_EDIT_GRACE_MS
   const sourceChips = [
     report?.source === 'regenerate'
       ? 'Regenerated before approval'

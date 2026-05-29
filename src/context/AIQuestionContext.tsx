@@ -258,7 +258,7 @@ function AIQuestionPopup({
 
 export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; children: ReactNode }) {
   const [requests, setRequests] = useState<Record<string, AIQuestionRequestState>>({})
-  const [minimized, setMinimized] = useState(false)
+  const [isMinimized, setIsMinimized] = useState(false)
   const ticketsById = useMemo(() => new Map(tickets.map((ticket) => [ticket.id, ticket])), [tickets])
   const activeTickets = useMemo(() => tickets.filter((ticket) => !isTerminalStatus(ticket.status)), [tickets])
   const activeTicketIds = useMemo(() => new Set(activeTickets.map((ticket) => ticket.id)), [activeTickets])
@@ -301,7 +301,7 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
         },
       }
     })
-    setMinimized(false)
+    setIsMinimized(false)
   }, [removeRequest, ticketsById])
 
   useEffect(() => {
@@ -431,25 +431,25 @@ export function AIQuestionProvider({ tickets, children }: { tickets: Ticket[]; c
 
   const value = useMemo<AIQuestionContextValue>(() => ({
     getPendingCount,
-    openQueue: () => setMinimized(false),
+    openQueue: () => setIsMinimized(false),
   }), [getPendingCount])
 
   return (
     <AIQuestionContext.Provider value={value}>
       {children}
-      {activeItem && !minimized && (
+      {activeItem && !isMinimized && (
         <AIQuestionPopup
           item={activeItem}
-          onMinimize={() => setMinimized(true)}
+          onMinimize={() => setIsMinimized(true)}
           onAnswer={answerActiveQuestion}
           onReject={rejectActiveQuestion}
         />
       )}
-      {activeItem && minimized && (
+      {activeItem && isMinimized && (
         <button
           type="button"
           className="fixed bottom-4 right-4 z-[90] flex max-w-xs items-center gap-3 rounded-lg border border-border bg-background px-4 py-3 text-left text-sm shadow-xl hover:bg-accent"
-          onClick={() => setMinimized(false)}
+          onClick={() => setIsMinimized(false)}
         >
           <HelpCircle className="h-5 w-5 text-primary" />
           <span className="min-w-0">

@@ -88,7 +88,7 @@ export function DraftView({ ticket }: DraftViewProps) {
   const [isEditingDescription, setIsEditingDescription] = useState(false)
   const [descriptionError, setDescriptionError] = useState<string | null>(null)
   const [lastSyncedDescription, setLastSyncedDescription] = useState(ticket.description ?? '')
-  const [skipNextSync, setSkipNextSync] = useState(false)
+  const [shouldSkipNextSync, setShouldSkipNextSync] = useState(false)
   const project = projects.find(p => p.id === ticket.projectId)
   const mainImplementer = typeof profile?.mainImplementer === 'string'
     ? profile.mainImplementer.trim()
@@ -113,14 +113,14 @@ export function DraftView({ ticket }: DraftViewProps) {
     if (savedDescription !== lastSyncedDescription) {
       setLastSyncedDescription(savedDescription)
       if (!isEditingDescription) {
-        if (skipNextSync) {
-          setSkipNextSync(false)
+        if (shouldSkipNextSync) {
+          setShouldSkipNextSync(false)
         } else {
           setDescriptionDraft(savedDescription)
         }
       }
     }
-  }, [savedDescription, lastSyncedDescription, isEditingDescription, skipNextSync])
+  }, [savedDescription, lastSyncedDescription, isEditingDescription, shouldSkipNextSync])
 
   const handleStart = () => {
     setIsStartAttemptActive(true)
@@ -162,7 +162,7 @@ export function DraftView({ ticket }: DraftViewProps) {
         description: descriptionDraft,
       })
       setDescriptionDraft(updated.description ?? descriptionDraft)
-      setSkipNextSync(true)
+      setShouldSkipNextSync(true)
       setIsEditingDescription(false)
     } catch (error) {
       setDescriptionError(error instanceof Error ? error.message : 'Failed to save description.')

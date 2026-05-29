@@ -290,8 +290,8 @@ export function PhaseLogPanel({
   const isLiveTicketPhase = !ticket || ticket.status === phase
   const currentActivityEnabled = !shouldLoadArchivedLogs && isLiveTicketPhase
   const hasToolbarPrefix = toolbarPrefix != null
-  const [modelsCollapsed, setModelsCollapsed] = useState(true)
-  const [sysCollapsed, setSysCollapsed] = useState(true)
+  const [isModelsCollapsed, setIsModelsCollapsed] = useState(true)
+  const [isSysCollapsed, setIsSysCollapsed] = useState(true)
   const isKnownMultiModelPhase = MULTI_MODEL_PHASES.has(phase)
   const lockedCouncilMembers = useMemo(
     () => ticket?.lockedCouncilMembers ?? [],
@@ -589,14 +589,14 @@ export function PhaseLogPanel({
                                   <TooltipTrigger asChild>
                                     <button
                                                         type="button"
-                                                        aria-label={modelsCollapsed ? 'Show models' : 'Hide models'}
-                                                        onClick={() => setModelsCollapsed(!modelsCollapsed)}
+                                                        aria-label={isModelsCollapsed ? 'Show models' : 'Hide models'}
+                                                        onClick={() => setIsModelsCollapsed(!isModelsCollapsed)}
                                                         className="pr-1.5 pl-0.5 py-0.5 flex items-center justify-center hover:text-foreground transition-colors opacity-70 hover:opacity-100"
                                                       >
-                                                        {modelsCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                                                        {isModelsCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
                                                       </button>
                                   </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs text-center text-balance">{modelsCollapsed ? 'Show models' : 'Hide models'}</TooltipContent>
+                                  <TooltipContent className="max-w-xs text-center text-balance">{isModelsCollapsed ? 'Show models' : 'Hide models'}</TooltipContent>
                                 </Tooltip>
                     </div>
                   </TooltipTrigger>
@@ -604,7 +604,7 @@ export function PhaseLogPanel({
                     {tooltipContent}
                   </TooltipContent>
                 </Tooltip>
-                {!modelsCollapsed && modelTabs.map(mTab => (
+                {!isModelsCollapsed && modelTabs.map(mTab => (
                   <ModelBadge
                     key={mTab}
                     modelId={mTab}
@@ -640,14 +640,14 @@ export function PhaseLogPanel({
                                   <TooltipTrigger asChild>
                                     <button
                                                         type="button"
-                                                        aria-label={sysCollapsed ? 'Show commands' : 'Hide commands'}
-                                                        onClick={() => setSysCollapsed(!sysCollapsed)}
+                                                        aria-label={isSysCollapsed ? 'Show commands' : 'Hide commands'}
+                                                        onClick={() => setIsSysCollapsed(!isSysCollapsed)}
                                                         className="pr-1.5 pl-0.5 py-0.5 flex items-center justify-center hover:text-foreground transition-colors opacity-70 hover:opacity-100"
                                                       >
-                                                        {sysCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
+                                                        {isSysCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
                                                       </button>
                                   </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs text-center text-balance">{sysCollapsed ? 'Show commands' : 'Hide commands'}</TooltipContent>
+                                  <TooltipContent className="max-w-xs text-center text-balance">{isSysCollapsed ? 'Show commands' : 'Hide commands'}</TooltipContent>
                                 </Tooltip>
                     </div>
                   </TooltipTrigger>
@@ -655,7 +655,7 @@ export function PhaseLogPanel({
                     {tooltipContent}
                   </TooltipContent>
                 </Tooltip>
-                {!sysCollapsed && (
+                {!isSysCollapsed && (
                   <Tooltip key="CMD" delayDuration={300}>
                     <TooltipTrigger asChild>
                       <button
