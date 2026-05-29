@@ -34,6 +34,7 @@ import {
   useApprovalDraftReset,
   useApprovalFocusAnchor,
   useDebouncedApprovalUiState,
+  useApprovalPaneState,
 } from './approvalHooks'
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
 import {
@@ -57,11 +58,6 @@ interface PrdArtifactResponse {
   content?: string
   contentSha256?: string | null
 }
-
-type DiscardTarget =
-  | { type: 'close' }
-  | { type: 'switch-tab'; tab: EditTab }
-  | null
 
 interface FullAnswersArtifact {
   winnerModelId: string
@@ -174,17 +170,20 @@ export function PrdApprovalPane({
   const rawDisplayContent = useMemo(() => buildReadableRawDisplayContent(rawContent), [rawContent])
   const isPreparingStructuredPrd = !prdDocument && Boolean(rawContent) && isFetching
 
-  const [isEditMode, setIsEditMode] = useState(false)
+  const {
+    isEditMode, setIsEditMode,
+    isSaving, setIsSaving,
+    isApproving, setIsApproving,
+    discardTarget, setDiscardTarget,
+    clearDiscardTarget,
+  } = useApprovalPaneState<EditTab>()
   const [editTab, setEditTab] = useState<EditTab>('structured')
   const [structuredDraft, setStructuredDraft] = useState<PrdApprovalDraft | null>(null)
   const [yamlDraft, setYamlDraft] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isApproving, setIsApproving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
   const [isCascadeWarningOpen, setIsCascadeWarningOpen] = useState(false)
   const [isFullAnswersOpen, setIsFullAnswersOpen] = useState(false)
-  const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -235,7 +234,7 @@ export function PrdApprovalPane({
     })
     lastSavedSnapshotRef.current = snapshot
     restoredDraftRef.current = true
-  }, [isLoading, persistedUiState, prdDocument, rawContent])
+  }, [isLoading, persistedUiState, prdDocument, rawContent, setIsEditMode])
 
   useApprovalFocusAnchor(ticket.id, PRD_APPROVAL_FOCUS_EVENT)
 
@@ -382,7 +381,7 @@ export function PrdApprovalPane({
 
   function handleConfirmDiscard() {
     const target = discardTarget
-    setDiscardTarget(null)
+    clearDiscardTarget()
     if (!target) return
 
     if (target.type === 'close') {
@@ -403,7 +402,7 @@ export function PrdApprovalPane({
         onCancel={() => setIsCascadeWarningOpen(false)}
       />
 
-      <Dialog open={discardTarget !== null} onOpenChange={(open) => !open && setDiscardTarget(null)}>
+      <Dialog open={discardTarget !== null} onOpenChange={(open) => !open && clearDiscardTarget()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">Discard unsaved PRD edits?</DialogTitle>
@@ -412,7 +411,7 @@ export function PrdApprovalPane({
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setDiscardTarget(null)}>
+            <Button type="button" variant="outline" size="sm" onClick={clearDiscardTarget}>
               Keep Editing
             </Button>
             <Button type="button" size="sm" onClick={handleConfirmDiscard}>

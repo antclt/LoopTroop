@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect, useCallback, Fragment, type ReactNode } from 'react'
-import { ChevronRight, ChevronLeft, Copy, Check, ArrowUpToLine, ArrowDownToLine } from 'lucide-react'
+import { Copy, Check, ArrowUpToLine, ArrowDownToLine } from 'lucide-react'
+import { LogCollapseToggle } from './LogCollapseToggle'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
@@ -585,19 +586,12 @@ export function PhaseLogPanel({
                       >
                         {tab}
                       </button>
-                      <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                                        type="button"
-                                                        aria-label={isModelsCollapsed ? 'Show models' : 'Hide models'}
-                                                        onClick={() => setIsModelsCollapsed(!isModelsCollapsed)}
-                                                        className="pr-1.5 pl-0.5 py-0.5 flex items-center justify-center hover:text-foreground transition-colors opacity-70 hover:opacity-100"
-                                                      >
-                                                        {isModelsCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-                                                      </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs text-center text-balance">{isModelsCollapsed ? 'Show models' : 'Hide models'}</TooltipContent>
-                                </Tooltip>
+                      <LogCollapseToggle
+                        isCollapsed={isModelsCollapsed}
+                        onToggle={() => setIsModelsCollapsed(!isModelsCollapsed)}
+                        showLabel="Show models"
+                        hideLabel="Hide models"
+                      />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground border border-border shadow-md font-medium max-w-[200px] text-center">
@@ -636,19 +630,12 @@ export function PhaseLogPanel({
                       >
                         {tab}
                       </button>
-                      <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <button
-                                                        type="button"
-                                                        aria-label={isSysCollapsed ? 'Show commands' : 'Hide commands'}
-                                                        onClick={() => setIsSysCollapsed(!isSysCollapsed)}
-                                                        className="pr-1.5 pl-0.5 py-0.5 flex items-center justify-center hover:text-foreground transition-colors opacity-70 hover:opacity-100"
-                                                      >
-                                                        {isSysCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
-                                                      </button>
-                                  </TooltipTrigger>
-                                  <TooltipContent className="max-w-xs text-center text-balance">{isSysCollapsed ? 'Show commands' : 'Hide commands'}</TooltipContent>
-                                </Tooltip>
+                      <LogCollapseToggle
+                        isCollapsed={isSysCollapsed}
+                        onToggle={() => setIsSysCollapsed(!isSysCollapsed)}
+                        showLabel="Show commands"
+                        hideLabel="Hide commands"
+                      />
                     </div>
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs bg-popover text-popover-foreground border border-border shadow-md font-medium max-w-[200px] text-center">

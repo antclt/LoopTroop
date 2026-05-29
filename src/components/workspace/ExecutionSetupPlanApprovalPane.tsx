@@ -22,11 +22,11 @@ import {
   useApprovalDraftReset,
   useApprovalFocusAnchor,
   useDebouncedApprovalUiState,
+  useApprovalPaneState,
 } from './approvalHooks'
 import { requestWorkspacePhaseNavigation } from '@/lib/workspaceNavigation'
 
 type EditTab = 'structured' | 'raw'
-type DiscardTarget = { type: 'close' } | { type: 'switch-tab'; tab: EditTab } | null
 type RuntimeRewindTarget = 'edit' | 'regenerate' | null
 
 interface ExecutionSetupPlanApprovalResponse {
@@ -356,19 +356,22 @@ export function ExecutionSetupPlanApprovalPane({
   const isSetupPlanVisible = !isPlanGenerating && rawContent.trim().length > 0
   const shouldExpandSetupPlanLog = !isSetupPlanVisible
 
-  const [isEditMode, setIsEditMode] = useState(false)
+  const {
+    isEditMode, setIsEditMode,
+    isSaving, setIsSaving,
+    isApproving, setIsApproving,
+    discardTarget, setDiscardTarget,
+    clearDiscardTarget,
+  } = useApprovalPaneState<EditTab>()
   const [editTab, setEditTab] = useState<EditTab>('structured')
   const [structuredDraft, setStructuredDraft] = useState<ExecutionSetupPlan | null>(null)
   const [rawDraft, setRawDraft] = useState('')
   const [commentary, setCommentary] = useState('')
   const [isRegenerateDialogOpen, setIsRegenerateDialogOpen] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
   const [isRegenerating, setIsRegenerating] = useState(false)
-  const [isApproving, setIsApproving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [regenerateError, setRegenerateError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
-  const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
   const [runtimeRewindTarget, setRuntimeRewindTarget] = useState<RuntimeRewindTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
@@ -408,15 +411,15 @@ export function ExecutionSetupPlanApprovalPane({
       commentary: nextCommentary,
     })
     restoredDraftRef.current = true
-  }, [isPlanGenerating, persistedUiState, plan, rawContent, readOnly])
+  }, [isPlanGenerating, persistedUiState, plan, rawContent, readOnly, setIsEditMode])
 
   useEffect(() => {
     if (!readOnly) return
     setIsEditMode(false)
-    setDiscardTarget(null)
+    clearDiscardTarget()
     setIsRegenerateDialogOpen(false)
     setRuntimeRewindTarget(null)
-  }, [readOnly])
+  }, [clearDiscardTarget, readOnly, setIsEditMode])
 
   useApprovalFocusAnchor(ticket.id, EXECUTION_SETUP_PLAN_APPROVAL_FOCUS_EVENT)
 
@@ -614,7 +617,7 @@ export function ExecutionSetupPlanApprovalPane({
 
   function handleConfirmDiscard() {
     const target = discardTarget
-    setDiscardTarget(null)
+    clearDiscardTarget()
     if (!target) return
 
     if (target.type === 'close') {
@@ -634,7 +637,7 @@ export function ExecutionSetupPlanApprovalPane({
         onCancel={() => setRuntimeRewindTarget(null)}
       />
 
-      <Dialog open={!readOnly && discardTarget !== null} onOpenChange={(open) => !open && setDiscardTarget(null)}>
+      <Dialog open={!readOnly && discardTarget !== null} onOpenChange={(open) => !open && clearDiscardTarget()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">Discard unsaved setup-plan edits?</DialogTitle>
@@ -643,7 +646,7 @@ export function ExecutionSetupPlanApprovalPane({
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setDiscardTarget(null)}>
+            <Button type="button" variant="outline" size="sm" onClick={clearDiscardTarget}>
               Keep Editing
             </Button>
             <Button type="button" size="sm" onClick={handleConfirmDiscard}>

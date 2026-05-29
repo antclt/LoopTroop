@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MutableRefObject } from 'react'
+import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction, type MutableRefObject } from 'react'
 import { nextTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
 
 interface SaveTicketUiStateInput<T> {
@@ -146,4 +146,37 @@ export function useDebouncedApprovalUiState<T>({
       window.removeEventListener('beforeunload', flushLatest)
     }
   }, [lastSavedSnapshotRef])
+}
+
+export type ApprovalDiscardTarget<TEditTab extends string = string> =
+  | { type: 'close' }
+  | { type: 'switch-tab'; tab: TEditTab }
+  | null
+
+export interface ApprovalPaneState<TEditTab extends string = string> {
+  isEditMode: boolean
+  setIsEditMode: Dispatch<SetStateAction<boolean>>
+  isSaving: boolean
+  setIsSaving: Dispatch<SetStateAction<boolean>>
+  isApproving: boolean
+  setIsApproving: Dispatch<SetStateAction<boolean>>
+  discardTarget: ApprovalDiscardTarget<TEditTab>
+  setDiscardTarget: Dispatch<SetStateAction<ApprovalDiscardTarget<TEditTab>>>
+  clearDiscardTarget: () => void
+}
+
+export function useApprovalPaneState<TEditTab extends string = string>(): ApprovalPaneState<TEditTab> {
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const [isApproving, setIsApproving] = useState(false)
+  const [discardTarget, setDiscardTarget] = useState<ApprovalDiscardTarget<TEditTab>>(null)
+  const clearDiscardTarget = useCallback(() => setDiscardTarget(null), [])
+
+  return {
+    isEditMode, setIsEditMode,
+    isSaving, setIsSaving,
+    isApproving, setIsApproving,
+    discardTarget, setDiscardTarget,
+    clearDiscardTarget,
+  }
 }

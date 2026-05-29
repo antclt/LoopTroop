@@ -25,6 +25,7 @@ import {
   useApprovalDraftReset,
   useApprovalFocusAnchor,
   useDebouncedApprovalUiState,
+  useApprovalPaneState,
 } from './approvalHooks'
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
 
@@ -38,11 +39,6 @@ interface InterviewApprovalUiState {
   yamlDraft?: string
   answerDrafts?: Record<string, InterviewAnswerUpdate['answer']>
 }
-
-type DiscardTarget =
-  | { type: 'close' }
-  | { type: 'switch-tab'; tab: EditTab }
-  | null
 
 function normalizePersistedAnswerDrafts(
   value: unknown,
@@ -100,16 +96,19 @@ export function InterviewApprovalPane({
   const hasSkippedQuestions = hasSkippedInterviewAnswers(interviewDocument)
   const isPreparingStructuredInterview = !interviewDocument && Boolean(rawContent) && isFetching
 
-  const [isEditMode, setIsEditMode] = useState(false)
+  const {
+    isEditMode, setIsEditMode,
+    isSaving, setIsSaving,
+    isApproving, setIsApproving,
+    discardTarget, setDiscardTarget,
+    clearDiscardTarget,
+  } = useApprovalPaneState<EditTab>()
   const [editTab, setEditTab] = useState<EditTab>('answers')
   const [answerDrafts, setAnswerDrafts] = useState<Record<string, InterviewAnswerUpdate['answer']>>({})
   const [yamlDraft, setYamlDraft] = useState('')
-  const [isSaving, setIsSaving] = useState(false)
-  const [isApproving, setIsApproving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
   const [isCascadeWarningOpen, setIsCascadeWarningOpen] = useState(false)
-  const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -151,7 +150,7 @@ export function InterviewApprovalPane({
     })
     lastSavedSnapshotRef.current = snapshot
     restoredDraftRef.current = true
-  }, [interviewDocument, isLoading, persistedUiState, rawContent])
+  }, [interviewDocument, isLoading, persistedUiState, rawContent, setIsEditMode])
 
   useApprovalFocusAnchor(ticket.id, INTERVIEW_APPROVAL_FOCUS_EVENT)
 
@@ -310,7 +309,7 @@ export function InterviewApprovalPane({
 
   function handleConfirmDiscard() {
     const target = discardTarget
-    setDiscardTarget(null)
+    clearDiscardTarget()
     if (!target) return
 
     if (target.type === 'close') {
@@ -331,7 +330,7 @@ export function InterviewApprovalPane({
         onCancel={() => setIsCascadeWarningOpen(false)}
       />
 
-      <Dialog open={discardTarget !== null} onOpenChange={(open) => !open && setDiscardTarget(null)}>
+      <Dialog open={discardTarget !== null} onOpenChange={(open) => !open && clearDiscardTarget()}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-sm">Discard unsaved interview edits?</DialogTitle>
@@ -340,7 +339,7 @@ export function InterviewApprovalPane({
             </DialogDescription>
           </DialogHeader>
           <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={() => setDiscardTarget(null)}>
+            <Button type="button" variant="outline" size="sm" onClick={clearDiscardTarget}>
               Keep Editing
             </Button>
             <Button type="button" size="sm" onClick={handleConfirmDiscard}>
