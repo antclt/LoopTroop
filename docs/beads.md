@@ -185,6 +185,6 @@ Without beads, LoopTroop would collapse back into a single long-running coding c
 ## Related Docs
 
 - [Execution Loop](execution-loop.md)
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [API Reference](api-reference.md)
 - [System Architecture](system-architecture.md)

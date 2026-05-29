@@ -26,7 +26,7 @@ LoopTroop responds by:
 4. isolating execution in ticket worktrees
 5. requiring human approval at the expensive boundaries
 
-Read more: [Core Philosophy](core-philosophy.md), [Context Isolation](context-isolation.md)
+Read more: [Core Philosophy](core-philosophy.md), [Context Engineering](context-engineering.md)
 
 ## What is an LLM council?
 

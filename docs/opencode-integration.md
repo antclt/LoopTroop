@@ -51,6 +51,10 @@ Both the LoopTroop backend and the OpenCode process must share the same credenti
 
 When running `npm run dev`, the launcher probes the configured address first. If OpenCode is already responding there, it reuses that instance. If the default port is occupied by a non-OpenCode process, the launcher finds the next available port and starts OpenCode there instead.
 
+## OpenCode Configuration Pass-Through
+
+LoopTroop sends work through your OpenCode server rather than replacing its provider layer. Model Context Protocol tools, custom skills, permissions, and provider authentication configured in OpenCode remain available to LoopTroop sessions.
+
 For full local OpenCode DEBUG logs in your terminal, run `npm run dev --opencode-logs=all`. The launcher maps that opt-in to OpenCode's documented [`--print-logs` and `--log-level DEBUG` CLI flags](https://opencode.ai/docs/cli/) for [`opencode serve`](https://opencode.ai/docs/server/) and propagates `LOOPTROOP_OPENCODE_LOGS=all` to the watcher. This only changes logging for an OpenCode server that LoopTroop starts itself; reused, remote, or mock servers keep their own logging configuration. OpenCode's [troubleshooting docs](https://opencode.ai/docs/troubleshooting/) describe DEBUG logs as detailed diagnostic output; treat them as sensitive local data because they may contain request or provider details.
 
 When OpenCode emits only a generic `Provider returned error` stream event, LoopTroop best-effort scans the newest local OpenCode log files for the same `session.id` and surfaces the exact provider cause in the ticket log and blocked-error diagnostics. The enrichment keeps compact fields only: HTTP status, retryability, OpenCode provider/model, request model, provider error type/title/message, and a short response-body preview. It discards prompt bodies, raw request payloads, headers, cookies, authorization values, and URL query strings before persisting anything. By default it reads OpenCode's documented local log directory; set `LOOPTROOP_OPENCODE_LOG_DIR` when LoopTroop is attached to an external server with logs stored elsewhere.
@@ -202,7 +206,7 @@ Without that wrapper, the rest of the system would have no safe way to restart, 
 
 ## Related Docs
 
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [Execution Loop](execution-loop.md)
 - [API Reference](api-reference.md)
 - [System Architecture](system-architecture.md)

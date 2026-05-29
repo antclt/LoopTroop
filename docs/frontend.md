@@ -274,9 +274,9 @@ These providers are composed in `TicketDashboard` around `ActiveWorkspace` and t
 
 ## Kanban Board
 
-`KanbanBoard` (`src/components/kanban/KanbanBoard.tsx`) is the alternate ticket overview. It groups `TicketCard` components by timeline group using the same `kanbanPhase` field from `workflowMeta.ts` that drives the `PhaseTimeline`.
+`KanbanBoard` (`src/components/kanban/KanbanBoard.tsx`) is the alternate ticket overview. It groups `TicketCard` components into four fixed board locations: To Do, Needs Input, In Progress, and Done.
 
-Column definitions come from `workflowMeta` group metadata, so new timeline groups appear in the Kanban view automatically without frontend changes. `KanbanColumn` handles the per-group layout and empty-column suppression.
+Ticket placement comes from the `kanbanPhase` mapping in `workflowMeta.ts`/`STATUS_TO_PHASE`. To Do is for created-but-not-started tickets, Needs Input is for any user-owned pause including blocked errors, In Progress is for active AI or system workflow work, and Done is for completed or canceled terminal tickets. `KanbanColumn` handles the per-column layout and empty-column suppression.
 
 Press `k` anywhere outside a text input to navigate to the Kanban board.
 

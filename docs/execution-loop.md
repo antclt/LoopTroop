@@ -213,6 +213,6 @@ The execution loop exists because coding models are good at focused work but unr
 ## Related Docs
 
 - [Beads](beads.md)
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [OpenCode Integration](opencode-integration.md)
 - [System Architecture](system-architecture.md)

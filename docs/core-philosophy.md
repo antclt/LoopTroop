@@ -22,7 +22,7 @@ That leads to three hard rules:
 2. A phase only sees the context keys it is explicitly allowed to see.
 3. When a retry is needed, LoopTroop prefers a fresh session plus a compact post-mortem over continuing a polluted transcript.
 
-See [Context Isolation](context-isolation.md).
+See [Context Engineering](context-engineering.md) for the design model, status matrix, and implementation allowlists.
 
 ## Council Instead Of Single-Draft Planning
 
@@ -130,7 +130,7 @@ It is not optimized for:
 
 - [Ticket Flow](ticket-flow.md)
 - [System Architecture](system-architecture.md)
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [LLM Council](llm-council.md)
 - [Execution Loop](execution-loop.md)
 - [Beads](beads.md)

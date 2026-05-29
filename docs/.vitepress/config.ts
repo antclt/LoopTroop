@@ -10,6 +10,7 @@ const sidebar = [
       { text: 'Home', link: '/' },
       { text: 'Getting Started', link: '/getting-started' },
       { text: 'Core Philosophy', link: '/core-philosophy' },
+      { text: 'Context Engineering', link: '/context-engineering' },
       { text: 'FAQ', link: '/faq' },
     ],
   },
@@ -18,6 +19,8 @@ const sidebar = [
     collapsed: false,
     items: [
       { text: 'Ticket Flow', link: '/ticket-flow' },
+      { text: 'Interview', link: '/interview' },
+      { text: 'PRD', link: '/prd' },
       { text: 'State Machine', link: '/state-machine' },
       { text: 'LLM Council', link: '/llm-council' },
       { text: 'Beads', link: '/beads' },
@@ -29,7 +32,6 @@ const sidebar = [
     collapsed: false,
     items: [
       { text: 'System Architecture', link: '/system-architecture' },
-      { text: 'Context Isolation', link: '/context-isolation' },
       { text: 'OpenCode Integration', link: '/opencode-integration' },
       { text: 'Frontend', link: '/frontend' },
       { text: 'Database Schema', link: '/database-schema' },

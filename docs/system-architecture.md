@@ -327,7 +327,7 @@ flowchart LR
 ## Related Docs
 
 - [Core Philosophy](core-philosophy.md)
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [LLM Council](llm-council.md)
 - [Execution Loop](execution-loop.md)
 - [Beads](beads.md)

@@ -86,7 +86,7 @@ This is why the council is better understood as a planning discipline than as a 
 | PRD | Ticket details, relevant files, approved interview, member-specific Full Answers | Approved PRD |
 | Beads | Ticket details, relevant files, approved PRD | Expanded bead plan |
 
-Each domain inherits only the artifacts it needs. See [Context Isolation](context-isolation.md) for the exact allowlists.
+Each domain inherits only the artifacts it needs. See [Context Engineering](context-engineering.md) for the exact allowlists.
 
 ## Quorum And Failure
 
@@ -160,7 +160,7 @@ That storage is what allows phase review, restart, and auditability in the UI.
 
 ## Related Docs
 
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [State Machine](state-machine.md)
 - [Beads](beads.md)
 - [System Architecture](system-architecture.md)

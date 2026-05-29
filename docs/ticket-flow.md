@@ -278,6 +278,27 @@ The UI and API both group workflow states:
 
 ### Interview
 
+The interview is LoopTroop's ambiguity-removal stage. A freshly created ticket is often too short, too broad, or missing assumptions that matter later. Instead of letting the coding model guess, LoopTroop first turns the ticket into a focused set of planning questions.
+
+The goal is not to create a long chat transcript. The goal is to capture the decisions that would otherwise be hidden in your head or invented by the model: expected behavior, constraints, edge cases, UI preferences, integration details, test expectations, and anything that should be explicitly out of scope. The relevant-file scan gives the interview enough repository context to ask better questions, but the interview still stays centered on the ticket intent.
+
+For the product-level explanation of adaptive batches, council drafting, coverage follow-ups, skips, artifact structure, and downstream use, see [Interview](/interview). This page keeps the status-by-status flow.
+
+What the user does in this stage:
+
+- answers the generated questions when the workflow pauses
+- skips questions that are not useful or not worth deciding yet
+- reviews the final interview artifact before it becomes source material for PRD generation
+- edits the artifact if the answers or framing need correction
+
+What LoopTroop produces:
+
+- a canonical interview document with the selected questions and answers
+- follow-up questions when coverage checks find missing or unclear information
+- an approved artifact that later PRD drafting can trust as user-confirmed context
+
+This is why the interview comes before the PRD. It makes requirements explicit while the cost of changing direction is still low.
+
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |
 | `COUNCIL_DELIBERATING` | Council members independently draft competing interview strategies and question sets from the same ticket + relevant-file context. Quorum matters here. | Interview draft artifacts and per-model logs. | `cancel` | Enough valid drafts moves to interview voting. |
@@ -306,6 +327,30 @@ This setting caps how many times `VERIFYING_INTERVIEW_COVERAGE` may generate fol
 See [Configuration Reference → Interview Coverage Passes](/configuration#interview-coverage-passes) for defaults, ranges, and guidance.
 
 ### PRD
+
+The PRD is the ticket's implementation contract. It takes the approved interview and turns it into a structured spec that later phases can decompose, verify, and trace back to user intent.
+
+In LoopTroop, the PRD is practical rather than ceremonial. It should answer what needs to be built, why it matters, what is in and out of scope, which technical constraints matter, what behavior must be accepted, and how the result should be verified. It is the bridge between human intent and execution planning: broad enough to describe the whole ticket, but structured enough that beads can later split it into concrete work.
+
+The PRD stage also protects against a common failure mode in AI coding: starting implementation from a vague request. Before any code is written, LoopTroop asks multiple models to draft candidate specs, compares them, refines the strongest one, checks it for coverage against the interview, and then pauses for your approval.
+
+For the product-level explanation of Full Answers, skipped-question handling, council drafting/voting/refining, PRD structure, coverage, and downstream use, see [PRD](/prd). This page keeps the status-by-status flow.
+
+What the user does in this stage:
+
+- reviews the generated spec before it drives architecture and implementation planning
+- checks scope, requirements, acceptance criteria, risks, and test expectations
+- opens the read-only Full Answers context when they want to see how skipped interview answers were filled for the winning draft
+- edits the PRD if it misses intent, adds scope creep, or describes the wrong behavior
+
+What LoopTroop produces:
+
+- a canonical PRD artifact
+- structured requirements, epics, stories, acceptance criteria, and verification expectations
+- coverage warnings or revisions when the spec does not fully match the winning Full Answers source
+- an approved contract that beads planning must follow
+
+Approving the PRD does not mean the implementation is done. It means the target is clear enough for LoopTroop to design the execution plan.
 
 | Status | What happens here | Main outputs | User action | Normal exits |
 | --- | --- | --- | --- | --- |

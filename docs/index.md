@@ -10,8 +10,9 @@ If you are new to LoopTroop, use this order:
 
 1. [Getting Started](getting-started.md) for local setup and the first run.
 2. [Core Philosophy](core-philosophy.md) for the system-level design goals.
-3. [Ticket Flow](ticket-flow.md) for the full lifecycle from draft to completion.
-4. [FAQ](faq.md) for terminology, safety, and common workflow questions.
+3. [Context Engineering](context-engineering.md) for LoopTroop's minimum-context model discipline.
+4. [Ticket Flow](ticket-flow.md) for the full lifecycle from draft to completion.
+5. [FAQ](faq.md) for terminology, safety, and common workflow questions.
 
 ## What LoopTroop Is
 
@@ -69,12 +70,15 @@ If you are new to LoopTroop, use this order:
 ### Start Here
 
 - [Getting Started](getting-started.md): installation, startup, ports, and first project attach.
-- [Core Philosophy](core-philosophy.md): context isolation, councils, retries, approvals, durable state.
+- [Core Philosophy](core-philosophy.md): context engineering, councils, retries, approvals, durable state.
+- [Context Engineering](context-engineering.md): why prompts are built from minimal per-status context and what each status receives.
 - [FAQ](faq.md): terminology and practical operational questions.
 
 ### Workflow
 
 - [Ticket Flow](ticket-flow.md): end-to-end ticket lifecycle, artifacts, user actions, retries, outcomes.
+- [Interview](interview.md): adaptive clarification batches, skipped questions, coverage follow-ups, artifact structure, and approval.
+- [PRD](prd.md): Full Answers, skipped-answer resolution, council drafting/voting/refining, PRD structure, coverage, and approval.
 - [State Machine](state-machine.md): canonical phase inventory and transition model.
 - [LLM Council](llm-council.md): draft, vote, refine, and coverage orchestration.
 - [Beads](beads.md): execution-unit model, dependency graph, storage, diff review.
@@ -83,7 +87,6 @@ If you are new to LoopTroop, use this order:
 ### Architecture
 
 - [System Architecture](system-architecture.md): current runtime architecture, storage ownership, module map, lifecycle.
-- [Context Isolation](context-isolation.md): context allowlists, trimming rules, cache behavior.
 - [OpenCode Integration](opencode-integration.md): adapter, sessions, reconnect, stream handling.
 - [Frontend](frontend.md): workspace composition, navigation, hooks, live updates.
 - [Database Schema](database-schema.md): app DB, project DB, ownership boundaries.

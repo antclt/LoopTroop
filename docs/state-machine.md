@@ -19,6 +19,19 @@ Use this page for the phase inventory and transition model. Use [Ticket Flow](ti
 | `done` | Done |
 | `errors` | Errors |
 
+## Ticket Board Locations
+
+Every ticket also belongs to exactly one board location through its `kanbanPhase`. This is the broad placement used by the Kanban-style overview and by quick status summaries. It is intentionally simpler than the workflow group list above: workflow groups explain where the ticket is in the lifecycle, while board locations explain who or what owns the next move.
+
+| Board location | `kanbanPhase` | Ticket meaning | Includes |
+| --- | --- | --- | --- |
+| To Do | `todo` | The ticket has been created but has not started. It is still a backlog item: no AI planning, execution worktree setup, or generated workflow artifacts have begun. The user can still edit the ticket normally, start it, or cancel it. | `DRAFT` |
+| Needs Input | `needs_input` | The automated workflow is paused because LoopTroop needs a user decision or user-provided content before it can safely continue. This includes normal review gates and error recovery: even when the underlying reason is a failure, the ticket belongs here because the next required action is human input. | Interview answers, interview/PRD/beads/setup approvals, pull request review, and `BLOCKED_ERROR` retry/continue/cancel or file-effect decisions. |
+| In Progress | `in_progress` | LoopTroop is actively moving the ticket forward through AI or deterministic system work. The next step is owned by the workflow rather than by the user, such as scanning files, drafting or voting, checking coverage, preparing the environment, coding, testing, integrating, creating a PR, or cleaning up. | All active non-terminal phases that are not waiting for user input. |
+| Done | `done` | The ticket is terminal. No further automated workflow step will run unless a new ticket or separate workflow is created. Both successful completion and cancellation live here, because both are deliberate end states from the board's perspective. | `COMPLETED` and `CANCELED` |
+
+`BLOCKED_ERROR` deliberately maps to `needs_input`, not to a separate board location. The detailed workflow group is still `errors`, but the broad board placement is "Needs Input" because recovery cannot proceed until the user retries, continues an eligible preserved session, chooses a file-effect action, or cancels.
+
 ## Phase Inventory
 
 | Phase | Label | Group | `uiView` | `kanbanPhase` | Review artifact | Editable | Multi-model logs | Progress kind |
@@ -236,5 +249,5 @@ That is why docs that drift away from `workflowMeta.ts` quickly become misleadin
 
 - [Ticket Flow](ticket-flow.md)
 - [Frontend](frontend.md)
-- [Context Isolation](context-isolation.md)
+- [Context Engineering](context-engineering.md)
 - [System Architecture](system-architecture.md)
