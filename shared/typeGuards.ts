@@ -1,3 +1,7 @@
+/**
+ * Type guard that validates if an unknown value is a plain object/record.
+ * Excludes arrays, dates, maps, sets, regexps, and null values.
+ */
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object'
     && value !== null
