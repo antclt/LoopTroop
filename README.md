@@ -5,7 +5,7 @@
 
 LoopTroop helps you turn a coding ticket into a planned, reviewable, agent-executed pull request.
 
-Instead of trusting a single, endless AI chat session—where the conversation history gets bloated, the AI gets confused, and code quality falls off a cliff—LoopTroop breaks the job into clean, separate stages: planning (where an interview feeds a PRD, which is then split into the smallest manageable milestones called "beads"), execution (where each bead goes through targeted retry loops), and final review.
+Instead of trusting a single, endless AI chat session—where the conversation history gets bloated, the AI gets confused, and code quality falls off a cliff—LoopTroop breaks the job into clean, separate stages: planning (where after an interview it creates a PRD, which is then split into the smallest manageable milestones called "beads"), execution (where each bead goes through targeted auto-fix loops), and final review.
 
 | Architectural Layer |  Core | Technical Lifecycle |
 | :--- | :--- | :--- |
@@ -51,7 +51,7 @@ LoopTroop breaks the development cycle into highly structured, verifiable phases
 ---
 
 ### Context Engineering: Why This Exists
-Context rot is the enemy of autonomous agents. When an AI is fed too much data, its performance can degrade severely. This results in missing files, broken imports, and "AI slop."
+Context rot is the enemy of autonomous agents. When an AI is fed too much data, its performance degrades severely—often when reaching just 40% of its maximum context window. This results in missing files, broken imports, and "AI slop."
 
 LoopTroop solves this through precise context curation: at any given step, the agent only sees the specific active bead, its immediate file target, and the test file. Keeping the working context fresh is what makes multi-hour, multi-step engineering cycles actually work. Even for planning phases, LoopTroop feeds the model only the absolute minimum context relevant to the current step, ensuring that the AI's "attention" is focused and effective.
 
@@ -62,7 +62,7 @@ LoopTroop solves this through precise context curation: at any given step, the a
 
 LoopTroop is designed for serious agentic coding work. Because it is designed to run unattended (sometimes for 10+ hours overnight), sitting at your computer to click "approve" on every terminal command is not practical.
 
-To solve this, the managed OpenCode server is permissive by default: `npm run dev` starts it with `OPENCODE_PERMISSION='"allow"'`, and LoopTroop creates execution sessions with allow-all tool permissions. This grants the agent broad local execution rights without prompting you for OpenCode confirmation.
+To solve this, the orchestrator runs OpenCode in a **dangerously-skip-permissions** (YOLO) mode. This grants the agent full local execution rights without prompting you for confirmation. 
 
 While this makes long-running autonomous tasks possible, it introduces real risks. AI agents are not perfect. If a generation goes wrong, the agent can execute commands that delete critical system folders, corrupt active configurations, or break your workspace. Git worktrees isolate your code changes, but they do not sandbox the command execution process itself. The agent runs with your local user privileges.
 
@@ -87,7 +87,7 @@ Why:
    🏛️ LLM Council Planning (Interview, PRD & Beads)
           │
           ▼
-   🛑 Human Approval Gates
+   🛑 Human Approval Gates (optional in future releases)
           │
           ▼
    🧪 Isolated OpenCode Bead Execution (Git Worktree)
