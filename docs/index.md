@@ -16,8 +16,10 @@ If you are new to LoopTroop, use this order:
 
 ## What LoopTroop Is
 
-- A workflow engine, not a thin coding-chat wrapper.
-- A planning pipeline for agentic coding that uses interview, PRD, and beads stages before code execution.
+- A **local GUI orchestrator for long-running, high-correctness AI software delivery** — taking you from a raw idea to merged code.
+- Built for **complex, multi-file feature work** where alignment and correctness are paramount, optimizing for a "slow and perfect" paradigm over raw speed.
+- **Great Context Engineering = Zero AI Slop:** precise context curation at every stage feeds the agent only the absolute minimum context it needs — eliminating context rot, LLM drift, and degraded output.
+- A planning pipeline that uses interview, PRD, and beads stages with multi-model councils (draft → vote → refine → verify) before any code execution.
 - An OpenCode worktrees execution system that keeps the attached project checkout out of the blast radius.
 - A durable runtime built around SQLite, `.ticket/**` artifacts, execution logs, and resumable ownership-aware sessions.
 - A human-in-the-loop system with approval gates before specs, blueprint, workspace setup, and final PR completion.
@@ -27,7 +29,7 @@ If you are new to LoopTroop, use this order:
 
 ::: details Projects dialog
 ![Projects dialog](media/projects.png)
-*Manage attached repositories, review ticket counts, and create new projects from the dashboard.*
+*Manage attached repositories, review ticket counts, and add new projects from the dashboard.*
 :::
 
 ::: details Configuration dialog

@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Restructured the README for clarity: consolidated repeated explanations, merged overlapping sections, and reorganized the reading flow.
+- Aligned documentation pages with the restructured README: updated index.md positioning, enriched FAQ comparison table, strengthened core-philosophy context framing and cost caveats, expanded the README doc table, and synchronized screenshot captions.
 - Added AI-assisted candidate-file auditing before PR creation so unrelated byproducts can be excluded with visible reasons.
 - Added bead-level raw Input and Output inspection with per-iteration history.
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
@@ -27,6 +28,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.
 - Removed the empty artifact spacer between live coding beads and the log viewer, leaving a single separator at that boundary.
 - Restructured the README: broke the dense intro paragraph into short focused sentences; merged the Core Pipeline numbered list and Core Ideas subsections into a single enriched section; consolidated three separate context engineering explanations into one comprehensive subsection; removed repeated council draft/vote/refine descriptions from PRD and Beads sections; consolidated repeated "hours/overnight" mentions into a single statement in Execution; merged the standalone Safety section into What You Need with a "Why a VM?" subsection; moved Screenshots to a collapsed `<details>` element after the intro links; moved the comparison table below Quick Start; and merged the two "What LoopTroop is not" headings into one section.
+- Aligned `docs/index.md` "What LoopTroop Is" section with the README's updated positioning: local GUI orchestrator, slow-and-perfect paradigm, context engineering = zero AI slop, and council pipeline framing.
+- Enriched `docs/faq.md` "Why use LoopTroop" answer with a structured 7-row comparison table matching the README's core challenges, replacing the previous 5-point list.
+- Strengthened `docs/core-philosophy.md` context degradation section with concrete 40% context window performance metric and "AI slop" framing from the README.
+- Added multi-model council token cost caveat to `docs/core-philosophy.md` "not optimized for" section.
+- Expanded the README documentation table from 9 to 14 pages, adding Configuration, State Machine, Frontend, Output Normalization, and Runtime Diagnostics.
+- Synchronized the `docs/index.md` Projects screenshot caption with the README ("add" instead of "create").
 
 #### Fixed
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.

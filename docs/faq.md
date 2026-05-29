@@ -16,15 +16,17 @@ Read more: [Ticket Flow](ticket-flow.md), [State Machine](state-machine.md)
 
 ## Why use LoopTroop instead of just asking ChatGPT or Claude for code?
 
-Plain chat loops tend to degrade as context grows. Planning quality is fragile, retries often happen in the same polluted session, and important workflow state lives only in the conversation unless you externalize it yourself.
+Direct coding-agent loops are highly useful, but they degrade rapidly when task complexity or repository scale increases. LoopTroop addresses the core challenges:
 
-LoopTroop responds by:
-
-1. forcing structured planning before coding
-2. using a council instead of a single first draft
-3. rebuilding context from durable artifacts at each phase
-4. isolating execution in ticket worktrees
-5. requiring human approval at the expensive boundaries
+| Challenge | Direct Agent Behavior | LoopTroop's Fix |
+| --- | --- | --- |
+| **Flawed Planning** | A single model drafts a plan in one pass, missing edge cases | Multi-model councils draft, vote, refine, and verify |
+| **Monolithic Overload** | Tries to solve a complex feature in one massive prompt | Decomposes work into atomic beads with acceptance criteria |
+| **Single-Provider Bias** | One model's blind spots cascade through the whole pipeline | Cross-model councils harness diverse providers and architectures |
+| **Context Rot** | Long chats suffer token bloat and degraded output | Phase-specific context rebuilt from durable artifacts each step |
+| **Degenerate Retries** | Keeps fixing inside the same polluted session | Ralph-style fresh-session retries with compact failure notes |
+| **Risky Edits** | Modifies your active checkout directly | Isolated git worktrees per ticket |
+| **Opaque Execution** | State and notes lost inside chat history | SQLite state, JSONL logs, and `.ticket/**` YAML artifacts |
 
 Read more: [Core Philosophy](core-philosophy.md), [Context Engineering](context-engineering.md)
 

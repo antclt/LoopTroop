@@ -14,7 +14,7 @@ LoopTroop is opinionated about how AI coding systems should behave. The app trad
 
 ## Context Degradation Is A Design Constraint
 
-Long-context models are useful, but they are still vulnerable to positional bias and long-run context drift. LoopTroop treats that as a systems problem, not as a prompt wording problem.
+Long-context models are useful, but they are still vulnerable to positional bias and long-run context drift. Performance can drop severely when reaching just 40% of the maximum context window—excessive conversational history and irrelevant files overwhelm the model, leading to missing files, broken imports, and "AI slop." LoopTroop treats this as a systems problem, not as a prompt wording problem.
 
 That leads to three hard rules:
 
@@ -125,6 +125,7 @@ It is not optimized for:
 - one-shot trivial edits
 - chat-first exploratory coding
 - unbounded autonomous runs with no checkpoints
+- cost-sensitive budgets where API token volume matters — orchestrating multi-model councils and long retry loops uses a high volume of tokens, though costs can be mitigated by leveraging subscription plans or free-tier providers in OpenCode
 
 ## Related Docs
 
