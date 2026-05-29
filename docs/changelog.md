@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Clarified README positioning, safety guidance, and workflow terminology.
 - Added AI-assisted candidate-file auditing before PR creation so unrelated byproducts can be excluded with visible reasons.
 - Added bead-level raw Input and Output inspection with per-iteration history.
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
@@ -22,6 +23,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Revised the README overview, core workflow explanations, and safety section to reduce repeated ideas, correct OpenCode permission terminology, and align links with the current documentation pages.
 - Changed PR review diff handling to default to the final net diff while keeping bead-level and by-file activity available for audit.
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.
 - Removed the empty artifact spacer between live coding beads and the log viewer, leaving a single separator at that boundary.
