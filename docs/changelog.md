@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Removed dead exports, standardized boolean naming, extracted shared components and hooks to reduce duplication.
 - Restructured the README for clarity: consolidated repeated explanations, merged overlapping sections, and reorganized the reading flow.
 - Aligned documentation pages with the restructured README: updated index.md positioning, enriched FAQ comparison table, strengthened core-philosophy context framing and cost caveats, expanded the README doc table, and synchronized screenshot captions.
 - Added AI-assisted candidate-file auditing before PR creation so unrelated byproducts can be excluded with visible reasons.
@@ -37,6 +38,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Fixed
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.
+
+#### Maintenance
+- Removed dead exported functions and constants from `src/lib/beadsDocument.ts` and `server/lib/constants.ts` that were defined but never called.
+- Extracted shared `LogCollapseToggle` component used identically in `PhaseLogPanel` and `FullLogView`, eliminating duplicate JSX blocks.
+- Extracted `useApprovalPaneState` hook shared across all three approval panes (`InterviewApprovalPane`, `PrdApprovalPane`, `ExecutionSetupPlanApprovalPane`), removing duplicate state and type definitions.
+- Standardized boolean variable naming to use `is/has/should` prefixes throughout the codebase.
+- Added `EXECUTION_SETUP_EDIT_GRACE_MS` named constant to replace inline magic number in approval pane timing logic.
+- Added `varsIgnorePattern: '^_'` to ESLint config for cleaner destructuring patterns without disable comments.
 
 ---
 
