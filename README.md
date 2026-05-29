@@ -1,16 +1,16 @@
 # LoopTroop
 
 > **A smart local engine that automates big coding tasks from start to finish.**
-> LLM councils plan it. Ralph loops recover it. OpenCode worktrees ship it.
+> LLM councils plan it. Ralph loops perfect it. OpenCode worktrees ship it.
 
 LoopTroop helps you turn a coding ticket into a planned, reviewable, agent-executed pull request.
 
-Instead of trusting a single, endless AI chat session—where the conversation history gets bloated, the AI gets confused, and code quality falls off a cliff—LoopTroop breaks the job into clean, separate stages. **Planning** turns an interview into a PRD, which is then split into the smallest manageable milestones, called "beads." **Execution** runs each bead through multiple targeted auto-fix loops. A **final review** ties it all together.
+Instead of trusting a single, endless AI chat session - where the conversation history gets bloated, the AI gets confused, and code quality falls off a cliff - LoopTroop breaks the job into clean, separate stages. **Planning** turns an interview into a PRD, which is then split into the smallest manageable milestones, called "beads." **Execution** runs each bead through multiple targeted auto-fix loops. A **final review** ties it all together.
 
 | Architectural Layer | Core | Technical Lifecycle |
 | :--- | :--- | :--- |
 | **1. Planning** | *LLM Councils Plan It* | Human Input ➔ AI Interview ➔ PRD ➔ Atomic Beads |
-| **2. Execution** | *Ralph Loops Recover It* | Isolated Bead Work ➔ Multi-Loop Automated Testing & Fixing |
+| **2. Execution** | *Ralph Loops Perfect It* | Isolated Bead Work ➔ Multi-Loop Automated Testing & Fixing |
 | **3. Shipping** | *OpenCode Worktrees Ship It* | Code Isolation ➔ Final Verification Pass ➔ Main Branch Handoff |
 
 **Start here:**
@@ -21,8 +21,10 @@ Instead of trusting a single, endless AI chat session—where the conversation h
 [Execution Loop](https://www.looptroop.ovh/execution-loop) |
 [Changelog](https://www.looptroop.ovh/changelog)
 
+### 📸 Screenshots
+
 <details>
-<summary>Screenshots</summary>
+<summary><strong>Click to expand the screenshot gallery</strong></summary>
 
 ![Projects dialog](docs/media/projects.png)
 *Manage attached repositories, review ticket counts, and add new projects from the dashboard.*
