@@ -402,7 +402,7 @@ export function getMissingBins() {
   })
 }
 
-export function getInstallReasons() {
+function getInstallReasons() {
   const reasons: string[] = []
   const missingBins = getMissingBins()
 

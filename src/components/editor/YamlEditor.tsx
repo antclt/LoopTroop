@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from '@codemirror/view'
-import { EditorState } from '@codemirror/state'
+import { Compartment, EditorState } from '@codemirror/state'
 import { yaml } from '@codemirror/lang-yaml'
 import { syntaxHighlighting, defaultHighlightStyle, bracketMatching } from '@codemirror/language'
 import { closeBrackets } from '@codemirror/autocomplete'
@@ -15,7 +15,10 @@ interface YamlEditorProps {
 export function YamlEditor({ value, onChange, readOnly = false, className }: YamlEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<EditorView | null>(null)
+  const initialValueRef = useRef(value)
+  const initialReadOnlyRef = useRef(readOnly)
   const onChangeRef = useRef(onChange)
+  const readOnlyCompartmentRef = useRef(new Compartment())
   onChangeRef.current = onChange
 
   const createState = useCallback((doc: string) => {
@@ -35,7 +38,7 @@ export function YamlEditor({ value, onChange, readOnly = false, className }: Yam
             onChangeRef.current(update.state.doc.toString())
           }
         }),
-        EditorState.readOnly.of(readOnly),
+        readOnlyCompartmentRef.current.of(EditorState.readOnly.of(initialReadOnlyRef.current)),
         EditorView.theme({
           '&': { fontSize: '12px', height: '100%' },
           '.cm-scroller': { overflow: 'auto' },
@@ -43,12 +46,12 @@ export function YamlEditor({ value, onChange, readOnly = false, className }: Yam
         }),
       ],
     })
-  }, [readOnly])
+  }, [])
 
   useEffect(() => {
     if (!containerRef.current) return
     const view = new EditorView({
-      state: createState(value),
+      state: createState(initialValueRef.current),
       parent: containerRef.current,
     })
     viewRef.current = view
@@ -56,9 +59,15 @@ export function YamlEditor({ value, onChange, readOnly = false, className }: Yam
       view.destroy()
       viewRef.current = null
     }
-    // Only create editor once
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [createState])
+
+  useEffect(() => {
+    const view = viewRef.current
+    if (!view) return
+    view.dispatch({
+      effects: readOnlyCompartmentRef.current.reconfigure(EditorState.readOnly.of(readOnly)),
+    })
+  }, [readOnly])
 
   // Sync external value changes
   useEffect(() => {

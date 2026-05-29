@@ -1,6 +1,6 @@
 import { spawnSync } from 'child_process'
 import { existsSync, mkdirSync } from 'fs'
-import { dirname, isAbsolute, resolve } from 'path'
+import { isAbsolute, resolve } from 'path'
 import { resolveBaseBranch } from '../git/repository'
 
 import { createRequire } from 'node:module'
@@ -55,10 +55,6 @@ export function resolveGitRepoRoot(folderPath: string): string | null {
   return normalizeFolderPath(stdout)
 }
 
-export function isGitRepo(folderPath: string): boolean {
-  return resolveGitRepoRoot(folderPath) !== null
-}
-
 export function detectGitBaseBranch(projectRoot: string): string {
   return resolveBaseBranch(projectRoot)
 }
@@ -107,15 +103,7 @@ export function getTicketExecutionSetupProfilePath(projectRoot: string, external
   return resolve(getTicketRuntimeDir(projectRoot, externalId), 'execution-setup-profile.json')
 }
 
-export function getTicketRuntimeStatePath(projectRoot: string, externalId: string): string {
-  return resolve(getTicketRuntimeDir(projectRoot, externalId), 'state.yaml')
-}
-
 export function ensureProjectStorageDirs(projectRoot: string) {
   mkdirSync(getProjectLoopTroopDir(projectRoot), { recursive: true })
   mkdirSync(getProjectWorktreesRoot(projectRoot), { recursive: true })
-}
-
-export function ensureParentDir(filePath: string) {
-  mkdirSync(dirname(filePath), { recursive: true })
 }

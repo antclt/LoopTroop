@@ -25,7 +25,7 @@ function normalizeExcerpt(value: unknown): string | undefined {
   return normalized.trim().length > 0 ? normalized : undefined
 }
 
-export function normalizeStructuredFailureClass(value: unknown): StructuredFailureClass | undefined {
+function normalizeStructuredFailureClass(value: unknown): StructuredFailureClass | undefined {
   return value === 'validation_error'
     || value === 'output_truncated'
     || value === 'empty_response'

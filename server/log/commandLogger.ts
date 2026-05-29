@@ -35,7 +35,7 @@ function getSharedStore(): AsyncLocalStorage<CommandLogContext> {
 }
 const commandLogStore = getSharedStore()
 
-export type LoggedCommandResult =
+type LoggedCommandResult =
   | { ok: true; stdin?: string; stdout?: string; stderr?: string }
   | { ok: false; error: string; stdin?: string; stdout?: string; stderr?: string }
 
@@ -114,26 +114,6 @@ function emitCommandLog(
   } finally {
     ctx.state.isEmittingCommandLog = false
   }
-}
-
-/**
- * Nest command logging metadata inside the current async context.
- * This lets callers scope command rows to a bead without changing the
- * surrounding command logging lifecycle.
- */
-export function withCommandLoggingFields<T>(
-  fields: Record<string, unknown>,
-  fn: () => T,
-): T {
-  const ctx = commandLogStore.getStore()
-  if (!ctx) return fn()
-  return commandLogStore.run({
-    ...ctx,
-    fields: {
-      ...(ctx.fields ?? {}),
-      ...fields,
-    },
-  }, fn)
 }
 
 export async function withCommandLoggingFieldsAsync<T>(

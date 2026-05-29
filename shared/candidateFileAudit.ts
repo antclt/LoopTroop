@@ -9,7 +9,7 @@ export interface CandidateFileAuditEntry {
   reason: string
 }
 
-export interface CandidateFileAuditSummary {
+interface CandidateFileAuditSummary {
   totalFiles: number
   includedFiles: number
   excludedFiles: number

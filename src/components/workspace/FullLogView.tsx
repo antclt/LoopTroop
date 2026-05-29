@@ -16,7 +16,8 @@ import { ModelBadge } from '@/components/shared/ModelBadge'
 import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { CurrentActivityStrip } from './CurrentActivityStrip'
-import { BeadDelimiter, buildBeadSections, type RenderedBeadSection } from './logGrouping'
+import { BeadDelimiter } from './logGrouping'
+import { buildBeadSections, type RenderedBeadSection } from './logGroupingHelpers'
 
 type LogTab = 'ALL' | 'SYS' | 'AI' | 'ERROR' | 'DEBUG'
 

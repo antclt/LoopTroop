@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Removed dead exports, standardized boolean naming, extracted shared components and hooks to reduce duplication.
+- Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
 - Restructured the README for clarity: consolidated repeated explanations, merged overlapping sections, and reorganized the reading flow.
 - Aligned documentation pages with the restructured README: updated index.md positioning, enriched FAQ comparison table, strengthened core-philosophy context framing and cost caveats, expanded the README doc table, and synchronized screenshot captions.
 - Added AI-assisted candidate-file auditing before PR creation so unrelated byproducts can be excluded with visible reasons.
@@ -46,6 +46,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Standardized boolean variable naming to use `is/has/should` prefixes throughout the codebase.
 - Added `EXECUTION_SETUP_EDIT_GRACE_MS` named constant to replace inline magic number in approval pane timing logic.
 - Added `varsIgnorePattern: '^_'` to ESLint config for cleaner destructuring patterns without disable comments.
+- Split bead log grouping helpers out of the `BeadDelimiter` component module, removing refresh suppressions and keeping bead section parsing reusable without JSX exports.
+- Reworked `YamlEditor` read-only reconfiguration to use a CodeMirror compartment so the editor no longer depends on a hook-dependency suppression.
+- Removed dead internal exports from dev scripts and backend runtime/storage/git helpers that were no longer referenced anywhere in the app or test suite.
 
 ---
 

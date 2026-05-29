@@ -133,14 +133,6 @@ export function tryFetchOrigin(projectPath: string): boolean {
   return gitCommandSucceeds(projectPath, ['fetch', '--no-progress', '--prune', 'origin'])
 }
 
-export function readGitStdout(projectPath: string, args: string[]): string {
-  return runGit(projectPath, args)
-}
-
-export function gitRefExists(projectPath: string, ref: string): boolean {
-  return gitCommandSucceeds(projectPath, ['show-ref', '--verify', '--quiet', ref])
-}
-
 export function ensureLocalGitExclude(projectPath: string, rules: string | readonly string[] = LOOP_TROOP_EXCLUDE_RULES) {
   const excludeGitPath = runGit(projectPath, ['rev-parse', '--git-path', 'info/exclude'])
   const excludePath = resolve(projectPath, excludeGitPath)

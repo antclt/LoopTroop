@@ -178,11 +178,6 @@ export function getStartupStatus(): StartupStatus {
   return toPublicStartupStatus(storageSnapshot!, runtimeSnapshot!, restoreNoticeDismissedAt)
 }
 
-export function getStartupStateDebugLine() {
-  ensureInitialized()
-  return formatStartupStorageVerbose(storageSnapshot!, restoreNoticeDismissedAt)
-}
-
 export function dismissStartupRestoreNotice(timestamp = new Date().toISOString()) {
   ensureInitialized()
 

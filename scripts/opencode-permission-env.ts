@@ -5,7 +5,7 @@ export const OPENCODE_ENABLE_EXA = 'OPENCODE_ENABLE_EXA'
 
 export type LoopTroopOpenCodePermissionMode = 'allow' | 'inherit'
 
-export function resolveOpenCodePermissionMode(env: NodeJS.ProcessEnv): LoopTroopOpenCodePermissionMode {
+function resolveOpenCodePermissionMode(env: NodeJS.ProcessEnv): LoopTroopOpenCodePermissionMode {
   const raw = env[LOOPTROOP_OPENCODE_PERMISSION_MODE]?.trim().toLowerCase()
   return raw === 'inherit' ? 'inherit' : 'allow'
 }

@@ -1,7 +1,6 @@
 import { release } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isMainThread, threadId } from 'node:worker_threads'
 import { buildWslAppMountedDriveWarning, isWslWindowsMountPath } from '../shared/wslPerformance'
 
 export const isTestRuntime = process.env.NODE_ENV === 'test'
@@ -15,10 +14,6 @@ export interface RuntimeStatus {
 }
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-
-export function getTestWorkerKey(): string {
-  return `${process.pid}-${isMainThread ? 0 : threadId}`
-}
 
 export function isWslRuntime(
   platform = process.platform,

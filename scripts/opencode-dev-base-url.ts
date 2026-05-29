@@ -47,7 +47,7 @@ function getPort(url: URL) {
   return port
 }
 
-export function getProbeHosts(url: URL) {
+function getProbeHosts(url: URL) {
   return Array.from(new Set([
     url.hostname,
     url.hostname === '0.0.0.0' ? '127.0.0.1' : url.hostname,

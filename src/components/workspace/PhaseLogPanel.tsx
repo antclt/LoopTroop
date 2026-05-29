@@ -17,7 +17,8 @@ import { LogEntryRow } from './LogLine'
 import { LogColorLegend } from './LogColorLegend'
 import { CurrentActivityStrip } from './CurrentActivityStrip'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
-import { BeadDelimiter, buildBeadSections } from './logGrouping'
+import { BeadDelimiter } from './logGrouping'
+import { buildBeadSections } from './logGroupingHelpers'
 
 interface PhaseLogPanelProps {
   phase: string

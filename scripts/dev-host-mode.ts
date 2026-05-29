@@ -117,7 +117,7 @@ export function isWildcardHost(host: string) {
   return normalized === '0.0.0.0' || normalized === '::'
 }
 
-export function isLoopbackDevHost(host: string) {
+function isLoopbackDevHost(host: string) {
   const normalized = normalizeBracketedIpv6Host(host.trim().toLowerCase())
   return normalized === 'localhost'
     || normalized === '::1'
@@ -126,7 +126,7 @@ export function isLoopbackDevHost(host: string) {
     || normalized.startsWith('127.')
 }
 
-export function formatDevHostForUrl(host: string) {
+function formatDevHostForUrl(host: string) {
   const normalized = normalizeBracketedIpv6Host(host.trim())
   return net.isIP(normalized) === 6 ? `[${normalized}]` : normalized
 }
@@ -152,7 +152,7 @@ export function listLanAddresses(interfaces: NetworkInterfaceMap = networkInterf
   return addresses
 }
 
-export function getAdvertisedDevHosts(
+function getAdvertisedDevHosts(
   hostMode: ResolvedDevHostMode,
   interfaces: NetworkInterfaceMap = networkInterfaces(),
 ) {
