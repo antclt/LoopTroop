@@ -32,17 +32,3 @@ export function parseCouncilMembers(raw: string | null | undefined): string[] {
   }
 }
 
-export function ensureMinimumCouncilMembers(
-  modelIds: Array<string | null | undefined>,
-  minCouncilMembers: number = 2,
-): string[] {
-  const members = normalizeCouncilMembers(modelIds)
-  if (members.length >= minCouncilMembers) return members
-
-  for (const fallback of DEFAULT_COUNCIL_MEMBERS) {
-    if (members.length >= minCouncilMembers) break
-    if (!members.includes(fallback)) members.push(fallback)
-  }
-
-  return members
-}

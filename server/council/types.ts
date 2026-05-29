@@ -129,14 +129,6 @@ export interface VotingPhaseResult {
   voterDetails: VoterDetail[]
 }
 
-export interface VoterResult {
-  voterId: string
-  outcome: MemberOutcome
-  duration: number
-  votes: Vote[]
-  error?: string
-}
-
 export interface CouncilResult {
   phase: string
   drafts: DraftResult[]

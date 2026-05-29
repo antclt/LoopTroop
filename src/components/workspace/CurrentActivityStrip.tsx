@@ -92,7 +92,8 @@ export function CurrentActivityStrip({ entries, enabled = true, activeStatus, cl
 
   useEffect(() => {
     if (!hasAnyActive) return
-    const intervalId = window.setInterval(() => setNowMs(Date.now()), 1000)
+    const UPDATE_INTERVAL_MS = 1000
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), UPDATE_INTERVAL_MS)
     return () => window.clearInterval(intervalId)
   }, [hasAnyActive])
 

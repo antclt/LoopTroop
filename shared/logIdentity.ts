@@ -5,10 +5,6 @@ export interface FingerprintedLogLike {
   data?: unknown
 }
 
-export interface LogIdentityLike extends FingerprintedLogLike {
-  entryId?: string | null
-}
-
 function normalizeNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0
     ? value.trim()

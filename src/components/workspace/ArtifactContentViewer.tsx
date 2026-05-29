@@ -3537,8 +3537,15 @@ function hasRejectedRawAttempt(rawAttempts: ArtifactRawAttemptData[] | undefined
 }
 
 function getRejectedRawAttempt(rawAttempts: ArtifactRawAttemptData[] | undefined): string | undefined {
-  const rejected = rawAttempts?.filter(isRejectedRawAttempt).map(getRawAttemptContent).filter((content): content is string => typeof content === 'string')
-  return rejected?.[rejected.length - 1]
+  if (!rawAttempts) return undefined
+  for (let i = rawAttempts.length - 1; i >= 0; i--) {
+    const attempt = rawAttempts[i]!
+    if (isRejectedRawAttempt(attempt)) {
+      const content = getRawAttemptContent(attempt)
+      if (typeof content === 'string') return content
+    }
+  }
+  return undefined
 }
 
 function getRawAttemptNumber(attempt: ArtifactRawAttemptData, index: number): number {

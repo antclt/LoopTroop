@@ -522,7 +522,7 @@ function canonicalizeInterviewRefinementChanges(
   // Repair added → replaced where the model reused a winner-draft question ID
   // but declared the change as "added" instead of "replaced"
   const accountedWinnerIds = new Set(
-    normalizedChanges.filter(c => c.before).map(c => c.before!.id),
+    normalizedChanges.flatMap(c => c.before ? [c.before.id] : []),
   )
   const winnerById = new Map(
     winnerQuestions
