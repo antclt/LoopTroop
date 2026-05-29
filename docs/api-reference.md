@@ -8,7 +8,7 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 
 | Convention | Meaning |
 | --- | --- |
-| Ticket identifiers | Most ticket endpoints use the external ticket reference, not the local numeric DB id |
+| Ticket identifiers | Ticket route params such as `:id` and `:ticketId` use the public composite ticket ref `projectId:externalId` (for example `1:AUTH-12`), not the project-local numeric DB id |
 | JSON validation | Most write routes validate request bodies with Zod or route-specific parsers |
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
@@ -28,7 +28,7 @@ All `/api/*` routes share a global per-client rate limit, with separate buckets 
 | `POST` | `/api/health/startup/restore-notice/dismiss` | Dismiss startup restore notice |
 | `GET` | `/api/models` | Connected and full model catalog |
 | `GET` | `/api/workflow/meta` | Current workflow groups and phases |
-| `GET` | `/api/stream?ticketId=<id>` | Ticket-scoped SSE stream; validates the ticket and enforces stream caps |
+| `GET` | `/api/stream?ticketId=<id>` | Ticket-scoped SSE stream using the composite ticket ref; validates the ticket and enforces stream caps |
 
 `/api/stream` also accepts `lastEventId` and, when header auth is not available, `apiToken` query parameters. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible.
 
@@ -88,6 +88,7 @@ Example profile update payload:
   "maxIterations": 5,
   "opencodeRetryLimit": 10,
   "opencodeRetryDelay": 60000,
+  "opencodeSteps": 0,
   "toolInputMaxChars": 4000,
   "toolOutputMaxChars": 12000,
   "toolErrorMaxChars": 6000
@@ -99,6 +100,8 @@ Example profile update payload:
 `structuredRetryCount` controls automatic structured-output retry prompts after the first invalid or missing structured response. It defaults to `1`, accepts `0` through `5`, and is locked onto each ticket at start; missing locked values on older tickets fall back to the current profile value and then the default.
 
 `opencodeRetryLimit` and `opencodeRetryDelay` control prompt-level OpenCode retry handling for continuable provider interruptions across all phases that use OpenCode. The limit defaults to `10` retry status events and accepts `0` through `50`; the delay defaults to `60000` ms and accepts `0` through `3600000`. Exhaustion of either budget blocks with diagnostics and preserves the active session for Continue when the interruption is resumable.
+
+`opencodeSteps` sets the maximum number of steps OpenCode is allowed to perform per session. When the limit is reached, OpenCode instructs the model to summarize its work and close the session; LoopTroop then starts a fresh session to continue. Defaults to `0` (no limit — OpenCode default), accepts `0` through `500`.
 
 ## Project Routes
 
@@ -147,8 +150,9 @@ Project deletion (`DELETE /api/projects/:id`) returns 409 when any ticket in the
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| `GET` | `/api/tickets` | Optionally filtered with `?projectId=` |
-| `GET` | `/api/tickets/:id` | Get one ticket |
+| `GET` | `/api/tickets` | Optionally filtered with `?project=` or `?projectId=` |
+| `GET` | `/api/tickets/:id` | Get one ticket by composite ticket ref |
+| `GET` | `/api/tickets/:id/size` | Recursively measure the ticket worktree and return logs/artifacts/source breakdown; returns `{ "size": 0, "exists": false }` when no worktree exists yet |
 | `POST` | `/api/tickets` | Create a ticket; title max 500 characters and description max 10,000 characters |
 | `PATCH` | `/api/tickets/:id` | Update title, description, or priority |
 | `DELETE` | `/api/tickets/:id` | Only allowed for `COMPLETED` or `CANCELED` |
@@ -167,6 +171,37 @@ Example ticket creation payload:
 ```
 
 Create-ticket validation requires a non-empty title up to 500 characters. The optional description is capped at 10,000 characters.
+
+All ticket route params shown as `:id` or `:ticketId` use the composite public ticket ref, such as `1:AUTH-12`. The browser URL uses only the external ticket id (`/ticket/AUTH-12`), but API callers should send the composite ref returned by ticket list/detail payloads.
+
+Example ticket size response:
+
+```json
+{
+  "size": 1234567,
+  "exists": true,
+  "breakdown": {
+    "logs": {
+      "total": 4096,
+      "children": [
+        { "name": "execution-log.jsonl", "size": 2048, "isDirectory": false }
+      ]
+    },
+    "artifacts": {
+      "total": 8192,
+      "children": [
+        { "name": "runtime", "size": 8192, "isDirectory": true }
+      ]
+    },
+    "source": {
+      "total": 12288,
+      "children": [
+        { "name": "src", "size": 12288, "isDirectory": true }
+      ]
+    }
+  }
+}
+```
 
 Example UI-state payload:
 
@@ -488,10 +523,30 @@ These routes are intentionally narrow.
 | `GET` | `/api/files/:ticketId/logs?channel=debug` | Read folded debug/forensic execution logs from `.ticket/runtime/execution-log.debug.jsonl`; the same `status`, `phase`, and `phaseAttempt` filters apply |
 | `GET` | `/api/files/:ticketId/logs?channel=ai` | Read folded AI detail logs from `.ticket/runtime/execution-log.ai.jsonl`; loaded by AI/model log views |
 | `GET` | `/api/files/:ticketId/logs?channel=all` | Merge all three LoopTroop log files plus OpenCode native server log lines filtered by the ticket's session IDs; used by the DEBUG tab to show every log line |
-| `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd`; existing file responses include `contentSha256` |
-| `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd` |
+| `GET` | `/api/files/:ticketId/:file` | Only `interview` or `prd`; returns `{ content, exists }` and adds `contentSha256` when the file exists |
+| `PUT` | `/api/files/:ticketId/:file` | Only `interview` or `prd`; delegates to the dedicated interview/PRD save handlers rather than exposing a generic file write route |
+| `POST` | `/api/files/open-path` | Reveal a file or folder in the user's native file explorer; file paths open their containing folder |
 
 Log routes accept optional `status`, `phase`, and `phaseAttempt` filters. The same filters apply to the default normal log channel, `channel=debug`, and `channel=ai`. The `channel=all` endpoint merges and deduplicates entries from all channels server-side, then sorts by timestamp; phase/status filters still apply to LoopTroop log entries but OpenCode native log entries (which have no ticket phase) are always included. Matching completed log entries are returned from the durable log files without an entry-count cap; streaming partial upserts are folded so the UI receives the latest completed or current streaming row for each stable entry. Live `log` and `state_change` SSE payloads carry the resolved `phaseAttempt` used for the durable JSONL row so active multi-attempt phase views can keep streaming while filtering to the selected attempt.
+
+When `GET /api/files/:ticketId/:file` cannot find the requested artifact file, it returns:
+
+```json
+{
+  "content": "",
+  "exists": false
+}
+```
+
+`POST /api/files/open-path` expects:
+
+```json
+{
+  "path": "/absolute/path/to/file-or-folder"
+}
+```
+
+On success it returns `{ "success": true }`. LoopTroop resolves file paths to their containing directory before opening the native explorer, and the implementation supports Windows, macOS, Linux, and WSL.
 
 There is no generic filesystem browser or arbitrary file read route under `/api/files`.
 

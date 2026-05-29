@@ -30,7 +30,7 @@ LoopTroop operates as a layered system:
 | App database | Singleton profile and attached-project registry | `server/db/index.ts`, `server/db/init.ts` |
 | Project database | Tickets, artifacts, sessions, attempts, history, error occurrences | `server/db/project.ts` |
 | Ticket filesystem | Human-readable and execution-time artifacts inside the ticket worktree | `server/storage/*`, `server/phases/*` |
-| Git and GitHub layer | Worktrees, diffs, commits, PR creation, merge/close flows | `server/phases/execution/gitOps.ts`, `server/git/*`, `server/github/*` |
+| Git and GitHub layer | Worktrees, diffs, commits, PR creation, merge/close flows | `server/phases/execution/gitOps.ts`, `server/git/*` |
 
 ## Authoritative Data Ownership
 

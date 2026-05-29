@@ -89,7 +89,7 @@ All scripts are available with `npm run <name>`.
 | `dev` | Full stack: frontend, backend, docs server, OpenCode watcher, and dev preflight. **Standard start command.** |
 | `dev:app` | Frontend and backend only — no docs server, no OpenCode watcher. Use when OpenCode is already running externally and docs are not needed locally. |
 | `dev:frontend` | Vite dev server only. |
-| `dev:backend` | Backend Express server only. |
+| `dev:backend` | Backend Hono API server only. |
 | `dev:opencode` | OpenCode watcher only. |
 | `docs:dev` | VitePress docs server only. |
 
@@ -160,6 +160,7 @@ The app database is runtime-bootstrapped by `server/db/init.ts`. The committed m
 | `LOOPTROOP_DEV_SKIP_OPENCODE_UPGRADE=1` | Skip the automatic local OpenCode CLI upgrade during `npm run dev` |
 | `LOOPTROOP_DEV_FORCE_MAINTENANCE=1` | Bypass the once-per-day maintenance gate and force all startup maintenance checks now |
 | `LOOPTROOP_OPENCODE_MODE` | Set to `mock` to use the mock adapter instead of the real SDK adapter |
+| `LOOPTROOP_OPENCODE_PERMISSION_MODE` | Set to `inherit` to skip setting `OPENCODE_PERMISSION='"allow"'` when `npm run dev` starts a managed OpenCode server; by default LoopTroop sets permissive mode automatically for local trusted sessions |
 | `LOOPTROOP_OPENCODE_LOGS=all` | Direct watcher fallback for `npm run dev:opencode`; starts a managed OpenCode server with `--print-logs --log-level DEBUG` when the watcher actually launches OpenCode |
 | `LOOPTROOP_OPENCODE_LOG_DIR` | Optional OpenCode log directory used to enrich generic provider errors from an external or nonstandard OpenCode server |
 | `CHOKIDAR_USEPOLLING` | Set to `1` to force chokidar polling for file watching; auto-set on mounted WSL drives, but can be overridden manually |

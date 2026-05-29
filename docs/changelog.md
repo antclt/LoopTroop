@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Synchronized the API reference and operations guide with the implemented Hono routes, composite ticket refs, ticket-size breakdown endpoint, and native file-reveal endpoint.
 - Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
 - Restructured the README for clarity: consolidated repeated explanations, merged overlapping sections, and reorganized the reading flow.
 - Aligned documentation pages with the restructured README: updated index.md positioning, enriched FAQ comparison table, strengthened core-philosophy context framing and cost caveats, expanded the README doc table, and synchronized screenshot captions.
@@ -15,6 +16,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added bead-level raw Input and Output inspection with per-iteration history.
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
 - Hardened structured-output parsing for common YAML quote mistakes before implementation planning.
+- Corrected four doc/code discrepancies: removed non-existent `server/github/*` module reference from the architecture guide; added `opencode_steps` to the database schema and API reference profile payload; added `LOOPTROOP_OPENCODE_PERMISSION_MODE` to the operations environment-variable table.
 
 ### Detailed Changes
 
@@ -25,6 +27,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Updated `docs/api-reference.md` to document composite ticket refs (`projectId:externalId`), `GET /api/tickets/:id/size`, the `/api/files/open-path` route, and the exact `GET/PUT /api/files/:ticketId/:file` behavior.
+- Fixed `docs/operations.md` to describe `npm run dev:backend` as the Hono backend server rather than Express.
 - Changed PR review diff handling to default to the final net diff while keeping bead-level and by-file activity available for audit.
 - Removed the extra bead progress summary line below the coding progress bar, leaving the header progress count and bead grid as the single source of progress information.
 - Removed the empty artifact spacer between live coding beads and the log viewer, leaving a single separator at that boundary.
@@ -38,6 +42,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Fixed
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.
+- Corrected `docs/system-architecture.md` to remove non-existent `server/github/*` module reference; all GitHub integration code lives in `server/git/github.ts`.
+- Added missing `opencode_steps` column to the `profiles` table key columns list in `docs/database-schema.md`, with a corresponding note in the prose.
+- Added missing `"opencodeSteps"` field to the profile update payload example in `docs/api-reference.md` with a description of its default and range.
+- Added missing `LOOPTROOP_OPENCODE_PERMISSION_MODE` row to the Environment Variables table in `docs/operations.md`.
 
 #### Maintenance
 - Removed dead exported functions and constants from `src/lib/beadsDocument.ts` and `server/lib/constants.ts` that were defined but never called.

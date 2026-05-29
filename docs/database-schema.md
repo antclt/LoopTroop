@@ -50,11 +50,12 @@ Key columns:
 - `max_iterations`
 - `opencode_retry_limit`
 - `opencode_retry_delay`
+- `opencode_steps`
 - `tool_input_max_chars`
 - `tool_output_max_chars`
 - `tool_error_max_chars`
 
-This table provides the baseline configuration that projects and tickets inherit from when they start. `structured_retry_count` defaults to `1` and is validated by the API/UI as a value from `0` through `5`. `opencode_retry_limit` defaults to `10` and is validated from `0` through `50`; `opencode_retry_delay` is stored in milliseconds, defaults to `60000`, and is validated from `0` through `3600000`.
+This table provides the baseline configuration that projects and tickets inherit from when they start. `structured_retry_count` defaults to `1` and is validated by the API/UI as a value from `0` through `5`. `opencode_retry_limit` defaults to `10` and is validated from `0` through `50`; `opencode_retry_delay` is stored in milliseconds, defaults to `60000`, and is validated from `0` through `3600000`. `opencode_steps` defaults to `0` (no limit — OpenCode default) and is validated from `0` through `500`.
 
 ## Project Database
 
