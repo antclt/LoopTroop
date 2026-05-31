@@ -1,92 +1,31 @@
 # Getting Started
 
-Welcome to LoopTroop! This guide will take you from zero to running your first AI-driven development cycle on your repository.
+Welcome to LoopTroop! This guide takes you from zero to your first AI-driven development cycle.
 
 > [!TIP]
-> LoopTroop works best when it has a powerful "Council" of AI models to brainstorm ideas. You don't need a massive budget to get started—check out the **Free AI Models** section below!
+> You don't need expensive API keys to get started. LoopTroop supports free-tier models from OpenRouter, NVIDIA NIM, or OpenCode — see [Setting Up Your AI Council](#4-setting-up-your-ai-council) below.
 
 ## 1. Prerequisites
 
 You need a few basic developer tools:
 
 - **Node.js** and **npm**
-- **git**
-- A local git repository that has an `origin` pointing to GitHub.
-- **OpenCode** installed locally — `npm run dev` will start and configure it automatically.
+- **Git**
+- A local git repository with an `origin` pointing to GitHub
+- **[OpenCode](https://opencode.ai)** installed locally with at least one configured provider
 
-## 2. Setting Up Your AI Council (For Free!)
+### Why a VM?
 
-### 💸 Configuring Free AI Models
+LoopTroop runs OpenCode in `dangerously-skip-permissions` (or YOLO) mode so that long-running autonomous tasks can proceed without human prompts. This means the agent executes with your local user privileges — and AI agents are not perfect.
 
-You no longer need to burn expensive tokens to run autonomous agents. LoopTroop supports all major API Gateways that provide state-of-the-art **Mixture-of-Experts (MoE)** models for free. 
+> [!WARNING]
+> **Run LoopTroop inside a disposable VM, cloud dev machine, or sandboxed environment.**
+>
+> Git worktrees protect your repository checkout, but they do not sandbox command execution. A bad generation could delete system folders, corrupt configs, or break your workspace. Worktrees protect code; a VM protects everything else.
 
-### Option A: OpenRouter Free Models (Recommended)
-OpenRouter provides a unified API with a dynamic router that automatically selects available zero-cost models.
+## 2. Installation
 
-1. Create a free account at [https://openrouter.ai/](https://openrouter.ai/).
-2. In your project's `.env` file set:
-   ```bash
-   PROVIDER=openrouter
-   OPENROUTER_API_KEY="your-api-key"
-   ```
-3. **Select the Model:** 
-   * **The Auto-Router:** Set your model to `openrouter/free`. LoopTroop will automatically route tasks to available free models capable of tool-calling.
-   * **Specific High-Capacity Free Models:** 
-     * `nvidia/nemotron-3-super-120b-a12b:free` (120B parameters, 1M context window)
-     * `qwen/qwen3-coder:free` (480B parameters, best for heavy repository logic)
-     * `inclusionai/ling-2.6-flash:free` (Extremely fast, highly token-efficient)
-     * `google/gemma-4-31b-it:free` (Excellent for multimodal tasks)
-
-### Option B: NVIDIA NIM API Catalog
-NVIDIA provides highly optimized, GPU-accelerated endpoints. Signing up gives you 1,000 base credits (up to 5,000 total trial credits).
-
-1. Go to [build.nvidia.com](https://build.nvidia.com/) and create a Developer account.
-2. Generate a personal key in the API Keys section.
-3. In your `.env` file:
-   ```bash
-   PROVIDER=nvidia-nim
-   NVIDIA_API_KEY="your-ngc-api-key"
-   ```
-4. **Recommended Free/Trial Models:**
-   * `nemotron-3-super-120b-a12b`
-   * `nemotron-3-nano-30b-a3b`
-   * `mistral-small-4-119b-2603`
-
-### Option C: OpenCode Free Network
-OpenCode curates a validated list of models specifically benchmarked for agentic coding. 
-
-1. Obtain your OpenCode API key from [opencode.ai](https://opencode.ai).
-2. In your `.env` file:
-   ```bash
-   PROVIDER=opencode
-   OPENCODE_API_KEY="your-opencode-key"
-   ```
-3. **Recommended Free Models:**
-   * `big-pickle`
-   * `nemotron-3-super-free`
-   * `minimax-m2.5-free`
-   * `mimo-v2-pro-free`
-
-   > [!NOTE]
-   > The OpenCode free-network model catalog evolves frequently. The names above were accurate at the time of writing but may change. Check the [OpenCode model list](https://opencode.ai/docs/models) or your ProfileSetup model picker (which loads the live catalog from your connected OpenCode server) for current names.
-
----
-
-### 📊 Latency & Model Tracking Tools
-
-Because free APIs can occasionally experience rate-limiting or latency spikes, the community maintains active trackers to help you route your agents efficiently:
-
-*   **[free-ai-tools](https://github.com/ShaikhWarsi/free-ai-tools):** The master directory of over 550 free APIs, IDEs, and local RAG stacks. Check this repository frequently for newly added free models and quota details.
-*   **[ClawRouter](https://github.com/BlockRunAI/ClawRouter):** An open-source routing layer that tracks the real-time latency of top-tier free models and handles load balancing.
-*   **[frouter](https://github.com/jyoung105/frouter):** A fast CLI tool to ping free models and test Time To First Token (TTFT) before starting your loop.
-
-### Connecting OpenCode to OpenRouter
-
-When running `opencode serve`, ensure your environment variables are set to use OpenRouter as your provider and supply your OpenRouter API key. See the OpenCode documentation for exact provider configuration.
-
-## 3. Installation
-
-Clone the LoopTroop repository and install the dependencies:
+Clone the repository and install dependencies:
 
 ```bash
 git clone https://github.com/looptroop-ai/LoopTroop.git
@@ -94,23 +33,15 @@ cd LoopTroop
 npm install
 ```
 
-## 4. Starting the Application
-
-The main development command starts the frontend, backend, docs, and the OpenCode watcher stack all at once. Its preflight prints immediate progress as it restores missing local dependencies when needed, checks LoopTroop-owned ports, and runs daily maintenance for direct dependencies, npm audit remediation, and the OpenCode CLI. Direct npm dependency sync only installs stable releases that are newer than the current version and at least 7 days old; if npm `latest` is too fresh, LoopTroop installs the newest eligible older release instead. Audit remediation previews the proposed lockfile first and holds the whole fix when any proposed npm package version is still inside the same 7-day delay. Normal startup explains that package gate in a short multi-line note, then summarizes maintenance once, including each updated package with its previous and new version, plus held dependency and audit releases with their next eligibility time. OpenCode updates are exempt from that release-age delay. `npm run dev` resolves the OpenCode server endpoint automatically — reusing a running local instance when available, or starting one on a free nearby port — and secures newly started local services with ephemeral credentials and an ephemeral API token when you have not configured your own. The API token is wired into the backend and Vite dev proxy, not embedded into the frontend bundle.
+## 3. Starting the Application
 
 ```bash
 npm run dev
 ```
 
-For full managed OpenCode DEBUG logs in your terminal, use `npm run dev --opencode-logs=all`. This maps to OpenCode's `--print-logs --log-level DEBUG` flags and may expose sensitive request or provider details in the terminal.
+This single command starts the frontend, backend, docs site, and OpenCode watcher (you don't need to start OpenCode manually). On first run it also handles dependency installation and daily maintenance automatically.
 
-For mobile, tablet, or another computer on the same trusted local network, use `npm run dev --lan`. LoopTroop binds the frontend and docs servers to the network, prints LAN URLs and a QR code, and still keeps backend/OpenCode control-plane ports on loopback so browser traffic goes through the normal Vite proxy. On WSL, LoopTroop explains that WSL uses a private `172.x` network behind Windows and prints one Windows PowerShell Administrator portproxy command that listens on the Windows LAN IP, removes stale wildcard forwarding entries, checks the Windows network profile, prints the exact `Set-NetConnectionProfile` command to run when the network is still Public, runs a Windows-side reachability self-test, and forwards through Windows localhost into WSL instead of starting a suspicious relay process. Router/AP client isolation cannot be reliably detected from the dev machine; if the Windows self-test passes but a phone still cannot open the URL, check that the phone is on the same non-guest Wi-Fi and that client isolation is disabled on the router.
-
-If a ticket shows only `Provider returned error`, LoopTroop automatically checks local OpenCode logs for the matching session and displays a sanitized exact provider cause when available. Set `LOOPTROOP_OPENCODE_LOG_DIR` when using an external OpenCode server with logs outside the default directory.
-
-For non-mutating startup, forced maintenance, API exposure settings, and manual maintenance commands, see [Operations Guide](operations.md).
-
-By default, the services run on these ports:
+By default the services bind to:
 
 | Service | Address |
 | --- | --- |
@@ -120,25 +51,98 @@ By default, the services run on these ports:
 | **OpenCode** | `http://127.0.0.1:4096` |
 
 > [!IMPORTANT]
-> If OpenCode is running on a different port, you can tell LoopTroop where to find it using an environment variable:
+> If OpenCode is running on a different port, point LoopTroop to it:
 > `export LOOPTROOP_OPENCODE_BASE_URL=http://127.0.0.1:YOUR_PORT`
+
+::: details What happens during startup?
+
+The preflight handles dependency updates, security audit fixes, OpenCode CLI updates, and port checks. Normal startup prints a short summary of every updated package (previous → new version) and any held releases with their next eligibility time.
+
+For the full preflight specification, see [Operations Guide](operations.md).
+:::
+
+::: details Useful startup flags
+
+- **`npm run dev --opencode-logs=all`** — full OpenCode DEBUG logs in your terminal (starts OpenCode with `--print-logs --log-level DEBUG`).
+- **`npm run dev --lan`** — binds frontend and docs to the local network, prints LAN URLs and a QR code. Backend and OpenCode stay on loopback. This way you can connect to the app via mobile or another computer on the same network.
+
+For non-mutating startup, forced maintenance, and manual maintenance commands, see [Operations Guide](operations.md).
+:::
+
+## 4. Setting Up Your AI Council
+
+LoopTroop works best with multiple AI models — they draft, vote on, and refine plans together before any code is written. You can configure your council models inside the app via the **Configuration** button on the dashboard.
+
+You need at least a **Main Implementer Model** (which writes and validates code) and **1–3 Council Members** (which challenge and improve the plan). See [Configuration](configuration.md) for all settings and trade-offs.
+
+### Choosing Your Main Implementer
+
+The Main Implementer is the model that actually writes, fixes, and validates your code — it needs to be the strongest model you can access. Pick a frontier-class model with strong coding benchmarks:
+
+- **OpenAI** — top models via API key or a Codex subscription through OpenCode
+- **Anthropic** — latest Claude models via API key
+- **Google** — latest Gemini model via API key
+- **Any other top-tier model** — check the [Chatbot Arena leaderboard](https://lmarena.ai/) or coding-specific benchmarks like SWE-bench to find the current best performers
+
+Council members can be a mix of different providers — diversity actually improves plan quality since different models catch different blind spots (it is recommended to use models from different providers and families for the council). You can also experiment with weaker models in the council to save costs — they still provide value by catching basic mistakes and asking clarifying questions.
+
+### Free Model Options
+
+You don't need paid API keys to get started. Here are three ways to access free models:
+
+#### OpenRouter (Recommended)
+
+OpenRouter provides a unified API with a dynamic router that selects available zero-cost models.
+
+1. Create a free account at [openrouter.ai](https://openrouter.ai/).
+2. Open OpenCode and connect to OpenRouter using your API key.
+3. In LoopTroop, set your model to `openrouter/free` — it automatically routes to available free models capable of tool-calling. You can also pick specific models from the catalog; they rotate every few days.
+
+#### NVIDIA NIM API
+
+NVIDIA provides GPU-accelerated endpoints. Signing up gives you 1,000 base credits (up to 5,000 trial credits).
+
+1. Create a Developer account at [build.nvidia.com](https://build.nvidia.com/).
+2. Generate a personal key in the API Keys section and connect it to OpenCode.
+
+#### OpenCode Go
+
+OpenCode curates models benchmarked for agentic coding, more details at [OpenCode docs](https://opencode.ai/go).
+
+::: details Latency & model tracking tools
+
+Free APIs can experience rate-limiting or latency spikes. Community trackers help you route efficiently:
+
+- **[free-ai-tools](https://github.com/ShaikhWarsi/free-ai-tools)** — master directory of 550+ free APIs, IDEs, and local RAG stacks.
+- **[ClawRouter](https://github.com/BlockRunAI/ClawRouter)** — open-source routing layer tracking real-time free model latency with load balancing.
+- **[frouter](https://github.com/jyoung105/frouter)** — CLI tool to ping free models and test Time To First Token (TTFT) before starting your loop.
+:::
 
 ## 5. Attaching Your First Project
 
-Once the frontend is up:
 1. Open `http://localhost:5173` in your browser.
 2. Click **Add Project** and provide the absolute path to your local git repository.
-3. LoopTroop will verify that it is a valid git repository with a GitHub origin.
-4. You're ready to create your first Ticket!
+3. LoopTroop verifies it is a valid git repo with a GitHub origin.
+4. Create your first **Ticket** with a description of the feature or fix you want.
 
----
+Once submitted, LoopTroop kicks off an **interview phase** to clarify your intent, then generates a structured spec and implementation plan before any code is written. You review and approve at each gate.
 
-## Operations and Troubleshooting
+## What Happens After Your First Ticket?
 
-For runtime storage, environment variables, startup maintenance, disk cleanup, diagnostics, and OpenCode troubleshooting, see [Operations Guide](operations.md).
+Your ticket flows through a structured pipeline — each stage has a clear purpose and a human review gate:
+
+1. **Interview** — the AI council asks targeted questions to clarify ambiguities in your request.
+2. **PRD** — your answers are synthesized into a structured spec with epics, user stories, and implementation steps.
+3. **Beads** — the spec is decomposed into the smallest independently implementable units of work.
+4. **Execution** — each bead is coded, tested, and retried in an isolated worktree until it passes.
+5. **Review** — you inspect the final diff, commits, and changes before merging.
+
+For the full lifecycle, see [Ticket Flow](ticket-flow.md).
 
 ## Next Steps
 
-To dive deeper into how LoopTroop actually plans and executes your code, check out:
-- [Core Philosophy](core-philosophy.md)
-- [Frequently Asked Questions](faq.md)
+- [Ticket Flow](ticket-flow.md) — end-to-end lifecycle from ticket to PR
+- [Core Philosophy](core-philosophy.md) — context engineering, councils, retries, approvals
+- [Configuration](configuration.md) — all profile settings with defaults, ranges, and trade-offs
+- [Operations Guide](operations.md) — runtime storage, environment variables, startup maintenance, diagnostics, and troubleshooting
+- [FAQ](faq.md) — terminology and common questions
