@@ -1,8 +1,17 @@
 # LoopTroop Docs
 
-LoopTroop is local AI coding orchestration for repo-scale work. It separates planning from execution, keeps critical workflow state outside the model, executes code inside isolated git worktrees, and forces explicit human review at the expensive boundaries.
+> **A smart local engine that automates big coding tasks from start to finish.**
+> LLM councils plan it. Ralph loops perfect it. OpenCode worktrees ship it.
 
-This docs site is the navigation hub for the current system. The README stays GitHub-first; this site is where the grouped, cross-linked runtime documentation lives.
+LoopTroop helps you turn a coding ticket into a planned, reviewable, agent-executed pull request.
+
+Instead of trusting a single, endless AI chat session — where the conversation history gets bloated, the AI gets confused, and code quality falls off a cliff — LoopTroop breaks the job into clean, separate stages. **Planning** turns an interview into a PRD, which is then split into the smallest manageable milestones, called "beads." **Execution** runs each bead through multiple targeted auto-fix loops. A **final review** ties it all together.
+
+| Architectural Layer | Core | Technical Lifecycle |
+| :--- | :--- | :--- |
+| **1. Planning** | *LLM Councils Plan It* | Human Input ➔ AI Interview ➔ PRD ➔ Atomic Beads |
+| **2. Execution** | *Ralph Loops Perfect It* | Isolated Bead Work ➔ Multi-Loop Automated Testing & Fixing |
+| **3. Shipping** | *OpenCode Worktrees Ship It* | Code Isolation ➔ Final Verification Pass ➔ Main Branch Handoff |
 
 ## Start Here
 
@@ -16,14 +25,11 @@ If you are new to LoopTroop, use this order:
 
 ## What LoopTroop Is
 
-- A **local GUI orchestrator for long-running, high-correctness AI software delivery** — taking you from a raw idea to merged code.
-- Built for **complex, multi-file feature work** where alignment and correctness are paramount, optimizing for a "slow and perfect" paradigm over raw speed.
-- **Great Context Engineering = Zero AI Slop:** precise context curation at every stage feeds the agent only the absolute minimum context it needs — eliminating context rot, LLM drift, and degraded output.
-- A planning pipeline that uses interview, PRD, and beads stages with multi-model councils (draft → vote → refine → verify) before any code execution.
-- An OpenCode worktrees execution system that keeps the attached project checkout out of the blast radius.
-- A durable runtime built around SQLite, `.ticket/**` artifacts, execution logs, and resumable ownership-aware sessions.
-- A human-in-the-loop system with approval gates before specs, blueprint, workspace setup, and final PR completion.
-- A safe-resume workflow that returns users to durable ticket state after browser, frontend, backend, OpenCode, or model interruptions, or blocks explicitly when a safe resume point cannot be proven.
+LoopTroop is a **local GUI orchestrator for long-running, high-correctness AI software delivery** — taking you from a raw idea to merged code.
+
+Unlike high-speed coding tools that optimize for immediate chat responses, LoopTroop is built for **complex, multi-file feature work** where alignment and correctness are paramount. It optimizes for a "slow and perfect" paradigm, intentionally sacrificing raw speed to deliver a final result that matches exactly how you envisioned it.
+
+**Great Context Engineering = Zero AI Slop:** LoopTroop employs precise context curation at every stage, feeding the agent only the absolute **minimum** context it needs. See [Context Engineering](context-engineering.md) for details.
 
 ## Screenshots
 
@@ -111,17 +117,9 @@ If you are new to LoopTroop, use this order:
 
 LoopTroop uses a mix of established and newer terms:
 
-- `git worktree` is a standard Git capability for working on multiple linked trees from one repository. LoopTroop uses it as the main execution-isolation primitive.
-- `Ralph-style retry` is community shorthand for abandoning a degraded coding session, keeping a compact failure note, and retrying in fresh context instead of continuing the same transcript.
-- `LLM council` is LoopTroop's name for its multi-model draft, vote, and refine pattern. The idea overlaps with newer multi-model consensus research, but the exact workflow here is LoopTroop-specific.
-- `AI orchestrator` is descriptive, not magical. In this repo it means a system that owns workflow state, artifact boundaries, retries, approvals, and delivery mechanics around model calls.
-
-## Canonical Runtime Sources
-
-When documentation and behavior disagree, the current implementation wins. The main sources of truth are:
-
-- `shared/workflowMeta.ts` for phase labels, groups, descriptions, UI mapping, and review metadata.
-- `server/machines/ticketMachine.ts` for state transitions and retry behavior.
-- `server/routes/ticketHandlers/` for user-triggered action modules like start, approve, merge, close-unmerged, and retry.
-
-For the broad runtime picture, start with [System Architecture](system-architecture.md). For the exact lifecycle, go to [Ticket Flow](ticket-flow.md).
+- `Bead` — the smallest, independently implementable unit of work. Borrowed from Steve Yegge's *Beads Project* methodology. Each bead contains a clear purpose, acceptance criteria, target files, and validation steps.
+- `git worktree` — a standard Git capability for working on multiple linked trees from one repository. LoopTroop uses it as the main execution-isolation primitive.
+- `Ralph-style retry` — community shorthand for abandoning a degraded coding session, keeping a compact failure note, and retrying in fresh context instead of continuing the same transcript.
+- `LLM council` — LoopTroop's name for its multi-model draft, vote, and refine pattern. The idea overlaps with newer multi-model consensus research, but the exact workflow here is LoopTroop-specific.
+- `PRD` — Product Requirements Document. The structured spec (epics + user stories) that the LLM Council produces from your ticket and interview answers before any coding starts.
+- `AI orchestrator` — descriptive, not magical. In this repo it means a system that owns workflow state, artifact boundaries, retries, approvals, and delivery mechanics around model calls.
