@@ -41,6 +41,37 @@ search: false
     *   Add `Doctor` validation that checks every field manifest against actual runtime consumption and warns on stale classifications (fields marked `required_downstream` but never consumed, or fields marked `obsolete` that are actually consumed).
     *   Audit order (status by status, starting with first): `DRAFT` → `SCANNING_RELEVANT_FILES` → `COUNCIL_DELIBERATING` → `COUNCIL_VOTING_INTERVIEW` → `COMPILING_INTERVIEW` → `WAITING_INTERVIEW_ANSWERS` → `VERIFYING_INTERVIEW_COVERAGE` → `WAITING_INTERVIEW_APPROVAL` → `DRAFTING_PRD` → `COUNCIL_VOTING_PRD` → `REFINING_PRD` → `VERIFYING_PRD_COVERAGE` → `WAITING_PRD_APPROVAL` → `DRAFTING_BEADS` → `COUNCIL_VOTING_BEADS` → `REFINING_BEADS` → `VERIFYING_BEADS_COVERAGE` → `EXPANDING_BEADS` → `WAITING_BEADS_APPROVAL` → `PRE_FLIGHT_CHECK` → `WAITING_EXECUTION_SETUP_APPROVAL` → `PREPARING_EXECUTION_ENV` → `CODING` → `RUNNING_FINAL_TEST` → `INTEGRATING_CHANGES` → `CREATING_PULL_REQUEST` → `WAITING_PR_REVIEW` → `CLEANING_ENV` → `COMPLETED`.
     *   For each status, document: input fields consumed, output fields produced, output fields actually used downstream, and fields added by any retry path.
+* **Global CLI Distribution & Multi-Platform Packaging (automated release pipeline):** Refactor the LoopTroop runtime architecture from a dev-centric multi-process concurrent stack into a production-ready global CLI daemon, and implement an automated release workflow that cross-compiles, packages, and synchronizes system package managers on every GitHub Release.
+	+ **Single-Process Production Compilation (CLI Daemon Mode):** Combine the four concurrent development processes (Vite frontend, Node backend API, documentation server, and OpenCode watcher) into a single production compilation unit.
+		- The frontend Vite workspace must build statically to `dist/frontend` during compile time.
+		- The Express/Fastify backend server must be updated to serve these static files natively, routing all non-API web traffic to `dist/frontend/index.html` to support the client-side SPA router.
+		- Spawning external hot-reloaders or dev-servers at runtime must be disallowed in production execution.
+	+ **Global User-Space Configuration Separation:** Remove reliance on local `.env` files in the installation directory, which is read-only in global installation environments.
+		- Transition environmental keys (e.g., `PROVIDER`, `OPENROUTER_API_KEY`, `OPENCODE_API_KEY`) and state configuration to a user-space configuration file: `~/.config/looptroop/config.json` (on macOS/Linux) or `%APPDATA%\looptroop\config.json` (on Windows).
+		- Fall back to standard environment variables only if the configuration directory/file is missing or unreadable.
+		- Persist migration receipts at `.looptroop/config-migration-receipt.json` during the first global execution.
+	+ **OIDC-Protected Registry Publication (npm, Bun, and pnpm):** Configure a secure, automated publishing pipeline using OpenID Connect (OIDC) "Trusted Publishing" with npmjs.com.
+		- On publication of a GitHub Release, compile production JavaScript targets, bundle the static assets, and run `npm publish` securely without storing long-lived, static npm tokens in GitHub secrets.
+		- Ensure the published package maps the main executable entrypoint to `"bin": { "looptroop": "dist/cli.js" }` so that `npm i -g`, `bun add -g`, and `pnpm add -g` work natively.
+	+ **Matrix Binary Compilation & Release Assets:** Configure a GitHub Actions runner matrix to compile standalone binaries for target platforms (`macos-x64`, `macos-arm64`, `linux-x64`, `win-x64`) using `pkg` or `bun build --compile`.
+		- Package compiled binaries inside `.tar.gz` (for macOS/Linux) and `.zip` (for Windows) containers.
+		- Automatically upload package archives to the matching GitHub Release assets on release confirmation.
+		- Generate a SHA-256 checksum manifest (`checksums.sha256`) and publish it alongside the release assets.
+	+ **Homebrew Tap Automation (`brew install looptroop-ai/tap/looptroop`):** Automate formula updates in your custom Tap repository `looptroop-ai/homebrew-tap` during the release workflow.
+		- The pipeline must commit a updated Ruby Formula (`Formula/looptroop.rb`) dynamically targeting the newly generated archive URLs and their corresponding SHA-256 hashes.
+	+ **Arch Linux AUR Pipeline (`paru -S looptroop-bin` / `yay -S looptroop-bin`):** Automate the generation and submission of Arch User Repository package updates.
+		- On release, clone the AUR SSH repository `aur.archlinux.org/looptroop-bin.git`.
+		- Update the `PKGBUILD` source arrays and checksums with the latest Linux x64 release asset parameters.
+		- Execute `makepkg --printsrcinfo > .SRCINFO` to update package metadata, commit, and push changes back to the AUR master branch.
+	+ **Windows Scoop & WinGet Automation:** Maintain compatibility across primary Windows package management environments.
+		- The release action must commit the updated Windows target URLs and checksums to the app manifest file inside your custom `scoop-bucket` repository.
+		- Integrate the `wingetcreate` or equivalent automated tool into the workflow to automatically submit PR manifests to the upstream `microsoft/winget-pkgs` repository.
+	+ **Universal Installer Script (`curl | bash`):** Maintain a static shell script at `install.sh` in the root of the primary branch, exposed via a clean redirect (e.g., `looptroop.ai/install`).
+		- The script must query the system `uname -s` and `uname -m` variables to dynamically resolve platform and architecture.
+		- Fetch the corresponding pre-compiled archive from the latest GitHub Release, extract the binary, and map it into `/usr/local/bin` using safe system permissions.
+	+ **Declarative Nix Flake Packaging (`nix profile install github:looptroop-ai/LoopTroop`):** Add a declarative `flake.nix` file to the root of your primary repository.
+		- The flake must define a zero-dependency derivation wrapping the compiled Linux/macOS binaries.
+		- Automate the Nix registry updates so developers using declarative shell workspaces can test or execute LoopTroop instantly inside clean, immutable sandbox environments.
 *   **Adversarial Critique Pre-Pass:** After relevant-file scanning and any enabled research briefs, optionally run a bounded ticket-level critique before Interview begins.
     *   Persist `.looptroop/tickets/<ticket-id>/critique.yaml` with verdict, major risks, counterproposals, interview follow-ups, and stop conditions.
     *   Treat the critique as read-only planning context, not a council vote or automatic cancel path.
