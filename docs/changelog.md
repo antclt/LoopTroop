@@ -18,6 +18,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Cleaned up redundant coding workspace chrome around bead progress and logs.
 - Hardened structured-output parsing for common YAML quote mistakes before implementation planning.
 - Corrected four doc/code discrepancies: removed non-existent `server/github/*` module reference from the architecture guide; added `opencode_steps` to the database schema and API reference profile payload; added `LOOPTROOP_OPENCODE_PERMISSION_MODE` to the operations environment-variable table.
+- Added a prominent TL;DR callout to the Context Engineering docs page summarizing the core design principle.
 
 ### Detailed Changes
 
@@ -28,6 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Added a TL;DR `[!IMPORTANT]` callout to `docs/context-engineering.md` highlighting the core principle: every phase, status, and retry uses only minimal context — never the full conversation history.
 - Updated `docs/api-reference.md` to document composite ticket refs (`projectId:externalId`), `GET /api/tickets/:id/size`, the `/api/files/open-path` route, and the exact `GET/PUT /api/files/:ticketId/:file` behavior.
 - Fixed `docs/operations.md` to describe `npm run dev:backend` as the Hono backend server rather than Express.
 - Changed PR review diff handling to default to the final net diff while keeping bead-level and by-file activity available for audit.
