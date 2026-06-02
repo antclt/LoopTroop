@@ -1,11 +1,13 @@
 # Beads & Execution
 
 > [!IMPORTANT]
-> **TL;DR** — Instead of handing an entire feature to one giant coding session, LoopTroop decomposes the approved PRD into small, dependency-ordered beads. Each bead is executed one at a time in an isolated worktree with bounded retries. Failed attempts reset the worktree to the bead's start commit and retry in a fresh, clean session with a compact context-wipe failure note instead of a bloated conversation history.
+> **TL;DR** — Instead of handing an entire feature to one giant coding session, LoopTroop decomposes the approved PRD epics and stories into the smallest implementation units called beads. Each bead is executed one at a time in an isolated worktree with bounded retries. Failed attempts reset the worktree to the bead's start commit and retry in a fresh, clean session with a compact failure note instead of a bloated conversation history.
 
 Beads are LoopTroop's primary execution units. They serve as the structural bridge between the approved Product Requirements Document (PRD) and the live coding run, functioning as both the execution plan and the execution memory.
 
 The core data model lives in `server/phases/beads/types.ts`. The execution orchestrator lives in `server/phases/execution/executor.ts`, and the workflow-side orchestration that manages coding loops and resumes interrupted sessions lives in `server/workflow/phases/executionPhase.ts` and `server/workflow/phases/beadsPhase.ts`.
+
+Note: LoopTroop implements only some of the bead ideas, not the full methodology from Steve Yegge, available here - https://github.com/gastownhall/beads. 
 
 ---
 
@@ -180,6 +182,8 @@ These reminders force the model to emit machine-readable progress state. If the 
 ## 7. Bounded Ralph-Style Retry & Context Wipe Notes
 
 ### The Ralph Loop Philosophy
+
+> **TL;DR** — Each bead has a limited time (configurable) to finish what it is trying to do. If it runs out of time, LoopTroop writes a note summarizing what went wrong and offering suggestions for the next attempt, then starts the bead fresh in a clean session with a reset worktree. The number of retries is also configurable.
 
 > [!NOTE]
 > **The Ralph Loop Philosophy:** Instead of trying to talk an AI out of a degraded coding spiral, LoopTroop acts like a strict manager. It says: "stop, write down what failed, throw away your scratchpad, and start over with a clean head."
