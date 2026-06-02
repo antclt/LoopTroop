@@ -8,7 +8,7 @@
 
 LoopTroop uses a council whenever it is choosing a plan, not just executing one. The council is a structured draft, vote, refine pipeline that is reused across interview generation, PRD creation, and bead planning.
 
-## Where The Council Appears
+## 1. Where The Council Appears
 
 | Domain | Draft phase | Vote phase | Refine phase | Coverage follow-up |
 | --- | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ LoopTroop uses a council whenever it is choosing a plan, not just executing one.
 | PRD | `DRAFTING_PRD` | `COUNCIL_VOTING_PRD` | `REFINING_PRD` | `VERIFYING_PRD_COVERAGE` |
 | Beads | `DRAFTING_BEADS` | `COUNCIL_VOTING_BEADS` | `REFINING_BEADS` | `VERIFYING_BEADS_COVERAGE` then `EXPANDING_BEADS` |
 
-## Council Lifecycle
+## 2. Council Lifecycle
 
 ```mermaid
 flowchart LR
@@ -30,7 +30,7 @@ flowchart LR
 
 The important detail is independence. Models do not co-author one shared draft during the draft stage.
 
-## Step 1: Independent Drafting
+## 3. Step 1: Independent Drafting
 
 Each council member receives the same allowed context for the stage and produces its own artifact:
 
@@ -46,7 +46,7 @@ If a member's Full Answers artifact is invalid after the configured structured r
 
 Rejected model responses are diagnostic data, not draft bodies. Accepted drafts persist normalized artifact content; invalid, failed, or timed-out outputs show only outcome, model, validation/retry diagnostics, and short excerpts in the structured artifact view. The full malformed responses remain available through Raw attempt views and execution logs.
 
-## Step 2: Structured Voting
+## 4. Step 2: Structured Voting
 
 Voting is not "pick the one you like." It is a structured evaluation pass over anonymized drafts.
 
@@ -59,7 +59,7 @@ LoopTroop reduces obvious bias by:
 
 The goal is not consensus chat. The goal is competitive evaluation under the same rubric.
 
-## Step 3: Refinement
+## 5. Step 3: Refinement
 
 Once a winner is selected, the winning direction is refined into the canonical artifact for the phase.
 
@@ -69,7 +69,7 @@ That refined artifact is what later phases see:
 - the PRD feeds beads planning
 - the beads plan feeds execution
 
-## Step 4: Coverage
+## 6. Step 4: Coverage
 
 The council does not end at "winner picked." LoopTroop then checks whether the artifact is complete enough to move on.
 
@@ -81,7 +81,7 @@ The council does not end at "winner picked." LoopTroop then checks whether the a
 
 This is why the council is better understood as a planning discipline than as a single phase.
 
-## Inputs And Outputs By Stage
+## 7. Inputs And Outputs By Stage
 
 | Domain | Main council inputs | Main output |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ This is why the council is better understood as a planning discipline than as a 
 
 Each domain inherits only the artifacts it needs. See [Context Engineering](context-engineering.md) for the exact allowlists.
 
-## Quorum And Failure
+## 8. Quorum And Failure
 
 The council is configured, not open-ended.
 
@@ -123,7 +123,7 @@ AI response timeout is the per-model wait budget for planning and review prompts
 
 If too few valid drafts or votes arrive to satisfy quorum, the pipeline does not pretend the result is trustworthy. It fails into `BLOCKED_ERROR` or a phase-specific retry path instead of silently advancing.
 
-## Why LoopTroop Uses Council Instead Of Debate Chat
+## 9. Why LoopTroop Uses Council Instead Of Debate Chat
 
 LoopTroop's council is inspired by multi-model deliberation, but the implementation is intentionally more operational than theoretical.
 
@@ -136,7 +136,7 @@ It chooses:
 
 That makes the result easier to inspect, compare, cache, edit, and restart.
 
-## Human Gates Still Matter
+## 10. Human Gates Still Matter
 
 The council does not replace the human. It prepares artifacts for review.
 
@@ -149,7 +149,7 @@ LoopTroop inserts explicit approvals after:
 
 The council improves draft quality, but the human still authorizes the next irreversible stage.
 
-## What Lives In Storage
+## 11. What Lives In Storage
 
 Council work is persisted in both artifact and runtime form:
 

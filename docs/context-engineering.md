@@ -7,7 +7,7 @@ LoopTroop uses context engineering to keep model work focused. The engine does n
 
 The implementation-level source of truth is `server/opencode/contextBuilder.ts`. The user-facing phase metadata is in `shared/workflowMeta.ts`.
 
-## Core Idea
+## 1. Core Idea
 
 Long-running AI work degrades when every phase inherits the full conversation:
 
@@ -18,7 +18,7 @@ Long-running AI work degrades when every phase inherits the full conversation:
 
 LoopTroop avoids that by treating context as an explicit input contract. A status receives only the artifact slices it is allowed to use, plus any small task-specific section that the status appends itself.
 
-## Prompt Assembly Contract
+## 2. Prompt Assembly Contract
 
 Every model prompt follows the same broad pattern:
 
@@ -31,7 +31,7 @@ Every model prompt follows the same broad pattern:
 
 This is why LoopTroop can show rich history in the UI without feeding that whole history back into every model call.
 
-## Implementation Contract
+## 3. Implementation Contract
 
 The core helper is `buildMinimalContext()`.
 
@@ -42,7 +42,7 @@ It accepts:
 
 It returns ordered `PromptPart[]` slices after applying the allowlist, loading cacheable slices where appropriate, sorting by prompt priority, and trimming to the token budget if necessary.
 
-## TicketState Inputs
+## 4. TicketState Inputs
 
 The current `TicketState` fields used by the context builder are:
 
@@ -71,7 +71,7 @@ ticketState:
   errorContext: string
 ```
 
-## Context Keys
+## 5. Context Keys
 
 | Key | Meaning |
 | --- | --- |
@@ -95,7 +95,7 @@ ticketState:
 | `tests` | Test/result material used by review surfaces where available. |
 | `error_context` | A compact failure summary for recovery prompts, especially context-wipe and final-test retry-note generation. |
 
-## Current Phase Allowlists
+## 6. Current Phase Allowlists
 
 The block below mirrors the current phase mapping in `server/opencode/contextBuilder.ts`.
 
@@ -197,7 +197,7 @@ preflight:
 
 Some statuses append small task-specific sections outside this reusable allowlist. For example, interview resume appends the current question/session state, PRD and beads voting append a rubric, coverage revision appends the concrete gaps for that pass, execution setup regeneration appends the current plan and user note, and pull-request creation appends narrow reports or diffs.
 
-## Status Context Matrix
+## 7. Status Context Matrix
 
 The table below describes what the model receives during each status. "No model prompt" means the status is deterministic or waiting for a user action; the UI may still show artifacts for review.
 
@@ -235,7 +235,7 @@ The table below describes what the model receives during each status. "No model 
 | `CANCELED` | No model prompt. The ticket is terminal; partial artifacts may remain available. |
 | `BLOCKED_ERROR` | No model prompt while blocked. `retry` re-enters the saved `previousStatus` and uses that status's normal context contract. Eligible `continue` sends exactly `continue please` into the preserved OpenCode session instead of rebuilding or appending a new broad prompt. CODING context-wipe prompts use only `bead_data` and `error_context`. |
 
-## Retry Behavior
+## 8. Retry Behavior
 
 Retries are where context engineering matters most.
 
@@ -245,7 +245,7 @@ Execution retries are even narrower. A failed bead produces a context-wipe note 
 
 Provider/session continuation is intentionally different from retry. When a provider stall is continuable and the exact OpenCode session is still preserved, LoopTroop sends only `continue please` into that session. It does not splice a new transcript, regenerate the prompt, or attach unrelated artifacts.
 
-## Ordering, Trimming, And Cache
+## 9. Ordering, Trimming, And Cache
 
 Context parts are sorted before prompting:
 
@@ -289,13 +289,13 @@ The context builder also keeps a lightweight per-ticket cache for reusable slice
 
 This cache is a performance helper, not a source of truth. Durable artifacts remain authoritative.
 
-## Relevant Files
+## 10. Relevant Files
 
 `relevant-files.yaml` is the first major context artifact. It gives later phases repo-grounded input without forcing them to scan the whole codebase again. Interview, PRD, and bead planning all depend on it.
 
 Older documentation sometimes referenced `codebase-map.yaml`; that is no longer the primary planning artifact.
 
-## Execution Isolation
+## 11. Execution Isolation
 
 Planning phases work with broad artifact context. Execution does the opposite:
 
@@ -306,7 +306,7 @@ Planning phases work with broad artifact context. Execution does the opposite:
 
 This narrowing is intentional. Coding quality improves when the prompt is dominated by the exact bead contract instead of by the full planning transcript.
 
-## What This Prevents
+## 12. What This Prevents
 
 Context engineering protects against:
 

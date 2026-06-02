@@ -17,7 +17,7 @@ The command writes a timestamped report under `tmp/diagnostics/`, for example:
 tmp/diagnostics/runtime-stall-YYYYMMDD-HHMMSS.log
 ```
 
-## Platform Support
+## 1. Platform Support
 
 The diagnostic script runs on **Linux**, **WSL2**, **macOS**, and **Windows**.
 
@@ -32,7 +32,7 @@ The diagnostic script runs on **Linux**, **WSL2**, **macOS**, and **Windows**.
 | macOS vm_stat / top | — | ✅ | — |
 | Shell baseline | bash / sh | bash / sh | PowerShell |
 
-## What It Captures
+## 2. What It Captures
 
 The report is read-only. It does not repair state, mutate tickets, or modify attached projects.
 
@@ -51,7 +51,7 @@ It captures:
 - **Advanced Diagnostics**: event-loop lag, DNS probe, FD limits, TCP connection states, zombie process count, diagnostic heap snapshot, and swap pressure
 - macOS-specific: `vm_stat`, load average, CPU count, and top processes (macOS only)
 
-## OpenCode Provider Errors
+## 3. OpenCode Provider Errors
 
 OpenCode sometimes streams only `Provider returned error` even though its local log contains the exact API failure. LoopTroop automatically correlates those generic stream errors with the newest OpenCode log files by `session.id` and surfaces a sanitized provider summary in ticket logs and blocked-error diagnostics when a match exists.
 
@@ -59,7 +59,7 @@ The enrichment records only compact diagnostic fields such as HTTP status, retry
 
 If no matching local log exists, the ticket keeps the generic error and includes a hint to configure `LOOPTROOP_OPENCODE_LOG_DIR` for external or nonstandard OpenCode servers.
 
-## Useful Options
+## 4. Useful Options
 
 ```bash
 npm run diagnose:stall -- --timeout-ms 8000
@@ -97,7 +97,7 @@ npm run diagnose:stall -- --no-color
 
 Disable colored output. Useful when piping or running in CI. Also respected via the `NO_COLOR` environment variable.
 
-## Reading The Report
+## 5. Reading The Report
 
 Read the report by category:
 

@@ -5,7 +5,7 @@
 
 LoopTroop uses OpenCode as its model execution layer, but wraps it with its own session ownership, context assembly, event streaming, and workflow recovery logic.
 
-## Core Modules
+## 1. Core Modules
 
 | Module | Responsibility |
 | --- | --- |
@@ -16,7 +16,7 @@ LoopTroop uses OpenCode as its model execution layer, but wraps it with its own 
 | `server/opencode/contextBuilder.ts` | Phase-specific context assembly |
 | `server/workflow/runOpenCodePrompt.ts` | Prompt orchestration and stream handling |
 
-## Adapter Surface
+## 2. Adapter Surface
 
 The current `OpenCodeAdapter` interface exposes:
 
@@ -38,7 +38,7 @@ The current `OpenCodeAdapter` interface exposes:
 
 Session creation, exact session lookup, session listing, and message reads accept `AbortSignal`s and are wrapped with bounded SDK-operation timeouts. Session creation also runs through a shared retry wrapper: after the initial failure, LoopTroop waits 1s, 3s, and 7s before the three retry attempts. Each failed create attempt collects lightweight OpenCode health diagnostics, but health is diagnostic-only and does not replace the actual session creation result.
 
-## Base URL And Modes
+## 3. Base URL And Modes
 
 | Setting | Meaning |
 | --- | --- |
@@ -54,7 +54,7 @@ Both the LoopTroop backend and the OpenCode process must share the same credenti
 
 When running `npm run dev`, the launcher probes the configured address first. If OpenCode is already responding there, it reuses that instance. If the default port is occupied by a non-OpenCode process, the launcher finds the next available port and starts OpenCode there instead.
 
-## OpenCode Configuration Pass-Through
+## 4. OpenCode Configuration Pass-Through
 
 LoopTroop sends work through your OpenCode server rather than replacing its provider layer. Model Context Protocol tools, custom skills, permissions, and provider authentication configured in OpenCode remain available to LoopTroop sessions.
 
@@ -64,7 +64,7 @@ When OpenCode emits only a generic `Provider returned error` stream event, LoopT
 
 For trusted local LoopTroop sessions, the managed OpenCode server is permissive by default: `scripts/dev-opencode.ts` sets `OPENCODE_PERMISSION='"allow"'` when it starts `opencode serve`, unless `LOOPTROOP_OPENCODE_PERMISSION_MODE=inherit` is set. LoopTroop also creates execution sessions with the SDK permission rule `{ permission: "*", pattern: "*", action: "allow" }`, so server-level permission policy and session-scoped permissions both allow required tool use. This removes OpenCode approval prompts from trusted automation, but it does not bypass normal OS privileges or make passworded `sudo` a dependency of setup.
 
-## Session Ownership
+## 5. Session Ownership
 
 LoopTroop does not treat OpenCode sessions as anonymous chat handles. It tracks who owns a session in the project database.
 
@@ -88,7 +88,7 @@ This is what lets the backend distinguish:
 - the first execution attempt for a bead from the second
 - a planning session from a coding session on the same ticket
 
-## Prompt Runner
+## 6. Prompt Runner
 
 `runOpenCodePrompt()` is the main orchestration helper.
 
@@ -118,7 +118,7 @@ continue please
 
 Continue does not archive the active phase attempt or create a fresh attempt. Retry still keeps the fresh-attempt behavior. For CODING provider interruptions, the blocked UI marks the bead as paused instead of showing a live iteration countdown; when Continue re-enters CODING, LoopTroop sends `continue please` to the preserved session with a fresh per-iteration timeout window.
 
-## Reconnect Behavior
+## 7. Reconnect Behavior
 
 Reconnect is intentionally conservative.
 
@@ -137,7 +137,7 @@ If OpenCode cannot verify an exact session because the server is down or restart
 
 For Continue, the route performs one extra live check: if the OpenCode server can no longer read the preserved session by exact id, the request returns `409` and leaves the ticket in `BLOCKED_ERROR`.
 
-## Streaming
+## 8. Streaming
 
 OpenCode stream events are consumed server-side and then translated into LoopTroop's own ticket event model.
 
@@ -160,7 +160,7 @@ The frontend never talks directly to OpenCode. It receives normalized ticket eve
 
 AI detail rows are emitted as fast live-only upserts while a text or reasoning part is still changing, finalized when the part completes, and then written to `.ticket/runtime/execution-log.ai.jsonl`. After a prompt completes, the prompt runner also backfills finalized assistant message parts from `session.messages()` so thinking/tool/output history is durable even if no browser was watching the ticket in real time.
 
-## Questions And Human Input
+## 9. Questions And Human Input
 
 OpenCode may request user input during execution. LoopTroop exposes that queue through:
 
@@ -170,7 +170,7 @@ OpenCode may request user input during execution. LoopTroop exposes that queue t
 
 This lets the workflow remain durable even when the model pauses for an explicit decision.
 
-## Health And Model Discovery
+## 10. Health And Model Discovery
 
 LoopTroop uses two related but different checks:
 
@@ -181,7 +181,7 @@ LoopTroop uses two related but different checks:
 
 If model discovery fails but health still passes, the API returns an empty model list plus a message instead of crashing the UI.
 
-## Startup Recovery
+## 11. Startup Recovery
 
 On startup, LoopTroop:
 
@@ -195,7 +195,7 @@ This is why the OpenCode integration is part of the runtime architecture, not ju
 
 Startup session recovery is best effort. If OpenCode itself is unavailable, ticket actors are still hydrated from durable workflow state, and later phase work will either reconnect, create a fresh owned session, or block with a persisted error according to the phase's recovery rules.
 
-## Why LoopTroop Wraps OpenCode This Heavily
+## 12. Why LoopTroop Wraps OpenCode This Heavily
 
 OpenCode is the model execution engine. LoopTroop adds:
 

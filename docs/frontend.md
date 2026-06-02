@@ -16,7 +16,7 @@ In development, same-origin `/api/*` calls go through the Vite proxy. When `npm 
 
 The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by two more probes spaced 1.5 seconds apart before the banner appears. When reconnecting or post-initial loading banners remain visible for at least five seconds and then clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so real backend gaps recover the same way as a manual refresh without turning brief warning flickers into page reloads.
 
-## Top-Level Composition
+## 1. Top-Level Composition
 
 | Area | Purpose | Primary files |
 | --- | --- | --- |
@@ -26,7 +26,7 @@ The app shell also polls `/api/health` for the global reconnecting banner. After
 | Navigator | Timeline, approval navigation, context tree, errors, full log entry point | `src/components/ticket/NavigatorPanel.tsx` |
 | Workspace views | Draft, council, interview, approval, coding, error, canceled, review, full log | `src/components/workspace/*` |
 
-## Active Workspace Routing
+## 2. Active Workspace Routing
 
 `ActiveWorkspace.tsx` maps workflow metadata to concrete views.
 
@@ -48,7 +48,7 @@ Additional routing rules:
 - reviewable past coding still uses `CodingView` in read-only mode
 - active or selected error occurrences render `ErrorView`
 
-## Navigator Surfaces
+## 3. Navigator Surfaces
 
 `NavigatorPanel.tsx` is more than a left rail. It combines several different navigation modes:
 
@@ -61,7 +61,7 @@ Additional routing rules:
 
 That split matters because the workspace is designed for both live work and historical review.
 
-## Key Workspace Views
+## 4. Key Workspace Views
 
 | View | Primary purpose |
 | --- | --- |
@@ -74,7 +74,7 @@ That split matters because the workspace is designed for both live work and hist
 | `PhaseReviewView` | Historical artifact review for completed phases |
 | `FullLogView` | Full folded execution log stream |
 
-## Coding Workspace Surfaces
+## 5. Coding Workspace Surfaces
 
 The coding workspace is broader than a simple log pane.
 
@@ -89,7 +89,7 @@ Current `CodingView` composes:
 
 It also merges persisted bead artifacts with runtime bead overlays from the live ticket payload so the UI can show in-progress status and notes without waiting for a full artifact refresh.
 
-## Data Hooks
+## 6. Data Hooks
 
 ### Workflow And Artifacts
 
@@ -132,7 +132,7 @@ Current `connectionState` values are:
 - `connected`
 - `reconnecting`
 
-## Interview Draft Persistence
+## 7. Interview Draft Persistence
 
 `useBatchSubmit(ticketId)` is one of the higher-value stateful hooks in the app.
 
@@ -153,7 +153,7 @@ Approval panes use the same success-aware debounced UI-state pattern for editor 
 
 `PrdApprovalPane` keeps the PRD editor as the primary surface. When the winning PRD draft has a Part 1 Full Answers artifact, the header shows a compact `Full Answers` chip that opens the read-only complete interview answer set used by that winning draft.
 
-## Artifact And Review Surfaces
+## 8. Artifact And Review Surfaces
 
 Several UI components exist specifically to inspect durable workflow state:
 
@@ -204,7 +204,7 @@ Parser repairs and structured retries are artifact processing notices, not cover
 
 Voting artifacts keep one collapsed aggregate processing notice so scorecard repairs remain visible at the top of the results. Expanding that notice shows the full intervention details grouped by affected voter model only; the normal **Voter Details** scorecard section does not repeat the same notices.
 
-## Frontend-State Relationship To Workflow Metadata
+## 9. Frontend-State Relationship To Workflow Metadata
 
 The frontend does not hardcode the full workflow. Instead, it derives major behavior from `shared/workflowMeta.ts`:
 
@@ -220,7 +220,7 @@ The current timeline group order is To Do, Discovery, Interview, Specs (PRD), Bl
 
 This is why keeping the docs aligned with `workflowMeta` matters: the UI is built around that shared metadata contract.
 
-## Configuration And Settings UI
+## 10. Configuration And Settings UI
 
 `ProfileSetup` (`src/components/config/ProfileSetup.tsx`) is the main configuration form. It is opened from the app header and lets you set all model and workflow defaults.
 
@@ -263,7 +263,7 @@ All numeric fields are validated against min/max bounds defined in `numericField
 
 Profile settings are inherited by new tickets at start time. The locked copies in the ticket record are what the workflow actually uses for that run.
 
-## Context Providers
+## 11. Context Providers
 
 Three React context providers wrap the ticket workspace and wire up cross-cutting concerns:
 
@@ -275,7 +275,7 @@ Three React context providers wrap the ticket workspace and wire up cross-cuttin
 
 These providers are composed in `TicketDashboard` around `ActiveWorkspace` and the navigator surfaces.
 
-## Kanban Board
+## 12. Kanban Board
 
 `KanbanBoard` (`src/components/kanban/KanbanBoard.tsx`) is the alternate ticket overview. It groups `TicketCard` components into four fixed board locations: To Do, Needs Input, In Progress, and Done.
 
@@ -283,7 +283,7 @@ Ticket placement comes from the `kanbanPhase` mapping in `workflowMeta.ts`/`STAT
 
 Press `k` anywhere outside a text input to navigate to the Kanban board.
 
-## Keyboard Shortcuts
+## 13. Keyboard Shortcuts
 
 `KeyboardShortcuts` (`src/components/shared/KeyboardShortcuts.tsx`) registers a global `?` handler and renders a centered overlay when triggered.
 
@@ -297,7 +297,7 @@ Press `k` anywhere outside a text input to navigate to the Kanban board.
 
 Shortcuts are suppressed when focus is inside an `<input>` or `<textarea>`.
 
-## Ticket Cancel Confirmation Dialog
+## 14. Ticket Cancel Confirmation Dialog
 
 The cancel button in `DashboardHeader` is labeled **"Cancel…"** (the ellipsis signals that a dialog will open before any action is taken).
 

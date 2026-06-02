@@ -1,4 +1,4 @@
-# Ticket Flow & State Machine
+# Ticket Flow
 
 > [!IMPORTANT]
 > **TL;DR** — A ticket flows through scanning → interview → PRD → beads planning → execution setup → bead-by-bead coding → final test → integration → PR → cleanup. Every single status, allowed transition, workflow group, board location, and recovery behavior is defined in a single deterministic state machine. If the system cannot prove a safe next step, it blocks rather than guesses.

@@ -17,7 +17,7 @@ const sidebar = [
     text: 'Workflow',
     collapsed: false,
     items: [
-      { text: 'Ticket Flow & State Machine', link: '/ticket-flow' },
+      { text: 'Ticket Flow', link: '/ticket-flow' },
       { text: 'Interview', link: '/interview' },
       { text: 'PRD', link: '/prd' },
       { text: 'LLM Council', link: '/llm-council' },

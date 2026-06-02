@@ -7,7 +7,7 @@ This document is the canonical architecture reference for the current LoopTroop 
 
 LoopTroop is not a thin chat wrapper around a coding model. It is a long-running workflow system with explicit planning phases, durable storage, isolated execution worktrees, and resumable OpenCode session ownership. The core architectural choice is simple: important state must live outside the model.
 
-## Mental Model
+## 1. Mental Model
 
 LoopTroop operates as a layered system:
 
@@ -18,7 +18,7 @@ LoopTroop operates as a layered system:
 5. SQLite, JSONL logs, and `.ticket/**` artifacts hold the durable truth.
 6. Git worktrees and GitHub delivery convert the plan into an isolated change set and then a PR outcome.
 
-## Runtime Actors
+## 2. Runtime Actors
 
 | Actor | Responsibility | Primary modules |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ LoopTroop operates as a layered system:
 | Ticket filesystem | Human-readable and execution-time artifacts inside the ticket worktree | `server/storage/*`, `server/phases/*` |
 | Git and GitHub layer | Worktrees, diffs, commits, PR creation, merge/close flows | `server/phases/execution/gitOps.ts`, `server/git/*` |
 
-## Authoritative Data Ownership
+## 3. Authoritative Data Ownership
 
 LoopTroop deliberately splits state across several storage layers. Each layer owns a different class of truth.
 
@@ -57,7 +57,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 > Note
 > SQLite and the filesystem are complementary, not redundant. The database is optimized for querying and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable while staying local to LoopTroop rather than becoming target-repository branch content.
 
-## End-to-End Ticket Lifecycle
+## 4. End-to-End Ticket Lifecycle
 
 1. A ticket starts in `DRAFT` with editable title, description, and priority.
 2. `SCANNING_RELEVANT_FILES` creates `relevant-files.yaml` from the ticket description and repo context.
@@ -72,7 +72,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 
 The full phase map lives in [Ticket Flow & State Machine](ticket-flow.md).
 
-## Planning Flow
+## 5. Planning Flow
 
 Planning is intentionally artifact-driven.
 
@@ -90,7 +90,7 @@ Only accepted, normalized planning outputs become artifact body content. Rejecte
 
 Human approval gates are content-addressed. The API exposes the current artifact hash for interview, PRD, beads, and execution setup plan views; approval requests must send `expectedContentSha256`; stale approvals return `409` instead of approving bytes the user did not review. Approval snapshots and receipts keep the reviewed raw content plus `content_sha256`, and interview/PRD receipts also record the post-stamp stored hash when approval metadata changes the YAML.
 
-## Execution Flow
+## 6. Execution Flow
 
 Execution is built around beads, not around one monolithic coding prompt.
 
@@ -106,7 +106,7 @@ Execution is built around beads, not around one monolithic coding prompt.
 
 See [Beads & Execution](beads.md).
 
-## Recovery Flow
+## 7. Recovery Flow
 
 Recovery is a first-class architectural concern.
 
@@ -131,7 +131,7 @@ Planning edit restarts are intentionally cancellation-based. Editing an approved
 
 If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`.
 
-## Restart And Session Ownership
+## 8. Restart And Session Ownership
 
 LoopTroop tracks session ownership in the project database so it can decide whether a remote OpenCode session still belongs to the exact workflow slot that wants to use it.
 
@@ -156,7 +156,7 @@ It deliberately does not mean "resume any random prior stream." Reconnect only s
 
 Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `list`, and message-read calls are guarded so an OpenCode restart cannot indefinitely block the workflow runner.
 
-## Module Map
+## 9. Module Map
 
 ### Frontend
 
@@ -203,7 +203,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | Session ownership and reconnect | `server/opencode/sessionManager.ts` |
 | Prompt runner | `server/workflow/runOpenCodePrompt.ts` |
 
-## ASCII Overview
+## 10. ASCII Overview
 
 ```text
 User
@@ -236,7 +236,7 @@ App DB     Project DB      Ticket worktree    OpenCode adapter/session manager
 git worktree, commits, PR creation, merge/close
 ```
 
-## Detailed Mermaid Diagram
+## 11. Detailed Mermaid Diagram
 
 ```mermaid
 flowchart LR

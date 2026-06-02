@@ -11,7 +11,7 @@ That split is intentional:
 - each attached project has its own operational database
 - ticket artifacts and runtime logs live in the project worktree filesystem
 
-## Database Locations
+## 1. Database Locations
 
 | Database | Default location | Configuration |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ That split is intentional:
 
 Both databases are opened with WAL mode and SQLite foreign-key enforcement enabled. `server/db/index.ts` owns the app DB path, connection lifecycle, and SQLite pragmas; `server/db/init.ts` bootstraps and evolves the app runtime schema. On project DB startup, LoopTroop removes orphan rows from dependent ticket tables before enabling enforcement so partially written or manually edited databases do not keep dangling references.
 
-## App Database
+## 2. App Database
 
 The app database connection is configured in `server/db/index.ts`; its runtime schema is initialized and evolved by `server/db/init.ts`.
 
@@ -60,7 +60,7 @@ Key columns:
 
 This table provides the baseline configuration that projects and tickets inherit from when they start. `structured_retry_count` defaults to `1` and is validated by the API/UI as a value from `0` through `5`. `opencode_retry_limit` defaults to `10` and is validated from `0` through `50`; `opencode_retry_delay` is stored in milliseconds, defaults to `60000`, and is validated from `0` through `3600000`. `opencode_steps` defaults to `0` (no limit — OpenCode default) and is validated from `0` through `500`.
 
-## Project Database
+## 3. Project Database
 
 The project database is initialized in `server/db/project.ts` and uses the schema definitions from `server/db/schema.ts`.
 
@@ -194,7 +194,7 @@ Columns:
 - `resolution_status`
 - `resumed_to_status`
 
-## Relationship Overview
+## 4. Relationship Overview
 
 ```mermaid
 erDiagram
@@ -208,7 +208,7 @@ erDiagram
 
 Ticket-owned rows cascade when a ticket is deleted. `opencode_sessions.ticket_id` is nullable and is set to `NULL` if a referenced ticket is removed.
 
-## What Is Not In SQLite
+## 5. What Is Not In SQLite
 
 SQLite is not the whole system.
 
@@ -226,7 +226,7 @@ Important non-DB state includes:
 
 The database tracks and indexes workflow state. The filesystem stores the user-facing and execution-facing artifacts.
 
-## Indexes And Runtime Behavior
+## 6. Indexes And Runtime Behavior
 
 The project DB also creates indexes for:
 
@@ -238,7 +238,7 @@ The project DB also creates indexes for:
 
 Combined with WAL mode, this keeps the workflow responsive while the UI polls and the backend streams updates.
 
-## Schema Changes
+## 7. Schema Changes
 
 LoopTroop uses Drizzle schema definitions, but the app database is created and updated at server startup by `server/db/init.ts`. For normal app schema changes, update both `server/db/schema.ts` and the runtime bootstrap/evolution logic in `server/db/init.ts`; do not rely on `db:push` or `db:push:app` as the app schema-change workflow.
 

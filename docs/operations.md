@@ -5,7 +5,7 @@
 
 This guide covers the parts of LoopTroop you deal with after the first run: startup maintenance, runtime storage, project-local Git hygiene, worktree cleanup, diagnostics, and common local service issues.
 
-## Quick Reference
+## 1. Quick Reference
 
 | Task | Start here |
 | --- | --- |
@@ -19,7 +19,7 @@ This guide covers the parts of LoopTroop you deal with after the first run: star
 | Diagnose slow UI or ticket refresh stalls | `npm run diagnose:stall` |
 | Clean tracked LoopTroop runtime paths from a project | `git rm --cached -r .looptroop` inside the attached project |
 
-## Runtime Storage
+## 2. Runtime Storage
 
 LoopTroop deliberately separates app-level state from project-level runtime state.
 
@@ -32,7 +32,7 @@ LoopTroop deliberately separates app-level state from project-level runtime stat
 
 LoopTroop adds `/.looptroop/` and `/.ticket/` to the repository-local `.git/info/exclude` file when a project is attached. That keeps project-level runtime state and ticket-local artifacts out of normal Git status without modifying the project's committed `.gitignore`.
 
-## Startup Maintenance
+## 3. Startup Maintenance
 
 `npm run dev` starts the frontend, backend, docs server, and OpenCode watcher stack. Before those services launch, LoopTroop runs a dev preflight that:
 
@@ -61,7 +61,7 @@ That means `npm run dev` can intentionally mutate local dependency files when ag
 
 The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held package names and next eligible times during normal startup. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
 
-## Maintenance Commands
+## 4. Maintenance Commands
 
 Run the individual maintenance steps directly when you need tighter control:
 
@@ -81,7 +81,7 @@ npm run dev --lan
 npm run dev --opencode-logs=all
 ```
 
-## Scripts Reference
+## 5. Scripts Reference
 
 All scripts are available with `npm run <name>`.
 
@@ -138,7 +138,7 @@ Run `test:client` and `test:server` separately when you only want to validate on
 
 The app database is runtime-bootstrapped by `server/db/init.ts`. The committed migration directory is not the source of truth for live app startup. Project DB work should use the explicit project scripts.
 
-## Environment Variables
+## 6. Environment Variables
 
 | Variable | Purpose |
 | --- | --- |
@@ -181,13 +181,13 @@ Default local service addresses:
 
 When `LOOPTROOP_FRONTEND_ORIGIN` is not explicitly set, LoopTroop derives the frontend origin from `LOOPTROOP_FRONTEND_PORT`, defaulting to `http://localhost:5173`. If `LOOPTROOP_FRONTEND_ORIGIN` is set but cannot be parsed as a URL origin, LoopTroop ignores it and falls back to that derived default.
 
-## API Rate Limits
+## 7. API Rate Limits
 
 The backend applies a global per-client rate limit to `/api/*` routes. Read requests, normal write actions, and UI-state autosaves use separate buckets so frequent draft saves do not exhaust the workflow-action budget. Defaults are 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. If a client exceeds a limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
 
 Forwarded client IP headers are ignored unless `LOOPTROOP_TRUST_PROXY=1` is set. This keeps local clients from bypassing limits by spoofing `x-forwarded-for`.
 
-## Project Git Hygiene
+## 8. Project Git Hygiene
 
 If `.looptroop` was already tracked before the project was attached, ticket startup is blocked with `INIT_LOOPTROOP_TRACKED`. This prevents nested or stale LoopTroop worktree data from being checked out into every new ticket worktree.
 
@@ -207,7 +207,7 @@ Other ticket initialization errors from the Git hygiene check:
 - `INIT_LOOPTROOP_EXCLUDE_FAILED` — LoopTroop could not write the `.looptroop/` exclusion to `.git/info/exclude`. Check that the project's `.git` directory is writable.
 - `INIT_LOOPTROOP_TRACKED_CHECK_FAILED` — The `git ls-files` check itself failed. Verify that the attached project path is a valid, accessible Git repository.
 
-## Worktree Disk Cleanup
+## 9. Worktree Disk Cleanup
 
 Over time `.looptroop/worktrees/` can grow large as completed and canceled tickets leave behind code checkouts, execution logs, and generated file artifacts.
 
@@ -226,7 +226,7 @@ Use the UI cleanup flow:
 - active, queued, and draft ticket worktrees
 - ticket records in the dashboard, including title, description, and status
 
-## Diagnostics
+## 10. Diagnostics
 
 If the UI feels slow, tickets disappear after refresh, or the app appears to stall, run the diagnostic command while `npm run dev` is still running:
 
@@ -247,7 +247,7 @@ npm run diagnose:stall -- --ticket-path /path/to/worktree/.ticket
 
 For the full report guide, see [Runtime Diagnostics](diagnostics.md).
 
-## OpenCode Reachability
+## 11. OpenCode Reachability
 
 Symptoms:
 
@@ -264,7 +264,7 @@ When using `npm run dev`, port resolution and basic auth are handled automatical
 3. If OpenCode is on a non-default port, set `LOOPTROOP_OPENCODE_BASE_URL`, for example `export LOOPTROOP_OPENCODE_BASE_URL=http://127.0.0.1:4097`.
 4. If you started OpenCode outside of `npm run dev`, ensure `OPENCODE_SERVER_PASSWORD` and `OPENCODE_SERVER_USERNAME` match the values LoopTroop is using. A credential mismatch causes silently failed requests.
 
-## Watcher and Filesystem Notes
+## 12. Watcher and Filesystem Notes
 
 The backend watcher prefers native file watching on normal local filesystems. Under WSL, mounted-drive workspaces such as `/mnt/...` can be slower and may need polling. LoopTroop auto-enables chokidar polling for those mounted-drive workspaces.
 
@@ -274,7 +274,7 @@ If your environment still misses file changes, force polling for the run:
 CHOKIDAR_USEPOLLING=1 npm run dev
 ```
 
-## Audit Warnings
+## 13. Audit Warnings
 
 `npm audit --omit=dev` should be clean. A full `npm audit` can still report dev-only moderate findings through transitive dev-server tooling:
 

@@ -9,7 +9,7 @@ Repairs produce `repairWarnings` that are stored on the run record and surfaced 
 
 If output remains invalid after the bounded repair and retry path, LoopTroop treats the malformed text as diagnostics only. It is kept in raw attempt views and execution logs, but it is not rendered as structured artifact body content.
 
-## Retry Classes
+## 1. Retry Classes
 
 LoopTroop uses four distinct retry classes. The names matter because they describe different session and artifact behavior:
 
@@ -28,7 +28,7 @@ When OpenCode reports a step finish reason such as `length`, LoopTroop treats th
 
 ---
 
-## Universal Repairs
+## 2. Universal Repairs
 
 These are applied to every structured artifact regardless of type, before any artifact-specific validation runs.
 
@@ -349,7 +349,7 @@ Every field accepts multiple spelling variants. Common examples:
 
 ---
 
-## Artifact-Specific Normalizations
+## 3. Artifact-Specific Normalizations
 
 After the universal repairs succeed, each artifact type applies additional semantic normalizations.
 
@@ -573,7 +573,7 @@ Entries where `inspiration` is present but cannot be resolved are recorded with 
 
 ---
 
-## Diagnostics and Observability
+## 4. Diagnostics and Observability
 
 Every repair produces one or more entries in `repairWarnings`. These are stored on the run record and shown in the **Diagnostics** panel (see [Diagnostics](diagnostics.md)).
 

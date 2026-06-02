@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
 - Merged redundant documentation pages: state-machine.md into ticket-flow.md, and execution-loop.md into beads.md. Updated VitePress sidebar links accordingly.
 - Synchronized the API reference and operations guide with the implemented Hono routes, composite ticket refs, ticket-size breakdown endpoint, and native file-reveal endpoint.
 - Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
@@ -30,6 +31,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Renamed the sidebar item to 'Ticket Flow' (instead of 'Ticket Flow & State Machine') in docs/.vitepress/config.ts and modified the main H1 header in docs/ticket-flow.md.
+- Added structured sequential prefix numbering to the main conceptual H2 sections across 12 documentation pages (Core Philosophy, Context Engineering, Interview, PRD, LLM Council, System Architecture, OpenCode Integration, Frontend, Database Schema, Output Normalization, Operations, and Diagnostics) to guide the reader clearly.
 - Merged `docs/state-machine.md` (Workflow Groups, Board Locations, Phase Inventory, Phase Descriptions, Transition Model, Safe Resume, Retry Semantics, UI Consequences) into `docs/ticket-flow.md` to create a unified Ticket Flow & State Machine document.
 - Merged `docs/execution-loop.md` (Execution Phases, Bead Execution Cycle, Structured Completion, Bounded Ralph-Style Retry, Context Wipe Notes, Session Strategy, OpenCode Retry Budget, Worktree Hygiene, Success/Failure Paths, Execution Configuration Controls) into `docs/beads.md` to create a unified Beads & Execution document.
 - Updated `docs/.vitepress/config.ts` to reflect the merged documentation links in the sidebar.

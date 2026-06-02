@@ -9,13 +9,13 @@ LoopTroop handles those decisions before PRD drafting. The goal is not to create
 
 For the exact state-by-state mechanics, see [Ticket Flow - Interview](/ticket-flow#interview).
 
-## Why It Exists
+## 1. Why It Exists
 
 The interview prevents the coding pipeline from starting with vague intent. It turns a short ticket into concrete product and technical decisions while the cost of changing direction is still low.
 
 This stage is especially important because later phases deliberately use narrow context. PRD drafting does not need every previous model attempt or conversation turn; it needs the approved interview artifact. That keeps downstream prompts focused on user-reviewed requirements instead of polluted by abandoned drafts or earlier execution attempts.
 
-## Council Drafting
+## 2. Council Drafting
 
 Interview planning starts with the LLM council. Each council member receives the ticket details and relevant-file scan, then independently drafts a candidate set of interview questions.
 
@@ -27,7 +27,7 @@ The drafts follow a three-part structure:
 
 The council votes on anonymized drafts using a structured rubric. The winning model then refines the selected draft, optionally incorporating stronger questions from losing drafts while preserving the winning structure. The result is compiled into the canonical interview session that the UI can render.
 
-## Adaptive Question Batches
+## 3. Adaptive Question Batches
 
 The user does not receive one large wall of questions. LoopTroop presents batches of 1 to 3 questions at a time.
 
@@ -41,7 +41,7 @@ After each submitted batch, LoopTroop reviews the answers and adjusts only the r
 
 The progress count is therefore an estimate. The current batch number is stable, but the total number of planned batches may change as answers make later questions unnecessary or reveal a targeted follow-up.
 
-## Question Types
+## 4. Question Types
 
 Interview questions can be free text, yes/no, single choice, or multiple choice. The prompt prefers structured question types when the answer space can be reasonably enumerated, because structured answers are easier to carry into PRD generation and later verification.
 
@@ -49,7 +49,7 @@ Choice questions still allow additional free-text notes. This means a user can s
 
 Every question keeps an ID, phase, source, follow-up round, answer type, options when applicable, and answer state. Preserving IDs matters because later artifacts can trace requirements back to the exact interview question that produced them.
 
-## Skipping Questions
+## 5. Skipping Questions
 
 Skipping is allowed and explicit. A skipped question is not silently removed, and it is not treated as if the user answered it.
 
@@ -57,7 +57,7 @@ Skipped questions remain in the interview artifact with `answer.skipped: true`. 
 
 If the user chooses "skip all" for the remaining interview, LoopTroop marks the unanswered questions as skipped and advances directly to interview approval. It writes a synthetic clean coverage record for audit continuity, because the user explicitly chose to bypass the remaining coverage loop.
 
-## Follow-Ups And Coverage
+## 6. Follow-Ups And Coverage
 
 After the compiled interview has been answered, skipped, or rendered redundant, LoopTroop asks one final free-form question for anything else the user wants captured before PRD generation.
 
@@ -74,7 +74,7 @@ If coverage finds real gaps and the follow-up budget allows it, LoopTroop genera
 
 If coverage is clean, or the configured follow-up budget is exhausted, the interview advances to approval. Remaining gaps are preserved for review instead of hidden.
 
-## Interview Artifact Structure
+## 7. Interview Artifact Structure
 
 The final interview artifact is structured YAML, not a transcript. It includes:
 
@@ -87,7 +87,7 @@ The final interview artifact is structured YAML, not a transcript. It includes:
 
 Question sources can distinguish compiled questions, prompt follow-ups, coverage follow-ups, and the final free-form question. The session snapshot also tracks current batch state, batch history, answered/skipped/pending state, and completion time.
 
-## Approval And Downstream Use
+## 8. Approval And Downstream Use
 
 The interview pauses at approval before PRD generation starts. The user can review the structured or raw artifact, edit it if needed, and approve only the version they actually reviewed. Approval includes a content hash so stale browser tabs cannot approve a replaced artifact.
 
