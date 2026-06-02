@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
+- Split the large state machine transition diagram in ticket-flow.md into 6 focused phase-specific diagrams for improved readability.
 - Merged redundant documentation pages: state-machine.md into ticket-flow.md, and execution-loop.md into beads.md. Updated VitePress sidebar links accordingly.
 - Synchronized the API reference and operations guide with the implemented Hono routes, composite ticket refs, ticket-size breakdown endpoint, and native file-reveal endpoint.
 - Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
@@ -32,6 +33,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Changed
 - Renamed the sidebar item to 'Ticket Flow' (instead of 'Ticket Flow & State Machine') in docs/.vitepress/config.ts and modified the main H1 header in docs/ticket-flow.md.
+- Split the large state machine transition diagram in docs/ticket-flow.md into 6 smaller, focused diagrams organized by workflow phase: Entry & Discovery, Interview Loop, PRD Loop, Beads Loop, Execution & Delivery, and Error Recovery & Cancellation. Enhanced readability by reducing diagram complexity and added descriptive notes explaining retry/continue behavior.
 - Added structured sequential prefix numbering to the main conceptual H2 sections across 12 documentation pages (Core Philosophy, Context Engineering, Interview, PRD, LLM Council, System Architecture, OpenCode Integration, Frontend, Database Schema, Output Normalization, Operations, and Diagnostics) to guide the reader clearly.
 - Merged `docs/state-machine.md` (Workflow Groups, Board Locations, Phase Inventory, Phase Descriptions, Transition Model, Safe Resume, Retry Semantics, UI Consequences) into `docs/ticket-flow.md` to create a unified Ticket Flow & State Machine document.
 - Merged `docs/execution-loop.md` (Execution Phases, Bead Execution Cycle, Structured Completion, Bounded Ralph-Style Retry, Context Wipe Notes, Session Strategy, OpenCode Retry Budget, Worktree Hygiene, Success/Failure Paths, Execution Configuration Controls) into `docs/beads.md` to create a unified Beads & Execution document.
