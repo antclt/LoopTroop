@@ -2,17 +2,17 @@
 
 LoopTroop is opinionated about how AI coding systems should behave. The app trades speed and conversational convenience for controllability, recovery, and durable correctness.
 
-## 1. The Five Core Commitments
+## The Five Core Commitments
 
 | Commitment | What it means in practice |
 | --- | --- |
-| Control context, do not accumulate it blindly | Every phase assembles only the artifacts it is allowed to see |
+| Control context, do not accumulate it blindly | Every phase assembles only the artifacts it is allowed to see. It never inherits chat history or useless context from previous phases. |
 | Compete before you converge | Interview, PRD, and bead planning use multi-model draft, vote, and refine |
 | Keep humans at the irreversible boundaries | Interview, PRD, beads, and execution setup all have approval gates |
-| Retry with fresh state, not with stale chat memory | Bead execution uses bounded Ralph-style retry with context wipe notes |
-| Persist important state outside the model | Databases, YAML, JSONL, and worktree artifacts outlive any single session |
+| Retry with fresh state, not with stale chat memory | Bead execution uses bounded Ralph-style retry loops with fresh context + notes from failures |
+| Persist important state outside the model | Databases, logs, YAML, JSONL, and worktree artifacts outlive any single session |
 
-## 2. Why LoopTroop Over Direct Agent Loops?
+## 1. Why LoopTroop Over Direct Agent Loops?
 
 Direct coding-agent loops are highly useful, but they degrade rapidly when task complexity or repository scale increases. LoopTroop addresses the core challenges:
 
@@ -26,7 +26,7 @@ Direct coding-agent loops are highly useful, but they degrade rapidly when task 
 | **Risky Edits** | Modifies your active checkout directly | Isolated git worktrees per ticket |
 | **Opaque Execution** | State and notes lost inside chat history | SQLite state, JSONL logs, and `.ticket/**` YAML artifacts |
 
-## 3. Context Degradation Is A Design Constraint
+## 2. Context Degradation Is A Design Constraint
 
 Long-context models are useful, but they are still vulnerable to positional bias and long-run context drift. Performance can drop severely when reaching just 40% of the maximum context window—excessive conversational history and irrelevant files overwhelm the model, leading to missing files, broken imports, and "AI slop." LoopTroop treats this as a systems problem, not as a prompt wording problem.
 
@@ -38,7 +38,7 @@ That leads to three hard rules:
 
 See [Context Engineering](context-engineering.md) for the design model, status matrix, and implementation allowlists.
 
-## 4. Council Instead Of Single-Draft Planning
+## 3. Council Instead Of Single-Draft Planning
 
 LoopTroop uses a council because early planning quality dominates downstream execution quality.
 
@@ -55,7 +55,7 @@ This is not a free-form model group chat. It is a constrained orchestration patt
 
 See [LLM Council](llm-council.md).
 
-## 5. Bounded Ralph-Style Retry
+## 4. Bounded Ralph-Style Retry
 
 Execution work fails in two broad ways:
 
@@ -75,7 +75,7 @@ This keeps the learning signal while discarding the poisoned conversational stat
 
 See [Beads & Execution](beads.md).
 
-## 6. Beads Are The Unit Of Execution Memory
+## 5. Beads Are The Unit Of Execution Memory
 
 LoopTroop does not hand a whole feature to one coding session and hope for the best. It decomposes the approved PRD into beads:
 
@@ -87,7 +87,7 @@ Beads are both the execution plan and the execution memory layer. They define wh
 
 See [Beads](beads.md).
 
-## 7. Human Review Is Not An Afterthought
+## 6. Human Review Is Not An Afterthought
 
 LoopTroop inserts explicit approval gates before the most expensive and hardest-to-reverse transitions:
 
@@ -98,7 +98,7 @@ LoopTroop inserts explicit approval gates before the most expensive and hardest-
 
 This keeps the system honest. The model is allowed to move quickly inside a phase, but the human decides when the pipeline is good enough to cross into the next expensive stage.
 
-## 8. Isolation Is Part Of Correctness
+## 7. Isolation Is Part Of Correctness
 
 LoopTroop treats isolation as a correctness boundary, not just a convenience feature.
 
@@ -113,7 +113,7 @@ At the host layer, unattended AI execution is safer in a disposable VM, cloud de
 
 See [System Architecture](system-architecture.md), [Beads & Execution](beads.md), and Git’s official [`git worktree`](https://git-scm.com/docs/git-worktree.html) documentation.
 
-## 9. Durable State Beats Conversational Memory
+## 8. Durable State Beats Conversational Memory
 
 LoopTroop stores meaningful workflow state in places that can be inspected, queried, and rebuilt:
 
@@ -124,7 +124,7 @@ LoopTroop stores meaningful workflow state in places that can be inspected, quer
 
 If the process restarts, the system should recover from storage, not from a model trying to remember what happened.
 
-## 10. What LoopTroop Optimizes For
+## 9. What LoopTroop Optimizes For
 
 LoopTroop is optimized for:
 
