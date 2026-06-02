@@ -1,5 +1,8 @@
 # Runtime Diagnostics
 
+> [!IMPORTANT]
+> **TL;DR** — When a ticket blocks or behaves unexpectedly, LoopTroop surfaces structured diagnostics: provider errors, session state, timeout details, retry history, and OpenCode log correlation — so you know exactly what failed and why.
+
 LoopTroop includes a local runtime diagnostic command for investigating slow refreshes, intermittent stalls, missing tickets after reload, OpenCode reachability problems, and machine-level resource pressure.
 
 Run it while `npm run dev` is already running, ideally during the slowdown:

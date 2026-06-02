@@ -1,5 +1,8 @@
 # Configuration Reference
 
+> [!IMPORTANT]
+> **TL;DR** — All runtime behavior — council size, retry budgets, timeouts, quorum rules, and model selection — is configurable through the UI settings panel. Defaults are tuned for overnight runs; adjust them to match your provider limits and cost tolerance.
+
 All configuration lives in your profile, accessible via the **Configuration** button in the LoopTroop UI. Changes take effect on the next phase that reads the value — you do not need to restart the server.
 
 ## Quick Reference
@@ -437,7 +440,7 @@ LoopTroop generates a context wipe note summarizing the failure when possible, a
 - Decrease for projects where you want fast failure feedback and the model tends to get stuck.
 - Setting to 0 disables the timeout (not recommended for production use).
 
-**See also:** [Execution Loop → Per-Iteration Timeout](/execution-loop#per-iteration-timeout)
+**See also:** [Beads & Execution → Per-Iteration Timeout](/beads#per-iteration-timeout)
 
 ---
 
@@ -466,7 +469,7 @@ The setup phase can install user-space toolchains under `.ticket/runtime/executi
 - Leave at default for most repos where setup runs in seconds or is not needed.
 - Setting to 0 disables the timeout for the setup phase specifically.
 
-**See also:** [Execution Loop → Execution Setup Timeout](/execution-loop#execution-setup-timeout)
+**See also:** [Beads & Execution → Execution Setup Timeout](/beads#execution-setup-timeout)
 
 ---
 
@@ -480,7 +483,7 @@ How many fresh-session re-attempts LoopTroop allows for a failing bead before it
 
 **What "fresh session" means:**
 
-Each retry discards the polluted conversational state from the failed attempt, resets the worktree to the bead's start commit, opens a brand-new OpenCode session, and starts over with the context wipe note from the previous attempt as context. See [Execution Loop — Bounded Ralph-Style Retry](/execution-loop#bounded-ralph-style-retry) for the full design rationale.
+Each retry discards the polluted conversational state from the failed attempt, resets the worktree to the bead's start commit, opens a brand-new OpenCode session, and starts over with the context wipe note from the previous attempt as context. See [Beads & Execution — Bounded Ralph-Style Retry](/beads#bounded-ralph-style-retry) for the full design rationale.
 
 Startup and manual-retry recovery can avoid a fresh attempt when the interrupted bead already has a current matching `bead_execution` checkpoint. In that case LoopTroop finalizes the checkpointed result; only missing or invalid checkpoints fall back to reset/retry and this retry budget.
 
@@ -498,7 +501,7 @@ Startup and manual-retry recovery can avoid a fresh attempt when the interrupted
 - Raise for greenfield work, unstable test suites, or providers with high per-call variance.
 - Setting to 0 effectively disables retry: any iteration failure immediately blocks the bead.
 
-**See also:** [Execution Loop → Max Bead Retries](/execution-loop#max-bead-retries)
+**See also:** [Beads & Execution → Max Bead Retries](/beads#max-bead-retries)
 
 ---
 
@@ -555,4 +558,4 @@ Error output is usually more compact than stdout but often more important to pre
 - Increase if stack traces or compiler errors are being truncated in a way that makes debugging difficult.
 - Decrease if error output is consistently short for your stack.
 
-**See also:** [Execution Loop → Tool Log Truncation](/execution-loop#tool-log-truncation)
+**See also:** [Beads & Execution → Tool Log Truncation](/beads#tool-log-truncation)

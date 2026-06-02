@@ -1,5 +1,8 @@
 # API Reference
 
+> [!IMPORTANT]
+> **TL;DR** — LoopTroop exposes a local REST API for ticket lifecycle actions, artifact access, settings, and real-time SSE streams. The frontend and external tools use this API — there is no separate internal protocol.
+
 All backend routes are mounted under `/api`.
 
 This page documents the current HTTP surface exposed by `server/index.ts` and the route handlers in `server/routes/*`.
@@ -620,5 +623,5 @@ Example `artifact_change` event payload:
 
 - [Frontend](frontend.md)
 - [OpenCode Integration](opencode-integration.md)
-- [State Machine](state-machine.md)
+- [Ticket Flow & State Machine](ticket-flow.md)
 - [System Architecture](system-architecture.md)

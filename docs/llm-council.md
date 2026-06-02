@@ -1,5 +1,8 @@
 # LLM Council
 
+> [!IMPORTANT]
+> **TL;DR** — LoopTroop uses a structured multi-model council (draft → vote → refine → verify) for every planning decision. Models compete independently before converging, so blind spots from any single provider are caught before execution begins.
+
 > [!TIP]
 > **Why use a Council?** Think of it like a design agency. If you hire one designer, you get one idea. If you hire three designers, have them pitch ideas independently, and then vote on the best elements from each, the final product is vastly superior. That's exactly what the LLM Council does for your code.
 
@@ -161,6 +164,6 @@ That storage is what allows phase review, restart, and auditability in the UI.
 ## Related Docs
 
 - [Context Engineering](context-engineering.md)
-- [State Machine](state-machine.md)
-- [Beads](beads.md)
+- [Ticket Flow & State Machine](ticket-flow.md)
+- [Beads & Execution](beads.md)
 - [System Architecture](system-architecture.md)

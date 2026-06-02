@@ -241,7 +241,6 @@ Useful pages:
 | [Frontend](https://www.looptroop.ovh/frontend) | Workspace composition, hooks, keyboard shortcuts, live updates |
 | [Output Normalization](https://www.looptroop.ovh/output-normalization) | YAML/JSON repair pipeline, retry classes, key aliasing |
 | [Runtime Diagnostics](https://www.looptroop.ovh/diagnostics) | Stall investigation and resource-pressure analysis |
-| [FAQ](https://www.looptroop.ovh/faq) | Common questions and terminology |
 
 When the app is running, the same docs are also available from the dashboard.
 

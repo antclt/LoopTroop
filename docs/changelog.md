@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Merged redundant documentation pages: state-machine.md into ticket-flow.md, and execution-loop.md into beads.md. Updated VitePress sidebar links accordingly.
 - Synchronized the API reference and operations guide with the implemented Hono routes, composite ticket refs, ticket-size breakdown endpoint, and native file-reveal endpoint.
 - Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
 - Restructured the README for clarity: consolidated repeated explanations, merged overlapping sections, and reorganized the reading flow.
@@ -29,6 +30,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Merged `docs/state-machine.md` (Workflow Groups, Board Locations, Phase Inventory, Phase Descriptions, Transition Model, Safe Resume, Retry Semantics, UI Consequences) into `docs/ticket-flow.md` to create a unified Ticket Flow & State Machine document.
+- Merged `docs/execution-loop.md` (Execution Phases, Bead Execution Cycle, Structured Completion, Bounded Ralph-Style Retry, Context Wipe Notes, Session Strategy, OpenCode Retry Budget, Worktree Hygiene, Success/Failure Paths, Execution Configuration Controls) into `docs/beads.md` to create a unified Beads & Execution document.
+- Updated `docs/.vitepress/config.ts` to reflect the merged documentation links in the sidebar.
 - Added a TL;DR `[!IMPORTANT]` callout to `docs/context-engineering.md` highlighting the core principle: every phase, status, and retry uses only minimal context — never the full conversation history.
 - Updated `docs/api-reference.md` to document composite ticket refs (`projectId:externalId`), `GET /api/tickets/:id/size`, the `/api/files/open-path` route, and the exact `GET/PUT /api/files/:ticketId/:file` behavior.
 - Fixed `docs/operations.md` to describe `npm run dev:backend` as the Hono backend server rather than Express.
@@ -43,6 +47,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added multi-model council token cost caveat to `docs/core-philosophy.md` "not optimized for" section.
 - Expanded the README documentation table from 9 to 14 pages, adding Configuration, State Machine, Frontend, Output Normalization, and Runtime Diagnostics.
 - Synchronized the `docs/index.md` Projects screenshot caption with the README ("add" instead of "create").
+
+#### Removed
+- Removed now-redundant documentation files `docs/state-machine.md` and `docs/execution-loop.md` whose content is now merged into `docs/ticket-flow.md` and `docs/beads.md` respectively.
 
 #### Fixed
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.

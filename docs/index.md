@@ -22,7 +22,6 @@ If you are new to LoopTroop, use this order:
 2. [Core Philosophy](core-philosophy.md) for the system-level design goals.
 3. [Context Engineering](context-engineering.md) for LoopTroop's minimum-context model discipline.
 4. [Ticket Flow](ticket-flow.md) for the full lifecycle from draft to completion.
-5. [FAQ](faq.md) for terminology, safety, and common workflow questions.
 
 ## What LoopTroop Is
 
@@ -81,17 +80,14 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 - [Getting Started](getting-started.md): installation, startup, ports, and first project attach.
 - [Core Philosophy](core-philosophy.md): context engineering, councils, retries, approvals, durable state.
 - [Context Engineering](context-engineering.md): why prompts are built from minimal per-status context and what each status receives.
-- [FAQ](faq.md): terminology and practical operational questions.
 
 ### Workflow
 
-- [Ticket Flow](ticket-flow.md): end-to-end ticket lifecycle, artifacts, user actions, retries, outcomes.
+- [Ticket Flow & State Machine](ticket-flow.md): end-to-end ticket lifecycle, state machine transitions, artifacts, user actions, retries, and outcomes.
 - [Interview](interview.md): adaptive clarification batches, skipped questions, coverage follow-ups, artifact structure, and approval.
 - [PRD](prd.md): Full Answers, skipped-answer resolution, council drafting/voting/refining, PRD structure, coverage, and approval.
-- [State Machine](state-machine.md): canonical phase inventory and transition model.
 - [LLM Council](llm-council.md): draft, vote, refine, and coverage orchestration.
-- [Beads](beads.md): execution-unit model, dependency graph, storage, diff review.
-- [Execution Loop](execution-loop.md): per-bead execution, structured completion, fresh-session retry.
+- [Beads & Execution](beads.md): execution-unit model, dependency graph, execution loop, bounded Ralph-style retry, storage, and diff review.
 
 ### Architecture
 

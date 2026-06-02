@@ -145,4 +145,3 @@ For the full lifecycle, see [Ticket Flow](ticket-flow.md).
 - [Core Philosophy](core-philosophy.md) — context engineering, councils, retries, approvals
 - [Configuration](configuration.md) — all profile settings with defaults, ranges, and trade-offs
 - [Operations Guide](operations.md) — runtime storage, environment variables, startup maintenance, diagnostics, and troubleshooting
-- [FAQ](faq.md) — terminology and common questions

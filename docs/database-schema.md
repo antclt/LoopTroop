@@ -1,5 +1,8 @@
 # Database Schema
 
+> [!IMPORTANT]
+> **TL;DR** — LoopTroop uses two SQLite databases: an app-level DB for projects and settings, and a per-project DB for tickets, artifacts, phases, errors, and sessions. All durable workflow state lives here — not in model memory.
+
 LoopTroop currently uses two SQLite databases plus filesystem artifacts.
 
 That split is intentional:

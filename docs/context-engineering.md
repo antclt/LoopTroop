@@ -1,7 +1,7 @@
 # Context Engineering
 
 > [!IMPORTANT]
-> **TL;DR** — Every single phase, every single status, and most retries use as input the smallest possible context derived from the previous status. LoopTroop **never** keeps the full conversation history. This is a core principle of the project's design and implementation.
+> **TL;DR** — Every single phase, every single status, and most retries use as input the smallest possible context derived from the previous status. LoopTroop almost **never** keeps the full conversation history. This is a core principle of the project's design and implementation.
 
 LoopTroop uses context engineering to keep model work focused. The engine does not treat an LLM session as the source of truth, and it does not keep appending every previous message to the next prompt. Each status rebuilds the smallest useful prompt from durable artifacts and the active task contract.
 
@@ -322,5 +322,5 @@ The practical rule is simple: the model should know exactly what it needs for th
 
 - [Core Philosophy](core-philosophy.md)
 - [Ticket Flow](ticket-flow.md)
-- [Execution Loop](execution-loop.md)
+- [Beads & Execution](beads.md)
 - [Output Normalization](output-normalization.md)

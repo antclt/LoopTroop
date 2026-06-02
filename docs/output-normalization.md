@@ -1,5 +1,8 @@
 # Output Normalization
 
+> [!IMPORTANT]
+> **TL;DR** — LLM outputs are messy. LoopTroop runs every model response through structured parsers, YAML repair rules, and bounded retry loops to extract valid artifacts — never trusting raw model output as-is.
+
 Every structured artifact that an AI council member produces goes through a normalization pipeline before LoopTroop trusts its content. This page catalogs all automatic repairs, cleanups, and semantic adjustments — what triggers each one and what the pipeline does about it.
 
 Repairs produce `repairWarnings` that are stored on the run record and surfaced in the diagnostics view. A repair being applied never silently discards data; it always records what changed.

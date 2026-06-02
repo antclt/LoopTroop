@@ -1,5 +1,8 @@
 # Operations Guide
 
+> [!IMPORTANT]
+> **TL;DR** — Covers installation, environment variables, startup scripts, port layout, project attachment, database locations, log files, and troubleshooting for running LoopTroop locally.
+
 This guide covers the parts of LoopTroop you deal with after the first run: startup maintenance, runtime storage, project-local Git hygiene, worktree cleanup, diagnostics, and common local service issues.
 
 ## Quick Reference

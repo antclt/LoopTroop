@@ -1,5 +1,8 @@
 # OpenCode Integration
 
+> [!IMPORTANT]
+> **TL;DR** — OpenCode is LoopTroop's only interface to AI models. LoopTroop creates sessions, sends prompts, streams completions, and manages retries through OpenCode's API — it never calls model providers directly.
+
 LoopTroop uses OpenCode as its model execution layer, but wraps it with its own session ownership, context assembly, event streaming, and workflow recovery logic.
 
 ## Core Modules
@@ -207,6 +210,6 @@ Without that wrapper, the rest of the system would have no safe way to restart, 
 ## Related Docs
 
 - [Context Engineering](context-engineering.md)
-- [Execution Loop](execution-loop.md)
+- [Beads & Execution](beads.md)
 - [API Reference](api-reference.md)
 - [System Architecture](system-architecture.md)

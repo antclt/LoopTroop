@@ -1,5 +1,8 @@
 # PRD
 
+> [!IMPORTANT]
+> **TL;DR** — The PRD is a council-drafted implementation contract built from the approved interview. It defines scope, behavior, constraints, and acceptance criteria. Beads planning decomposes this spec — not the raw ticket — into executable work.
+
 The PRD is the ticket's implementation contract. It turns the approved interview into a structured specification that later phases can decompose, verify, and trace back to user intent.
 
 In LoopTroop, the PRD is practical rather than ceremonial. It defines what needs to be built, why it matters, what is in and out of scope, which technical constraints matter, what behavior must be accepted, and how the result should be verified.

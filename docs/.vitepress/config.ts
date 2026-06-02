@@ -11,20 +11,17 @@ const sidebar = [
       { text: 'Getting Started', link: '/getting-started' },
       { text: 'Core Philosophy', link: '/core-philosophy' },
       { text: 'Context Engineering', link: '/context-engineering' },
-      { text: 'FAQ', link: '/faq' },
     ],
   },
   {
     text: 'Workflow',
     collapsed: false,
     items: [
-      { text: 'Ticket Flow', link: '/ticket-flow' },
+      { text: 'Ticket Flow & State Machine', link: '/ticket-flow' },
       { text: 'Interview', link: '/interview' },
       { text: 'PRD', link: '/prd' },
-      { text: 'State Machine', link: '/state-machine' },
       { text: 'LLM Council', link: '/llm-council' },
-      { text: 'Beads', link: '/beads' },
-      { text: 'Execution Loop', link: '/execution-loop' },
+      { text: 'Beads & Execution', link: '/beads' },
     ],
   },
   {

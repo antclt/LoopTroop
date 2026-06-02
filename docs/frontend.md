@@ -1,5 +1,8 @@
 # Frontend
 
+> [!IMPORTANT]
+> **TL;DR** — The frontend is a local React + TypeScript SPA using Vite, Zustand, and SSE for real-time updates. It renders ticket workflow, approval gates, coding progress, bead grids, artifact inspection, and phase-versioned history.
+
 The frontend is a React 19 SPA that renders the ticket dashboard, the live workspace, review panes, and the navigator surfaces around them.
 
 The UI is data-driven from:
@@ -238,10 +241,10 @@ All numeric fields are validated against min/max bounds defined in `numericField
 
 | Field | Docs link |
 | --- | --- |
-| Per-Iteration Timeout | [Execution Loop](execution-loop.md#per-iteration-timeout) |
-| Execution Setup Timeout | [Execution Loop](execution-loop.md#execution-setup-timeout) |
+| Per-Iteration Timeout | [Beads & Execution](beads.md#per-iteration-timeout) |
+| Execution Setup Timeout | [Beads & Execution](beads.md#execution-setup-timeout) |
 | AI Response Timeout | [LLM Council](llm-council.md#ai-response-timeout) |
-| Max Bead Retries | [Execution Loop](execution-loop.md#max-bead-retries) |
+| Max Bead Retries | [Beads & Execution](beads.md#max-bead-retries) |
 | OpenCode Retry Limit | [Configuration Reference](configuration.md#opencode-retry-limit) |
 | OpenCode Retry Grace Window | [Configuration Reference](configuration.md#opencode-retry-grace-window) |
 | Min Council Quorum | [LLM Council](llm-council.md#min-council-quorum) |
@@ -251,9 +254,9 @@ All numeric fields are validated against min/max bounds defined in `numericField
 | Interview Coverage Passes | [Ticket Flow](ticket-flow.md#interview-coverage-passes) |
 | PRD Coverage Passes | [Ticket Flow](ticket-flow.md#prd-coverage-passes) |
 | Beads Coverage Passes | [Ticket Flow](ticket-flow.md#beads-coverage-passes) |
-| Tool Input Max Chars | [Execution Loop](execution-loop.md#tool-log-truncation) |
-| Tool Output Max Chars | [Execution Loop](execution-loop.md#tool-log-truncation) |
-| Tool Error Max Chars | [Execution Loop](execution-loop.md#tool-log-truncation) |
+| Tool Input Max Chars | [Beads & Execution](beads.md#tool-log-truncation) |
+| Tool Output Max Chars | [Beads & Execution](beads.md#tool-log-truncation) |
+| Tool Error Max Chars | [Beads & Execution](beads.md#tool-log-truncation) |
 
 > [!NOTE]
 > Timeout and delay fields are stored in **milliseconds**. `ProfileSetup` converts those stored milliseconds to seconds for display and back to milliseconds on save.
@@ -312,6 +315,6 @@ The dialog calls `useCancelTicket` which POSTs `{ deleteContent, deleteLog }` to
 ## Related Docs
 
 - [API Reference](api-reference.md)
-- [State Machine](state-machine.md)
+- [Ticket Flow & State Machine](ticket-flow.md)
 - [OpenCode Integration](opencode-integration.md)
 - [System Architecture](system-architecture.md)

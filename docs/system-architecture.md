@@ -1,5 +1,8 @@
 # System Architecture
 
+> [!IMPORTANT]
+> **TL;DR** — LoopTroop runs as a local Hono backend + React frontend backed by SQLite. Each ticket executes in its own git worktree, and all AI work flows through OpenCode as the sole model gateway. No cloud dependency, no hosted backend.
+
 This document is the canonical architecture reference for the current LoopTroop application.
 
 LoopTroop is not a thin chat wrapper around a coding model. It is a long-running workflow system with explicit planning phases, durable storage, isolated execution worktrees, and resumable OpenCode session ownership. The core architectural choice is simple: important state must live outside the model.
@@ -67,7 +70,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 9. Implementation runs bead by bead in an isolated ticket worktree, with bounded retry per bead.
 10. Post-implementation final testing, file-effects auditing, integration, PR creation, review follow-up, and cleanup drive the ticket to `COMPLETED`, `CANCELED`, or `BLOCKED_ERROR`.
 
-The full phase map lives in [State Machine](state-machine.md).
+The full phase map lives in [Ticket Flow & State Machine](ticket-flow.md).
 
 ## Planning Flow
 
@@ -101,7 +104,7 @@ Execution is built around beads, not around one monolithic coding prompt.
 8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
 9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper and PR creation auditing the final candidate files before anything is pushed.
 
-See [Execution Loop](execution-loop.md) and [Beads](beads.md).
+See [Beads & Execution](beads.md).
 
 ## Recovery Flow
 
@@ -329,8 +332,7 @@ flowchart LR
 - [Core Philosophy](core-philosophy.md)
 - [Context Engineering](context-engineering.md)
 - [LLM Council](llm-council.md)
-- [Execution Loop](execution-loop.md)
-- [Beads](beads.md)
+- [Beads & Execution](beads.md)
 - [OpenCode Integration](opencode-integration.md)
 - [Database Schema](database-schema.md)
 - [API Reference](api-reference.md)

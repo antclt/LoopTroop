@@ -12,6 +12,20 @@ LoopTroop is opinionated about how AI coding systems should behave. The app trad
 | Retry with fresh state, not with stale chat memory | Bead execution uses bounded Ralph-style retry with context wipe notes |
 | Persist important state outside the model | Databases, YAML, JSONL, and worktree artifacts outlive any single session |
 
+## Why LoopTroop Over Direct Agent Loops?
+
+Direct coding-agent loops are highly useful, but they degrade rapidly when task complexity or repository scale increases. LoopTroop addresses the core challenges:
+
+| Challenge | Direct Agent Behavior | LoopTroop's Fix |
+| --- | --- | --- |
+| **Flawed Planning** | A single model drafts a plan in one pass, missing edge cases | Multi-model councils draft, vote, refine, and verify |
+| **Monolithic Overload** | Tries to solve a complex feature in one massive prompt | Decomposes work into atomic beads with acceptance criteria |
+| **Single-Provider Bias** | One model's blind spots cascade through the whole pipeline | Cross-model councils harness diverse providers and architectures |
+| **Context Rot** | Long chats suffer token bloat and degraded output | Phase-specific context rebuilt from durable artifacts each step |
+| **Degenerate Retries** | Keeps fixing inside the same polluted session | Ralph-style fresh-session retries with compact failure notes |
+| **Risky Edits** | Modifies your active checkout directly | Isolated git worktrees per ticket |
+| **Opaque Execution** | State and notes lost inside chat history | SQLite state, JSONL logs, and `.ticket/**` YAML artifacts |
+
 ## Context Degradation Is A Design Constraint
 
 Long-context models are useful, but they are still vulnerable to positional bias and long-run context drift. Performance can drop severely when reaching just 40% of the maximum context window—excessive conversational history and irrelevant files overwhelm the model, leading to missing files, broken imports, and "AI slop." LoopTroop treats this as a systems problem, not as a prompt wording problem.
@@ -59,7 +73,7 @@ This keeps the learning signal while discarding the poisoned conversational stat
 
 `Ralph-style retry` is also a current community term rather than a formal standard. LoopTroop uses the term narrowly: it means fresh-session retry with preserved failure context, not unlimited unattended looping.
 
-See [Execution Loop](execution-loop.md).
+See [Beads & Execution](beads.md).
 
 ## Beads Are The Unit Of Execution Memory
 
@@ -97,7 +111,7 @@ At the repository layer, it uses `git worktree` as the main execution primitive.
 
 At the host layer, unattended AI execution is safer in a disposable VM, cloud desktop, or similarly sandboxed environment. Worktrees protect the repo boundary, but they do not replace process isolation, filesystem policy, or host-level blast-radius reduction. If an agent can run commands for hours, the safer default is to give it a safe host to operate in.
 
-See [System Architecture](system-architecture.md), [Execution Loop](execution-loop.md), and Git’s official [`git worktree`](https://git-scm.com/docs/git-worktree.html) documentation.
+See [System Architecture](system-architecture.md), [Beads & Execution](beads.md), and Git’s official [`git worktree`](https://git-scm.com/docs/git-worktree.html) documentation.
 
 ## Durable State Beats Conversational Memory
 
@@ -133,5 +147,4 @@ It is not optimized for:
 - [System Architecture](system-architecture.md)
 - [Context Engineering](context-engineering.md)
 - [LLM Council](llm-council.md)
-- [Execution Loop](execution-loop.md)
-- [Beads](beads.md)
+- [Beads & Execution](beads.md)

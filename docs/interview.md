@@ -1,5 +1,8 @@
 # Interview
 
+> [!IMPORTANT]
+> **TL;DR** — Before any code is planned, LoopTroop runs a council-drafted, adaptive interview that turns a vague ticket into concrete product and technical decisions. The approved interview artifact becomes the sole input for PRD generation — no chat history carries forward.
+
 The interview is LoopTroop's ambiguity-removal stage. A ticket usually starts as a compact user request, but implementation often depends on decisions that are not written down yet: expected behavior, target users, constraints, edge cases, UI preferences, integration details, test expectations, and explicit non-goals.
 
 LoopTroop handles those decisions before PRD drafting. The goal is not to create a long chat transcript. The goal is to produce a structured, reviewable interview artifact that later phases can trust without needing the full conversation history.
