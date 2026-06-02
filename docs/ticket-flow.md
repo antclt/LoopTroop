@@ -215,6 +215,8 @@ stateDiagram-v2
 stateDiagram-v2
     direction LR
 
+    [*] --> COUNCIL_DELIBERATING
+
     COUNCIL_DELIBERATING --> COUNCIL_VOTING_INTERVIEW: QUESTIONS_READY
     COUNCIL_DELIBERATING --> BLOCKED_ERROR: ERROR
 
@@ -245,6 +247,8 @@ stateDiagram-v2
 stateDiagram-v2
     direction LR
 
+    [*] --> DRAFTING_PRD
+
     DRAFTING_PRD --> COUNCIL_VOTING_PRD: DRAFTS_READY
     DRAFTING_PRD --> BLOCKED_ERROR: ERROR
 
@@ -269,6 +273,8 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     direction LR
+
+    [*] --> DRAFTING_BEADS
 
     DRAFTING_BEADS --> COUNCIL_VOTING_BEADS: DRAFTS_READY
     DRAFTING_BEADS --> BLOCKED_ERROR: ERROR
@@ -297,6 +303,8 @@ stateDiagram-v2
 ```mermaid
 stateDiagram-v2
     direction LR
+
+    [*] --> PRE_FLIGHT_CHECK
 
     PRE_FLIGHT_CHECK --> WAITING_EXECUTION_SETUP_APPROVAL: CHECKS_PASSED
     PRE_FLIGHT_CHECK --> BLOCKED_ERROR: ERROR / CHECKS_FAILED
@@ -336,6 +344,8 @@ stateDiagram-v2
 stateDiagram-v2
     direction LR
 
+    [*] --> BLOCKED_ERROR
+
     state "previousStatus" as PREVIOUS_PHASE
 
     BLOCKED_ERROR --> PREVIOUS_PHASE: RETRY
@@ -348,6 +358,7 @@ stateDiagram-v2
         RETRY re-runs the phase.
         CONTINUE resumes eligible sessions.
     end note
+```
 ```
 
 ### Key Observations
