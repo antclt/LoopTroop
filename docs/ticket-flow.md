@@ -41,154 +41,17 @@ WAITING_PR_REVIEW -> merge or close-unmerged -> CLEANING_ENV
 
 The flowchart below visualizes how tickets progress through planning, execution, and delivery, and how recovery pathways branch back to active phases:
 
-```mermaid
-flowchart TB
-    subgraph Intake["Entry"]
-        D[DRAFT<br/>Editable ticket metadata]
-        S[SCANNING_RELEVANT_FILES<br/>Write relevant-files.yaml]
-    end
+The diagrams in this document are embedded SVGs so they render consistently in VS Code Markdown Preview.
 
-    subgraph Interview["Interview Group"]
-        ID[COUNCIL_DELIBERATING<br/>Parallel interview drafts]
-        IV[COUNCIL_VOTING_INTERVIEW<br/>Score and pick winner]
-        IC[COMPILING_INTERVIEW<br/>Normalize interview.yaml]
-        IQ[WAITING_INTERVIEW_ANSWERS<br/>User answers, skips, or continues batches]
-        ICV[VERIFYING_INTERVIEW_COVERAGE<br/>Budgeted follow-up loop]
-        IA[WAITING_INTERVIEW_APPROVAL<br/>Editable approval gate]
-    end
+![Detailed ticket flow diagram](./media/ticket-flow/01-2-detailed-flow-diagram.svg)
 
-    subgraph PRD["PRD Group"]
-        PD[DRAFTING_PRD<br/>Full answers + draft specs]
-        PV[COUNCIL_VOTING_PRD<br/>Select best spec]
-        PR[REFINING_PRD<br/>Upgrade winner to candidate]
-        PC[VERIFYING_PRD_COVERAGE<br/>Versioned revision loop]
-        PA[WAITING_PRD_APPROVAL<br/>PRD approval + Full Answers context]
-    end
+Loop semantics are omitted from the high-level chart to keep it readable:
 
-    subgraph Beads["Beads Group"]
-        BD[DRAFTING_BEADS<br/>Semantic blueprint drafts]
-        BV[COUNCIL_VOTING_BEADS<br/>Choose architecture]
-        BR[REFINING_BEADS<br/>Strengthen winner]
-        BC[VERIFYING_BEADS_COVERAGE<br/>Coverage review loop]
-        BE[EXPANDING_BEADS<br/>Expand into execution-ready beads]
-        BA[WAITING_BEADS_APPROVAL<br/>Execution plan approval]
-    end
-
-    subgraph Execution["Execution And Delivery"]
-        PF[PRE_FLIGHT_CHECK<br/>Readiness and dependency checks]
-        ESA[WAITING_EXECUTION_SETUP_APPROVAL<br/>Review setup plan]
-        EE[PREPARING_EXECUTION_ENV<br/>Write execution setup profile]
-        C[CODING<br/>Per-bead execution loop]
-        FT[RUNNING_FINAL_TEST<br/>Whole-ticket verification]
-        IG[INTEGRATING_CHANGES<br/>Squash to candidate commit]
-        PRC[CREATING_PULL_REQUEST<br/>Push candidate + draft PR]
-        PRR[WAITING_PR_REVIEW<br/>Merge or close unmerged]
-        CL[CLEANING_ENV<br/>Remove transient runtime state]
-        DONE[COMPLETED]
-    end
-
-    subgraph Recovery["Recovery"]
-        ERR[BLOCKED_ERROR<br/>Retry, Continue, or cancel]
-        CAN[CANCELED]
-    end
-
-    D -->|start| S
-    D -->|cancel| CAN
-    S --> ID
-    S -->|failure| ERR
-
-    ID --> IV
-    IV --> IC
-    IC --> IQ
-    IQ -->|more batch questions| IQ
-    IQ -->|complete| ICV
-    ICV -->|gaps + budget| IQ
-    ICV -->|clean or budget exhausted| IA
-    IA -->|approve| PD
-    IA -->|cancel| CAN
-
-    PD --> PV
-    PV --> PR
-    PR --> PC
-    PC -->|gaps| PR
-    PC -->|clean or cap reached| PA
-    PA -->|approve| BD
-    PA -->|cancel| CAN
-
-    BD --> BV
-    BV --> BR
-    BR --> BC
-    BC -->|gaps| BR
-    BC -->|clean or cap reached| BE
-    BE -->|expanded plan ready| BA
-    BA -->|approve| PF
-    BA -->|cancel| CAN
-
-    PF --> ESA
-    ESA -->|approve setup plan| EE
-    ESA -->|cancel| CAN
-    EE --> C
-    C -->|next bead| C
-    C -->|all beads done| FT
-    FT --> IG
-    IG --> PRC
-    PRC --> PRR
-    PRR -->|merge| CL
-    PRR -->|close unmerged| CL
-    PRR -->|cancel| CAN
-    CL --> DONE
-
-    ID -.-> ERR
-    IV -.-> ERR
-    IC -.-> ERR
-    ICV -.-> ERR
-    PD -.-> ERR
-    PV -.-> ERR
-    PR -.-> ERR
-    PC -.-> ERR
-    BD -.-> ERR
-    BV -.-> ERR
-    BR -.-> ERR
-    BC -.-> ERR
-    BE -.-> ERR
-    PF -.-> ERR
-    ESA -.-> ERR
-    EE -.-> ERR
-    C -.-> ERR
-    FT -.-> ERR
-    IG -.-> ERR
-    PRC -.-> ERR
-    PRR -.-> ERR
-    CL -.-> ERR
-
-    ERR -->|retry| S
-    ERR -->|retry| ID
-    ERR -->|retry| IV
-    ERR -->|retry| IC
-    ERR -->|retry| IQ
-    ERR -->|retry| ICV
-    ERR -->|retry| IA
-    ERR -->|retry| PD
-    ERR -->|retry| PV
-    ERR -->|retry| PR
-    ERR -->|retry| PC
-    ERR -->|retry| PA
-    ERR -->|retry| BD
-    ERR -->|retry| BV
-    ERR -->|retry| BR
-    ERR -->|retry| BC
-    ERR -->|retry| BE
-    ERR -->|retry| PF
-    ERR -->|retry| ESA
-    ERR -->|retry| EE
-    ERR -->|retry| C
-    ERR -->|retry| FT
-    ERR -->|retry| IG
-    ERR -->|retry| PRC
-    ERR -->|retry| PRR
-    ERR -->|retry| CL
-    ERR -->|cancel| CAN
-```
+- `WAITING_INTERVIEW_ANSWERS` can self-loop for more batches, and interview coverage can send the ticket back to answers when gaps remain.
+- `VERIFYING_PRD_COVERAGE` can send the ticket back to `REFINING_PRD` until the spec is clean or the revision cap is reached.
+- `VERIFYING_BEADS_COVERAGE` can send the ticket back to `REFINING_BEADS` until the blueprint is clean or the revision cap is reached.
+- `CODING` repeats bead-by-bead until all executable beads are complete.
+- `BLOCKED_ERROR` stores `previousStatus`, so `retry` and eligible `continue` actions both return to the interrupted phase.
 
 ---
 
@@ -198,171 +61,33 @@ The underlying state machine enforces valid state transitions and recovery hooks
 
 ### 3.1 Entry & Discovery
 
-```mermaid
-flowchart LR
-    START([Start])
-    DRAFT[DRAFT]
-    SCAN[SCANNING_RELEVANT_FILES]
-    COUNCIL[COUNCIL_DELIBERATING]
-    ERROR[BLOCKED_ERROR]
-    CANCELED[CANCELED]
-
-    START --> DRAFT
-    DRAFT -->|START| SCAN
-    DRAFT -->|CANCEL| CANCELED
-    SCAN -->|RELEVANT_FILES_READY| COUNCIL
-    SCAN -->|ERROR| ERROR
-```
+![Entry and discovery state diagram](./media/ticket-flow/02-3-1-entry-discovery.svg)
 
 ### 3.2 Interview Loop
 
-```mermaid
-flowchart TD
-    DELIB[COUNCIL_DELIBERATING]
-    VOTE[COUNCIL_VOTING_INTERVIEW]
-    COMPILE[COMPILING_INTERVIEW]
-    QA[WAITING_INTERVIEW_ANSWERS]
-    VERIFY[VERIFYING_INTERVIEW_COVERAGE]
-    APPROVAL[WAITING_INTERVIEW_APPROVAL]
-    PRD[DRAFTING_PRD]
-    ERROR[BLOCKED_ERROR]
-    CANCELED[CANCELED]
+![Interview loop state diagram](./media/ticket-flow/03-3-2-interview-loop.svg)
 
-    DELIB -->|QUESTIONS_READY| VOTE
-    VOTE -->|WINNER_SELECTED| COMPILE
-    COMPILE -->|READY| QA
-    QA -->|BATCH_ANSWERED| QA
-    QA -->|INTERVIEW_COMPLETE| VERIFY
-    QA -->|SKIP_ALL_TO_APPROVAL| APPROVAL
-    VERIFY -->|GAPS_FOUND| QA
-    VERIFY -->|COVERAGE_CLEAN| APPROVAL
-    VERIFY -->|COVERAGE_LIMIT_REACHED| APPROVAL
-    APPROVAL -->|APPROVE| PRD
-    APPROVAL -->|CANCEL| CANCELED
-    
-    DELIB -.->|ERROR| ERROR
-    VOTE -.->|ERROR| ERROR
-    COMPILE -.->|ERROR| ERROR
-    QA -.->|ERROR| ERROR
-    VERIFY -.->|ERROR| ERROR
-    APPROVAL -.->|ERROR| ERROR
-```
+`WAITING_INTERVIEW_ANSWERS` self-loops while batches are still being answered, and `VERIFYING_INTERVIEW_COVERAGE` returns to answers when gaps require follow-up questions.
 
 ### 3.3 PRD Loop
 
-```mermaid
-flowchart TD
-    DRAFT[DRAFTING_PRD]
-    VOTE[COUNCIL_VOTING_PRD]
-    REFINE[REFINING_PRD]
-    VERIFY[VERIFYING_PRD_COVERAGE]
-    APPROVAL[WAITING_PRD_APPROVAL]
-    BEADS[DRAFTING_BEADS]
-    ERROR[BLOCKED_ERROR]
-    CANCELED[CANCELED]
+![PRD loop state diagram](./media/ticket-flow/04-3-3-prd-loop.svg)
 
-    DRAFT -->|DRAFTS_READY| VOTE
-    VOTE -->|WINNER_SELECTED| REFINE
-    REFINE -->|REFINED| VERIFY
-    VERIFY -->|GAPS_FOUND| REFINE
-    VERIFY -->|COVERAGE_CLEAN| APPROVAL
-    VERIFY -->|COVERAGE_LIMIT_REACHED| APPROVAL
-    APPROVAL -->|APPROVE| BEADS
-    APPROVAL -->|CANCEL| CANCELED
-    
-    DRAFT -.->|ERROR| ERROR
-    VOTE -.->|ERROR| ERROR
-    REFINE -.->|ERROR| ERROR
-    VERIFY -.->|ERROR| ERROR
-    APPROVAL -.->|ERROR| ERROR
-```
+`VERIFYING_PRD_COVERAGE` loops back to `REFINING_PRD` whenever the candidate spec still has gaps.
 
 ### 3.4 Beads Loop
 
-```mermaid
-flowchart TD
-    DRAFT[DRAFTING_BEADS]
-    VOTE[COUNCIL_VOTING_BEADS]
-    REFINE[REFINING_BEADS]
-    VERIFY[VERIFYING_BEADS_COVERAGE]
-    EXPAND[EXPANDING_BEADS]
-    APPROVAL[WAITING_BEADS_APPROVAL]
-    PREFLIGHT[PRE_FLIGHT_CHECK]
-    ERROR[BLOCKED_ERROR]
-    CANCELED[CANCELED]
+![Beads loop state diagram](./media/ticket-flow/05-3-4-beads-loop.svg)
 
-    DRAFT -->|DRAFTS_READY| VOTE
-    VOTE -->|WINNER_SELECTED| REFINE
-    REFINE -->|REFINED| VERIFY
-    VERIFY -->|GAPS_FOUND| REFINE
-    VERIFY -->|COVERAGE_CLEAN| EXPAND
-    VERIFY -->|COVERAGE_LIMIT_REACHED| EXPAND
-    EXPAND -->|EXPANDED| APPROVAL
-    APPROVAL -->|APPROVE| PREFLIGHT
-    APPROVAL -->|CANCEL| CANCELED
-    
-    DRAFT -.->|ERROR| ERROR
-    VOTE -.->|ERROR| ERROR
-    REFINE -.->|ERROR| ERROR
-    VERIFY -.->|ERROR| ERROR
-    EXPAND -.->|ERROR| ERROR
-    APPROVAL -.->|ERROR| ERROR
-```
+`VERIFYING_BEADS_COVERAGE` loops back to `REFINING_BEADS` whenever the execution blueprint still misses required coverage.
 
 ### 3.5 Execution & Delivery
 
-```mermaid
-flowchart TD
-    PREFLIGHT[PRE_FLIGHT_CHECK]
-    SETUP_APPROVAL[WAITING_EXECUTION_SETUP_APPROVAL]
-    PREPARE[PREPARING_EXECUTION_ENV]
-    CODING[CODING]
-    FINAL_TEST[RUNNING_FINAL_TEST]
-    INTEGRATE[INTEGRATING_CHANGES]
-    CREATE_PR[CREATING_PULL_REQUEST]
-    PR_REVIEW[WAITING_PR_REVIEW]
-    CLEANUP[CLEANING_ENV]
-    DONE[COMPLETED]
-    ERROR[BLOCKED_ERROR]
-    CANCELED[CANCELED]
-
-    PREFLIGHT -->|CHECKS_PASSED| SETUP_APPROVAL
-    SETUP_APPROVAL -->|APPROVE| PREPARE
-    SETUP_APPROVAL -->|CANCEL| CANCELED
-    PREPARE -->|EXECUTION_SETUP_READY| CODING
-    CODING -->|BEAD_COMPLETE| CODING
-    CODING -->|ALL_BEADS_DONE| FINAL_TEST
-    FINAL_TEST -->|TESTS_PASSED| INTEGRATE
-    INTEGRATE -->|INTEGRATION_DONE| CREATE_PR
-    CREATE_PR -->|PULL_REQUEST_READY| PR_REVIEW
-    PR_REVIEW -->|MERGE_COMPLETE| CLEANUP
-    PR_REVIEW -->|CLOSE_UNMERGED| CLEANUP
-    PR_REVIEW -->|CANCEL| CANCELED
-    CLEANUP -->|CLEANUP_DONE| DONE
-    
-    PREFLIGHT -.->|ERROR| ERROR
-    SETUP_APPROVAL -.->|ERROR| ERROR
-    PREPARE -.->|ERROR| ERROR
-    CODING -.->|ERROR| ERROR
-    FINAL_TEST -.->|ERROR| ERROR
-    INTEGRATE -.->|ERROR| ERROR
-    CREATE_PR -.->|ERROR| ERROR
-    PR_REVIEW -.->|ERROR| ERROR
-    CLEANUP -.->|ERROR| ERROR
-```
+![Execution and delivery state diagram](./media/ticket-flow/06-3-5-execution-delivery.svg)
 
 ### 3.6 Error Recovery & Cancellation
 
-```mermaid
-flowchart LR
-    BLOCKED_ERROR[BLOCKED_ERROR]
-    PREVIOUS["previousStatus<br/>(stored in context)"]
-    CANCELED[CANCELED]
-
-    BLOCKED_ERROR -->|RETRY| PREVIOUS
-    BLOCKED_ERROR -->|CONTINUE| PREVIOUS
-    BLOCKED_ERROR -->|CANCEL| CANCELED
-```
+![Error recovery and cancellation state diagram](./media/ticket-flow/07-3-6-error-recovery-cancellation.svg)
 
 **Recovery semantics:**
 - `RETRY`: Re-runs the previous phase from scratch

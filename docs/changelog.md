@@ -10,6 +10,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Summary
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
 - Split the large state machine transition diagram in ticket-flow.md into 6 focused phase-specific diagrams for improved readability.
+- Made the Ticket Flow diagrams render reliably in VS Code Markdown Preview by replacing the live Mermaid blocks with embedded SVG diagrams and keeping loopback details in nearby notes.
 - Merged redundant documentation pages: state-machine.md into ticket-flow.md, and execution-loop.md into beads.md. Updated VitePress sidebar links accordingly.
 - Synchronized the API reference and operations guide with the implemented Hono routes, composite ticket refs, ticket-size breakdown endpoint, and native file-reveal endpoint.
 - Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
@@ -57,6 +58,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Removed now-redundant documentation files `docs/state-machine.md` and `docs/execution-loop.md` whose content is now merged into `docs/ticket-flow.md` and `docs/beads.md` respectively.
 
 #### Fixed
+- Replaced the live Mermaid diagrams in `docs/ticket-flow.md` with embedded SVG exports generated from the same flow definitions, so section 2 and all section 3 state diagrams render consistently in VS Code Markdown Preview while the omitted loopback semantics remain documented immediately below the affected charts.
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.
 - Corrected `docs/system-architecture.md` to remove non-existent `server/github/*` module reference; all GitHub integration code lives in `server/git/github.ts`.
 - Added missing `opencode_steps` column to the `profiles` table key columns list in `docs/database-schema.md`, with a corresponding note in the prose.
