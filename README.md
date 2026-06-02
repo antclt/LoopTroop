@@ -50,7 +50,7 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 
 ## What is LoopTroop?
 
-LoopTroop is a **local GUI orchestrator for long-running, high-correctness AI software delivery**—taking you from a raw idea to merged code.
+LoopTroop is a **local GUI orchestrator for long-running, high-correctness AI software delivery** - taking you from a raw idea to merged code. Free and fully open-source.
 
 Unlike high-speed coding tools that optimize for immediate chat responses, LoopTroop is built for **complex, multi-file feature work** where alignment and correctness are paramount. It optimizes for a "slow and perfect" paradigm, intentionally sacrificing raw speed to deliver a final result that matches exactly how you envisioned it.
 
@@ -86,7 +86,7 @@ LoopTroop keeps workflow state outside the model, stores durable artifacts, and 
 
 ### Context Engineering
 
-Context rot is the enemy of autonomous agents. Traditional agent loops suffer from it—excessive conversational history and irrelevant files overwhelm the model, causing code quality to degrade. Performance can drop severely when reaching just 40% of the maximum context window, resulting in missing files, broken imports, and "AI slop."
+Context rot is the enemy of autonomous agents. Traditional agent loops suffer from it-excessive conversational history and irrelevant files overwhelm the model, causing code quality to degrade. Performance can drop severely when reaching just 40% of the maximum context window, resulting in missing files, broken imports, and "AI slop."
 
 LoopTroop solves this through precise context curation. Instead of sending full conversational transcripts, the engine isolates payloads to the active status. During execution, the agent only sees the specific active bead, its immediate file target, and the test file. During planning phases, it receives only the minimum context relevant to the current step.
 
@@ -107,7 +107,7 @@ Read more: [LLM Council](https://www.looptroop.ovh/llm-council)
 
 ### Interview
 
-Before writing a spec, the LLM Council compiles a list of targeted questions to resolve any ambiguities. This interactive session gathers requirements and clarifies intent—because matching your vision is the goal, this phase can take over an hour by design.
+Before writing a spec, the LLM Council compiles a list of targeted questions to resolve any ambiguities. This interactive session gathers requirements and clarifies intent-because matching your vision is the goal, this phase can take over an hour by design.
 
 You answer these questions directly in the Interview workspace to clarify edge cases, design decisions, and requirements, ensuring the model never operates on false assumptions. Although a final interview is created after the council's draft-vote-refine cycle is complete, the user still receives questions in batches that can adapt based on previous answers.
 
@@ -121,9 +121,9 @@ Read more: [PRD](https://www.looptroop.ovh/prd)
 
 ### Beads
 
-LoopTroop implements **only the Beads methodology**—not the full external Beads Project—extracting just the lightweight planning structure needed to bring immediate value to your repository.
+LoopTroop implements **only the Beads methodology**-not the full external Beads Project-extracting just the lightweight planning structure needed to bring immediate value to your repository.
 
-Using Steve Yegge's *Beads Project* methodology, epics are split into "beads"—the smallest, independently implementable units of work. Each bead contains:
+Using Steve Yegge's *Beads Project* methodology, epics are split into "beads"-the smallest, independently implementable units of work. Each bead contains:
 - Clear purpose and objective
 - Measurable acceptance criteria
 - Necessary dependencies and prerequisite context
@@ -136,7 +136,7 @@ Read more: [Beads](https://www.looptroop.ovh/beads)
 
 ### Execution & Ralph-style recovery
 
-The actual implementation is carried out by an AI coding agent (OpenCode) running in an isolated workspace. If the agent struggles, continuing the same conversation can make things worse. LoopTroop's retry mechanism (the "Ralph Loop") preserves a highly compact error trace from the failure, resets the worktree, discards the contaminated session, and begins a fresh run with clean context—plus a note from previous failures.
+The actual implementation is carried out by an AI coding agent (OpenCode) running in an isolated workspace. If the agent struggles, continuing the same conversation can make things worse. LoopTroop's retry mechanism (the "Ralph Loop") preserves a highly compact error trace from the failure, resets the worktree, discards the contaminated session, and begins a fresh run with clean context-plus a note from previous failures.
 
 ```text
 fail ──> log failure trace ──> reset worktree ──> retry fresh
