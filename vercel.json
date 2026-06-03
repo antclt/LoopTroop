@@ -1,12 +1,21 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "npm run docs:build",
-  "outputDirectory": "docs/.vitepress/dist",
+  "buildCommand": "npm run site:build",
+  "outputDirectory": "site",
   "cleanUrls": true,
   "headers": [
     {
       "source": "/assets/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/docs/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

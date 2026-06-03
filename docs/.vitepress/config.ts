@@ -62,6 +62,7 @@ const sidebar = [
 ]
 
 export default defineConfig({
+  base: '/docs/',
   title: 'LoopTroop',
   description: 'Durable repo-scale AI delivery through council planning, isolated worktrees, and explicit approvals.',
   head: [
