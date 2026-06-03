@@ -14,6 +14,10 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 | **3. Shipping** | *OpenCode Worktrees Ship It* | Code Isolation ➔ Final Verification Pass ➔ Main Branch Handoff |
 
 Free and fully open-source.
+
+::: warning Run LoopTroop in a Sandboxed Environment (VM)
+LoopTroop executes agent code changes with full local user privileges to allow unattended runs. For maximum security, it is highly recommended to run LoopTroop inside a disposable VM, cloud environment, or sandboxed workspace. See [Getting Started](getting-started.md#why-a-vm) for details.
+:::
 ## Start Here
 
 If you are new to LoopTroop, use this order:
@@ -30,6 +34,15 @@ LoopTroop is a **local GUI orchestrator for long-running, high-correctness AI so
 Unlike high-speed coding tools that optimize for immediate chat responses, LoopTroop is built for **complex, multi-file feature work** where alignment and correctness are paramount. It optimizes for a "slow and perfect" paradigm, intentionally sacrificing raw speed to deliver a final result that matches exactly how you envisioned it.
 
 **Great Context Engineering = Zero AI Slop:** LoopTroop employs precise context curation at every stage, feeding the agent only the absolute **minimum** context it needs. See [Context Engineering](context-engineering.md) for details.
+
+## How It Works
+
+```mermaid
+flowchart LR
+    A[🔍 Scanning files] --> B[🏛️ LLM council planning<br/>(interview, prd, beads)]
+    B --> C[🧪 Implementation]
+    C --> D[🚀 PR & Review]
+```
 
 ## Screenshots
 
@@ -98,6 +111,7 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 
 ### Reference
 
+- [Configuration](configuration.md): all profile settings with defaults, ranges, and trade-offs.
 - [API Reference](api-reference.md): routes, SSE events, payload shapes.
 - [Output Normalization](output-normalization.md): how malformed or partial model output is repaired or isolated before use.
 
@@ -108,15 +122,16 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 
 ### Direction
 
+- [Changelog](changelog.md): project release notes and historical changes.
 - [Roadmap](roadmap.md): living planning notes for priorities and future directions.
 
 ## Terminology Notes
 
 LoopTroop uses a mix of established and newer terms:
 
-- `Bead` - the smallest, independently implementable unit of work. Borrowed from Steve Yegge's *Beads Project* methodology. Each bead contains a clear purpose, acceptance criteria, target files, and validation steps.
-- `git worktree` - a standard Git capability for working on multiple linked trees from one repository. LoopTroop uses it as the main execution-isolation primitive.
-- `Ralph-style retry` - community shorthand for abandoning a degraded coding session, keeping a compact failure note, and retrying in fresh context instead of continuing the same transcript.
-- `LLM council` - LoopTroop's name for its multi-model draft, vote, and refine pattern. The idea overlaps with newer multi-model consensus research, but the exact workflow here is LoopTroop-specific.
-- `PRD` - Product Requirements Document. The structured spec (epics + user stories) that the LLM Council produces from your ticket and interview answers before any coding starts.
-- `AI orchestrator` - descriptive, not magical. In this repo it means a system that owns workflow state, artifact boundaries, retries, approvals, and delivery mechanics around model calls.
+- **[Bead](beads.md)** - the smallest, independently implementable unit of work. Borrowed from Steve Yegge's *Beads Project* methodology. Each bead contains a clear purpose, acceptance criteria, target files, and validation steps.
+- **[git worktree](system-architecture.md)** - a standard Git capability for working on multiple linked trees from one repository. LoopTroop uses it as the main execution-isolation primitive.
+- **[Ralph-style retry](beads.md)** - community shorthand for abandoning a degraded coding session, keeping a compact failure note, and retrying in fresh context instead of continuing the same transcript.
+- **[LLM council](llm-council.md)** - LoopTroop's name for its multi-model draft, vote, and refine pattern. The idea overlaps with newer multi-model consensus research, but the exact workflow here is LoopTroop-specific.
+- **[PRD](prd.md)** - Product Requirements Document. The structured spec (epics + user stories) that the LLM Council produces from your ticket and interview answers before any coding starts.
+- **AI orchestrator** - descriptive, not magical. In this repo it means a system that owns workflow state, artifact boundaries, retries, approvals, and delivery mechanics around model calls.

@@ -16,15 +16,15 @@ LoopTroop is opinionated about how AI coding systems should behave. The app trad
 
 Direct coding-agent loops are highly useful, but they degrade rapidly when task complexity or repository scale increases. LoopTroop addresses the core challenges:
 
-| Challenge | Direct Agent Behavior | LoopTroop's Fix |
-| --- | --- | --- |
-| **Flawed Planning** | A single model drafts a plan in one pass, missing edge cases | Multi-model councils draft, vote, refine, and verify |
-| **Monolithic Overload** | Tries to solve a complex feature in one massive prompt | Decomposes work into atomic beads with acceptance criteria |
-| **Single-Provider Bias** | One model's blind spots cascade through the whole pipeline | Cross-model councils harness diverse providers and architectures |
-| **Context Rot** | Long chats suffer token bloat and degraded output | Phase-specific context rebuilt from durable artifacts each step |
-| **Degenerate Retries** | Keeps fixing inside the same polluted session | Ralph-style fresh-session retries with compact failure notes |
-| **Risky Edits** | Modifies your active checkout directly | Isolated git worktrees per ticket |
-| **Opaque Execution** | State and notes lost inside chat history | SQLite state, JSONL logs, and `.ticket/**` YAML artifacts |
+| Core Challenge | Direct Agent Behavior | LoopTroop's Structural Fix |
+| :--- | :--- | :--- |
+| **Flawed Planning** | A single model attempts to draft a multi-step plan in one pass, frequently missing structural edge cases. | **LLM Council Consensus:** Competing models draft, vote on, and synthesize a single, rigorous implementation plan. |
+| **Monolithic Overload** | Direct agents try to solve a complex feature in a single massive prompt, leaving incomplete files or "TODO" placeholders. | **Atomic Bead Decompositions:** Automatically breaks down the feature into independent, test-backed "beads" to focus on smallest changes at a time. |
+| **Single-Provider Bias** | Relying on one model makes your pipeline highly vulnerable to that specific model's logical blind spots and systemic failures. | **Cross-Model Councils:** Harnesses diverse providers and architectures (e.g., Anthropic, OpenAI, NVIDIA NIM) to critique and align code drafts. |
+| **Context Rot** | Long-running chats suffer from token bloat and context degradation, leading to broken imports or forgotten criteria. | **Modern Context Engineering:** The environment strictly isolates context, feeding the agent only the absolute minimum context it needs at each step. |
+| **Degenerate Retries** | When a command fails, the agent tries to fix it within the same polluted chat session, compounding previous errors. | **Ralph-Style Retries:** Discards the broken chat session entirely and retries the exact bead with a fresh context window (plus notes from previous failures). |
+| **Risky Edits** | Code modifications are made directly in your active checkout, potentially leaving your main branch in an unstable state. | **Isolated Git Worktrees:** Executes all changes in dedicated, isolated worktrees away from your primary working branch. |
+| **Opaque Execution** | Internal states, planning notes, and test outputs are lost inside unstructured chat history. | **Structured Durability:** Maintains state locally inside SQLite, JSONL logs, and easily inspectable `.ticket/**` YAML artifacts. |
 
 ## 2. Context Degradation Is A Design Constraint
 
@@ -124,22 +124,23 @@ LoopTroop stores meaningful workflow state in places that can be inspected, quer
 
 If the process restarts, the system should recover from storage, not from a model trying to remember what happened.
 
-## 9. What LoopTroop Optimizes For
+## 9. What LoopTroop Optimizes For (and What It Is Not)
 
 LoopTroop is optimized for:
 
-- mid-size and large feature work
-- overnight or multi-hour runs
-- traceable planning artifacts
-- recoverable execution
-- explicit delivery outcomes
+- **Mid-size and large feature work** where planning and correctness are paramount.
+- **Overnight or multi-hour runs** designed to run unattended while you sleep.
+- **Traceable planning artifacts** stored as durable local specs.
+- **Recoverable execution** using isolated worktrees and fresh-session retry logic.
+- **Explicit delivery outcomes** with strict human approval gates.
 
-It is not optimized for:
+It is **not** a magic autopilot, nor is it optimized for:
 
-- one-shot trivial edits
-- chat-first exploratory coding
-- unbounded autonomous runs with no checkpoints
-- cost-sensitive budgets where API token volume matters — orchestrating multi-model councils and long retry loops uses a high volume of tokens, though costs can be mitigated by leveraging subscription plans or free-tier providers in OpenCode
+- **One-shot trivial edits** or quick fixes where the system overhead will feel slow.
+- **Chat-first exploratory coding** (traditional IDE-based chat assistants are better suited here).
+- **Unbounded autonomous runs** without explicit human checkpoints.
+- **Cost-sensitive budgets** — orchestrating multi-model councils and long retry loops uses a high volume of API tokens, though costs can be mitigated by leveraging subscription plans or free-tier providers in OpenCode.
+- **A secure sandbox** — it does not replace process isolation, filesystem policy, or host-level blast-radius reduction. Always run in a disposable VM or cloud container.
 
 ## Related Docs
 

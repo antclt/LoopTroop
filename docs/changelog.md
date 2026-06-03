@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Streamlined documentation and README: focused the README documentation table to essential first-time user pages, added missing error screenshots, integrated a high-level VM warning and workflow Mermaid diagram into the docs landing page, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
 - Split the large state machine transition diagram in ticket-flow.md into 6 focused phase-specific diagrams for improved readability.
 - Made the Ticket Flow diagrams render reliably in VS Code Markdown Preview by replacing the live Mermaid blocks with embedded SVG diagrams and keeping loopback details in nearby notes.
@@ -31,12 +32,20 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added a high-level warning alerting users to run LoopTroop in a sandboxed environment/VM on the documentation landing page (`docs/index.md`).
+- Added a simple workflow flowchart using Mermaid to the documentation landing page (`docs/index.md`).
 - Added candidate-file auditing during pull request creation: final changed files are classified as include, exclude, or review before the branch is pushed; evidence-backed exclusions rewrite the local candidate and are recorded in a `candidate_file_audit` artifact.
 - Added candidate net-diff capture for PR review so the review surface can distinguish the actual final PR diff from cumulative bead activity.
 - Added bead-level `Input` and `Output` tabs in the Coding view, including raw prompt/output formatting, copy actions, line/character/token counts, tooltips, and a version selector for previous bead iterations.
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Streamlined `README.md` quick navigation start links to fit on a single line.
+- Added missing `bead2.png` and `bead3.png` error view screenshots to the `README.md` gallery.
+- Focused the documentation table in `README.md` to display only the essential five pages for new users.
+- Added `Configuration` and `Changelog` references to `docs/index.md`'s Documentation Map.
+- Updated Terminology Notes in `docs/index.md` to use internal cross-reference links.
+- Synced and enriched the direct-agent challenges comparison table and optimized-for list in `docs/core-philosophy.md`.
 - Improved `web.html` landing page SEO and UX: added favicon, Open Graph meta tags, and canonical URL; moved theme detection to an inline `<head>` script to eliminate dark-mode flash on load; added a `<noscript>` banner warning users that interactive features require JavaScript; added the missing `scrollbar-hide` CSS utility for the screenshot tab strip; simplified the footer theme-toggle script to only sync icons since the class is now set pre-render.
 - Hardened `web.html` for production: fixed header and mobile-menu social links that pointed to bare platform domains instead of the LoopTroop profile pages; added Twitter Card meta tags, `<link rel="canonical">`, `<meta name="robots">`, `og:site_name`, and JSON-LD `SoftwareApplication` structured data; self-hosted Inter and JetBrains Mono woff2 font files in `/public/fonts/` replacing the Google Fonts CDN and `preconnect` hints; pinned Tailwind CDN to v3.4.17 and Font Awesome to v6.5.2 with SRI integrity hashes; wrapped main content in a `<main>` landmark; replaced the non-functional video play button with a visually disabled "coming soon" indicator; removed the duplicate footer "Back to top" button (floating FAB remains); and added `<!-- VERSION -->` comments at both v0.2.4 badges to ease future updates.
 - Renamed the sidebar item to 'Ticket Flow' (instead of 'Ticket Flow & State Machine') in docs/.vitepress/config.ts and modified the main H1 header in docs/ticket-flow.md.

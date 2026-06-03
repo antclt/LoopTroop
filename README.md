@@ -13,13 +13,7 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 | **2. Execution** | *Ralph Loops Perfect It* | Isolated Bead Work ➔ Multi-Loop Automated Testing & Fixing |
 | **3. Shipping** | *OpenCode Worktrees Ship It* | Code Isolation ➔ Final Verification Pass ➔ Main Branch Handoff |
 
-**Start here:**
-[Docs](https://www.looptroop.ovh/docs/) |
-[Getting Started](https://www.looptroop.ovh/docs/getting-started) |
-[Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) |
-[LLM Council](https://www.looptroop.ovh/docs/llm-council) |
-[Execution Loop](https://www.looptroop.ovh/docs/beads) |
-[Changelog](https://www.looptroop.ovh/docs/changelog)
+**Start here:** [Docs](https://www.looptroop.ovh/docs/) | [Getting Started](https://www.looptroop.ovh/docs/getting-started) | [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | [Beads & Execution](https://www.looptroop.ovh/docs/beads)
 
 ### 📸 Screenshots
 
@@ -43,6 +37,12 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 
 ![Bead execution detail](docs/media/bead.png)
 *Inspect bead-level progress, task status, and live execution logs while an implementation bead runs.*
+
+![Bead error view](docs/media/bead2.png)
+*Review the focused workspace view shown when an implementation bead is blocked by an error.*
+
+![Alternate bead error view](docs/media/bead3.png)
+*Compare a different bead's error state, diagnostics, and recovery context before deciding whether to continue or retry.*
 
 </details>
 
@@ -144,7 +144,7 @@ fail ──> log failure trace ──> reset worktree ──> retry fresh
 
 This cycle repeats until all tests pass or retry limits are reached. **This can take hours (sometimes 10+ hours) by design.** It is built to run unattended (e.g., overnight).
 
-Read more: [Execution Loop](https://www.looptroop.ovh/docs/beads)
+Read more: [Beads & Execution](https://www.looptroop.ovh/docs/beads)
 
 ### Worktree isolation
 
@@ -228,19 +228,11 @@ Useful pages:
 
 | Page | What it explains |
 | --- | --- |
-| [Getting Started](https://www.looptroop.ovh/docs/getting-started) | Setup, startup, ports, first project attach |
+| [Getting Started](https://www.looptroop.ovh/docs/getting-started) | Setup, startup, ports, and first project attach |
 | [Configuration](https://www.looptroop.ovh/docs/configuration) | All profile settings with defaults, ranges, and trade-offs |
-| [Operations Guide](https://www.looptroop.ovh/docs/operations) | Startup maintenance, environment variables, runtime storage, diagnostics, and cleanup |
-| [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | End-to-end workflow from ticket to PR result |
-| [State Machine](https://www.looptroop.ovh/docs/ticket-flow) | Canonical phase inventory and transition model |
+| [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | End-to-end workflow from ticket input to PR result |
 | [LLM Council](https://www.looptroop.ovh/docs/llm-council) | Multi-model draft, vote, refine, and coverage planning |
-| [Execution Loop](https://www.looptroop.ovh/docs/beads) | Bead execution, retries, resets, context wipe notes |
-| [Beads](https://www.looptroop.ovh/docs/beads) | The execution-unit model |
-| [System Architecture](https://www.looptroop.ovh/docs/system-architecture) | Runtime actors, storage, worktrees, artifacts |
-| [OpenCode Integration](https://www.looptroop.ovh/docs/opencode-integration) | Session ownership, reconnects, streaming, health checks |
-| [Frontend](https://www.looptroop.ovh/docs/frontend) | Workspace composition, hooks, keyboard shortcuts, live updates |
-| [Output Normalization](https://www.looptroop.ovh/docs/output-normalization) | YAML/JSON repair pipeline, retry classes, key aliasing |
-| [Runtime Diagnostics](https://www.looptroop.ovh/docs/diagnostics) | Stall investigation and resource-pressure analysis |
+| [Beads & Execution](https://www.looptroop.ovh/docs/beads) | Bead execution, retries, resets, and context wipe notes |
 
 When the app is running, the same docs are also available from the dashboard.
 
