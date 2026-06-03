@@ -20,6 +20,12 @@ LoopTroop executes agent code changes with full local user privileges to allow u
 :::
 ## Start Here
 
+```bash
+git clone https://github.com/looptroop-ai/LoopTroop.git
+cd LoopTroop
+npm run dev
+```
+
 If you are new to LoopTroop, use this order:
 
 1. [Getting Started](getting-started.md) for local setup and the first run.
@@ -38,10 +44,14 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 ## How It Works
 
 ```mermaid
-flowchart LR
-    A["🔍 Scanning files"] --> B["🏛️ LLM council planning<br/>(interview, prd, beads)"]
-    B --> C["🧪 Implementation"]
-    C --> D["🚀 PR & Review"]
+flowchart TD
+    A["🎫 Ticket Input"] --> B["🔍 Codebase Discovery"]
+    B --> C["🏛️ LLM Council Planning<br/>(Interview, PRD & Beads)"]
+    C --> D["🛑 Human Approval Gate<br/>(optional in future releases)"]
+    D --> E["🧪 Isolated OpenCode Bead Execution<br/>(Git Worktree)"]
+    E --> F["✅ Final Tests & PR Review"]
+    E -.->|"On Failure"| G["🔄 Ralph-Style Recovery Loop"]
+    G -.->|"Retry"| E
 ```
 
 ## Screenshots

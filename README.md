@@ -60,24 +60,15 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 
 ## How it works
 
-```text
-  [ 🎫 Ticket Input ]
-          │
-          ▼
-   🔍 Codebase Discovery
-          │
-          ▼
-   🏛️ LLM Council Planning (Interview, PRD & Beads)
-          │
-          ▼
-   🛑 Human Approval Gate (optional in future releases)
-          │
-          ▼
-   🧪 Isolated OpenCode Bead Execution (Git Worktree)
-          ├─► [ 🔄 Ralph-Style Recovery Loop (On Failure) ]
-          │
-          ▼
-   ✅ Final Tests & PR Review
+```mermaid
+flowchart TD
+    A["🎫 Ticket Input"] --> B["🔍 Codebase Discovery"]
+    B --> C["🏛️ LLM Council Planning<br/>(Interview, PRD & Beads)"]
+    C --> D["🛑 Human Approval Gate<br/>(optional in future releases)"]
+    D --> E["🧪 Isolated OpenCode Bead Execution<br/>(Git Worktree)"]
+    E --> F["✅ Final Tests & PR Review"]
+    E -.->|"On Failure"| G["🔄 Ralph-Style Recovery Loop"]
+    G -.->|"Retry"| E
 ```
 
 LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries.
