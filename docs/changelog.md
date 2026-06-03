@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Streamlined documentation and README: focused the README documentation table to essential first-time user pages, added missing error screenshots, integrated a high-level VM warning and workflow Mermaid diagram into the docs landing page, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
+- Streamlined documentation and README: focused the README documentation table to essential first-time user pages (including LLM Council and Context Engineering), added missing error screenshots, integrated a high-level VM warning and a quoted Mermaid flowchart into the docs landing page to resolve parse errors, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
 - Split the large state machine transition diagram in ticket-flow.md into 6 focused phase-specific diagrams for improved readability.
 - Made the Ticket Flow diagrams render reliably in VS Code Markdown Preview by replacing the live Mermaid blocks with embedded SVG diagrams and keeping loopback details in nearby notes.

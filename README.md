@@ -13,7 +13,7 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 | **2. Execution** | *Ralph Loops Perfect It* | Isolated Bead Work ➔ Multi-Loop Automated Testing & Fixing |
 | **3. Shipping** | *OpenCode Worktrees Ship It* | Code Isolation ➔ Final Verification Pass ➔ Main Branch Handoff |
 
-**Start here:** [Docs](https://www.looptroop.ovh/docs/) | [Getting Started](https://www.looptroop.ovh/docs/getting-started) | [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | [Beads & Execution](https://www.looptroop.ovh/docs/beads)
+**Start here:** [Docs](https://www.looptroop.ovh/docs/) | [Getting Started](https://www.looptroop.ovh/docs/getting-started) | [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | [LLM Council](https://www.looptroop.ovh/docs/llm-council) | [Context Engineering](https://www.looptroop.ovh/docs/context-engineering) | [Beads & Execution](https://www.looptroop.ovh/docs/beads)
 
 ### 📸 Screenshots
 
@@ -232,6 +232,7 @@ Useful pages:
 | [Configuration](https://www.looptroop.ovh/docs/configuration) | All profile settings with defaults, ranges, and trade-offs |
 | [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | End-to-end workflow from ticket input to PR result |
 | [LLM Council](https://www.looptroop.ovh/docs/llm-council) | Multi-model draft, vote, refine, and coverage planning |
+| [Context Engineering](https://www.looptroop.ovh/docs/context-engineering) | Why prompts are built from minimal per-status context and what each status receives |
 | [Beads & Execution](https://www.looptroop.ovh/docs/beads) | Bead execution, retries, resets, and context wipe notes |
 
 When the app is running, the same docs are also available from the dashboard.

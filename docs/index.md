@@ -39,9 +39,9 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 
 ```mermaid
 flowchart LR
-    A[🔍 Scanning files] --> B[🏛️ LLM council planning<br/>(interview, prd, beads)]
-    B --> C[🧪 Implementation]
-    C --> D[🚀 PR & Review]
+    A["🔍 Scanning files"] --> B["🏛️ LLM council planning<br/>(interview, prd, beads)"]
+    B --> C["🧪 Implementation"]
+    C --> D["🚀 PR & Review"]
 ```
 
 ## Screenshots
