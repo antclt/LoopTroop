@@ -23,6 +23,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Hardened structured-output parsing for common YAML quote mistakes before implementation planning.
 - Corrected four doc/code discrepancies: removed non-existent `server/github/*` module reference from the architecture guide; added `opencode_steps` to the database schema and API reference profile payload; added `LOOPTROOP_OPENCODE_PERMISSION_MODE` to the operations environment-variable table.
 - Added a prominent TL;DR callout to the Context Engineering docs page summarizing the core design principle.
+- Polished the marketing landing page (`web.html`) with SEO meta tags, a noscript fallback banner, and a pre-render theme script to eliminate dark-mode flash.
 - Updated the Vercel deployment layout so the marketing page serves at `/` while documentation moves under `/docs/`.
 - Updated repository and marketing-page links to point at the new `/docs/` documentation routes.
 
@@ -35,6 +36,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Improved `web.html` landing page SEO and UX: added favicon, Open Graph meta tags, and canonical URL; moved theme detection to an inline `<head>` script to eliminate dark-mode flash on load; added a `<noscript>` banner warning users that interactive features require JavaScript; added the missing `scrollbar-hide` CSS utility for the screenshot tab strip; simplified the footer theme-toggle script to only sync icons since the class is now set pre-render.
 - Renamed the sidebar item to 'Ticket Flow' (instead of 'Ticket Flow & State Machine') in docs/.vitepress/config.ts and modified the main H1 header in docs/ticket-flow.md.
 - Split the large state machine transition diagram in docs/ticket-flow.md into 6 smaller, focused diagrams organized by workflow phase: Entry & Discovery, Interview Loop, PRD Loop, Beads Loop, Execution & Delivery, and Error Recovery & Cancellation. Enhanced readability by reducing diagram complexity and added descriptive notes explaining retry/continue behavior.
 - Added structured sequential prefix numbering to the main conceptual H2 sections across 12 documentation pages (Core Philosophy, Context Engineering, Interview, PRD, LLM Council, System Architecture, OpenCode Integration, Frontend, Database Schema, Output Normalization, Operations, and Diagnostics) to guide the reader clearly.

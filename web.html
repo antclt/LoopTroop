@@ -2,9 +2,34 @@
 <html lang="en" class="">
 <head>
   <meta charset="UTF-8">
+  <script>
+    (function() {
+      const saved = localStorage.getItem('looptroop-theme');
+      const dark = saved ? saved === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (dark) document.documentElement.classList.add('dark');
+    })();
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>LoopTroop — LLM Councils Plan It. Ralph Loops Perfect It. OpenCode Worktrees Ship It.</title>
   <meta name="description" content="A smart local engine that automates big coding tasks from start to finish. Durable repo-scale AI delivery through council planning, isolated worktrees, and explicit approvals.">
+  <link rel="icon" href="/favicon.ico?v=20260429" sizes="any" />
+  <link rel="icon" type="image/png" sizes="256x256" href="/favicon.png?v=20260429" />
+  <link rel="apple-touch-icon" href="/trans-logo.png?v=20260429" />
+  <meta property="og:title" content="LoopTroop — LLM Councils Plan It. Ralph Loops Perfect It. OpenCode Worktrees Ship It.">
+  <meta property="og:description" content="A smart local engine that automates big coding tasks from start to finish. Durable repo-scale AI delivery through council planning, isolated worktrees, and explicit approvals.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="/trans-logo.png?v=20260429">
+  <meta property="og:url" content="https://looptroop.ovh/">
+  <noscript>
+    <style>
+      .noscript-banner {
+        position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+        background: #0c6d7c; color: #fff;
+        padding: 12px 16px; text-align: center; font-size: 14px;
+      }
+      body { padding-top: 42px; }
+    </style>
+  </noscript>
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -46,6 +71,8 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #0c6d7c55; border-radius: 4px; }
     .dark ::-webkit-scrollbar-thumb { background: #1aaec255; }
+    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    .scrollbar-hide::-webkit-scrollbar { display: none; }
 
     /* Play button pulse */
     @keyframes pulse-ring {
@@ -278,6 +305,12 @@
   </style>
 </head>
 <body class="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 antialiased transition-colors duration-300">
+  <noscript>
+    <div class="noscript-banner">
+      <i class="fa-solid fa-circle-exclamation mr-2"></i>
+      JavaScript is disabled. LoopTroop's landing page will display, but interactive features (theme toggle, screenshot tabs, lightbox, and animations) require JavaScript.
+    </div>
+  </noscript>
 
   <!-- ============ LIGHTBOX ============ -->
   <div id="lightbox" class="lightbox fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm" onclick="closeLightbox()">
@@ -1103,16 +1136,16 @@
 
         <!-- Social icons -->
         <div class="flex items-center gap-3">
-          <a href="https://x.com" target="_blank" rel="noopener" aria-label="X / Twitter" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
+          <a href="https://x.com/looptroop_ai" target="_blank" rel="noopener" aria-label="X / Twitter" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
             <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
           </a>
-          <a href="https://youtube.com" target="_blank" rel="noopener" aria-label="YouTube" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
+          <a href="https://www.youtube.com/@LoopTroop-ai" target="_blank" rel="noopener" aria-label="YouTube" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
             <i class="fa-brands fa-youtube text-base"></i>
           </a>
-          <a href="https://facebook.com" target="_blank" rel="noopener" aria-label="Facebook" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
+          <a href="https://www.facebook.com/profile.php?id=61587012306948" target="_blank" rel="noopener" aria-label="Facebook" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
             <i class="fa-brands fa-facebook-f text-sm"></i>
           </a>
-          <a href="https://reddit.com" target="_blank" rel="noopener" aria-label="Reddit" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
+          <a href="https://www.reddit.com/user/looptroop-ai/" target="_blank" rel="noopener" aria-label="Reddit" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
             <i class="fa-brands fa-reddit-alien text-base"></i>
           </a>
           <a href="https://github.com/looptroop-ai/LoopTroop" target="_blank" rel="noopener" aria-label="GitHub" class="w-9 h-9 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-800/50 transition-colors">
@@ -1143,29 +1176,18 @@
       const toggle = document.getElementById('themeToggle');
       const STORAGE_KEY = 'looptroop-theme';
 
-      function applyTheme(dark) {
-        if (dark) {
-          html.classList.add('dark');
-          sunIcon.classList.remove('hidden');
-          moonIcon.classList.add('hidden');
-        } else {
-          html.classList.remove('dark');
-          sunIcon.classList.add('hidden');
-          moonIcon.classList.remove('hidden');
-        }
+      function applyIcons(dark) {
+        sunIcon.classList.toggle('hidden', !dark);
+        moonIcon.classList.toggle('hidden', dark);
       }
 
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved !== null) {
-        applyTheme(saved === 'dark');
-      } else {
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        applyTheme(prefersDark);
-      }
+      // Initial state already set by inline script in <head>; just sync icons
+      applyIcons(html.classList.contains('dark'));
 
       toggle.addEventListener('click', function() {
         const isDark = html.classList.contains('dark');
-        applyTheme(!isDark);
+        html.classList.toggle('dark', !isDark);
+        applyIcons(!isDark);
         localStorage.setItem(STORAGE_KEY, isDark ? 'light' : 'dark');
       });
     })();
