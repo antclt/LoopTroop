@@ -1126,9 +1126,11 @@
     // ---- Back to Top visibility ----
     (function() {
       const btn = document.getElementById('backToTop');
-      window.addEventListener('scroll', function() {
+      function updateBackToTop() {
         btn.classList.toggle('show', window.scrollY > 600);
-      });
+      }
+      window.addEventListener('scroll', updateBackToTop, { passive: true });
+      updateBackToTop(); // check initial scroll position on load
     })();
 
     // ---- Header shadow on scroll ----
