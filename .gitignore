@@ -55,10 +55,6 @@ Thumbs.db
 .roomodes
 *.aider*
 *.bak
-AGENTS.md
-CLAUDE.md
-GEMINI.md
-
 # Removed repo metadata/assets
 /CITATION.cff
 /public/vite.svg
@@ -88,6 +84,5 @@ docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/.vitepress/.temp/
 
-# Generated stylesheets
-/public/web.css
+
 
