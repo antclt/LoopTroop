@@ -20,28 +20,28 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 <details>
 <summary><strong>Click to expand the screenshot gallery</strong></summary>
 
-![Projects dialog](docs/media/projects.png)
+![Projects dialog](docs/media/projects.webp)
 *Manage attached repositories, review ticket counts, and add new projects from the dashboard.*
 
-![Configuration dialog](docs/media/configuration.png)
+![Configuration dialog](docs/media/configuration.webp)
 *Choose the main implementer model, council members, and effort levels for local orchestration.*
 
-![Interview workspace](docs/media/interview.png)
+![Interview workspace](docs/media/interview.webp)
 *Answer focused planning questions before specs and implementation plans are approved.*
 
-![Ticket workflow detail](docs/media/ticket.png)
+![Ticket workflow detail](docs/media/ticket.webp)
 *Track council progress, generated artifacts, and live execution logs inside a ticket.*
 
-![Implementation review](docs/media/implementing.png)
+![Implementation review](docs/media/implementing.webp)
 *Review bead completion, commits, changes, and final implementation details before closing the workflow.*
 
-![Bead execution detail](docs/media/bead.png)
+![Bead execution detail](docs/media/bead.webp)
 *Inspect bead-level progress, task status, and live execution logs while an implementation bead runs.*
 
-![Bead error view](docs/media/bead2.png)
+![Bead error view](docs/media/bead2.webp)
 *Review the focused workspace view shown when an implementation bead is blocked by an error.*
 
-![Alternate bead error view](docs/media/bead3.png)
+![Alternate bead error view](docs/media/bead3.webp)
 *Compare a different bead's error state, diagnostics, and recovery context before deciding whether to continue or retry.*
 
 </details>

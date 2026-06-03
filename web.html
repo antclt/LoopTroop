@@ -74,312 +74,8 @@
       body { padding-top: 42px; }
     </style>
   </noscript>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            brand: {
-              50: '#eef8fa',
-              100: '#d0eef3',
-              200: '#a1dde7',
-              300: '#5cc5d6',
-              400: '#1aaec2',
-              500: '#1594a6',
-              600: '#0c6d7c',
-              700: '#0b5a66',
-              800: '#0b3942',
-              900: '#071f25',
-            }
-          },
-          fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-            mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
-          }
-        }
-      }
-    }
-  </script>
-  <!-- Self-hosted fonts (replaces Google Fonts CDN) -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha384-PPIZEGYM1v8zp5Py7UjFb79S58UeqCL9pYVnVPURKEqvioPROaVAJKKLzvH2rDnI" crossorigin="anonymous">
-  <style>
-    /* Self-hosted Inter font */
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 100 900;
-      font-display: swap;
-      src: url('/fonts/inter-latin-ext.woff2') format('woff2');
-      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-    }
-    @font-face {
-      font-family: 'Inter';
-      font-style: normal;
-      font-weight: 100 900;
-      font-display: swap;
-      src: url('/fonts/inter-latin.woff2') format('woff2');
-      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-    }
-    /* Self-hosted JetBrains Mono font */
-    @font-face {
-      font-family: 'JetBrains Mono';
-      font-style: normal;
-      font-weight: 100 800;
-      font-display: swap;
-      src: url('/fonts/jetbrains-mono-latin-ext.woff2') format('woff2');
-      unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
-    }
-    @font-face {
-      font-family: 'JetBrains Mono';
-      font-style: normal;
-      font-weight: 100 800;
-      font-display: swap;
-      src: url('/fonts/jetbrains-mono-latin.woff2') format('woff2');
-      unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-    }
-
-    * { scroll-behavior: smooth; }
-    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #0c6d7c55; border-radius: 4px; }
-    .dark ::-webkit-scrollbar-thumb { background: #1aaec255; }
-    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-    .scrollbar-hide::-webkit-scrollbar { display: none; }
-
-    /* Play button pulse */
-    @keyframes pulse-ring {
-      0% { transform: scale(1); opacity: 0.6; }
-      100% { transform: scale(1.6); opacity: 0; }
-    }
-    .pulse-ring { animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
-
-    /* Fade in on scroll */
-    .fade-up {
-      opacity: 0;
-      transform: translateY(30px);
-      transition: opacity 0.7s ease, transform 0.7s ease;
-    }
-    .fade-up.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* Stagger children */
-    .stagger-in > * {
-      opacity: 0;
-      transform: translateY(20px);
-      transition: opacity 0.5s ease, transform 0.5s ease;
-    }
-    .stagger-in.visible > *:nth-child(1) { transition-delay: 0.05s; }
-    .stagger-in.visible > *:nth-child(2) { transition-delay: 0.15s; }
-    .stagger-in.visible > *:nth-child(3) { transition-delay: 0.25s; }
-    .stagger-in.visible > *:nth-child(4) { transition-delay: 0.35s; }
-    .stagger-in.visible > *:nth-child(5) { transition-delay: 0.45s; }
-    .stagger-in.visible > *:nth-child(6) { transition-delay: 0.55s; }
-    .stagger-in.visible > *:nth-child(7) { transition-delay: 0.65s; }
-    .stagger-in.visible > * {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* Glow effects */
-    .glow-teal { box-shadow: 0 0 60px -12px rgba(12, 109, 124, 0.4); }
-    .dark .glow-teal { box-shadow: 0 0 60px -12px rgba(26, 174, 194, 0.3); }
-
-    /* Hero gradient background */
-    .hero-bg {
-      background: radial-gradient(ellipse at 50% 0%, rgba(12, 109, 124, 0.12) 0%, transparent 60%);
-    }
-    .dark .hero-bg {
-      background: radial-gradient(ellipse at 50% 0%, rgba(26, 174, 194, 0.1) 0%, transparent 60%);
-    }
-
-    /* Screenshot tabs */
-    .screenshot-tab.active {
-      color: #0c6d7c;
-      border-bottom-color: #0c6d7c;
-    }
-    .dark .screenshot-tab.active {
-      color: #1aaec2;
-      border-bottom-color: #1aaec2;
-    }
-
-    /* Mobile menu */
-    .mobile-menu { max-height: 0; overflow: hidden; transition: max-height 0.3s ease; }
-    .mobile-menu.open { max-height: 400px; }
-
-    /* Gradient text */
-    .gradient-text {
-      background: linear-gradient(135deg, #0c6d7c 0%, #1aaec2 60%, #5cc5d6 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    /* Feature card hover */
-    .feature-card {
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
-    }
-    .feature-card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 20px 40px -12px rgba(12, 109, 124, 0.2);
-    }
-    .dark .feature-card:hover {
-      box-shadow: 0 20px 40px -12px rgba(26, 174, 194, 0.15);
-    }
-
-    /* Back to top */
-    .back-to-top {
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
-    }
-    .back-to-top.show {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .browser-dot { width: 12px; height: 12px; border-radius: 50%; }
-
-    /* Lightbox */
-    .lightbox {
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s ease;
-    }
-    .lightbox.open {
-      opacity: 1;
-      pointer-events: auto;
-    }
-    .lightbox img {
-      transform: scale(0.95);
-      transition: transform 0.3s ease;
-    }
-    .lightbox.open img {
-      transform: scale(1);
-    }
-
-    /* Timeline animations */
-    @keyframes draw-line {
-      from { height: 0; }
-      to { height: 100%; }
-    }
-    .timeline-line-animated {
-      position: relative;
-      overflow: hidden;
-    }
-    .timeline-line-animated::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      background: linear-gradient(180deg, #0c6d7c, #1aaec2 50%, #5cc5d6);
-      animation: draw-line 2s ease-out forwards;
-      height: 0;
-    }
-    .dark .timeline-line-animated::after {
-      background: linear-gradient(180deg, #1aaec2, #5cc5d6 50%, #1aaec2);
-    }
-
-    /* Timeline step animation */
-    .timeline-step {
-      opacity: 0;
-      transform: translateY(40px);
-      transition: opacity 0.6s ease, transform 0.6s ease;
-    }
-    .timeline-step.visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-
-    /* Timeline node pulse */
-    @keyframes node-pulse {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(12, 109, 124, 0.4); }
-      50% { box-shadow: 0 0 0 8px rgba(12, 109, 124, 0); }
-    }
-    .dark .timeline-node-pulse {
-      animation: node-pulse 3s ease-in-out infinite;
-    }
-    @keyframes node-pulse-dark {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(26, 174, 194, 0.4); }
-      50% { box-shadow: 0 0 0 8px rgba(26, 174, 194, 0); }
-    }
-    .dark .timeline-node-pulse {
-      animation-name: node-pulse-dark;
-    }
-
-    /* Architectural layer card */
-    .layer-card {
-      opacity: 0;
-      transform: translateX(-30px);
-      transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.3s ease;
-    }
-    .layer-card.visible {
-      opacity: 1;
-      transform: translateX(0);
-    }
-    .layer-card:nth-child(2) { transition-delay: 0.2s; }
-    .layer-card:nth-child(3) { transition-delay: 0.4s; }
-    .layer-card:hover {
-      box-shadow: 0 12px 32px -8px rgba(12, 109, 124, 0.15);
-    }
-    .dark .layer-card:hover {
-      box-shadow: 0 12px 32px -8px rgba(26, 174, 194, 0.1);
-    }
-
-    /* Lifecycle flow arrow animation */
-    @keyframes flow-dash {
-      to { stroke-dashoffset: -20; }
-    }
-    .flow-arrow-animated {
-      stroke-dasharray: 8 12;
-      animation: flow-dash 1s linear infinite;
-    }
-
-    /* Screenshot image hover */
-    .screenshot-img {
-      cursor: pointer;
-      transition: transform 0.3s ease, filter 0.3s ease;
-    }
-    .screenshot-img:hover {
-      transform: scale(1.02);
-    }
-
-    /* Terminal row styling */
-    .terminal-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 0;
-    }
-    .terminal-row .line-num {
-      color: #52525b;
-      width: 20px;
-      text-align: right;
-      font-size: 12px;
-      user-select: none;
-      flex-shrink: 0;
-    }
-
-    /* Connector line for layers */
-    .layer-connector {
-      position: absolute;
-      left: 50%;
-      top: 100%;
-      width: 2px;
-      height: 24px;
-      background: linear-gradient(180deg, #0c6d7c, transparent);
-    }
-    .dark .layer-connector {
-      background: linear-gradient(180deg, #1aaec2, transparent);
-    }
-  </style>
+  <link rel="stylesheet" href="/web.css">
 </head>
 <body class="bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50 antialiased transition-colors duration-300">
   <noscript>
@@ -483,8 +179,8 @@
           <!-- Badge -->
           <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-brand-50 dark:bg-brand-900/30 border border-brand-200 dark:border-brand-700/40 mb-6">
             <span class="w-2 h-2 rounded-full bg-brand-500 animate-pulse"></span>
-            <!-- VERSION: also update in footer -->
-            <span class="text-xs font-semibold text-brand-700 dark:text-brand-300 tracking-wide uppercase">Open Source &middot; MIT License &middot; v0.2.4</span>
+            <!-- VERSION: dynamically replaced from package.json -->
+            <span class="text-xs font-semibold text-brand-700 dark:text-brand-300 tracking-wide uppercase">Open Source &middot; MIT License &middot; v{{VERSION}}</span>
           </div>
 
           <h1 class="text-3xl sm:text-4xl lg:text-5xl font-extrabold leading-tight tracking-tight mb-6">
@@ -701,7 +397,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">projects-dialog</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/projects.png" alt="Projects Dialog — manage attached repositories, review ticket counts, and register new local git repos" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/projects.webp" alt="Projects Dialog — manage attached repositories, review ticket counts, and register new local git repos" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -728,7 +424,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">configuration</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/configuration.png" alt="Configuration Workspace — choose implementer models, setup council members, and configure effort levels" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/configuration.webp" alt="Configuration Workspace — choose implementer models, setup council members, and configure effort levels" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -755,7 +451,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">interview</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/interview.png" alt="Interview Stage — answer focused planning questions before spec and implementation generation" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/interview.webp" alt="Interview Stage — answer focused planning questions before spec and implementation generation" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -782,7 +478,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">ticket-workflow</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/ticket.png" alt="Ticket Workflow Detail — track council updates, generated artifacts, and live execution logs" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/ticket.webp" alt="Ticket Workflow Detail — track council updates, generated artifacts, and live execution logs" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -809,7 +505,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">implementation-review</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/implementing.png" alt="Implementation Review — approve, adjust, or regenerate bead changes before committing" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/implementing.webp" alt="Implementation Review — approve, adjust, or regenerate bead changes before committing" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -836,7 +532,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">bead-execution</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/bead.png" alt="Bead Execution Detail — watch individual bead execution with live code changes and validation" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/bead.webp" alt="Bead Execution Detail — watch individual bead execution with live code changes and validation" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -863,7 +559,7 @@
                     <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">bead-error</span>
                     <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
                   </div>
-                  <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/bead2.png" alt="Bead Error View — see how LoopTroop handles bead failures with compact error traces and Ralph Loop recovery" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                  <img src="/media/bead2.webp" alt="Bead Error View — see how LoopTroop handles bead failures with compact error traces and Ralph Loop recovery" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
                 </div>
               </div>
               <div class="lg:col-span-2 lg:py-4">
@@ -875,33 +571,33 @@
                   <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Ralph Loop automatic recovery</li>
                 </ul>
               </div>
-
-        <!-- Bead Error (Alternate) -->
-        <div class="screenshot-panel hidden" data-panel="7">
-          <div class="grid lg:grid-cols-5 gap-8 items-start">
-            <div class="lg:col-span-3">
-              <div class="rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-xl bg-zinc-100 dark:bg-zinc-900">
-                <div class="flex items-center gap-2 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
-                  <div class="browser-dot bg-red-400"></div>
-                  <div class="browser-dot bg-yellow-400"></div>
-                  <div class="browser-dot bg-green-400"></div>
-                  <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">bead-error-alt</span>
-                  <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
-                </div>
-                <img src="https://raw.githubusercontent.com/looptroop-ai/LoopTroop/refs/heads/main/docs/media/bead3.png" alt="Alternate Bead Error View — compare a different bead's failure diagnostics and recovery context" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
-              </div>
-            </div>
-            <div class="lg:col-span-2 lg:py-4">
-              <h3 class="text-2xl font-bold mb-3">Alternate Bead Error</h3>
-              <p class="text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4">Look at how the Ralph Loop handles a second bead failure shape. When a different bead runs into trouble, LoopTroop surfaces this alternate error view — same compact-trace-then-discard philosophy, but with a fresh recovery context inside a new isolated worktree. Compare the two error states side by side to confirm the strict manager approach handles varied failures without ever degrading the original session.</p>
-              <ul class="space-y-2.5">
-                <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Alternate failure shape coverage</li>
-                <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Identical fresh-context recovery</li>
-                <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Side-by-side error comparison</li>
-              </ul>
             </div>
           </div>
-        </div>
+
+          <!-- Bead Error (Alternate) -->
+          <div class="screenshot-panel hidden" data-panel="7">
+            <div class="grid lg:grid-cols-5 gap-8 items-start">
+              <div class="lg:col-span-3">
+                <div class="rounded-2xl overflow-hidden border border-zinc-200 dark:border-zinc-800 shadow-xl bg-zinc-100 dark:bg-zinc-900">
+                  <div class="flex items-center gap-2 px-4 py-2.5 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
+                    <div class="browser-dot bg-red-400"></div>
+                    <div class="browser-dot bg-yellow-400"></div>
+                    <div class="browser-dot bg-green-400"></div>
+                    <span class="ml-2 text-xs text-zinc-400 dark:text-zinc-600 font-mono">bead-error-alt</span>
+                    <span class="ml-auto text-[10px] text-zinc-400 flex items-center gap-1"><i class="fa-solid fa-expand"></i> Click to expand</span>
+                  </div>
+                  <img src="/media/bead3.webp" alt="Alternate Bead Error View — compare a different bead's failure diagnostics and recovery context" class="w-full screenshot-img" loading="lazy" onclick="openLightbox(this.src)">
+                </div>
+              </div>
+              <div class="lg:col-span-2 lg:py-4">
+                <h3 class="text-2xl font-bold mb-3">Alternate Bead Error</h3>
+                <p class="text-zinc-600 dark:text-zinc-400 leading-relaxed mb-4">Look at how the Ralph Loop handles a second bead failure shape. When a different bead runs into trouble, LoopTroop surfaces this alternate error view — same compact-trace-then-discard philosophy, but with a fresh recovery context inside a new isolated worktree. Compare the two error states side by side to confirm the strict manager approach handles varied failures without ever degrading the original session.</p>
+                <ul class="space-y-2.5">
+                  <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Alternate failure shape coverage</li>
+                  <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Identical fresh-context recovery</li>
+                  <li class="flex items-start gap-2.5 text-sm text-zinc-600 dark:text-zinc-400"><i class="fa-solid fa-check text-brand-500 mt-0.5 text-xs"></i> Side-by-side error comparison</li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -1240,8 +936,8 @@
           <img src="/trans-logo.png?v=20260429" alt="LoopTroop" class="w-7 h-7 rounded-lg">
           <div>
             <span class="font-bold text-sm"><span class="gradient-text">Loop</span>Troop</span>
-            <!-- VERSION: also update in hero badge -->
-            <span class="text-xs text-zinc-600 dark:text-zinc-400 ml-2">MIT License &middot; v0.2.4</span>
+            <!-- VERSION: dynamically replaced from package.json -->
+            <span class="text-xs text-zinc-600 dark:text-zinc-400 ml-2">MIT License &middot; v{{VERSION}}</span>
           </div>
         </div>
 
@@ -1303,7 +999,8 @@
     // ---- Copy Command ----
     function copyCommand() {
       const cmd = 'git clone https://github.com/looptroop-ai/LoopTroop.git\ncd LoopTroop\nnpm run dev';
-      navigator.clipboard.writeText(cmd).then(function() {
+      
+      function showSuccess() {
         const btn = document.getElementById('copyBtn');
         btn.innerHTML = '<i class="fa-solid fa-check mr-1"></i> Copied!';
         btn.classList.add('text-emerald-400', 'border-emerald-600');
@@ -1311,7 +1008,30 @@
           btn.innerHTML = '<i class="fa-regular fa-clipboard mr-1"></i> Copy';
           btn.classList.remove('text-emerald-400', 'border-emerald-600');
         }, 2000);
-      });
+      }
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(cmd).then(showSuccess).catch(fallbackCopy);
+      } else {
+        fallbackCopy();
+      }
+
+      function fallbackCopy() {
+        const textArea = document.createElement('textarea');
+        textArea.value = cmd;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        try {
+          document.execCommand('copy');
+          showSuccess();
+        } catch (err) {
+          console.error('Fallback copy failed', err);
+        }
+        document.body.removeChild(textArea);
+      }
     }
 
     // ---- Screenshot Tabs ----
@@ -1417,6 +1137,44 @@
       window.addEventListener('scroll', function() {
         header.classList.toggle('shadow-sm', window.scrollY > 50);
       });
+    })();
+
+    // ---- Scroll Spy ----
+    (function() {
+      const sections = document.querySelectorAll('section[id]');
+      const navLinks = document.querySelectorAll('header nav a[href^="#"]');
+      const mobileNavLinks = document.querySelectorAll('#mobileMenu a[href^="#"]');
+
+      function activateLink(hash) {
+        navLinks.forEach(link => {
+          const active = link.getAttribute('href') === hash;
+          link.classList.toggle('text-brand-600', active);
+          link.classList.toggle('dark:text-brand-400', active);
+          link.classList.toggle('bg-zinc-100', active);
+          link.classList.toggle('dark:bg-zinc-800/50', active);
+          link.classList.toggle('text-zinc-600', !active);
+          link.classList.toggle('dark:text-zinc-400', !active);
+        });
+        mobileNavLinks.forEach(link => {
+          const active = link.getAttribute('href') === hash;
+          link.classList.toggle('text-brand-600', active);
+          link.classList.toggle('dark:text-brand-400', active);
+          link.classList.toggle('bg-zinc-100', active);
+          link.classList.toggle('dark:bg-zinc-800/50', active);
+          link.classList.toggle('text-zinc-600', !active);
+          link.classList.toggle('dark:text-zinc-400', !active);
+        });
+      }
+
+      const spyObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            activateLink('#' + entry.target.id);
+          }
+        });
+      }, { threshold: 0.2, rootMargin: '-20% 0px -60% 0px' });
+
+      sections.forEach(sec => spyObserver.observe(sec));
     })();
   </script>
 </body>

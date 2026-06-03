@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Optimized the landing page (`web.html`) and modernized the build pipeline: compiled Tailwind CSS v4 statically (moving all custom classes, keyframes, scrollbars, and preloaded `@font-face` definitions to `src/web.css` and building to `public/web.css`), converted all screenshot images from PNG to WebP to reduce asset payload size by ~85%, updated references in `web.html`, `README.md`, and `docs/index.md` to use `/media/*.webp`, fixed an HTML nesting bug that broke the Alternate Bead Error tab, implemented Scroll-Spy navigation for header nav links, added a secure-context copy command fallback, and automated the `package.json` version tag injection during builds.
 - Streamlined documentation and README: focused the README documentation table to essential first-time user pages (including LLM Council and Context Engineering), added missing error screenshots, integrated a high-level VM warning and a quoted Mermaid flowchart into the docs landing page to resolve parse errors, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
 - Split the large state machine transition diagram in ticket-flow.md into 6 focused phase-specific diagrams for improved readability.

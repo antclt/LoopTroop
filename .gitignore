@@ -87,3 +87,7 @@ test-results/
 docs/.vitepress/cache/
 docs/.vitepress/dist/
 docs/.vitepress/.temp/
+
+# Generated stylesheets
+/public/web.css
+

@@ -57,42 +57,42 @@ flowchart TD
 ## Screenshots
 
 ::: details Projects dialog
-![Projects dialog](media/projects.png)
+![Projects dialog](media/projects.webp)
 *Manage attached repositories, review ticket counts, and add new projects from the dashboard.*
 :::
 
 ::: details Configuration dialog
-![Configuration dialog](media/configuration.png)
+![Configuration dialog](media/configuration.webp)
 *Choose the main implementer model, council members, and effort levels for local orchestration.*
 :::
 
 ::: details Interview workspace
-![Interview workspace](media/interview.png)
+![Interview workspace](media/interview.webp)
 *Answer focused planning questions before specs and implementation plans are approved.*
 :::
 
 ::: details Ticket workflow detail
-![Ticket workflow detail](media/ticket.png)
+![Ticket workflow detail](media/ticket.webp)
 *Track council progress, generated artifacts, and live execution logs inside a ticket.*
 :::
 
 ::: details Implementation review
-![Implementation review](media/implementing.png)
+![Implementation review](media/implementing.webp)
 *Review bead completion, commits, changes, and final implementation details before closing the workflow.*
 :::
 
 ::: details Bead execution detail
-![Bead execution detail](media/bead.png)
+![Bead execution detail](media/bead.webp)
 *Inspect bead-level progress, task status, and live execution logs while an implementation bead runs.*
 :::
 
 ::: details Bead error view
-![Bead error view](media/bead2.png)
+![Bead error view](media/bead2.webp)
 *Review the focused workspace view shown when an implementation bead is blocked by an error.*
 :::
 
 ::: details Alternate bead error view
-![Alternate bead error view](media/bead3.png)
+![Alternate bead error view](media/bead3.webp)
 *Compare a different bead's error state, diagnostics, and recovery context before deciding whether to continue or retry.*
 :::
 
