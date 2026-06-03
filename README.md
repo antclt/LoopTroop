@@ -14,12 +14,12 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 | **3. Shipping** | *OpenCode Worktrees Ship It* | Code Isolation ➔ Final Verification Pass ➔ Main Branch Handoff |
 
 **Start here:**
-[Docs](https://www.looptroop.ovh/) |
-[Getting Started](https://www.looptroop.ovh/getting-started) |
-[Ticket Flow](https://www.looptroop.ovh/ticket-flow) |
-[LLM Council](https://www.looptroop.ovh/llm-council) |
-[Execution Loop](https://www.looptroop.ovh/execution-loop) |
-[Changelog](https://www.looptroop.ovh/changelog)
+[Docs](https://www.looptroop.ovh/docs/) |
+[Getting Started](https://www.looptroop.ovh/docs/getting-started) |
+[Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) |
+[LLM Council](https://www.looptroop.ovh/docs/llm-council) |
+[Execution Loop](https://www.looptroop.ovh/docs/beads) |
+[Changelog](https://www.looptroop.ovh/docs/changelog)
 
 ### 📸 Screenshots
 
@@ -92,7 +92,7 @@ LoopTroop solves this through precise context curation. Instead of sending full 
 
 This eliminates conversation pollution from previous execution attempts, prevents LLM drift and performance degradation, and keeps model focus high. Keeping the working context fresh is what makes multi-hour, multi-step engineering cycles actually work.
 
-Read more: [Context Engineering](https://www.looptroop.ovh/context-engineering)
+Read more: [Context Engineering](https://www.looptroop.ovh/docs/context-engineering)
 
 ### LLM Council
 
@@ -103,7 +103,7 @@ This multi-role process (draft → vote → refine → verify) is utilized for:
 - PRD/Specs generation
 - Bead/blueprint generation
 
-Read more: [LLM Council](https://www.looptroop.ovh/llm-council)
+Read more: [LLM Council](https://www.looptroop.ovh/docs/llm-council)
 
 ### Interview
 
@@ -111,13 +111,13 @@ Before writing a spec, the LLM Council compiles a list of targeted questions to 
 
 You answer these questions directly in the Interview workspace to clarify edge cases, design decisions, and requirements, ensuring the model never operates on false assumptions. Although a final interview is created after the council's draft-vote-refine cycle is complete, the user still receives questions in batches that can adapt based on previous answers.
 
-Read more: [Interview](https://www.looptroop.ovh/interview)
+Read more: [Interview](https://www.looptroop.ovh/docs/interview)
 
 ### PRD (Product Requirements Document)
 
 Once the interview phase is complete, the LLM Council translates your initial ticket and your interview answers into a structured Product Requirements Document consisting of Epics and User Stories, complete with highly decomposed implementation steps. This spec serves as the single source of truth for the implementation, detailing the technical approach, edge cases, scope, and expected validation steps before any coding starts. The PRD is stored as a durable artifact for later reference during bead execution.
 
-Read more: [PRD](https://www.looptroop.ovh/prd)
+Read more: [PRD](https://www.looptroop.ovh/docs/prd)
 
 ### Beads
 
@@ -132,7 +132,7 @@ Using Steve Yegge's *Beads Project* methodology, epics are split into "beads"-th
 
 A bead acts as a small, isolated implementation unit, allowing the execution agent to complete concrete tasks sequentially rather than attempting a massive, single-pass code rewrite.
 
-Read more: [Beads](https://www.looptroop.ovh/beads)
+Read more: [Beads](https://www.looptroop.ovh/docs/beads)
 
 ### Execution & Ralph-style recovery
 
@@ -144,19 +144,19 @@ fail ──> log failure trace ──> reset worktree ──> retry fresh
 
 This cycle repeats until all tests pass or retry limits are reached. **This can take hours (sometimes 10+ hours) by design.** It is built to run unattended (e.g., overnight).
 
-Read more: [Execution Loop](https://www.looptroop.ovh/execution-loop)
+Read more: [Execution Loop](https://www.looptroop.ovh/docs/beads)
 
 ### Worktree isolation
 
 LoopTroop runs execution steps inside isolated Git worktrees rather than modifying your active branch. This keeps your working copy clean and ensures reliable, inspectable diffs. Note that worktrees provide workspace isolation, not sandboxed host security.
 
-Read more: [System Architecture](https://www.looptroop.ovh/system-architecture)
+Read more: [System Architecture](https://www.looptroop.ovh/docs/system-architecture)
 
 ### Human approval gates
 
 LoopTroop keeps you in control of critical state transitions. You actively review and sign off on planning specs, execution blueprints, and final pull request deliverables. *(Note: Human approval gates will become optional in future releases).*
 
-Read more: [Ticket Flow](https://www.looptroop.ovh/ticket-flow)
+Read more: [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow)
 
 
 ## Quick start
@@ -169,7 +169,7 @@ npm run dev
 
 Open `http://localhost:5173`, add a local repository with a GitHub origin, create a ticket, and follow the review gates.
 
-Full setup, ports, startup flags, and troubleshooting: [Getting Started](https://www.looptroop.ovh/getting-started) and [Operations Guide](https://www.looptroop.ovh/operations).
+Full setup, ports, startup flags, and troubleshooting: [Getting Started](https://www.looptroop.ovh/docs/getting-started) and [Operations Guide](https://www.looptroop.ovh/docs/operations).
 
 ## What you need
 
@@ -222,25 +222,25 @@ LoopTroop is not a magic autopilot. It does not remove the need to review code, 
 
 The README gives a first-glance overview. The full docs live in `docs/` and at:
 
-https://www.looptroop.ovh/
+https://www.looptroop.ovh/docs/
 
 Useful pages:
 
 | Page | What it explains |
 | --- | --- |
-| [Getting Started](https://www.looptroop.ovh/getting-started) | Setup, startup, ports, first project attach |
-| [Configuration](https://www.looptroop.ovh/configuration) | All profile settings with defaults, ranges, and trade-offs |
-| [Operations Guide](https://www.looptroop.ovh/operations) | Startup maintenance, environment variables, runtime storage, diagnostics, and cleanup |
-| [Ticket Flow](https://www.looptroop.ovh/ticket-flow) | End-to-end workflow from ticket to PR result |
-| [State Machine](https://www.looptroop.ovh/state-machine) | Canonical phase inventory and transition model |
-| [LLM Council](https://www.looptroop.ovh/llm-council) | Multi-model draft, vote, refine, and coverage planning |
-| [Execution Loop](https://www.looptroop.ovh/execution-loop) | Bead execution, retries, resets, context wipe notes |
-| [Beads](https://www.looptroop.ovh/beads) | The execution-unit model |
-| [System Architecture](https://www.looptroop.ovh/system-architecture) | Runtime actors, storage, worktrees, artifacts |
-| [OpenCode Integration](https://www.looptroop.ovh/opencode-integration) | Session ownership, reconnects, streaming, health checks |
-| [Frontend](https://www.looptroop.ovh/frontend) | Workspace composition, hooks, keyboard shortcuts, live updates |
-| [Output Normalization](https://www.looptroop.ovh/output-normalization) | YAML/JSON repair pipeline, retry classes, key aliasing |
-| [Runtime Diagnostics](https://www.looptroop.ovh/diagnostics) | Stall investigation and resource-pressure analysis |
+| [Getting Started](https://www.looptroop.ovh/docs/getting-started) | Setup, startup, ports, first project attach |
+| [Configuration](https://www.looptroop.ovh/docs/configuration) | All profile settings with defaults, ranges, and trade-offs |
+| [Operations Guide](https://www.looptroop.ovh/docs/operations) | Startup maintenance, environment variables, runtime storage, diagnostics, and cleanup |
+| [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | End-to-end workflow from ticket to PR result |
+| [State Machine](https://www.looptroop.ovh/docs/ticket-flow) | Canonical phase inventory and transition model |
+| [LLM Council](https://www.looptroop.ovh/docs/llm-council) | Multi-model draft, vote, refine, and coverage planning |
+| [Execution Loop](https://www.looptroop.ovh/docs/beads) | Bead execution, retries, resets, context wipe notes |
+| [Beads](https://www.looptroop.ovh/docs/beads) | The execution-unit model |
+| [System Architecture](https://www.looptroop.ovh/docs/system-architecture) | Runtime actors, storage, worktrees, artifacts |
+| [OpenCode Integration](https://www.looptroop.ovh/docs/opencode-integration) | Session ownership, reconnects, streaming, health checks |
+| [Frontend](https://www.looptroop.ovh/docs/frontend) | Workspace composition, hooks, keyboard shortcuts, live updates |
+| [Output Normalization](https://www.looptroop.ovh/docs/output-normalization) | YAML/JSON repair pipeline, retry classes, key aliasing |
+| [Runtime Diagnostics](https://www.looptroop.ovh/docs/diagnostics) | Stall investigation and resource-pressure analysis |
 
 When the app is running, the same docs are also available from the dashboard.
 
@@ -248,7 +248,7 @@ When the app is running, the same docs are also available from the dashboard.
 
 LoopTroop is early alpha software, but it is usable for real work. The full ticket lifecycle is implemented, but some bugs are still likely. The core primitives (planning, execution, retries) are functional.
 
-Roadmap: [Roadmap](https://www.looptroop.ovh/roadmap)
+Roadmap: [Roadmap](https://www.looptroop.ovh/docs/roadmap)
 
 ## Contributing
 

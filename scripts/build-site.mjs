@@ -12,5 +12,5 @@ await copyFile(path.join(root, 'web.html'), path.join(siteDir, 'index.html'))
 await cp(path.join(root, 'public'), siteDir, { recursive: true })
 await cp(docsDistDir, path.join(siteDir, 'docs'), { recursive: true })
 
-// Preserve current web.html screenshot links until they are moved to /docs/assets/.
+// Keep legacy screenshot links working for older cached marketing pages.
 await cp(path.join(docsDistDir, 'assets'), path.join(siteDir, 'assets'), { recursive: true })

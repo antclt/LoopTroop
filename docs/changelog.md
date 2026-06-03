@@ -24,6 +24,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Corrected four doc/code discrepancies: removed non-existent `server/github/*` module reference from the architecture guide; added `opencode_steps` to the database schema and API reference profile payload; added `LOOPTROOP_OPENCODE_PERMISSION_MODE` to the operations environment-variable table.
 - Added a prominent TL;DR callout to the Context Engineering docs page summarizing the core design principle.
 - Updated the Vercel deployment layout so the marketing page serves at `/` while documentation moves under `/docs/`.
+- Updated repository and marketing-page links to point at the new `/docs/` documentation routes.
 
 ### Detailed Changes
 
@@ -55,6 +56,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Expanded the README documentation table from 9 to 14 pages, adding Configuration, State Machine, Frontend, Output Normalization, and Runtime Diagnostics.
 - Synchronized the `docs/index.md` Projects screenshot caption with the README ("add" instead of "create").
 - Updated the Vercel build to publish a combined static `site/` output, with `web.html` at the site root and the VitePress documentation nested under `/docs/`.
+- Updated README and `web.html` links so public docs links use `/docs/`, old Execution Loop and State Machine links resolve to their merged pages, and marketing screenshots load from `/docs/assets/`.
 
 #### Removed
 - Removed now-redundant documentation files `docs/state-machine.md` and `docs/execution-loop.md` whose content is now merged into `docs/ticket-flow.md` and `docs/beads.md` respectively.
