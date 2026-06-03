@@ -28,6 +28,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Hardened the marketing landing page (`web.html`) for production: fixed broken header/mobile social links to use correct profile URLs; added Twitter Card meta tags, canonical URL, robots directive, og:site_name, and JSON-LD structured data; self-hosted Inter and JetBrains Mono fonts replacing the Google Fonts CDN; pinned CDN dependencies (Tailwind, Font Awesome) to specific versions with SRI integrity hashes; added `<main>` landmark for accessibility; disabled the non-functional video play button with a clear "coming soon" visual; removed the duplicate footer back-to-top button; and added version-sync comments at both version badges.
 - Updated the Vercel deployment layout so the marketing page serves at `/` while documentation moves under `/docs/`.
 - Updated repository and marketing-page links to point at the new `/docs/` documentation routes.
+- Strengthened the marketing landing page (`web.html`) SEO, accessibility, and performance: added a dedicated 1280×640 OG image, Organization JSON-LD with social profiles, distinct SEO vs. social descriptions, a sitemap and robots.txt, font preloads, color-contrast fixes for low-emphasis text, and an 8th screenshot tab for an alternate bead error view.
 
 ### Detailed Changes
 
@@ -70,6 +71,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Synchronized the `docs/index.md` Projects screenshot caption with the README ("add" instead of "create").
 - Updated the Vercel build to publish a combined static `site/` output, with `web.html` at the site root and the VitePress documentation nested under `/docs/`.
 - Updated README and `web.html` links so public docs links use `/docs/`, old Execution Loop and State Machine links resolve to their merged pages, and marketing screenshots load from `/docs/assets/`.
+- Replaced the previous `/trans-logo.png` references in `web.html`'s `og:image` and `twitter:image` meta tags with the new purpose-built `/og-image.png?v=20260429` for richer social link previews.
+- Unified every URL, `canonical`, and JSON-LD reference in `web.html` to the canonical `https://www.looptroop.ovh/` marketing domain.
+- Repointed all 7 screenshot image URLs in the Screenshots section of `web.html` from VitePress-hashed `/docs/assets/...` paths to stable `/docs/media/*.png` paths, so the marketing page no longer breaks when VitePress regenerates assets.
+- Introduced two distinct descriptions in `web.html`: a search-engine-focused `<meta name="description">` (richer keywords and a positioning statement) and a punchier social-hook `<meta property="og:description">` / `<meta name="twitter:description">` (focused on a single benefit).
 
 #### Removed
 - Removed now-redundant documentation files `docs/state-machine.md` and `docs/execution-loop.md` whose content is now merged into `docs/ticket-flow.md` and `docs/beads.md` respectively.
@@ -78,9 +83,16 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Replaced the live Mermaid diagrams in `docs/ticket-flow.md` with embedded SVG exports generated from the same flow definitions, so section 2 and all section 3 state diagrams render consistently in VS Code Markdown Preview while the omitted loopback semantics remain documented immediately below the affected charts.
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.
 - Corrected `docs/system-architecture.md` to remove non-existent `server/github/*` module reference; all GitHub integration code lives in `server/git/github.ts`.
+- Improved color contrast for low-emphasis text throughout `web.html` (tab labels, mobile social icons, footer social icons, timeline badges, hero copy, footer version line) by replacing `text-zinc-500 dark:text-zinc-500` with `text-zinc-600 dark:text-zinc-400`, addressing WCAG contrast for small gray-on-white text. The terminal text on the in-page black background is intentionally left at `text-zinc-500` for visual hierarchy.
 - Added missing `opencode_steps` column to the `profiles` table key columns list in `docs/database-schema.md`, with a corresponding note in the prose.
 - Added missing `"opencodeSteps"` field to the profile update payload example in `docs/api-reference.md` with a description of its default and range.
 - Added missing `LOOPTROOP_OPENCODE_PERMISSION_MODE` row to the Environment Variables table in `docs/operations.md`.
+- Added an 8th "Bead Error Alt" screenshot tab to `web.html` using `docs/media/bead3.png`, giving visitors a second view of the Ralph Loop's failure-recovery flow across varied error shapes.
+- Added a dedicated `public/og-image.png` (1280×640, copied from `.github/social-preview.png`) used for Open Graph and Twitter Card previews, with explicit `width`, `height`, and `alt` meta attributes for richer link unfurls.
+- Added Organization JSON-LD structured data (`@type: Organization`) to `web.html` with the official LoopTroop logo URL and `sameAs` links to the GitHub organization, GitHub project, GitHub sponsors, X/Twitter, and Discord profiles.
+- Added `public/robots.txt` allowing all crawlers and pointing at the sitemap.
+- Added `public/sitemap.xml` listing the marketing root and all 19 documentation pages under `https://www.looptroop.ovh/docs/`.
+- Added preloads for the self-hosted `inter-latin.woff2` and `jetbrains-mono-latin.woff2` font files in `web.html` to improve LCP and reduce render-blocking font loading.
 
 #### Maintenance
 - Removed dead exported functions and constants from `src/lib/beadsDocument.ts` and `server/lib/constants.ts` that were defined but never called.
