@@ -44,7 +44,7 @@ Unlike high-speed coding tools that optimize for immediate chat responses, LoopT
 ## How It Works
 
 ```mermaid
-flowchart LR
+flowchart TD
     A["🎫 Ticket Input"] --> B["🔍 Codebase Discovery"]
     B --> C["🏛️ LLM Council Planning<br/>(Interview, PRD & Beads)"]
     C --> D["🛑 Human Approval Gate<br/>(optional in future releases)"]
