@@ -89,11 +89,11 @@
     "gpt-tokenizer": "^3.4.0",
     "hono": "^4.12.23",
     "js-yaml": "^4.1.1",
-    "lucide-react": "^1.16.0",
+    "lucide-react": "^1.17.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "tailwind-merge": "^3.6.0",
-    "xstate": "^5.31.1",
+    "xstate": "^5.32.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
@@ -108,7 +108,7 @@
     "@types/react": "^19.2.15",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.2",
-    "concurrently": "^9.2.1",
+    "concurrently": "^10.0.0",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.4.0",
     "eslint-plugin-react-hooks": "^7.1.1",
