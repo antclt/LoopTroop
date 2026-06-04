@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Added a Prompt Inventory reference page that documents built-in prompt templates, runtime prompt builders, workflow usage, tool policies, and context inputs.
+- Added a Prompt Inventory reference page that documents built-in prompt templates, collapsed full prompt content, runtime prompt builders, workflow usage, tool policies, and context inputs.
 - Optimized the landing page (`web.html`) and modernized the build pipeline: compiled Tailwind CSS v4 statically (moving all custom classes, keyframes, scrollbars, and preloaded `@font-face` definitions to `src/web.css` and building to `public/web.css`), converted all screenshot images from PNG to WebP to reduce asset payload size by ~85%, updated references in `web.html`, `README.md`, and `docs/index.md` to use `/media/*.webp`, fixed an HTML nesting bug that broke the Alternate Bead Error tab, implemented Scroll-Spy navigation for header nav links, added a secure-context copy command fallback, and automated the `package.json` version tag injection during builds.
 - Streamlined documentation and README: focused the README documentation table to essential first-time user pages (including LLM Council and Context Engineering), added missing error screenshots, integrated a high-level VM warning and a quoted Mermaid flowchart into the docs landing page to resolve parse errors, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
@@ -35,7 +35,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added `docs/prompts.md` as a Prompt Inventory reference page covering named prompt templates, runtime prompt builders, workflow statuses, session types, tool policies, context inputs, and maintenance guidance.
+- Added `docs/prompts.md` as a Prompt Inventory reference page covering named prompt templates, collapsed full prompt content, runtime prompt builders, workflow statuses, session types, tool policies, context inputs, and maintenance guidance.
 - Added a high-level warning alerting users to run LoopTroop in a sandboxed environment/VM on the documentation landing page (`docs/index.md`).
 - Added a simple workflow flowchart using Mermaid to the documentation landing page (`docs/index.md`).
 - Added candidate-file auditing during pull request creation: final changed files are classified as include, exclude, or review before the branch is pushed; evidence-backed exclusions rewrite the local candidate and are recorded in a `candidate_file_audit` artifact.

@@ -122,7 +122,7 @@ flowchart TD
 ### Reference
 
 - [Configuration](configuration.md): all profile settings with defaults, ranges, and trade-offs.
-- [Prompt Inventory](prompts.md): built-in prompt templates, runtime prompt builders, workflow usage, tool policies, and context inputs.
+- [Prompt Inventory](prompts.md): built-in prompt templates, collapsed full prompt content, runtime prompt builders, workflow usage, tool policies, and context inputs.
 - [API Reference](api-reference.md): routes, SSE events, payload shapes.
 - [Output Normalization](output-normalization.md): how malformed or partial model output is repaired or isolated before use.
 
