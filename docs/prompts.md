@@ -6,15 +6,15 @@ pageClass: prompt-inventory-page
 
 LoopTroop prompts are workflow contracts. They define the model role, the task, the allowed tools, the runtime context, and the exact artifact shape the model must return.
 
-The TypeScript implementation remains the source of truth. This page gives you a readable map of every built-in prompt template and runtime prompt-builder family, plus collapsed copies of the rendered named prompt content for inspection.
+The TypeScript implementation remains the source of truth. This page gives you a readable map of every built-in prompt and runtime prompt-builder family, plus collapsed copies of the rendered prompt content for inspection.
 
 ::: tip Reading this page
-Use the phase map to jump to the part of the workflow you care about. The named-template tables link to collapsed full prompt content; runtime builders are documented separately because their final text depends on ticket artifacts, validation errors, diffs, or command output.
+Use the phase map to jump to the part of the workflow you care about. The built-in prompt tables link to collapsed full prompt content; runtime builders are documented separately because their final text depends on ticket artifacts, validation errors, diffs, or command output.
 :::
 
 ## 1. How Prompt Assembly Works
 
-Named prompt templates live in `server/prompts/index.ts` and are exported through `ALL_PROMPTS`. Each template defines an ID, description, system role, task, instructions, expected output format, context inputs, and OpenCode tool policy.
+Built-in prompt definitions live in `server/prompts/index.ts` and are exported through `ALL_PROMPTS`. Each definition has an ID, description, system role, task, instructions, expected output format, context inputs, and OpenCode tool policy.
 
 The shared builders apply one of three rule blocks before sending a prompt:
 
@@ -37,30 +37,30 @@ Context parts are assembled by `server/opencode/contextBuilder.ts`. See [Context
 
 ## 2. Phase Map
 
-| Workflow area | Named templates | Runtime builders | What to inspect first |
+| Workflow area | Built-in prompts | Runtime prompt builders | What to inspect first |
 | --- | --- | --- | --- |
-| [Discovery](#discovery) | `PROM0` | Minimal context assembly | Relevant-file scan and repository evidence gathering. |
-| [Interview](#interview) | `PROM1` to `PROM5` | Interview vote/refine, resume, answer, and retry builders | Question generation, council scoring, adaptive interview batches, and coverage follow-ups. |
-| [PRD](#prd) | `PROM10a` to `PROM13b` | PRD vote/refine and coverage-revision retry builders | Full Answers, PRD drafting, PRD council review, and gap repair. |
-| [Beads](#beads) | `PROM20` to `PROM25` | Bead vote/refine, expansion, and coverage-revision retry builders | Semantic bead planning, voting, refinement, coverage, and expansion. |
-| [Execution Setup](#execution-setup) | `PROM_EXECUTION_*` | Setup-plan and runtime setup retry builders | Capability probing, setup-plan approval, and workspace setup execution. |
-| [Coding](#coding) | `PROM_CODING`, `PROM51` | Bead continuation and marker repair builders | One-bead implementation and recovery notes. |
-| [Final Test And Continuation](#final-test-and-continuation) | `PROM52`, `PROM53`, `PROM54` | Final-test retry and blocked-session continuation builders | Targeted final test generation, retry notes, and preserved-session continuation. |
-| [Pull Request And Repair](#pull-request-and-repair) | Runtime builders only | Candidate-file audit, PR draft, and shared structured retry builders | Final changed-file review, PR text generation, and schema repair prompts. |
+| [Discovery](#discovery) | `PROM0` | none | Relevant-file scan and repository evidence gathering. |
+| [Interview](#interview) | `PROM1`, `PROM2`, `PROM3`, `PROM4`, `PROM5` | `buildInterviewVotePrompt()`, `buildInterviewRefinePrompt()`, `startInterviewSession()`, `submitBatchToSession()`, `buildInterviewResumePrompt()`, `PROM4` structured retry | Question generation, council scoring, adaptive interview batches, and coverage follow-ups. |
+| [PRD](#prd) | `PROM10a`, `PROM10b`, `PROM11`, `PROM12`, `PROM13`, `PROM13b` | `buildPrdVotePrompt()`, `buildPrdContextBuilder()`, `buildPrdRefinePrompt()`, `buildFullAnswersRetryPrompt()`, `buildPrdRefinementRetryPrompt()`, `buildPrdCoverageRevisionRetryPrompt()` | Full Answers, PRD drafting, PRD council review, and gap repair. |
+| [Beads](#beads) | `PROM20`, `PROM21`, `PROM22`, `PROM23`, `PROM24`, `PROM25` | `buildBeadsContextBuilder()`, `buildBeadsVotePrompt()`, `buildBeadsExpandRetryPrompt()`, `buildBeadsRefinementRetryPrompt()`, `buildBeadsCoverageRevisionRetryPrompt()` | Semantic bead planning, voting, refinement, coverage, and expansion. |
+| [Execution Setup](#execution-setup) | `PROM_EXECUTION_CAPABILITY_PROBE`, `PROM_EXECUTION_SETUP_PLAN`, `PROM_EXECUTION_SETUP_PLAN_REGENERATE`, `PROM_EXECUTION_SETUP`, `PROM_EXECUTION_SETUP_NOTE` | Execution setup plan structured retry, execution setup structured retry | Capability probing, setup-plan approval, and workspace setup execution. |
+| [Coding](#coding) | `PROM_CODING`, `PROM51` | `buildContinuationPrompt()`, bead completion structured retry | One-bead implementation and recovery notes. |
+| [Final Test And Continuation](#final-test-and-continuation) | `PROM52`, `PROM53`, `PROM54` | Final-test structured retry, `generateFinalTestRetryNote()`, `buildStructuredRetryPrompt()` | Targeted final test generation, retry notes, and preserved-session continuation. |
+| [Pull Request And Repair](#pull-request-and-repair) | none | `buildCandidateFileAuditPrompt()`, `buildPullRequestPrompt()`, pull-request draft structured retry, `buildStructuredRetryPrompt()` | Final changed-file review, PR text generation, and schema repair prompts. |
 
-## 3. Named Prompt Templates And Text
+## 3. Built-In Prompts And Text
 
-All named templates in this section are exported from `server/prompts/index.ts` through `ALL_PROMPTS`. The tables group them by workflow area so the right sidebar outline stays useful and the columns remain readable. The prompt links jump to collapsed text blocks later in this same section.
+All built-in prompts in this section are exported from `server/prompts/index.ts` through `ALL_PROMPTS`. The tables group them by workflow area so the right sidebar outline stays useful and the columns remain readable. The prompt links jump to collapsed text blocks later in this same section.
 
 ### Discovery
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM0` | `SCANNING_RELEVANT_FILES` | Fresh / `default` | `ticket_details` | Inspects the repository and returns a structured relevant-files report with rationales and previews. | [Full content here](#full-prompt-prom0) |
 
 ### Interview
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM1` | `COUNCIL_DELIBERATING` | Fresh council draft / `disabled` | `relevant_files`, `ticket_details` | Drafts candidate interview questions from ticket and repo context. | [Full content here](#full-prompt-prom1) |
 | `PROM2` | `COUNCIL_VOTING_INTERVIEW` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `drafts` | Scores interview drafts with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom2) |
@@ -70,7 +70,7 @@ All named templates in this section are exported from `server/prompts/index.ts` 
 
 ### PRD
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM10a` | `DRAFTING_PRD` full-answers sub-step | Fresh / `disabled` | `relevant_files`, `ticket_details`, `interview` | Resolves skipped interview answers into a complete Full Answers artifact before PRD drafting. | [Full content here](#full-prompt-prom10a) |
 | `PROM10b` | `DRAFTING_PRD` draft sub-step | Fresh council draft / `disabled` | `relevant_files`, `ticket_details`, `full_answers` | Drafts a structured PRD from the completed interview answers. | [Full content here](#full-prompt-prom10b) |
@@ -81,7 +81,7 @@ All named templates in this section are exported from `server/prompts/index.ts` 
 
 ### Beads
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM20` | `DRAFTING_BEADS` draft sub-step | Fresh council draft / `disabled` | `relevant_files`, `ticket_details`, `prd` | Drafts the semantic bead blueprint from the approved PRD. | [Full content here](#full-prompt-prom20) |
 | `PROM21` | `COUNCIL_VOTING_BEADS` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts` | Scores bead blueprints with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom21) |
@@ -92,7 +92,7 @@ All named templates in this section are exported from `server/prompts/index.ts` 
 
 ### Execution Setup
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM_EXECUTION_CAPABILITY_PROBE` | `PRE_FLIGHT_CHECK` | Fresh probe / `read_only` | none | Runs a minimal OpenCode capability probe before execution setup. | [Full content here](#full-prompt-prom-execution-capability-probe) |
 | `PROM_EXECUTION_SETUP_PLAN` | `WAITING_EXECUTION_SETUP_APPROVAL` | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan_notes` | Drafts a reviewable workspace setup plan without modifying the repository. | [Full content here](#full-prompt-prom-execution-setup-plan) |
@@ -102,14 +102,14 @@ All named templates in this section are exported from `server/prompts/index.ts` 
 
 ### Coding
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM_CODING` | `CODING` | Fresh bead implementation / `default` | `bead_data`, `bead_notes` | Guides the implementer through one bead and requires the bead completion marker. | [Full content here](#full-prompt-prom-coding) |
 | `PROM51` | `CODING` context-wipe sub-step | Same session / `disabled` | `bead_data`, `error_context` | Captures a compact failure note before abandoning a degraded bead session. | [Full content here](#full-prompt-prom51) |
 
 ### Final Test And Continuation
 
-| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM52` | `RUNNING_FINAL_TEST` | Fresh final-test generation / `default` | `ticket_details`, `prd`, `beads`, `final_test_notes` | Adds or updates targeted final tests and returns the commands to run them. | [Full content here](#full-prompt-prom52) |
 | `PROM53` | `RUNNING_FINAL_TEST` retry-note sub-step | Fresh / `disabled` | `ticket_details`, `error_context` | Summarizes a failed final-test attempt for the next retry. | [Full content here](#full-prompt-prom53) |
@@ -117,11 +117,11 @@ All named templates in this section are exported from `server/prompts/index.ts` 
 
 ### Pull Request And Repair
 
-Pull-request drafting, candidate-file auditing, and shared structured retry prompts are runtime builders rather than `ALL_PROMPTS` named templates. They are inventoried in [Runtime Prompt Builders](#runtime-prompt-builders) and [Shared Structured Retry Prompts](#shared-structured-retry-prompts).
+Pull-request drafting, candidate-file auditing, and shared structured retry prompts are runtime builders rather than `ALL_PROMPTS` built-in prompts. They are inventoried in [Runtime Prompt Builders](#runtime-prompt-builders) and [Shared Structured Retry Prompts](#shared-structured-retry-prompts).
 
 ### Prompt Text
 
-These blocks are collapsed by default. They show the rendered base prompt text for each named template, with runtime context sections represented by placeholders such as `[ticket_details provided at runtime]`. Some workflow builders append additional runtime-only sections; those are listed in the runtime builder inventory.
+These blocks are collapsed by default. They show the rendered base prompt text for each built-in prompt, with runtime context sections represented by placeholders such as `[ticket_details provided at runtime]`. Some workflow builders append additional runtime-only sections; those are listed in the runtime builder inventory.
 
 #### PROM0 Prompt Text {#full-prompt-prom0}
 
@@ -1984,7 +1984,7 @@ continue please
 
 ## 4. Runtime Prompt Builders
 
-These builders assemble prompt variants around the named templates or create standalone operational prompts. They are intentionally documented as builder families because their exact text depends on runtime artifacts such as drafts, answers, diffs, validation errors, or command output.
+These builders assemble prompt variants around the built-in prompts or create standalone operational prompts. They are intentionally documented as builder families because their exact text depends on runtime artifacts such as drafts, answers, diffs, validation errors, or command output.
 
 | Prompt / builder | Source | Used in / status | Session type | Tool policy | Context inputs | Purpose |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -2005,7 +2005,7 @@ These builders assemble prompt variants around the named templates or create sta
 | `buildBeadsExpandRetryPrompt()` | `server/workflow/phases/beadsPhase.ts` | `EXPANDING_BEADS` retry path | Same session when recoverable | `PROM25.toolPolicy` | Validation error, raw response, `PROM25` schema reminder | Corrects malformed expanded bead output and adds preserved-field guidance when needed. |
 | `buildBeadsRefinementRetryPrompt()` | `server/phases/beads/refined.ts` | Defined helper for `REFINING_BEADS` retry | Same session when wired | `PROM22.toolPolicy` | Validation error and sanitized raw response | Corrects malformed refined bead output and reinforces bead change metadata rules; the current workflow path uses the generic council refinement retry. |
 | `buildBeadsCoverageRevisionRetryPrompt()` | `server/phases/beads/coverageRevision.ts` | `VERIFYING_BEADS_COVERAGE` revision retry | Same session when recoverable | `PROM24.toolPolicy` | Validation error and sanitized raw response | Corrects malformed beads coverage revision output, including `changes` and `gap_resolutions`. |
-| Execution setup plan structured retry | `server/phases/executionSetupPlan/generator.ts` | `WAITING_EXECUTION_SETUP_APPROVAL` retry path | Same session when recoverable, fresh session otherwise | Selected setup-plan template policy | Validation error, raw response, setup-plan schema reminder | Corrects malformed setup-plan or setup-plan-regeneration output. |
+| Execution setup plan structured retry | `server/phases/executionSetupPlan/generator.ts` | `WAITING_EXECUTION_SETUP_APPROVAL` retry path | Same session when recoverable, fresh session otherwise | Selected setup-plan prompt policy | Validation error, raw response, setup-plan schema reminder | Corrects malformed setup-plan or setup-plan-regeneration output. |
 | Execution setup structured retry | `server/phases/executionSetup/generator.ts` | `PREPARING_EXECUTION_ENV` retry path | Same session when recoverable, fresh session otherwise | `PROM_EXECUTION_SETUP.toolPolicy` | Validation error, raw response, setup schema reminder | Corrects malformed workspace setup execution results. |
 | `buildContinuationPrompt()` | `server/phases/execution/executor.ts` | `CODING` marker-repair path | Same bead session | `PROM_CODING.toolPolicy` | Bead ID, parse errors, previous response | Tells the implementer to continue the same bead attempt after a missing or invalid completion marker. |
 | Bead completion structured retry | `server/phases/execution/executor.ts` | `CODING` marker-repair path | Same session when recoverable | `PROM_CODING.toolPolicy` | Validation error, raw response, bead-status schema reminder | Corrects malformed `<BEAD_STATUS>` completion markers. |
@@ -2027,7 +2027,7 @@ Repairs must only correct formatting or structure. They should not invent requir
 
 When adding or changing a prompt:
 
-1. Update the template description, detailed prompt text, output schema, and parser together.
+1. Update the prompt description, detailed prompt text, output schema, and parser together.
 2. Update this inventory with the prompt ID or builder, source path, workflow status, session type, tool policy, context inputs, and purpose.
 3. Update [Context Engineering](context-engineering.md) if the prompt receives new context parts or changes status-level context behavior.
 4. Update [Output Normalization](output-normalization.md) if the expected output shape, parser, repair rules, or retry behavior changes.
