@@ -16,15 +16,18 @@ In development, same-origin `/api/*` calls go through the Vite proxy. When `npm 
 
 The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by two more probes spaced 1.5 seconds apart before the banner appears. When reconnecting or post-initial loading banners remain visible for at least five seconds and then clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so real backend gaps recover the same way as a manual refresh without turning brief warning flickers into page reloads.
 
+Most modal routes and workspace views are also lazy-loaded through `lazyWithChunkReload()`. Recoverable chunk-load failures trigger at most one full-page reload per surface, using `sessionStorage` markers so the browser does not loop forever on a broken import.
+
 ## 1. Top-Level Composition
 
 | Area | Purpose | Primary files |
 | --- | --- | --- |
-| App shell | App startup, configuration preload, global layout | `src/App.tsx` |
-| Ticket dashboard | Ticket list, status cards, workspace selection | `src/components/ticket/*` |
+| App shell | App bootstrap, startup overlays, lazy modal routes, global header chrome | `src/App.tsx`, `src/components/layout/AppShell.tsx` |
+| Ticket dashboard | Selected-ticket orchestration, live status bridging, navigator/workspace wiring, loading/reconnect banners | `src/components/ticket/TicketDashboard.tsx` |
 | Active workspace | Chooses the live view for the selected phase | `src/components/ticket/ActiveWorkspace.tsx` |
 | Navigator | Timeline, approval navigation, context tree, errors, full log entry point | `src/components/ticket/NavigatorPanel.tsx` |
 | Workspace views | Draft, council, interview, approval, coding, error, canceled, review, full log | `src/components/workspace/*` |
+| App providers | React Query bootstrap, UI state, tooltips, error boundary | `src/main.tsx`, `src/context/*` |
 
 ### App Shell, Startup Overlays, And Modal Routes
 
@@ -35,6 +38,16 @@ The app shell also polls `/api/health` for the global reconnecting banner. After
 - centered modal routes for Configuration (`/config`), Projects (`/project/new`), and New Ticket (`/ticket/new`)
 - deep-link ticket selection from `/ticket/:externalId`
 - header controls for New Ticket, Projects, Configuration, Docs, Refresh, and theme switching
+
+### Ticket Dashboard Coordination
+
+`TicketDashboard.tsx` is the live-ticket coordinator rather than a passive wrapper.
+
+- mounts `LogProvider` and the SSE bridge (`SSELogConnector`) around the active ticket workspace
+- reconciles the polled ticket snapshot with live `state_change` events so the workspace can advance immediately while the REST snapshot catches up
+- tracks selected phase, selected error occurrence, archived attempt review, full-log mode, and the `Back to live` flow
+- forwards workspace navigation/focus events so approval panes can jump directly to a requested anchor
+- owns loading and reconnecting banners plus the guarded auto-reload path for sustained ticket or stream recovery
 
 ## 2. Active Workspace Routing
 
@@ -91,35 +104,33 @@ The coding workspace is broader than a simple log pane.
 Current `CodingView` composes:
 
 - bead list and progress UI
+- `PhaseAttemptSelector` when reviewing archived non-live attempts
 - `BeadDiffViewer`
-- `CollapsiblePhaseLogSection`
-- `LogEntryRow`
+- per-bead `Details`, `Changes`, `Log`, `Input`, and `Output` tabs, plus a `Versions` selector when multiple bead iterations exist
 - `PhaseArtifactsPanel`
 - `VerificationSummaryPanel`
+- `CollapsiblePhaseLogSection`
 
 It also merges persisted bead artifacts with runtime bead overlays from the live ticket payload so the UI can show in-progress status and notes without waiting for a full artifact refresh.
 
 ## 6. Data Hooks
 
-### Workflow And Artifacts
-
-| Hook | Current role | Current return shape |
-| --- | --- | --- |
-| `useWorkflowMeta()` | Loads phase and group metadata | `{ groups, phases, phaseMap, isLoading }` |
-| `useTicketArtifacts(ticketId, opts?)` | Fetches and caches ticket artifacts | `{ artifacts, isLoading }` |
-| `useTicketPhaseAttempts(ticketId?, phase?)` | Reads phase-attempt history | React Query result |
-| `useCoverageHooks` (various) | Provides coverage status and override actions for PRD and Beads coverage phases | React Query result |
-
-### Ticket And Profile Data
+### Workflow, Ticket, And UI-State Data
 
 | Hook | Current role |
 | --- | --- |
-| `useTickets(projectId?)` | Ticket list with auto-refresh for active tickets |
-| `useTicket(id)` | Individual ticket with active-state refresh |
+| `useWorkflowMeta()` | Loads phase/group metadata, seeded from `shared/workflowMeta.ts`, and exposes `{ groups, phases, phaseMap, isLoading }` |
+| `useTicketArtifacts(ticketId, opts?)` | Fetches, caches, and merges ticket artifacts for live and archived review surfaces |
+| `useTicketPhaseAttempts(ticketId?, phase?)` | Reads archived phase-attempt history for selectors and review panes |
+| `useTicketUIState(ticketId, scope)` / `useSaveTicketUIState()` | Persists per-ticket draft/editor UI state such as interview drafts, approval editors, and error-attention markers |
+| `useTickets(projectId?)` | Ticket list with 10-second auto-refresh while any ticket is non-terminal |
+| `useTicket(id)` | Individual ticket query with 5-second auto-refresh while active, seeded from cached ticket lists when possible |
+| `useProjects()` | Attached project metadata for the dashboard, kanban cards, ticket forms, and project management modal |
 | `useProfile()` | Singleton profile query against `/api/profile` |
 | `useStartupStatus()` | Startup storage/runtime state for restore notices and WSL warnings |
-| `useOpenCodeModels()` | Connected models only |
-| `useAllOpenCodeModels()` | Full catalog including disconnected providers |
+| `useOpenCodeModels()` / `useAllOpenCodeModels()` | Connected-model list versus full provider catalog |
+| `useBackendHealth()` | Global backend-reachability banner with confirmation probes to avoid startup false positives |
+| `useRecoveryAutoReload(source, active)` | Guarded full-page recovery reload after a sustained reconnect/loading episode clears |
 
 ### Live Updates
 
@@ -130,10 +141,11 @@ Current behavior:
 - connects to `/api/stream`
 - persists the latest SSE event id per ticket in browser storage
 - sends `ticketId` and `lastEventId` on reconnect when available
+- waits for the dev backend readiness guard before opening the stream during local Vite development
 - uses the same-origin Vite proxy during development, which injects token auth server-side; outside that path, `apiToken` query auth is only valid for `/api/stream`
-- listens for `state_change`, `progress`, `log`, `error`, `bead_complete`, `needs_input`, and `artifact_change`
+- listens for `state_change`, `progress`, `log`, `app_error`, `bead_complete`, `needs_input`, and `artifact_change`
 - receives AI/model log detail as fast live-only `log` upserts plus persisted finalizations/backfills backed by `.ticket/runtime/execution-log.ai.jsonl`, so OpenCode thinking, tool calls, and model output can appear live without bloating durable logs and remain available after reconnect or tab close
-- invalidates or patches React Query caches in response
+- patches or invalidates React Query caches in response, including direct artifact snapshot merging for `artifact_change`
 - refetches ticket details, ticket lists, artifacts, interview state, setup-plan state, bead state, and server logs after a reconnect gap
 - lets the dashboard trigger the guarded recovery reload once the visible live-update reconnecting episode has cleared
 - returns `{ lastEventIdRef, connectionState }`
@@ -161,13 +173,15 @@ It does more than submit answers:
 
 That makes `InterviewQAView` resilient across reloads, view changes, and follow-up question rounds.
 
-### Coverage & Flow Controls
+### Interview View Structure
 
-The workflow is guided by specialized control components:
-- `InterviewFlowControls.tsx`: Provides the primary interaction surface for answering or skipping batches of questions.
-- `InterviewFollowUpControls.tsx`: Manages the UI state during dynamic follow-up rounds when the coverage loop requires more information.
-- `PrdCoverageControl.tsx` and `BeadsCoverageControl.tsx`: Handles manual verification overrides and review presentation during the PRD and Beads coverage phases.
-- `OpenCodeAuthAlert.tsx`: Surfaces OpenCode connection or authentication issues gracefully before prompting fails.
+`InterviewQAView` pairs `useBatchSubmit()` with concrete editor/history surfaces rather than a separate "flow controls" layer:
+
+- `QuestionList` renders answered and skipped history groups, plus in-place edits for previous answers
+- `AnswerEditor` renders the active batch, choice inputs, AI commentary, per-question skip actions, a skip-all confirmation path, and batch progress badges
+- a bottom `CollapsiblePhaseLogSection` keeps the live phase log available while the user answers questions
+
+The current batch can come from the persisted interview session snapshot or the latest SSE-driven batch. History groups are derived from the normalized question source (`compiled`, `prompt_follow_up`, `coverage_follow_up`, `final_free_form`) and rendered with user-facing labels such as `PROM4 Follow-ups` and `Coverage Follow-ups`.
 
 Approval panes use the same success-aware debounced UI-state pattern for editor drafts. This protects large manual edits if the browser tab closes before the debounce timer finishes.
 
@@ -182,6 +196,7 @@ Several UI components exist specifically to inspect durable workflow state:
 | `PhaseArtifactsPanel` | Phase-specific artifact viewer |
 | `PrdApprovalPane` | PRD approval editor plus compact read-only Full Answers context for the winning draft |
 | `WorkspacePhaseSummary` | Compact summary for the selected phase; its `(details)` button opens the expanded workflow metadata from `shared/workflowMeta.ts` while keeping the selected status lightweight above the workspace |
+| `DashboardHeader` details dialog | Ticket metadata, project info, file locations, copy/reveal actions, and on-demand ticket size breakdown |
 | `VerificationSummaryPanel` | Delivery actions during PR review |
 | `PhaseReviewView` | Historical artifact review with phase-attempt support |
 | `FullLogView` | Ticket-wide log inspection |
@@ -240,9 +255,9 @@ The current timeline group order is To Do, Discovery, Interview, Specs (PRD), Bl
 
 This is why keeping the docs aligned with `workflowMeta` matters: the UI is built around that shared metadata contract.
 
-## 10. Configuration And Settings UI
+## 10. Configuration, Projects, And Settings UI
 
-`ProfileSetup` (`src/components/config/ProfileSetup.tsx`) is the main configuration form. It is opened from the app header and lets you set all model and workflow defaults.
+`ProfileSetup` (`src/components/config/ProfileSetup.tsx`) is the main configuration form. It is opened from the app header and lets you set all model and workflow defaults. The adjacent Projects modal (`ProjectsPanel` / `ProjectForm`) handles repository attachment, restore, and cleanup operations for local projects.
 
 ### Model Selection
 
@@ -251,49 +266,63 @@ This is why keeping the docs aligned with `workflowMeta` matters: the UI is buil
 | Main Implementer | The primary model used for coding phases. Shown with an optional `EffortPicker` when the model exposes variants. |
 | Council Members | Additional models that participate in planning drafts and voting. The main implementer is always added to the council automatically and cannot appear twice. |
 
-`ModelPicker` (`src/components/config/ModelPicker.tsx`) is the shared dropdown for selecting models from the live OpenCode catalog. It filters to connected models only by default.
+`ModelPicker` (`src/components/config/ModelPicker.tsx`) is the shared dropdown for selecting models from the live OpenCode catalog. It defaults to connected models only, but the footer toggle can expand to the full provider catalog. The picker also supports provider grouping, text search, and a free-only filter.
 
 `EffortPicker` (`src/components/config/EffortPicker.tsx`) appears next to a model selector when that model exposes variants (for example `high`, `low`, `medium`). The selected variant is stored per model id in `councilMemberVariants`.
 
+`ProfileSetup` also pings `/api/health/opencode` so the modal can show whether OpenCode is reachable, surface model-discovery failures separately from connection failures, and expose a reload button for the provider/model catalog.
+
 ### Numeric Settings
 
-All numeric fields are validated against min/max bounds defined in `numericFieldConfig.ts`. Each field links to the relevant docs section:
+All numeric fields are validated against min/max bounds defined in `numericFieldConfig.ts`. The inline help links open the matching `/configuration#...` anchor:
 
 | Field | Docs link |
 | --- | --- |
-| Per-Iteration Timeout | [Beads & Execution](beads.md#per-iteration-timeout) |
-| Execution Setup Timeout | [Beads & Execution](beads.md#execution-setup-timeout) |
-| AI Response Timeout | [LLM Council](llm-council.md#ai-response-timeout) |
-| Max Bead Retries | [Beads & Execution](beads.md#max-bead-retries) |
+| Per-Iteration Timeout | [Configuration Reference](configuration.md#per-iteration-timeout) |
+| Execution Setup Timeout | [Configuration Reference](configuration.md#execution-setup-timeout) |
+| AI Response Timeout | [Configuration Reference](configuration.md#ai-response-timeout) |
+| Max Bead Retries | [Configuration Reference](configuration.md#max-bead-retries) |
 | OpenCode Retry Limit | [Configuration Reference](configuration.md#opencode-retry-limit) |
 | OpenCode Retry Grace Window | [Configuration Reference](configuration.md#opencode-retry-grace-window) |
-| Min Council Quorum | [LLM Council](llm-council.md#min-council-quorum) |
-| Max Interview Questions | [Ticket Flow](ticket-flow.md#max-interview-questions) |
+| OpenCode Max Steps | [Configuration Reference](configuration.md#opencode-max-steps) |
+| Min Council Quorum | [Configuration Reference](configuration.md#min-council-quorum) |
+| Max Interview Questions | [Configuration Reference](configuration.md#max-interview-questions) |
 | Structured Output Retries | [Configuration Reference](configuration.md#structured-output-retries) |
-| Coverage Follow-Up Budget | [Ticket Flow](ticket-flow.md#coverage-follow-up-budget) |
-| Interview Coverage Passes | [Ticket Flow](ticket-flow.md#interview-coverage-passes) |
-| PRD Coverage Passes | [Ticket Flow](ticket-flow.md#prd-coverage-passes) |
-| Beads Coverage Passes | [Ticket Flow](ticket-flow.md#beads-coverage-passes) |
-| Tool Input Max Chars | [Beads & Execution](beads.md#tool-log-truncation) |
-| Tool Output Max Chars | [Beads & Execution](beads.md#tool-log-truncation) |
-| Tool Error Max Chars | [Beads & Execution](beads.md#tool-log-truncation) |
+| Coverage Follow-Up Budget | [Configuration Reference](configuration.md#coverage-follow-up-budget) |
+| Interview Coverage Passes | [Configuration Reference](configuration.md#interview-coverage-passes) |
+| PRD Coverage Passes | [Configuration Reference](configuration.md#prd-coverage-passes) |
+| Beads Coverage Passes | [Configuration Reference](configuration.md#beads-coverage-passes) |
+| Tool Input Max Chars | [Configuration Reference](configuration.md#tool-input-max-chars) |
+| Tool Output Max Chars | [Configuration Reference](configuration.md#tool-output-max-chars) |
+| Tool Error Max Chars | [Configuration Reference](configuration.md#tool-error-max-chars) |
 
 > [!NOTE]
-> Timeout and delay fields are stored in **milliseconds**. `ProfileSetup` converts those stored milliseconds to seconds for display and back to milliseconds on save.
+> Timeout and delay fields are stored in **milliseconds**. `ProfileSetup` converts those stored milliseconds to seconds for display and back to milliseconds on save. Count-style fields such as `OpenCode Max Steps` remain raw integers in both storage and UI.
 
 Profile settings are inherited by new tickets at start time. The locked copies in the ticket record are what the workflow actually uses for that run.
 
+### Project Attachment And Maintenance
+
+`ProjectsPanel` is more than a list modal:
+
+- it lists attached repositories, supports sort-by name/ticket-count/created/updated, and opens `ProjectForm` for create/edit flows
+- the create flow validates the selected folder with `/api/projects/check-git`, requires a git-initialized repository, and surfaces WSL mounted-drive performance warnings before attachment
+- if the selected repository already contains LoopTroop local state, the form switches into restore mode and explains which values are restored from disk versus taken from the current form
+- the edit flow focuses on project identity and maintenance: rename, recolor, re-icon, inspect timestamps, delete the project, or open `DeleteWorktreesDialog` to reclaim disk space
+
+The current frontend project modal is intentionally scoped to attachment metadata, restore awareness, and cleanup. It does not expose advanced per-project workflow override editing in the modal today.
+
 ## 11. Context Providers
 
-Three React context providers supply cross-cutting app-shell and workspace state:
+The provider stack is split across `main.tsx`, `App.tsx`, and `TicketDashboard.tsx`. `main.tsx` installs the React Query client, `UIProvider`, `TooltipProvider`, and the app-wide `ErrorBoundary`; `App.tsx` adds `ToastProvider` and `AIQuestionProvider`; `TicketDashboard.tsx` mounts `LogProvider` for the active ticket.
+
+Among the custom LoopTroop state providers, three carry most of the frontend-specific cross-cutting state:
 
 | Provider | Location | Purpose |
 | --- | --- | --- |
 | `LogProvider` | `LogContext.tsx` | Owns the in-memory execution log for the active ticket. Merges SSE-delivered log rows immediately and handles reconnect recovery by re-requesting the server log and merging by stable entry identity. |
 | `UIProvider` | `UIContext.tsx` | Manages app UI state such as the selected ticket, filters, sidebar state, log panel height, and theme. It persists that state to `localStorage` and keeps the browser URL in sync with the active view. |
-| `AIQuestionProvider` | `AIQuestionContext.tsx` | Manages the queue of pending OpenCode human-input requests across active tickets, including minimize/reopen state and answer/reject actions for the AI-question popup. |
-
-These providers are composed in `TicketDashboard` around `ActiveWorkspace` and the navigator surfaces.
+| `AIQuestionProvider` | `AIQuestionContext.tsx` | Manages the queue of pending OpenCode human-input requests across active tickets, including minimize/reopen state, answer/reject actions, and periodic recovery from `/api/opencode/questions`. |
 
 Interview draft persistence is separate: `InterviewQAView` uses `useBatchSubmit()` and ticket UI-state artifacts for interview answers, while `AIQuestionProvider` is specifically for execution-time OpenCode questions.
 
@@ -311,10 +340,11 @@ The Kanban board is the default root view when no ticket is selected. Clicking t
 
 | Key | Action |
 | --- | --- |
-| `?` | Toggle the keyboard shortcuts overlay |
-| `Escape` | Close the keyboard overlay, active modal, or selected ticket dashboard |
+| `?` | Toggle the keyboard shortcuts overlay unless focus is already inside an input-like control |
+| `Escape` | Close the keyboard overlay; elsewhere the dashboard and modal wrappers also use `Escape` to close the current surface |
+| `n`, `k`, `/` | Listed in the overlay copy today, but `KeyboardShortcuts.tsx` does not currently register handlers for them |
 
-Shortcuts are suppressed when focus is inside an `<input>` or `<textarea>`.
+Shortcut toggling is suppressed when focus is inside an `<input>`, `<textarea>`, `<select>`, or another textbox-like editable control.
 
 ## 14. Ticket Cancel Confirmation Dialog
 
@@ -334,6 +364,7 @@ The dialog calls `useCancelTicket` which POSTs `{ deleteContent, deleteLog }` to
 ## Related Docs
 
 - [API Reference](api-reference.md)
+- [Configuration](configuration.md)
 - [Ticket Flow & State Machine](ticket-flow.md)
 - [OpenCode Integration](opencode-integration.md)
 - [System Architecture](system-architecture.md)
