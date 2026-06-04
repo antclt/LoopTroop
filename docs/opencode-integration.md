@@ -210,6 +210,7 @@ Without that wrapper, the rest of the system would have no safe way to restart, 
 ## Related Docs
 
 - [Context Engineering](context-engineering.md)
+- [Prompt Inventory](prompts.md)
 - [Beads & Execution](beads.md)
 - [API Reference](api-reference.md)
 - [System Architecture](system-architecture.md)

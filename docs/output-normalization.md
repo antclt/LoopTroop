@@ -586,3 +586,9 @@ Structured retry loops store `rawAttempts` next to the artifact/report detail wh
 Automatic structured retries are attempt history inside one phase run. They appear as Raw variants on the artifact and do not create a new canonical artifact version. User-triggered Retry from `BLOCKED_ERROR` is different: for every non-implementation status, LoopTroop archives the failed active phase attempt and creates a fresh active attempt before rerunning, so prior rerun artifacts/logs are inspected through the previous-version selector. `CODING` remains bead-scoped and uses its reset/retry history instead of phase versions.
 
 Invalid, failed, or timed-out outputs are diagnostic-only. The structured artifact body shows the outcome, model or stage, retry count, validation error, failure class, and short diagnostic excerpts; full malformed model text belongs in Raw attempt views and execution logs only.
+
+## Related Docs
+
+- [Prompt Inventory](prompts.md)
+- [Context Engineering](context-engineering.md)
+- [Runtime Diagnostics](diagnostics.md)

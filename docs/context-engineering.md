@@ -5,7 +5,7 @@
 
 LoopTroop uses context engineering to keep model work focused. The engine does not treat an LLM session as the source of truth, and it does not keep appending every previous message to the next prompt. Each status rebuilds the smallest useful prompt from durable artifacts and the active task contract.
 
-The implementation-level source of truth is `server/opencode/contextBuilder.ts`. The user-facing phase metadata is in `shared/workflowMeta.ts`.
+The implementation-level source of truth is `server/opencode/contextBuilder.ts`. The user-facing phase metadata is in `shared/workflowMeta.ts`. For a catalogue of prompt templates and runtime prompt builders, see [Prompt Inventory](prompts.md).
 
 ## 1. Core Idea
 
@@ -322,5 +322,6 @@ The practical rule is simple: the model should know exactly what it needs for th
 
 - [Core Philosophy](core-philosophy.md)
 - [Ticket Flow](ticket-flow.md)
+- [Prompt Inventory](prompts.md)
 - [Beads & Execution](beads.md)
 - [Output Normalization](output-normalization.md)
