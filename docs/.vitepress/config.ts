@@ -22,8 +22,8 @@ const sidebar = [
       { text: 'PRD', link: '/prd' },
       { text: 'LLM Council', link: '/llm-council' },
       { text: 'Beads & Execution', link: '/beads' },
-      { text: 'Pre-Flight & Setup', link: '/pre-flight-setup' },
-      { text: 'Verification & Delivery', link: '/verification-delivery' },
+      { text: 'Pre-Implementation', link: '/pre-implementation' },
+      { text: 'Post-Implementation', link: '/post-implementation' },
     ],
   },
   {

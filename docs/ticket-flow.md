@@ -299,6 +299,18 @@ Durable checkpoints are saved to the project directory at critical milestones:
 
 ---
 
+## 12. Advanced Workflow Mechanics
+
+Several orchestrator modules drive the complex mechanics behind the scenes:
+
+- **Coverage Control (`server/workflow/coverageControl.ts`)**: Manages the PRD and Beads coverage tracking loops, determining whether candidate specs have gaps and whether follow-up verification rounds are needed.
+- **Execution Band (`server/workflow/executionBand.ts`)**: Demarcates the boundary between planning (editable, cancellable restarts) and runtime execution (strict isolated worktree changes).
+- **Session Logging (`server/workflow/sessionStatusLogging.ts`)**: Handles the durable recording of session state transitions and OpenCode interactions.
+- **Integration Phase (`server/workflow/phases/integrationPhase.ts`)**: Orchestrates the commit squashing and target branch integration logic after coding and final tests are complete.
+- **Execution Setup Phase (`server/workflow/phases/executionSetupPlanPhase.ts`)**: Manages the pre-flight checks and setup plan drafting, explicitly separating environment prep from active bead coding.
+
+---
+
 ## Related Docs
 
 - [Beads & Execution](beads.md)

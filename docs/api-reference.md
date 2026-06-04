@@ -149,6 +149,17 @@ Project deletion (`DELETE /api/projects/:id`) returns 409 when any ticket in the
 
 ## Ticket Routes
 
+Ticket routes are implemented using a modular handler architecture located in `server/routes/ticketHandlers/*`. This splits the broad ticket API into focused domains:
+
+- `crudHandlers.ts` for lifecycle creation and basic updates
+- `artifactHandlers.ts` for artifact retrieval
+- `approvalHandlers.ts` for human approval gates
+- `uiStateHandlers.ts` for frontend draft persistence
+- `executionSetupHandlers.ts` for environment setup plan routes
+- `interviewHandlers.ts` for Q&A persistence
+- `lifecycleHandlers.ts` for workflow progression
+- `devEventHandlers.ts` and `openCodeQuestionHandlers.ts` for advanced integrations
+
 ### CRUD And UI State
 
 | Method | Route | Notes |

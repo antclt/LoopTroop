@@ -10,7 +10,13 @@ LoopTroop uses OpenCode as its model execution layer, but wraps it with its own 
 | Module | Responsibility |
 | --- | --- |
 | `server/opencode/adapter.ts` | Concrete OpenCode SDK adapter and interface |
+| `server/opencode/mockAdapter.ts` | Mock adapter for testing and offline development |
 | `server/opencode/factory.ts` | Singleton adapter creation and mock-mode switching |
+| `server/opencode/providerCatalog.ts` | Discovers and flattens connected models from the OpenCode server |
+| `server/opencode/retryPolicy.ts` | Defines bounded retries for session creation and prompt errors |
+| `server/opencode/modelValidation.ts` | Validates chosen models against the live catalog |
+| `server/opencode/errorDetails.ts` | Extracts structured insights from OpenCode provider errors |
+| `server/opencode/blockedErrorDiagnostics.ts` | Translates raw OpenCode/provider failures into human-readable UI diagnostics |
 | `server/opencode/sessionCreation.ts` | Bounded retry wrapper and health diagnostics for session creation |
 | `server/opencode/sessionManager.ts` | Session ownership, reconnect, completion, abandonment |
 | `server/opencode/contextBuilder.ts` | Phase-specific context assembly |

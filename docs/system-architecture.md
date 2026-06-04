@@ -192,7 +192,27 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | App DB runtime schema bootstrap | `server/db/init.ts` |
 | Project DB bootstrap | `server/db/project.ts` |
 | Schema | `server/db/schema.ts` |
-| Ticket and project storage helpers | `server/storage/*` |
+| Ticket artifact data access | `server/storage/ticketArtifacts.ts` |
+| Ticket phase attempt data access | `server/storage/ticketPhaseAttempts.ts` |
+| Ticket mutation helpers | `server/storage/ticketMutations.ts` |
+| Ticket runtime state projection | `server/storage/ticketRuntimeProjection.ts` |
+
+### IO Utilities
+
+| Area | Modules |
+| --- | --- |
+| Atomic file append (durable logs) | `server/io/atomicAppend.ts` |
+| Atomic file write (durable state) | `server/io/atomicWrite.ts` |
+
+### Shared Layer
+
+| Area | Modules |
+| --- | --- |
+| Error codes and diagnostics | `shared/errorCodes.ts`, `shared/structuredRetryDiagnostics.ts` |
+| Artifact and repair definitions | `shared/artifactCompanions.ts`, `shared/yamlRepair.ts` |
+| Interventions and refinements | `shared/structuredInterventions.ts`, `shared/refinementDiffArtifacts.ts` |
+| OpenCode catalog and auth | `shared/opencodeCatalog.ts`, `shared/opencodeAuth.ts` |
+| WSL performance utilities | `shared/wslPerformance.ts` |
 
 ### OpenCode Integration
 

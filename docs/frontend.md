@@ -98,6 +98,7 @@ It also merges persisted bead artifacts with runtime bead overlays from the live
 | `useWorkflowMeta()` | Loads phase and group metadata | `{ groups, phases, phaseMap, isLoading }` |
 | `useTicketArtifacts(ticketId, opts?)` | Fetches and caches ticket artifacts | `{ artifacts, isLoading }` |
 | `useTicketPhaseAttempts(ticketId?, phase?)` | Reads phase-attempt history | React Query result |
+| `useCoverageHooks` (various) | Provides coverage status and override actions for PRD and Beads coverage phases | React Query result |
 
 ### Ticket And Profile Data
 
@@ -148,6 +149,14 @@ It does more than submit answers:
 - listens for interview batch updates coming back from the runtime
 
 That makes `InterviewQAView` resilient across reloads, view changes, and follow-up question rounds.
+
+### Coverage & Flow Controls
+
+The workflow is guided by specialized control components:
+- `InterviewFlowControls.tsx`: Provides the primary interaction surface for answering or skipping batches of questions.
+- `InterviewFollowUpControls.tsx`: Manages the UI state during dynamic follow-up rounds when the coverage loop requires more information.
+- `PrdCoverageControl.tsx` and `BeadsCoverageControl.tsx`: Handles manual verification overrides and review presentation during the PRD and Beads coverage phases.
+- `OpenCodeAuthAlert.tsx`: Surfaces OpenCode connection or authentication issues gracefully before prompting fails.
 
 Approval panes use the same success-aware debounced UI-state pattern for editor drafts. This protects large manual edits if the browser tab closes before the debounce timer finishes.
 

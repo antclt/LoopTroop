@@ -8,8 +8,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Updated the system architecture, API reference, output normalization, ticket flow, opencode integration, frontend, and LLM council documentation to cover missing core modules and architectural components.
 - Documented the Structured Interventions subsystem and added a performance warning for Windows-mounted drives inside WSL.
-- Added two new documentation pages for Pre-Implementation (Pre-Flight & Setup) and Post-Implementation (Verification & Delivery) workflow phases, and updated the VitePress configuration and index doc map.
+- Added two new documentation pages for Pre-Implementation and Post-Implementation workflow phases, and updated the VitePress configuration and index doc map.
 - Clarified the Prompt Inventory wording and expanded the phase map so each workflow area lists its exact built-in prompt IDs.
 - Improved the Prompt Inventory documentation with workflow-grouped prompt tables, styled collapsed prompt content, and a persistent right-sidebar outline collapse control.
 - Added a Prompt Inventory reference page that documents built-in prompts, collapsed full prompt content, runtime prompt builders, workflow usage, tool policies, and context inputs.
@@ -39,10 +40,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Expanded documentation across 7 core architecture guides to cover missing components: Data Access Layer, IO Utilities, Shared Layer, Modular Ticket Handlers, Structured Output Schemas, Advanced Workflow Mechanics, and Frontend coverage controls.
 - Added documentation for the Structured Interventions diagnostic subsystem (categories, stages, and UI behavior) in [output-normalization.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/output-normalization.md).
 - Added a performance warning cautioning WSL users against cloning repositories or running projects on Windows-mounted drives (like `/mnt/c/`) in [operations.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/operations.md).
-- Added `docs/pre-flight-setup.md` documentation page detailing the pre-flight checks doctor, capability probe, setup plan, and tool-cache environment setup.
-- Added `docs/verification-delivery.md` documentation page detailing final testing, file-effects auditing, integration, pull request publishing, and environment cleanup.
+- Added `docs/pre-implementation.md` documentation page detailing the pre-flight checks doctor, capability probe, setup plan, and tool-cache environment setup.
+- Added `docs/post-implementation.md` documentation page detailing final testing, file-effects auditing, integration, pull request publishing, and environment cleanup.
 - Added a persisted right-sidebar outline collapse toggle to the VitePress docs theme, mirroring the existing left sidebar collapse behavior for wide desktop docs pages.
 - Added `docs/prompts.md` as a Prompt Inventory reference page covering built-in prompts, collapsed full prompt content, runtime prompt builders, workflow statuses, session types, tool policies, context inputs, and maintenance guidance.
 - Added a high-level warning alerting users to run LoopTroop in a sandboxed environment/VM on the documentation landing page (`docs/index.md`).

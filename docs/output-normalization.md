@@ -624,6 +624,20 @@ Automatic structured retries are attempt history inside one phase run. They appe
 
 Invalid, failed, or timed-out outputs are diagnostic-only. The structured artifact body shows the outcome, model or stage, retry count, validation error, failure class, and short diagnostic excerpts; full malformed model text belongs in Raw attempt views and execution logs only.
 
+## 6. Structured Output Schemas
+
+The canonical definitions for all parsers and validators are defined as Zod schemas under `server/structuredOutput/*`:
+
+- `voteOutput.ts` — Normalizes council voting scorecards and tallies.
+- `completionOutput.ts` — Validates bead and step completion markers.
+- `prdOutput.ts` — Validates the PRD layout, epics, user stories, and acceptance criteria.
+- `interviewDocument.ts` — Validates Q&A phases and round logic.
+- `beadsOutput.ts` — Validates execution plans, tools, and constraints.
+- `refinementChanges.ts` — Validates proposed modification overlays during planning refine phases.
+- `interviewOutput.ts` — Validates interview answers and batch states.
+
+These modules define the boundary between raw text generation and durable backend state, powering the normalizations detailed above.
+
 ## Related Docs
 
 - [Prompt Inventory](prompts.md)
