@@ -264,7 +264,7 @@ When using `npm run dev`, port resolution and basic auth are handled automatical
 3. If OpenCode is on a non-default port, set `LOOPTROOP_OPENCODE_BASE_URL`, for example `export LOOPTROOP_OPENCODE_BASE_URL=http://127.0.0.1:4097`.
 4. If you started OpenCode outside of `npm run dev`, ensure `OPENCODE_SERVER_PASSWORD` and `OPENCODE_SERVER_USERNAME` match the values LoopTroop is using. A credential mismatch causes silently failed requests.
 
-## 12. Watcher and Filesystem Notes
+## 12. Watcher and WSL Performance Notes
 
 The backend watcher prefers native file watching on normal local filesystems. Under WSL, mounted-drive workspaces such as `/mnt/...` can be slower and may need polling. LoopTroop auto-enables chokidar polling for those mounted-drive workspaces.
 
@@ -273,6 +273,15 @@ If your environment still misses file changes, force polling for the run:
 ```bash
 CHOKIDAR_USEPOLLING=1 npm run dev
 ```
+
+### Windows-Mounted Drive Warning (WSL Users Only)
+
+If you run LoopTroop inside Windows Subsystem for Linux (WSL), ensure that both the LoopTroop installation directory and your attached target projects reside on the native Linux file system (e.g., under `/home/username/...` or another path in `\wsl$`).
+
+> [!WARNING]
+> **Avoid Windows-mounted drives (like `/mnt/c/...` or `/mnt/d/...`) in WSL.**
+>
+> Keeping the LoopTroop codebase or attached projects on Windows-mounted drives severely degrades disk I/O performance. This slows down Git operations, codebase scanning, and test execution. It also disables native file-watching, forcing a fallback to chokidar polling (`CHOKIDAR_USEPOLLING=1`). For optimal performance, always store your workspaces and repositories inside the Linux home directory.
 
 ## 13. Audit Warnings
 

@@ -40,7 +40,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Added
 - Added documentation for the Structured Interventions diagnostic subsystem (categories, stages, and UI behavior) in [output-normalization.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/output-normalization.md).
-- Added a performance warning cautioning WSL users against cloning repositories or running projects on Windows-mounted drives (like `/mnt/c/`) in [getting-started.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/getting-started.md).
+- Added a performance warning cautioning WSL users against cloning repositories or running projects on Windows-mounted drives (like `/mnt/c/`) in [operations.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/operations.md).
 - Added `docs/pre-flight-setup.md` documentation page detailing the pre-flight checks doctor, capability probe, setup plan, and tool-cache environment setup.
 - Added `docs/verification-delivery.md` documentation page detailing final testing, file-effects auditing, integration, pull request publishing, and environment cleanup.
 - Added a persisted right-sidebar outline collapse toggle to the VitePress docs theme, mirroring the existing left sidebar collapse behavior for wide desktop docs pages.
