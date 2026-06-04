@@ -1,67 +1,119 @@
 # Interview
 
 > [!IMPORTANT]
-> **TL;DR** — Before any code is planned, LoopTroop runs a council-drafted, adaptive interview that turns a vague ticket into concrete product and technical decisions. The approved interview artifact becomes the sole input for PRD generation — no chat history carries forward.
+> **TL;DR** — Before PRD drafting starts, LoopTroop runs a council-designed, adaptive interview that turns a vague ticket into an approved, structured requirements artifact. Downstream planning relies on that approved artifact as the authoritative record of user intent instead of carrying forward a raw chat transcript.
 
-The interview is LoopTroop's ambiguity-removal stage. A ticket usually starts as a compact user request, but implementation often depends on decisions that are not written down yet: expected behavior, target users, constraints, edge cases, UI preferences, integration details, test expectations, and explicit non-goals.
+The interview is LoopTroop's ambiguity-removal stage. A ticket often starts as a short request, but implementation usually depends on decisions that are still missing: expected behavior, target users, constraints, edge cases, integrations, testing expectations, explicit non-goals, and what should stay out of scope.
 
-LoopTroop handles those decisions before PRD drafting. The goal is not to create a long chat transcript. The goal is to produce a structured, reviewable interview artifact that later phases can trust without needing the full conversation history.
+LoopTroop resolves those decisions before specs drafting. The goal is not to preserve a long conversation. The goal is to produce a reviewable artifact that later phases can trust.
 
-For the exact state-by-state mechanics, see [Ticket Flow - Interview](/ticket-flow#interview).
+For the state-machine view, see [Ticket Flow - Interview](/ticket-flow#interview-loop).
 
-## 1. Why It Exists
+## 1. What The Interview Is For
 
-The interview prevents the coding pipeline from starting with vague intent. It turns a short ticket into concrete product and technical decisions while the cost of changing direction is still low.
+The interview exists to make intent durable before expensive planning begins.
 
-This stage is especially important because later phases deliberately use narrow context. PRD drafting does not need every previous model attempt or conversation turn; it needs the approved interview artifact. That keeps downstream prompts focused on user-reviewed requirements instead of polluted by abandoned drafts or earlier execution attempts.
+That matters because later phases intentionally use narrow, purpose-built context. LoopTroop does **not** want PRD drafting, beads planning, or execution to depend on every earlier conversational turn, abandoned model attempt, or half-formed idea. Instead, the approved interview becomes the planning baseline, and later phases only add extra context where the workflow explicitly requires it, such as ticket details, relevant-file scans, or AI-filled answers for skipped questions.
 
-## 2. Council Drafting
+## 2. Lifecycle At A Glance
 
-Interview planning starts with the LLM council. Each council member receives the ticket details and relevant-file scan, then independently drafts a candidate set of interview questions.
+The interview phase has four distinct steps:
 
-The drafts follow a three-part structure:
+1. **Council drafting and voting** create the initial question plan.
+2. **Interactive answering** presents adaptive batches of questions to the user.
+3. **Coverage review** checks whether anything important is still missing and may generate targeted follow-ups.
+4. **Approval** freezes the reviewed interview artifact before PRD drafting begins.
 
-- Foundation: problem, target users, core value, constraints, non-goals, and anything out of scope.
-- Structure: complete feature inventory, major user flows, priorities, and dependencies between expected behaviors.
-- Assembly: feature-level behavior, edge cases, acceptance criteria, test intent, implementation constraints, and integration details.
+That means the interview is not a single prompt. It is a small workflow with its own drafting, user-input, coverage, and approval loop.
 
-The council votes on anonymized drafts using a structured rubric. The winning model then refines the selected draft, optionally incorporating stronger questions from losing drafts while preserving the winning structure. The result is compiled into the canonical interview session that the UI can render.
+## 3. How Questions Are Designed
 
-## 3. Adaptive Question Batches
+Interview planning starts with the LLM council. Each council member receives the ticket details and relevant-file scan, then independently drafts a candidate question set.
 
-The user does not receive one large wall of questions. LoopTroop presents batches of 1 to 3 questions at a time.
+The drafted questions follow a three-part structure:
 
-Batch size is chosen dynamically:
+- **Foundation**: problem framing, goals, constraints, target users, non-goals, and scope boundaries.
+- **Structure**: feature inventory, major workflows, priorities, sequencing, and dependencies between behaviors.
+- **Assembly**: feature-level behavior, edge cases, acceptance criteria, tests, implementation constraints, and integration details.
 
-- 1 question for complex, high-priority, or open-ended topics that need focused attention.
-- 2 questions for moderately related topics or when previous answers were brief or unclear.
-- 3 questions only for simple, factual, tightly related questions.
+The council then votes on anonymized drafts using a structured rubric. The winning model refines the selected draft and produces the canonical compiled interview session used by the UI.
 
-After each submitted batch, LoopTroop reviews the answers and adjusts only the remaining questions when needed. It can reorder, rephrase, merge, or lightly split compiled questions to make the next batch coherent. If an earlier answer fully resolves a later question, that later question can be marked as accounted for instead of asked redundantly.
+Each question keeps stable metadata, including:
 
-The progress count is therefore an estimate. The current batch number is stable, but the total number of planned batches may change as answers make later questions unnecessary or reveal a targeted follow-up.
+- `id`
+- `phase`
+- `source`
+- `follow_up_round`
+- `answer_type`
+- `options` for choice questions
+- answer state and timestamps
 
-## 4. Question Types
+Stable question IDs matter because later artifacts can trace requirements back to the exact interview question that produced them.
 
-Interview questions can be free text, yes/no, single choice, or multiple choice. The prompt prefers structured question types when the answer space can be reasonably enumerated, because structured answers are easier to carry into PRD generation and later verification.
+## 4. Question Types And Sources
 
-Choice questions still allow additional free-text notes. This means a user can select the closest option and add nuance when the options do not tell the full story.
+Questions can be:
 
-Every question keeps an ID, phase, source, follow-up round, answer type, options when applicable, and answer state. Preserving IDs matters because later artifacts can trace requirements back to the exact interview question that produced them.
+- `free_text`
+- `single_choice`
+- `multiple_choice`
 
-## 5. Skipping Questions
+Choice questions still support additional free-text notes, so the user can select the closest option and add nuance when needed.
 
-Skipping is allowed and explicit. A skipped question is not silently removed, and it is not treated as if the user answered it.
+Question sources are also explicit:
 
-Skipped questions remain in the interview artifact with `answer.skipped: true`. During PRD drafting, each council member may fill those skipped answers in its own Full Answers artifact before producing a PRD draft. Those AI-filled answers are marked `answered_by: ai_skip`, so they stay distinguishable from user-provided answers.
+| Source | Meaning |
+| --- | --- |
+| `compiled` | Part of the original council-approved interview plan |
+| `prompt_follow_up` | A follow-up added while adapting the next batch after earlier answers; the UI labels these as **PROM4 Follow-ups** |
+| `coverage_follow_up` | A follow-up generated later by the coverage pass because important gaps remained |
+| `final_free_form` | The last catch-all question for anything else the user wants recorded |
 
-If the user chooses "skip all" for the remaining interview, LoopTroop marks the unanswered questions as skipped and advances directly to interview approval. It writes a synthetic clean coverage record for audit continuity, because the user explicitly chose to bypass the remaining coverage loop.
+This distinction is important because not all follow-ups mean the same thing. Some are local batch adaptation, while others are explicit coverage-driven gap checks.
 
-## 6. Follow-Ups And Coverage
+## 5. Live Interview Session Behavior
 
-After the compiled interview has been answered, skipped, or rendered redundant, LoopTroop asks one final free-form question for anything else the user wants captured before PRD generation.
+The interview UI is backed by a **live session snapshot** as well as the final `interview.yaml` artifact.
 
-Then the winning interview model runs coverage. Coverage checks for:
+During answering, LoopTroop persists:
+
+- the current batch
+- the full question list
+- recorded answers
+- skip state
+- follow-up rounds
+- batch history
+- completion timestamps
+
+This is what lets the UI show answered/skipped history, restore in-progress state, and continue the same interview across batches.
+
+Questions are presented in adaptive batches of **1 to 3**:
+
+- **1** for complex or high-priority questions
+- **2** for moderately related questions
+- **3** only for simple, tightly related questions
+
+While a batch is open:
+
+- answers can be filled in any order
+- choice selections and free-text notes are tracked locally before submit
+- already answered or skipped questions remain visible in grouped history
+- previously recorded answers can still be edited while the ticket is in `WAITING_INTERVIEW_ANSWERS`
+- skipped questions can be unskipped and answered later
+
+After submit, LoopTroop persists the batch into the session snapshot, updates the canonical interview state, and either prepares the next batch or advances to coverage.
+
+The progress counter is an estimate, not a hard promise. The current batch number is real, but the total can change because later questions may become unnecessary, be merged, be lightly split, or be replaced by targeted follow-ups.
+
+## 6. Skips, Final Free-Form, And Coverage
+
+Skipping is explicit and durable. A skipped question is not silently deleted and is not treated as answered.
+
+In the final interview artifact, skipped answers remain present with `answer.skipped: true`. Later, during PRD drafting, each council model may fill those skipped answers in its own Full Answers artifact. Those AI-filled answers are marked with `answered_by: ai_skip`, so they remain distinguishable from user-provided answers.
+
+Once the compiled interview has been answered, skipped, or made redundant, LoopTroop asks one final free-form question for anything else the user wants captured before specs drafting.
+
+After that, the winning interview model runs coverage. Coverage checks for:
 
 - unresolved ambiguity
 - missing constraints
@@ -70,27 +122,78 @@ Then the winning interview model runs coverage. Coverage checks for:
 - inconsistent answers
 - gaps that would force PRD drafting to guess
 
-If coverage finds real gaps and the follow-up budget allows it, LoopTroop generates targeted follow-up questions and returns to the same answer state with a new batch. These follow-ups use coverage-specific IDs and are generated only for unresolved information that matters.
+If real gaps remain and the follow-up budget allows it, coverage generates targeted follow-up questions and sends the ticket back to `WAITING_INTERVIEW_ANSWERS`.
 
-If coverage is clean, or the configured follow-up budget is exhausted, the interview advances to approval. Remaining gaps are preserved for review instead of hidden.
+If coverage is clean, the interview moves to approval.
 
-## 7. Interview Artifact Structure
+If the follow-up budget is exhausted, the interview still moves to approval, but the remaining gaps stay visible in the resulting artifacts instead of being hidden.
 
-The final interview artifact is structured YAML, not a transcript. It includes:
+If the user chooses **skip all**, LoopTroop:
 
-- `schema_version`, `ticket_id`, `artifact`, and `status`
-- `generated_by` metadata for the winning model and server canonicalization
-- `questions` with IDs, phases, prompts, sources, follow-up rounds, answer types, options, and answers
-- `follow_up_rounds` showing which questions came from prompt adaptation or coverage
-- `summary` fields for goals, constraints, non-goals, and the final free-form answer
-- `approval` metadata once the user approves the interview
+1. preserves anything already answered
+2. marks every remaining unanswered question as skipped
+3. advances directly to interview approval
+4. writes a **synthetic clean coverage record** for audit continuity
 
-Question sources can distinguish compiled questions, prompt follow-ups, coverage follow-ups, and the final free-form question. The session snapshot also tracks current batch state, batch history, answered/skipped/pending state, and completion time.
+That is intentionally different from real coverage. It is an explicit user bypass.
 
-## 8. Approval And Downstream Use
+## 7. What Gets Stored
 
-The interview pauses at approval before PRD generation starts. The user can review the structured or raw artifact, edit it if needed, and approve only the version they actually reviewed. Approval includes a content hash so stale browser tabs cannot approve a replaced artifact.
+The final interview artifact is structured YAML, not a transcript. Its core fields are:
 
-Once approved, the interview becomes the authoritative source for PRD drafting. The PRD phase uses it to create Full Answers artifacts, draft competing PRDs, and later check PRD coverage. Beads, implementation, and final verification are downstream of that PRD, so the interview is the first major place where user intent is made durable.
+| Field | Purpose |
+| --- | --- |
+| `schema_version` | Artifact schema version |
+| `ticket_id` | External ticket reference |
+| `artifact` | Always `interview` |
+| `status` | `draft` or `approved` |
+| `generated_by` | Winning model, generation timestamp, and canonicalization metadata |
+| `questions` | Canonical question list with per-question metadata and answers |
+| `follow_up_rounds` | Round-by-round follow-up history with source and question IDs |
+| `summary` | Goals, constraints, non-goals, and final free-form answer |
+| `approval` | Human approval metadata |
 
-Post-approval interview edits are allowed only before pre-flight. Saving one archives the current approved interview and affected downstream PRD/beads planning attempts, then restarts PRD drafting from the edited interview.
+Each question answer stores:
+
+- `skipped`
+- `selected_option_ids`
+- `free_text`
+- `answered_by` (`user` or `ai_skip`)
+- `answered_at`
+
+In practice, this gives LoopTroop two complementary records:
+
+1. a **live session snapshot** for the interactive Q&A workflow
+2. a **canonical interview artifact** for review, approval, and downstream planning
+
+## 8. Approval, Editing, And Downstream Impact
+
+Approval is a real gate. PRD drafting does not start until the interview is approved.
+
+At the approval step, the user can review the artifact in:
+
+- a structured question-and-answer view
+- a raw YAML editor
+
+Approval includes the SHA-256 hash of the exact raw content the user reviewed. If the stored artifact changes before approval lands, the server rejects the request with a stale-content `409` instead of approving a different version by mistake.
+
+Editing rules are intentionally strict:
+
+- **At `WAITING_INTERVIEW_APPROVAL`**: saving edits rewrites the interview into canonical form and clears approval state, so the updated artifact must be reviewed and approved again.
+- **After approval but still before `PRE_FLIGHT_CHECK`**: interview edits are still allowed, but saving them archives the current approved interview and any downstream PRD/beads planning attempts, invalidates stale downstream planning artifacts, saves the edited interview as the new approved version, and restarts PRD drafting from that edited baseline.
+- **At `PRE_FLIGHT_CHECK` or later**: interview edits are rejected, because execution planning is already being locked for implementation.
+
+This behavior is why the interview is more than a form. It is the first durable planning contract in the pipeline.
+
+## 9. How Later Phases Use It
+
+Once approved, the interview becomes the authoritative planning artifact for the rest of the pre-implementation workflow.
+
+The PRD phase uses it to:
+
+- generate per-model Full Answers artifacts
+- distinguish real user answers from AI-filled skipped answers
+- draft competing PRDs
+- verify PRD coverage against the approved interview baseline
+
+Beads planning, execution setup, coding, final testing, and pull-request generation all sit downstream of that PRD. So although the interview happens early, it is the point where vague intent becomes durable, reviewable planning input for everything that follows.

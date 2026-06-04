@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Refined the Interview docs so they now match the implemented lifecycle more closely, including live session behavior, follow-up source types, approval/edit semantics, and the exact interview artifact structure.
 - Refined the Ticket Flow docs to match the implemented lifecycle more closely, including workflow-wide cancellation, setup-plan rewinds, versioned retries/history, OpenCode runtime questions, and final-test recovery decisions.
 - Tightened docs-to-code coverage by correcting stale frontend behavior notes and documenting project-level configuration overrides plus startup shell surfaces.
 - Added documentation for the worktree changes classification system, coverage control loop, execution band concurrency lock, IO utilities (atomic write/append/JSONL/recovery), startup state system, and session continuation eligibility logic across the architecture docs.
@@ -72,6 +73,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Rewrote `docs/interview.md` to align it with the implemented interview flow: clarified that the approved interview is the authoritative planning baseline rather than the only downstream input, documented the live session snapshot versus the final `interview.yaml` artifact, explained `compiled` vs prompt-follow-up vs coverage-follow-up vs final free-form question sources, added missing details about answer history/editing and skip-all behavior, and tightened the approval/edit-restart semantics around content-hash approval and post-approval planning invalidation.
 - Refined `docs/ticket-flow.md` so its high-level action/recovery guidance now matches the code: cancellation is documented as available from every non-terminal state, setup-plan edits/regenerations during runtime setup now explain the rewind-to-approval behavior, non-implementation retries/regenerations are described as archived phase-attempt history, execution-time OpenCode questions are called out explicitly, and the final-test file-effects decision path is documented in the status and recovery sections.
 - Corrected stale frontend documentation to match the current implementation: removed the old Zustand claim, fixed the documented keyboard shortcuts, clarified that `AIQuestionProvider` handles OpenCode human-input requests rather than interview batches, and documented startup overlays plus project-level configuration overrides in the configuration and API guides.
 - Enhanced SSE event type documentation in the API reference with a table covering all 7 event types, their trigger conditions, key payload fields, and payload examples for `progress`, `bead_complete`, `log`, `app_error`, and `needs_input`.
