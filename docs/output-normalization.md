@@ -9,6 +9,12 @@ Repairs produce `repairWarnings` that are stored on the run record and surfaced 
 
 If output remains invalid after the bounded repair and retry path, LoopTroop treats the malformed text as diagnostics only. It is kept in raw attempt views and execution logs, but it is not rendered as structured artifact body content.
 
+Normalization is intentionally conservative:
+
+- **Parser repairs** fix syntax, wrappers, and transport noise so LoopTroop can read what the model already emitted.
+- **Cleanup normalizations** may fill or restore values only when the source is deterministic, such as runtime context, canonical interview metadata, or arithmetic totals.
+- **Anything else fails validation** and stays diagnostic-only rather than being guessed into a saved artifact.
+
 ## 1. Retry Classes
 
 LoopTroop uses four distinct retry classes. The names matter because they describe different session and artifact behavior:
@@ -179,7 +185,7 @@ questions:
 
 **Warning:** *Stripped XML-style tags `<tag>` from the payload before parsing.* (Lists the specific tags that were removed.)
 
-#### 8. Free-text scalar repair
+#### 9. Free-text scalar repair
 
 **Trigger:** A `free_text:` field has fragile YAML scalar formatting. Common cases include unquoted one-line values, malformed block scalars whose body starts at the same indentation as `free_text: >-`, and plain multi-line values that spill onto following indented lines. Such values are always strings in LoopTroop's schema but can start with backticks, look like booleans, contain `: `, or otherwise be misread as structure.
 
@@ -187,19 +193,19 @@ questions:
 
 **Warning:** *Repaired YAML free_text scalar formatting before parsing.*
 
-#### 9. Missing list-dash space
+#### 10. Missing list-dash space
 
 **Trigger:** A list item starts with `-` immediately followed by a key letter: `-key: value` instead of `- key: value`.
 
 **Repair:** A space is inserted after the dash.
 
-#### 10. Duplicate key removal
+#### 11. Duplicate key removal
 
 **Trigger:** The same mapping key appears more than once with exactly the same line text (key + value).
 
 **Repair:** The exact duplicate is dropped. If the duplicate opens a nested block (e.g. a second `options:` with the same list), the entire duplicate block is skipped. Ambiguous duplicates with *different* values are left for js-yaml to report as an error.
 
-#### 11. Invalid double-quoted escape repair
+#### 12. Invalid double-quoted escape repair
 
 **Trigger:** A double-quoted YAML scalar contains a backslash sequence that is not valid in YAML (e.g. `\+`, `\p`, `\s` from regex-like text). YAML only permits a specific set of escape sequences (`\n`, `\t`, `\\`, `\"`, `\uXXXX`, etc.).
 
@@ -207,7 +213,7 @@ questions:
 
 **Warning:** *Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.*
 
-#### 12. Inner double-quote scalar repair
+#### 13. Inner double-quote scalar repair
 
 **Trigger:** A one-line double-quoted scalar contains unescaped inner quotes, usually in code-like prose such as `free_text: "Errors include origin: "date" metadata."`.
 
@@ -215,7 +221,7 @@ questions:
 
 **Warning:** *Repaired improperly quoted YAML scalar value.*
 
-#### 13. Unclosed double-quote repair
+#### 14. Unclosed double-quote repair
 
 **Trigger:** A `key: "value` mapping line or a `- "value` list item has an opening `"` with no matching closing `"`, and the next non-blank line is clearly a new YAML structural element (list item, sibling key, code fence, document marker `---`, or end of file).
 
@@ -223,7 +229,7 @@ questions:
 
 **Warning:** *Fixed unbalanced YAML quote before reparsing.*
 
-#### 14. Quoted scalar fragment repair
+#### 15. Quoted scalar fragment repair
 
 Two sub-cases:
 
@@ -237,13 +243,13 @@ Two sub-cases:
 
 **Warning:** *Repaired improperly quoted YAML scalar value.*
 
-#### 15. Type-union scalar repair
+#### 16. Type-union scalar repair
 
 **Trigger:** Schema-like values such as `type: "epic" | "user_story"` or `- "unit" | "integration"`. YAML interprets the `|` as a block-scalar indicator after a quoted token.
 
 **Repair:** The entire scalar is wrapped in double quotes.
 
-#### 16. Reserved indicator scalar repair
+#### 17. Reserved indicator scalar repair
 
 **Trigger:** Plain scalars starting with `` ` `` (backtick) or `@`. YAML reserves these characters and rejects plain scalars that begin with them.
 
@@ -260,13 +266,13 @@ question: "`repo_git_mutex` behavior?"
 
 **Warning:** *Quoted plain YAML scalars that began with reserved indicator characters (`` ` `` or `@`) before reparsing.*
 
-#### 17. Sequence entry indent drift repair
+#### 18. Sequence entry indent drift repair
 
 **Trigger:** After a block scalar (`>-`, `|`), subsequent sibling list items drift by 1–3 spaces relative to the first item in the sequence.
 
 **Repair:** All sibling dashes are normalized to the indent of the first `- ` in each sequence level.
 
-#### 18. Indentation repair
+#### 19. Indentation repair
 
 **Trigger:** Property lines inside a list item are indented by the wrong amount (off by 1–2 spaces relative to `dash_indent + 2`).
 
@@ -353,11 +359,17 @@ Every field accepts multiple spelling variants. Common examples:
 
 After the universal repairs succeed, each artifact type applies additional semantic normalizations.
 
-### Interview Artifact
+### Interview Question-List and Interview Document Artifacts
+
+This section covers three closely related shapes that share normalization rules:
+
+- interview batch / question-list outputs produced during live questioning,
+- interview refinement question lists used by council refine phases,
+- the final durable `interview.yaml` document.
 
 **Question ID normalization**
 
-Any numeric or prefixed ID is normalized to the `Q##` format (zero-padded to 2 digits):
+Question-list artifacts normalize numeric or loosely prefixed IDs to the `Q##` format (zero-padded to 2 digits):
 
 | Raw | Normalized |
 | --- | --- |
@@ -367,11 +379,15 @@ Any numeric or prefixed ID is normalized to the `Q##` format (zero-padded to 2 d
 | `Q01` | `Q01` (unchanged) |
 | `Q15` | `Q15` (unchanged) |
 
+The final durable interview document does **not** renumber every valid ID into `Q##`, but exact duplicate IDs are still repaired to the next available `Q##` value so the saved artifact stays unambiguous.
+
 **Duplicate question ID renumbering**
 
-If two questions share the same normalized ID, the duplicate is assigned the next integer above the current maximum ID in the batch.
+If two question-list entries share the same normalized ID, the duplicate is assigned the next integer above the current maximum ID in the batch.
 
-**Warning:** *Renumbered duplicate question id Q01 at index 3 to Q05.*
+**Warning examples:**
+- *Renumbered duplicate question id Q01 at index 3 to Q05.* (question-list artifacts)
+- *Renumbered duplicate question id "Q01" to "Q05".* (durable interview document)
 
 **Malformed structured question collections**
 
@@ -379,11 +395,22 @@ When a response contains a structured `questions` collection, every entry in tha
 
 **Phase normalization**
 
-The `phase` field is accepted case-insensitively. Valid values: `foundation`, `structure`, `assembly`.
+The `phase` field is accepted case-insensitively.
+
+- Question-list artifacts normalize phases to `foundation`, `structure`, `assembly`.
+- Interview batch payloads surface the display labels `Foundation`, `Structure`, `Assembly`.
 
 **Question reordering**
 
 Questions are sorted by phase (foundation → structure → assembly), preserving relative order within each phase. This matches the expected interview structure regardless of the order the model emitted them.
+
+**Interview document identity cleanup**
+
+The durable `interview.yaml` artifact also applies a few root-level canonicalizations:
+
+- Missing `ticket_id` is filled from runtime context.
+- A non-canonical root `artifact` value is normalized to `interview`.
+- Status values are reduced to `draft` or `approved`; any other emitted value is normalized to `draft` and logged.
 
 **Coverage gap string list quoting**
 
@@ -424,7 +451,7 @@ This recovery is intentionally not shared by PRD, beads, or generic YAML parsers
 
 **Status normalization**
 
-Accepted values for `status`: `draft`, `approved`. Any unrecognized value is silently normalized to `draft`.
+Accepted values for `status`: `draft`, `approved`. Any unrecognized value is normalized to `draft` and recorded as a repair warning.
 
 **Warning:** *Normalized unsupported PRD status "pending" to draft.*
 
@@ -514,6 +541,18 @@ A bead with no PRD references is valid but unusual.
 
 ---
 
+### Expanded Beads JSONL Artifact
+
+The Part 2 expanded bead list (`normalizeBeadsJsonlOutput`) is stricter than the council blueprint subset, but it still performs a few compatibility repairs:
+
+- **Legacy status normalization** — `completed` and `skipped` become `done`; `failed` becomes `error`.
+- **Legacy dependency array handling** — a flat dependency list is treated as `blocked_by`.
+- **Notes array normalization** — `notes` may be emitted as a string array and is collapsed into a newline-joined string.
+
+Unlike the council blueprint normalizer, duplicate bead IDs or unknown/self dependencies fail validation here instead of being silently reshaped.
+
+---
+
 ### Bead Completion Marker Artifact
 
 The completion marker is extracted from a `<BEAD_STATUS>…</BEAD_STATUS>` XML envelope.
@@ -522,6 +561,7 @@ The completion marker is extracted from a `<BEAD_STATUS>…</BEAD_STATUS>` XML e
 
 | Raw value | Normalized |
 | --- | --- |
+| `done` | `done` |
 | `completed`, `complete`, `success`, `succeeded` | `done` |
 | `failed`, `fail`, `error` | `error` |
 
@@ -546,6 +586,122 @@ Any other string value is kept as-is (lowercased).
 | `lint` | `linter` |
 | `typecheck` | `type_check`, `type-check`, `typechecks`, `typescript` |
 | `qualitative` | `quality`, `qualitativereview`, `qualitative_review`, `review` |
+
+---
+
+### Vote Scorecard Artifact
+
+Vote scorecards accept wrapper keys such as `draft_scores`, `scores`, or `scorecard`, then normalize the per-draft score map.
+
+**Draft label normalization**
+
+Draft labels like `draft1`, `Draft 01`, or `draft 2` are normalized to the canonical `Draft N` form before validation.
+
+**Wrapper indentation repair**
+
+Models sometimes emit a wrapper key correctly but indent the draft scorecards or rubric rows one level too shallow beneath it. LoopTroop repairs that indentation before parsing.
+
+**Warning:** *Normalized vote scorecard indentation under the wrapper key.*
+
+**`total_score` recovery**
+
+- Missing `total_score` is filled from the rubric dimension totals.
+- Incorrect `total_score` is recomputed from the rubric dimension totals.
+
+**Warning examples:**
+- *Filled missing total_score for Draft 2 from rubric category totals.*
+- *Recomputed total_score for Draft 1: expected 54, received 57.*
+
+---
+
+### Relevant Files Artifact
+
+Relevant-files output prefers a `<RELEVANT_FILES_RESULT>…</RELEVANT_FILES_RESULT>` envelope, but the normalizer also accepts plain YAML/JSON payloads and wrapper keys such as `relevant_files_result`, `relevant_files`, `payload`, `result`, `output`, `data`, or `artifact`.
+
+**Incomplete trailing file-entry recovery**
+
+If the last `files:` entry is truncated and breaks YAML parsing, LoopTroop drops only that incomplete final entry and retries parsing the remainder.
+
+**Warning:** *Truncated incomplete last file entry to recover from malformed YAML.*
+
+**List entry and field defaults**
+
+- `file_count` is always canonicalized to the actual saved list length.
+- Missing `relevance` defaults to `medium`.
+- Missing `likely_action` defaults to `read`.
+- Missing `content_preview` falls back to the emitted `content`.
+
+---
+
+### Final Test Command Artifact
+
+Final test command plans use a `<FINAL_TEST_COMMANDS>…</FINAL_TEST_COMMANDS>` envelope and may be wrapped in keys such as `final_test_commands`, `command_plan`, `plan`, `result`, `output`, or `data`.
+
+**Array coercions**
+
+- A single string `commands` value is coerced into a one-item array.
+- String `test_files` and `modified_files` values are likewise coerced into arrays.
+- `modified_files` falls back to the deduped `test_files` list when omitted.
+
+**Warning examples:**
+- *Coerced commands from string to array*
+- *Coerced test_files from string to array*
+- *Coerced modified_files from string to array*
+
+**File effect normalization**
+
+`file_effects` entries may be emitted as either bare paths or objects. Bare paths are treated as `{ path, intent: "candidate" }`. Object intents are normalized into three canonical buckets:
+
+| Raw intent | Normalized |
+| --- | --- |
+| `candidate`, `include`, `commit`, `keep`, `permanent` | `candidate` |
+| `temporary`, `temp`, `scratch`, `artifact`, `generated`, `exclude` | `temporary` |
+| `unexpected`, `unknown`, `unintended`, `accidental` | `unexpected` |
+
+---
+
+### Execution Setup Plan and Result Artifacts
+
+Execution setup artifacts use explicit XML envelopes:
+
+- `<EXECUTION_SETUP_PLAN>…</EXECUTION_SETUP_PLAN>`
+- `<EXECUTION_SETUP_RESULT>…</EXECUTION_SETUP_RESULT>`
+
+The plan normalizer accepts wrapper keys such as `execution_setup_plan`, `plan`, `data`, and `result`. The result normalizer accepts `execution_setup_result`, `result`, `output`, and `data`.
+
+**Status normalization**
+
+- Execution setup plan status accepts `draft`, `planned`, `plan`, `review` and normalizes to `draft`.
+- Execution setup result/profile status accepts `ready`, `ok`, `complete`, `completed`, `success`, `succeeded` and normalizes to `ready`.
+- Readiness status accepts `ready`, `partial`, and `missing` plus close aliases such as `needsSetup`, `incomplete`, `notReady`, and `uninitialized`.
+
+**Path normalization**
+
+`temp_roots` and reusable artifact paths are normalized to forward-slash form and drop a leading `./`, so path comparisons stay stable across providers and host shells.
+
+**Missing setup-step field fill**
+
+Execution setup plan steps may safely inherit a few values from local context:
+
+- missing `id` → `setup-step-{ordinal}`
+- missing `title` → copied from `purpose`
+- missing `rationale` → copied from `purpose`
+
+**Warning examples:**
+- *Filled missing execution setup plan step id at index 0 from list position.*
+- *Filled missing execution setup plan step title at index 0 from existing purpose text.*
+- *Filled missing execution setup plan step rationale at index 0 from existing purpose text.*
+
+**Tool requirement status normalization**
+
+Within execution setup profiles, tool requirements normalize these status buckets:
+
+| Raw value | Normalized |
+| --- | --- |
+| `available` | `available` |
+| `provisioned`, `prepared` | `provisioned` |
+| `failed`, `fail`, `error` | `failed` |
+| `notProvisionable`, `notPossible`, `noSafePath`, `unsupported` | `not_provisionable` |
 
 ---
 
@@ -618,11 +774,20 @@ A `repairApplied: true` flag is set on any result where at least one repair warn
 
 Repairs never silently drop required fields — if a required field cannot be recovered after all repairs, the parse fails and the run may be retried with a structured retry prompt that explains the specific validation error, up to the locked `Structured Output Retries` count.
 
-Structured retry loops store `rawAttempts` next to the artifact/report detail when model text is available. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class; future attempts may also store `initialInput` on the first attempt to preserve the first prompt dispatched to that model run. This covers council drafts/votes, PRD/interview/beads refinement, relevant-files scan, coverage audit/revision, execution setup plan/runtime, final-test generation, and PR draft generation. If a failure occurs before model text exists, the attempt is diagnostic-only with the error/failure class and no invented raw response. Artifact viewers show retry intervention notices on the primary artifact tab, while Raw/Diff tabs focus on diagnostic payload inspection. Duplicate Raw variants are collapsed by rendered payload, with per-attempt retry tabs preferred over generic model/raw-output shortcuts and validated council draft/vote selectors labeled with the accepted attempt number when known; `Initial Prompt` remains a distinct selector and is not inferred from legacy logs. Attempt output variants stay in numeric order after dedupe, so retry histories read from attempt 1 through the latest configured attempt; log-derived rejected retry shortcuts use their inferred attempt number when explicit `rawAttempts` are unavailable. Single-model Raw views omit the aggregate selector, group attempts under a passive model/mode source label, and no longer expose a separate stored artifact JSON shortcut. The aggregate `All Models` selector remains for true multi-source views, including legacy rows where only the aggregate artifact has raw payloads. Draft raw-log fallback is only used while viewing draft-producing phases; voting-phase winner artifacts do not borrow vote scorecard logs when a stored draft raw response is missing. Once a draft is reused by voting or refinement, its Raw view shows only the validated/canonical draft body because that is the content later phases consume.
+Structured retry loops store `rawAttempts` next to the artifact/report detail when model text is available. Each attempt records the attempt number, stage, outcome (`rejected` or `accepted`), raw response, and any validation error or failure class. If a failure happens before any model text exists, the attempt is still recorded diagnostically but without invented output text.
 
-Automatic structured retries are attempt history inside one phase run. They appear as Raw variants on the artifact and do not create a new canonical artifact version. User-triggered Retry from `BLOCKED_ERROR` is different: for every non-implementation status, LoopTroop archives the failed active phase attempt and creates a fresh active attempt before rerunning, so prior rerun artifacts/logs are inspected through the previous-version selector. `CODING` remains bead-scoped and uses its reset/retry history instead of phase versions.
+This currently covers council drafts and votes, PRD/interview/beads refinement, relevant-files scans, coverage audit/revision, execution setup plan/runtime, final-test generation, and PR draft generation.
 
-Invalid, failed, or timed-out outputs are diagnostic-only. The structured artifact body shows the outcome, model or stage, retry count, validation error, failure class, and short diagnostic excerpts; full malformed model text belongs in Raw attempt views and execution logs only.
+The UI then presents that retry history conservatively:
+
+- Raw/Diff tabs focus on attempt inspection, not on pretending rejected output became canonical.
+- Duplicate Raw variants are collapsed by rendered payload, while attempt numbering stays stable and ordered.
+- Single-model Raw views group attempts under the model/mode label; aggregate selectors only appear for genuinely multi-source views.
+- When a draft is later reused by voting or refinement, its Raw view falls back to the validated canonical body because that is the only content downstream phases consume.
+
+Automatic structured retries are still **one phase run**. They create attempt history inside the artifact, not a new canonical artifact version. User-triggered Retry from `BLOCKED_ERROR` is different: for every non-implementation status, LoopTroop archives the failed active phase attempt and creates a fresh active attempt before rerunning, so earlier reruns are inspected through the previous-version selector. `CODING` remains bead-scoped and uses bead reset/retry history instead of phase versions.
+
+Invalid, failed, or timed-out outputs stay diagnostic-only. The structured artifact body shows the failure context and short excerpts, while the full malformed model text lives only in Raw attempt views and execution logs.
 
 ## 6. UI Artifact Companions
 
@@ -654,13 +819,13 @@ Companions are generated when the council phase produces its primary artifact. T
 
 The canonical definitions for all parsers and validators are defined as Zod schemas under `server/structuredOutput/*`:
 
-- `voteOutput.ts` — Normalizes council voting scorecards and tallies.
-- `completionOutput.ts` — Validates bead and step completion markers.
+- `voteOutput.ts` — Validates council voting scorecards.
+- `completionOutput.ts` — Validates bead completion markers, final-test command plans, and execution setup plan/result payloads.
 - `prdOutput.ts` — Validates the PRD layout, epics, user stories, and acceptance criteria.
-- `interviewDocument.ts` — Validates Q&A phases and round logic.
-- `beadsOutput.ts` — Validates execution plans, tools, and constraints.
+- `interviewDocument.ts` — Validates durable interview documents and Full Answers overlays.
+- `beadsOutput.ts` — Validates bead blueprints, expanded beads JSONL, relevant-files payloads, and bead refinement outputs.
 - `refinementChanges.ts` — Validates proposed modification overlays during planning refine phases.
-- `interviewOutput.ts` — Validates interview answers and batch states.
+- `interviewOutput.ts` — Validates interview batches, coverage results, and interview refinement outputs.
 
 These modules define the boundary between raw text generation and durable backend state, powering the normalizations detailed above.
 
