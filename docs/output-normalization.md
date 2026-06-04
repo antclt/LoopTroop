@@ -573,7 +573,44 @@ Entries where `inspiration` is present but cannot be resolved are recorded with 
 
 ---
 
-## 4. Diagnostics and Observability
+## 4. Structured Interventions
+
+LoopTroop automatically translates low-level parser warnings, schema repairs, and normalization adjustments into rich **Structured Interventions**. Rather than silently modifying generated data or failing with obscure syntax errors, the pipeline captures every correction and exposes it as a human-readable diagnostic in the UI.
+
+Structured Interventions are stored alongside the validated artifact metadata and displayed on the primary artifact tabs.
+
+### 4.1 Intervention Categories
+
+Interventions are classified into six categories, determining their purpose and how they are presented:
+
+| Category | Meaning | Example Rule / Action |
+| --- | --- | --- |
+| `parser_fix` | Syntax adjustments required to parse raw YAML/JSON | Stripping terminal noise, balancing quotes, unwrapping code fences |
+| `cleanup` | Schema-level normalizations to standardize values | Renumbering duplicate IDs, setting defaults, normalizing status casing |
+| `synthesized` | Reconstructing omitted elements from adjacent context | Inferring missing fields, synthesizing undeclared refinement changes |
+| `dropped` | Pruning invalid or incompatible elements | Removing malformed refinement entries, dropping no-op changes |
+| `attribution` | Correcting or clearing source draft references | Resolving or clearing out-of-range inspiration IDs |
+| `retry` | Recording automatic validation-prompt attempts | Retrying structured requests after validation failures |
+
+### 4.2 Intervention Stages
+
+The system tracks which stage in the parsing lifecycle triggered the intervention:
+
+- **`parse`** — Applied before or during the raw parse attempt (e.g., prefix stripping, ANSI code trimming).
+- **`normalize`** — Applied during key-value normalization and type alignment (e.g., zero-padding question IDs to `Q##`).
+- **`semantic_validation`** — Applied when comparing contents against external reference sources or schemas (e.g., verifying expanded beads against a refined blueprint).
+- **`retry`** — Applied when a structured request is repeated following validation failure.
+
+### 4.3 UI and Interactive Details
+
+In the UI, interventions are represented as compact badges on the primary artifact review screens:
+- **Amber Indicators:** Surfacer notices appear on the main tab to alert the user that repairs were applied.
+- **Detailed Breakdowns:** Expanding an intervention notice exposes its technical details, including the specific **rule** applied, the **exact correction** performed, target fields or keys, and **before/after examples** showing exactly how the raw model output was repaired.
+- **Vote scorecard consolidation:** Voting scorecard repairs are consolidated into a single collapsed notification per voter to keep the results screen clean.
+
+---
+
+## 5. Diagnostics and Observability
 
 Every repair produces one or more entries in `repairWarnings`. These are stored on the run record and shown in the **Diagnostics** panel (see [Diagnostics](diagnostics.md)).
 

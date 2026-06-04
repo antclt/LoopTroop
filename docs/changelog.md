@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Documented the Structured Interventions subsystem and added a performance warning for Windows-mounted drives inside WSL.
 - Added two new documentation pages for Pre-Implementation (Pre-Flight & Setup) and Post-Implementation (Verification & Delivery) workflow phases, and updated the VitePress configuration and index doc map.
 - Clarified the Prompt Inventory wording and expanded the phase map so each workflow area lists its exact built-in prompt IDs.
 - Improved the Prompt Inventory documentation with workflow-grouped prompt tables, styled collapsed prompt content, and a persistent right-sidebar outline collapse control.
@@ -16,7 +17,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Streamlined documentation and README: focused the README documentation table to essential first-time user pages (including LLM Council and Context Engineering), added missing error screenshots, integrated a high-level VM warning and a quoted Mermaid flowchart into the docs landing page to resolve parse errors, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
 - Renamed the sidebar item to 'Ticket Flow' and added structured sequential prefix numbering to logical conceptual sections across 12 documentation pages.
 - Split the large state machine transition diagram in ticket-flow.md into 6 focused phase-specific diagrams for improved readability.
-- Made the Ticket Flow diagrams render reliably in VS Code Markdown Preview by replacing the live Mermaid blocks with embedded SVG diagrams and keeping loopback details in nearby notes.
+- Make the Ticket Flow diagrams render reliably in VS Code Markdown Preview by replacing the live Mermaid blocks with embedded SVG diagrams and keeping loopback details in nearby notes.
 - Merged redundant documentation pages: state-machine.md into ticket-flow.md, and execution-loop.md into beads.md. Updated VitePress sidebar links accordingly.
 - Synchronized the API reference and operations guide with the implemented Hono routes, composite ticket refs, ticket-size breakdown endpoint, and native file-reveal endpoint.
 - Removed dead exports, standardized boolean naming, and extracted shared helpers/components to reduce duplication across log grouping and editor wiring.
@@ -38,6 +39,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added documentation for the Structured Interventions diagnostic subsystem (categories, stages, and UI behavior) in [output-normalization.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/output-normalization.md).
+- Added a performance warning cautioning WSL users against cloning repositories or running projects on Windows-mounted drives (like `/mnt/c/`) in [getting-started.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/getting-started.md).
 - Added `docs/pre-flight-setup.md` documentation page detailing the pre-flight checks doctor, capability probe, setup plan, and tool-cache environment setup.
 - Added `docs/verification-delivery.md` documentation page detailing final testing, file-effects auditing, integration, pull request publishing, and environment cleanup.
 - Added a persisted right-sidebar outline collapse toggle to the VitePress docs theme, mirroring the existing left sidebar collapse behavior for wide desktop docs pages.

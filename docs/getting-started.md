@@ -23,6 +23,15 @@ LoopTroop runs OpenCode in `dangerously-skip-permissions` (or YOLO) mode so that
 >
 > Git worktrees protect your repository checkout, but they do not sandbox command execution. A bad generation could delete system folders, corrupt configs, or break your workspace. Worktrees protect code; a VM protects everything else.
 
+### WSL Mounted-Drive Performance Warning (WSL Users Only)
+
+If you run LoopTroop inside Windows Subsystem for Linux (WSL), ensure that both the LoopTroop installation directory and your attached target projects reside on the native Linux file system (e.g., under `/home/username/...` or another path in `\wsl$`).
+
+> [!WARNING]
+> **Avoid Windows-mounted drives (like `/mnt/c/...` or `/mnt/d/...`) in WSL.**
+>
+> Storing the codebase or projects on Windows-mounted drives severely degrades disk I/O performance. This slows down Git operations, codebase scanning, and test execution. It also disables native file-watching, forcing a fallback to chokidar polling (`CHOKIDAR_USEPOLLING=1`). For optimal performance, always store your workspaces and repositories inside the Linux home directory.
+
 ## 2. Installation
 
 Clone the repository and install dependencies:
