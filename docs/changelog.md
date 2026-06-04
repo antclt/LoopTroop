@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added two new documentation pages for Pre-Implementation (Pre-Flight & Setup) and Post-Implementation (Verification & Delivery) workflow phases, and updated the VitePress configuration and index doc map.
 - Clarified the Prompt Inventory wording and expanded the phase map so each workflow area lists its exact built-in prompt IDs.
 - Improved the Prompt Inventory documentation with workflow-grouped prompt tables, styled collapsed prompt content, and a persistent right-sidebar outline collapse control.
 - Added a Prompt Inventory reference page that documents built-in prompts, collapsed full prompt content, runtime prompt builders, workflow usage, tool policies, and context inputs.
@@ -37,6 +38,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added `docs/pre-flight-setup.md` documentation page detailing the pre-flight checks doctor, capability probe, setup plan, and tool-cache environment setup.
+- Added `docs/verification-delivery.md` documentation page detailing final testing, file-effects auditing, integration, pull request publishing, and environment cleanup.
 - Added a persisted right-sidebar outline collapse toggle to the VitePress docs theme, mirroring the existing left sidebar collapse behavior for wide desktop docs pages.
 - Added `docs/prompts.md` as a Prompt Inventory reference page covering built-in prompts, collapsed full prompt content, runtime prompt builders, workflow statuses, session types, tool policies, context inputs, and maintenance guidance.
 - Added a high-level warning alerting users to run LoopTroop in a sandboxed environment/VM on the documentation landing page (`docs/index.md`).

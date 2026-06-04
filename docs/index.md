@@ -111,6 +111,8 @@ flowchart TD
 - [PRD](prd.md): Full Answers, skipped-answer resolution, council drafting/voting/refining, PRD structure, coverage, and approval.
 - [LLM Council](llm-council.md): draft, vote, refine, and coverage orchestration.
 - [Beads & Execution](beads.md): execution-unit model, dependency graph, execution loop, bounded Ralph-style retry, storage, and diff review.
+- [Pre-Flight & Setup](pre-flight-setup.md): environment validation doctor, pre-flight check-list, setup plan configuration, and local tooling tool-cache setup.
+- [Verification & Delivery](verification-delivery.md): final testing, file effects audit, integration squashing, pull request publishing, and worktree cleanup.
 
 ### Architecture
 
