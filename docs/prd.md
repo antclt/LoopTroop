@@ -1,87 +1,137 @@
 # PRD
 
 > [!IMPORTANT]
-> **TL;DR** — The PRD is a council-drafted implementation contract built from the approved interview. It defines scope, behavior, constraints, and acceptance criteria. Beads planning decomposes this spec, not the raw ticket, into executable work.
+> **TL;DR** — After interview approval, LoopTroop runs a two-part PRD loop: each council member first completes skipped interview answers into its own Full Answers artifact, then drafts, votes, refines, and coverage-checks a structured PRD. The approved PRD becomes the implementation contract that beads planning decomposes.
 
-The PRD is the ticket's implementation contract. It turns the approved interview into a structured specification that later phases can decompose, verify, and trace back to user intent.
+The PRD is the ticket's implementation contract. It turns approved interview intent into a durable, reviewable spec that later phases can decompose, verify, and trace back to what the user actually meant.
 
-In LoopTroop, the PRD is practical rather than ceremonial. It defines what needs to be built, why it matters, what is in and out of scope, which technical constraints matter, what behavior must be accepted, and how the result should be verified.
+The core PRD document shape lives in `src/lib/prdDocument.ts`. Drafting and council orchestration live in `server/workflow/phases/prdPhase.ts`, coverage/versioning in `server/workflow/phases/verificationPhase.ts`, and approval/edit handling in `server/phases/prd/document.ts` plus `server/routes/ticketHandlers/approvalHandlers.ts`.
 
-For the exact state-by-state mechanics, see [Ticket Flow - PRD](/ticket-flow#prd).
+For the state-machine view, see [Ticket Flow - PRD](/ticket-flow#prd-loop).
 
-## 1. Why It Exists
+## 1. What The PRD Is For
 
-The PRD protects the workflow from a common AI coding failure mode: starting implementation from a vague request. It gives beads planning a concrete contract before any execution plan is created and before any code is written.
+The PRD exists to stop implementation from starting on a vague ticket plus a fuzzy memory of earlier conversation.
 
-The PRD sits between the human interview and the implementation plan. It is broad enough to describe the whole ticket, but structured enough that beads can later split it into concrete work.
+LoopTroop intentionally narrows context from phase to phase. That only works if planning decisions are converted into explicit artifacts instead of being left inside raw transcripts. The PRD is the artifact that says:
 
-## 2. Full Answers
+- what must be built
+- what is explicitly out of scope
+- which constraints and risks matter
+- how the work should be verified
 
-PRD drafting starts by resolving skipped interview questions. Before a council member writes a PRD, it creates a Full Answers artifact from the approved interview.
+Beads planning decomposes this contract, not the raw ticket.
 
-The Full Answers artifact preserves the approved interview structure:
+## 2. Lifecycle At A Glance
 
-- question order and IDs
-- prompts and phases
-- answer types and options
-- source and follow-up metadata
+The PRD phase is a small workflow, not a single prompt:
+
+1. **Full Answers generation** completes any skipped interview answers on a per-model basis.
+2. **Independent PRD drafting** turns those completed answers into competing specs.
+3. **Anonymized voting and refinement** pick the strongest draft baseline and improve it with ideas from losing drafts.
+4. **Versioned coverage** revises the PRD in-place until it is clean or the configured cap is reached.
+5. **Approval** freezes the reviewed PRD before beads planning begins.
+
+That means the PRD loop produces assumptions, draft history, candidate versions, approval state, and audit artifacts - not just one final YAML file.
+
+## 3. Part 1: Full Answers
+
+PRD drafting starts from the approved interview, but not every interview answer is always user-provided. Skipped questions are completed first through a **Full Answers** artifact.
+
+The Full Answers artifact keeps the approved interview structure intact, including:
+
+- stable question IDs and order
+- question phase and source metadata
+- answer types and option lists
 - follow-up rounds
-- summary and approval fields
-- every non-skipped user answer exactly as provided
+- summary and approval metadata
+- every non-skipped user answer exactly as approved
 
-The only fields a model may change are the answer blocks for skipped questions. Filled answers are marked with `answered_by: ai_skip`, set `answer.skipped: false`, and include a concrete answer inferred from ticket details, relevant files, and the rest of the interview. For single-choice and multiple-choice questions, the model must use existing option IDs and may add concise free text when the selected option needs nuance.
+The model may change only the answer blocks for skipped questions. When it fills one in, LoopTroop marks it with `answered_by: ai_skip`, flips `answer.skipped` to `false`, and stores the inferred answer in the same artifact shape as a real answer. For choice questions, the model must reuse existing option IDs and may add concise free text only when the selected option needs nuance.
 
-If no skipped answers need filling, LoopTroop can synthesize the Full Answers artifact without a model call.
+If no skipped answers exist, LoopTroop can synthesize the Full Answers artifact without making another model call.
 
-## 3. Why Full Answers Are Per-Model
+### Why Full Answers Are Per-Model
 
-Each council member creates its own Full Answers artifact. This is intentional.
+Each council member creates its own Full Answers artifact on purpose.
 
-Skipped questions often represent uncertain requirements. Different models may make different reasonable assumptions from the same ticket and repo context. Keeping Full Answers per model lets each PRD draft carry its own assumptions into voting, instead of forcing the entire council through one shared AI guess before drafting begins.
+Skipped questions are unresolved requirements. Different models may infer different but still reasonable completions from the same ticket, repo, and approved interview. LoopTroop wants those assumptions to stay attached to the PRD draft they produced, so voting chooses both:
 
-The winning model's Full Answers artifact is available read-only from PRD approval. It is supporting context that explains which user answers and AI-filled skipped answers shaped the winning PRD.
+1. the PRD structure and content
+2. the assumption set behind that PRD
 
-## 4. Council Drafting, Voting, And Refining
+### Validation And Failure Rules
 
-After Full Answers are prepared, each council member drafts an independent PRD from relevant files, ticket details, and its own Full Answers artifact. If a member cannot produce a valid Full Answers artifact, its PRD draft is not started; LoopTroop records a concise skipped/invalid diagnostic instead of letting malformed output become a draft.
+If a council member cannot produce a valid Full Answers artifact, its PRD draft is not started. LoopTroop records a concise skipped/invalid diagnostic instead of letting malformed Full Answers output leak into the PRD draft stage.
 
-The council then votes on anonymized PRD drafts using a requirements-focused rubric. The voting phase evaluates coverage, feasibility, testability, decomposition quality, risks, edge cases, acceptance criteria quality, and structural coherence.
+Full Answers normalization is intentionally conservative:
 
-The winning model refines its own draft by reviewing losing drafts for useful material. It can selectively adopt stronger requirements, acceptance criteria, edge cases, constraints, risks, and verification ideas. The goal is not to average every draft together. The goal is to keep the strongest baseline and improve it with clearly better pieces from competitors.
+- safe formatting repairs may fix YAML around existing text
+- canonical interview metadata such as `follow_up_rounds` is restored from the approved interview when possible
+- unrecoverable or invented structure still fails validation
 
-The refined result becomes PRD Candidate v1 and enters coverage.
+Rejected model output remains diagnostic-only in Raw attempt views and logs.
 
-## 5. PRD Structure
+## 4. Part 2: Drafting, Voting, And Refining
+
+After Full Answers are ready, the PRD council runs the normal draft -> vote -> refine pattern:
+
+| Step | What happens |
+| --- | --- |
+| **Drafting** | Each council member receives relevant files, ticket details, and its own Full Answers artifact, then independently writes a full PRD draft. |
+| **Voting** | Drafts are anonymized, presentation order is randomized, and the council scores them against a requirements-focused PRD rubric. |
+| **Refining** | The winning model keeps its own structure but selectively adopts stronger requirements, acceptance criteria, edge cases, risks, and verification ideas from losing drafts. |
+
+The refined result becomes **PRD Candidate v1**.
+
+LoopTroop treats malformed or rejected model text as diagnostics, not as artifact body content. The structured UI shows accepted, validated PRD bodies; raw/rejected attempts remain available separately for audit.
+
+## 5. What The PRD Contains
 
 The PRD artifact is structured YAML with stable top-level sections:
 
-- `schema_version`, `ticket_id`, `artifact`, and `status`
-- `source_interview.content_sha256`
-- `product.problem_statement` and `product.target_users`
-- `scope.in_scope` and `scope.out_of_scope`
-- `technical_requirements`
-- `epics`
-- `risks`
-- `approval`
+| Field | Purpose |
+| --- | --- |
+| `schema_version`, `ticket_id`, `artifact`, `status` | Artifact identity and lifecycle state (`draft` or `approved`) |
+| `source_interview.content_sha256` | Hash tying the PRD back to the canonical interview content it came from |
+| `product` | Problem statement and target users |
+| `scope` | Explicit in-scope and out-of-scope boundaries |
+| `technical_requirements` | Implementation constraints that later phases should honor |
+| `epics` | The main chunks of work the feature breaks into |
+| `risks` | Known implementation or product risks |
+| `approval` | Human approval metadata |
 
-Technical requirements cover:
+`technical_requirements` is split into these stable sections:
 
-- architecture constraints
-- data model
-- API contracts
-- security constraints
-- performance constraints
-- reliability constraints
-- error-handling rules
-- tooling assumptions
+- `architecture_constraints`
+- `data_model`
+- `api_contracts`
+- `security_constraints`
+- `performance_constraints`
+- `reliability_constraints`
+- `error_handling_rules`
+- `tooling_assumptions`
 
-Each epic includes an ID, title, objective, implementation steps, and user stories. Each user story includes an ID, title, acceptance criteria, implementation steps, and `verification.required_commands`.
+Each epic includes:
 
-Every in-scope feature from the completed interview should map to at least one concrete user story. Acceptance criteria should be specific enough that later phases can verify whether the implementation satisfies them.
+- an ID
+- title
+- objective
+- implementation steps
+- one or more user stories
 
-## 6. Coverage
+Each user story includes:
 
-Before approval, LoopTroop runs PRD coverage against the winning model's Full Answers artifact. This is the canonical source for PRD coverage because it contains the user-provided answers plus the winning model's adopted AI completions for skipped questions.
+- an ID and title
+- acceptance criteria
+- implementation steps
+- `verification.required_commands`
+
+Every in-scope feature from the completed interview should map to at least one concrete user story. In practice, the PRD approval UI is organized around the same core sections: product, scope, technical requirements, risks, and epics/stories.
+
+## 6. Coverage And Candidate Versioning
+
+Coverage starts after refinement. The important detail is that PRD coverage uses the **winning model's Full Answers artifact** as the canonical comparison source, not the entire interview transcript.
 
 PRD coverage checks for:
 
@@ -89,19 +139,88 @@ PRD coverage checks for:
 - vague or weak acceptance criteria
 - missing edge cases
 - missing constraints
-- missing non-goals or out-of-scope items
-- contradictions between the Full Answers artifact and the PRD
+- missing out-of-scope or non-goal boundaries
+- contradictions between Full Answers and the PRD
 - weak verification guidance
 - missing traceability from completed interview answers into the PRD
 
-Unlike interview coverage, PRD coverage does not ask the user new questions. `follow_up_questions` is always empty for this phase. If gaps exist and the configured pass cap allows it, LoopTroop asks the model to revise the PRD in place, records change and gap-resolution metadata, validates the revised document, and audits the next candidate version.
+Unlike interview coverage, PRD coverage does **not** ask the user new questions. If gaps are found and the configured cap allows another pass, LoopTroop revises the PRD inside the same phase and promotes it to the next candidate version (`v1`, `v2`, and so on).
 
-If the coverage cap is reached with unresolved gaps, the latest candidate still advances to approval with warnings preserved. The user can then decide whether to edit the PRD manually before approving it.
+Coverage metadata is also filtered conservatively. LoopTroop keeps revision/change metadata only when it contains real, text-preserving semantic before/after items. If a model emits only section paths or vague summaries, LoopTroop records warnings and falls back to deriving the visible diff from the validated PRD versions themselves.
 
-## 7. Approval And Downstream Use
+If the candidate becomes clean, it advances to approval cleanly. If the cap is exhausted first, the latest candidate still advances, but unresolved coverage warnings stay visible for review instead of being hidden.
 
-The PRD pauses at approval before beads planning begins. The user can review the structured or raw PRD, inspect unresolved coverage warnings, open the read-only Full Answers context for the winning model, edit the PRD if needed, and approve only the version they reviewed. Approval uses a content hash so stale tabs cannot approve replaced content.
+## 7. Approval, Editing, And Downstream Impact
 
-Once approved, the PRD becomes the authoritative input for beads planning. Beads use it to create the execution blueprint and later expanded bead records. Implementation and verification then work from those approved beads, but the PRD remains the spec they should trace back to.
+Approval is the gate between specs and beads planning.
 
-Post-approval PRD edits are allowed only before pre-flight. Saving one archives the current approved PRD and affected downstream beads planning attempts, then restarts beads drafting from the edited PRD.
+At `WAITING_PRD_APPROVAL`, the user can:
+
+- review the PRD in structured form
+- switch to raw YAML for direct editing
+- inspect the winning model's read-only Full Answers artifact
+- review any unresolved coverage warnings from a capped coverage loop
+
+### Saving Before Approval
+
+Saving while the ticket is still in `WAITING_PRD_APPROVAL` canonicalizes the document back into a draft PRD:
+
+- `ticket_id` is rewritten to the canonical ticket external ID
+- `status` is forced back to `draft`
+- approval metadata is cleared
+- a `user_edit_receipt:prd` artifact records the change
+
+That means a saved edit is not silently treated as already approved. You must approve the newly saved draft version.
+
+### Approving
+
+Approval includes the SHA-256 hash of the exact raw bytes the user reviewed. If the stored PRD changed before the approval request lands, the server rejects the request with a stale-content `409` instead of approving a different version by mistake.
+
+The approval receipt stores both:
+
+- `content_sha256` for the reviewed draft bytes
+- `stored_content_sha256` for the approved YAML after approval metadata is injected
+
+That distinction matters because approval changes the stored file.
+
+### Editing After Approval
+
+Post-approval PRD edits are still allowed only while the ticket is before `PRE_FLIGHT_CHECK`.
+
+When a post-approval save happens in a downstream planning state, LoopTroop:
+
+1. archives the current approved PRD attempt
+2. archives downstream beads-planning attempts
+3. clears stale beads artifacts and related UI state
+4. saves the edited PRD as the new approved version
+5. restarts the workflow at `DRAFTING_BEADS`
+
+Once the ticket reaches `PRE_FLIGHT_CHECK` or later, PRD edits are rejected because the execution plan is already entering implementation territory.
+
+## 8. What Gets Stored
+
+Beyond the final `prd.yaml`, LoopTroop persists PRD-phase audit history, including:
+
+- per-model Full Answers artifacts
+- PRD draft artifacts
+- vote artifacts and outcome metadata
+- refinement diff metadata when available
+- coverage attempts and candidate-version history
+- approval snapshots and approval receipts
+- append-only `user_edit_receipt:prd` artifacts
+- archived phase attempts created by retries, regenerations, or post-approval edits
+
+This is what makes the PRD reviewable, restartable, and auditable instead of being a one-shot prompt result.
+
+## 9. How Later Phases Use The PRD
+
+Once approved, the PRD becomes the authoritative input for beads planning.
+
+The beads council uses it to:
+
+- choose task boundaries
+- preserve scope and non-goals during decomposition
+- carry forward acceptance criteria into bead verification intent
+- keep implementation work traceable back to explicit PRD stories
+
+Execution setup, coding, and final verification then work downstream of those approved beads. So the PRD is not ceremonial documentation - it is the contract that turns interview intent into executable planning.
