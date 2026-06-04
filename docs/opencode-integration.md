@@ -202,19 +202,26 @@ LoopTroop uses two related but different checks:
 
 If model discovery fails but health still passes, the API returns an empty model list plus a message instead of crashing the UI.
 
-## 11. Startup Recovery
+## 11. Question Log Fingerprinting
 
-On startup, LoopTroop:
+LoopTroop uses deterministic fingerprinting to track OpenCode question lifecycle events across log entries. The system is implemented in `shared/logIdentity.ts`.
 
-- checks OpenCode health
-- hydrates ticket actors from storage
-- scans active session records in attached project databases
-- attempts reconnect for owned sessions
-- abandons stale session records that no longer exist remotely
+### 11.1 Why Fingerprinting
 
-This is why the OpenCode integration is part of the runtime architecture, not just a transport detail.
+OpenCode questions (pending human-input requests during a session) produce multiple log entries: when a question is asked, replied to, rejected, or when a reply or rejection fails. Without a stable identity, the same question could appear multiple times in log views, and deduplication would be unreliable.
 
-Startup session recovery is best effort. If OpenCode itself is unavailable, ticket actors are still hydrated from durable workflow state, and later phase work will either reconnect, create a fresh owned session, or block with a persisted error according to the phase's recovery rules.
+### 11.2 How It Works
+
+`buildOpenCodeQuestionLogIdentity()` generates a stable identity for each question lifecycle event:
+
+- **`entryId`** — A deterministic SHA-256 fingerprint combining the ticket ID, session ID, request ID, and action type (`asked`, `replied`, `rejected`, `reply_failed`, `reject_failed`). The same question+action combination always produces the same `entryId`, enabling reliable deduplication.
+- **`fingerprint`** — A broader SHA-256 fingerprint spanning ticket ID, session ID, and request ID. All events for the same question share the same fingerprint, making it possible to correlate question lifecycle stages across separate log entries.
+
+### 11.3 Usage
+
+`extractLogFingerprint()` reads the fingerprint from a log record's metadata. `hasMatchingLogFingerprint()` compares fingerprints across records to detect duplicate or related entries.
+
+The fingerprinting system is used internally by the OpenCode question polling loop and the execution log pipeline to prevent duplicate question entries from being recorded when the same question state is observed multiple times.
 
 ## 12. Why LoopTroop Wraps OpenCode This Heavily
 

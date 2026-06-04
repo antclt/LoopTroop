@@ -113,3 +113,56 @@ Read the report by category:
 - **🧬 ADVANCED DIAGNOSTICS**: Event-loop lag, DNS probe for localhost, FD limits, TCP states, zombie count, diagnostic heap, and swap pressure.
 
 For intermittent stalls, save at least one report from a healthy moment and one from a slow moment. The differences are usually more useful than either report alone.
+
+## 6. Error Diagnostics Normalization
+
+Every blocked-error occurrence stores a structured diagnostic record normalized by `shared/errorDiagnostics.ts`. When a phase fails, the raw error data is passed through `normalizeBlockedErrorDiagnostics()` before being persisted.
+
+### 6.1 Diagnostic Classification
+
+Each diagnostic is classified along two dimensions:
+
+**Kind** (`BlockedErrorDiagnosticKind`) — describes the nature of the failure:
+
+| Kind | Meaning |
+| --- | --- |
+| `model_output_truncated` | The model response was cut off (OpenCode `length` finish reason) |
+| `opencode_provider` | The OpenCode provider returned an error |
+| `opencode_session` | A session-level failure (creation, reconnect, or abandonment) |
+| `timeout` | A prompt or execution deadline was exceeded |
+| `transport` | A network or transport-level failure |
+| `runtime` | An internal runtime error (state machine, storage, or unexpected condition) |
+| `unknown` | The error could not be classified |
+
+**Source** (`BlockedErrorDiagnosticSource`) — identifies the origin:
+
+| Source | Meaning |
+| --- | --- |
+| `opencode` | Originated from the OpenCode integration layer |
+| `provider` | Originated from the model provider (API error, rate limit, etc.) |
+| `system` | Originated from the LoopTroop runtime |
+| `runtime` | Originated from a runtime execution error |
+
+### 6.2 Sensitive Data Redaction
+
+Before any diagnostic is persisted, `normalizeBlockedErrorDiagnostics()` applies credential redaction:
+
+- **API keys, tokens, and passwords** in error messages are replaced with `[REDACTED]` using a pre-compiled regex pattern that covers common credential formats (`sk-...`, `Bearer ...`, `Authorization: ...`, etc.).
+- **URL query strings** are removed from error messages to prevent inadvertently logging tokens or secrets passed as query parameters.
+- The redacted payload preserves the diagnostic structure (status code, error type, model identity, token counts) so the failure remains debuggable without exposing sensitive data.
+
+### 6.3 Diagnostic Fields
+
+A normalized diagnostic record may include:
+
+| Field | Description |
+| --- | --- |
+| `modelId` | The model that was being used (sanitized) |
+| `sessionId` | The OpenCode session ID involved |
+| `providerId` | The provider identifier |
+| `statusCode` | HTTP status code when applicable |
+| `tokens` | Token usage information when available |
+| `errorType` | Classified error type string |
+| `errorMessage` | Redacted error description |
+| `retryable` | Whether the error is eligible for automatic retry |
+| `failureClass` | Structured failure classification for retry logic |

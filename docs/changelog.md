@@ -11,6 +11,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added documentation for the worktree changes classification system, coverage control loop, execution band concurrency lock, IO utilities (atomic write/append/JSONL/recovery), startup state system, and session continuation eligibility logic across the architecture docs.
 - Updated the system architecture, API reference, output normalization, ticket flow, opencode integration, frontend, and LLM council documentation to cover missing core modules and architectural components.
 - Documented the Structured Interventions subsystem and added a performance warning for Windows-mounted drives inside WSL.
+- Documented the Question Log Fingerprinting system, Error Diagnostics Normalization, Refinement Change Tracking, and UI Artifact Companions across the OpenCode integration, diagnostics, LLM council, and output normalization documentation.
+- Enhanced SSE event type documentation with full payload examples for every event type.
+- Added explicit code module references for shared utilities (WSL performance, error diagnostics, artifact companions) across operations and architecture docs.
 - Added two new documentation pages for Pre-Implementation and Post-Implementation workflow phases, and updated the VitePress configuration and index doc map.
 - Clarified the Prompt Inventory wording and expanded the phase map so each workflow area lists its exact built-in prompt IDs.
 - Improved the Prompt Inventory documentation with workflow-grouped prompt tables, styled collapsed prompt content, and a persistent right-sidebar outline collapse control.
@@ -48,6 +51,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added IO utilities documentation (atomicWrite, atomicAppend, JSONL, recovery) with durability guarantees to the system architecture page.
 - Added session status logging documentation (buildSessionStatusLogEntries, entry structure) to the system architecture page.
 - Added session continuation eligibility documentation (continuable vs non-continuable errors, Continue mechanics) to the opencode integration page.
+- Added Question Log Fingerprinting documentation (`logIdentity.ts`) to the opencode integration page, covering SHA-256 fingerprinting for question lifecycle deduplication.
+- Added Error Diagnostics Normalization documentation (`errorDiagnostics.ts`) to the diagnostics page, covering diagnostic classification, credential redaction, and field structure.
+- Added Refinement Change Tracking documentation (`refinementChanges.ts`, `refinementDiffArtifacts.ts`) to the LLM council page, covering change types, attribution tracking, and UI diff artifacts.
+- Added UI Artifact Companions documentation (`artifactCompanions.ts`) to the output normalization page, covering companion type convention, lifecycle, and UI rendering metadata.
 - Expanded documentation across 7 core architecture guides to cover missing components: Data Access Layer, IO Utilities, Shared Layer, Modular Ticket Handlers, Structured Output Schemas, Advanced Workflow Mechanics, and Frontend coverage controls.
 - Added documentation for the Structured Interventions diagnostic subsystem (categories, stages, and UI behavior) in [output-normalization.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/output-normalization.md).
 - Added a performance warning cautioning WSL users against cloning repositories or running projects on Windows-mounted drives (like `/mnt/c/`) in [operations.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/operations.md).
@@ -63,6 +70,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Enhanced SSE event type documentation in the API reference with a table covering all 7 event types, their trigger conditions, key payload fields, and payload examples for `progress`, `bead_complete`, `log`, `app_error`, and `needs_input`.
+- Added explicit `shared/wslPerformance.ts` module reference to the WSL mounted-drive warning in the operations guide.
+- Renumbered structured output schemas section from 6 to 7 after inserting the UI Artifact Companions section.
 - Reworded `docs/prompts.md` to use plain built-in prompt terminology and expanded the phase map so it lists each exact prompt ID instead of ranges or wildcard groups.
 - Reworked `docs/prompts.md` into a workflow-oriented reference with a phase map, grouped built-in prompt tables, wider prompt-page layout, and more readable collapsed prompt content styling.
 - Streamlined `README.md` quick navigation start links to fit on a single line.

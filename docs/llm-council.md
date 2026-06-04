@@ -161,6 +161,57 @@ Council work is persisted in both artifact and runtime form:
 
 That storage is what allows phase review, restart, and auditability in the UI.
 
+## 12. Refinement Change Tracking
+
+LoopTroop records structured metadata about every council refinement so the UI can show exactly what changed, why, and which source draft inspired each modification. The system is implemented across `shared/refinementChanges.ts` and `shared/refinementDiffArtifacts.ts`.
+
+### 12.1 Change Types
+
+Each refinement change is classified by `RefinementChangeType`:
+
+| Type | Meaning |
+| --- | --- |
+| `modified` | An existing item was changed (e.g., a PRD user story was reworded) |
+| `added` | A new item was introduced during refinement |
+| `removed` | An item present in the winning draft was dropped |
+
+### 12.2 Attribution Tracking
+
+Changes carry an `attributionStatus` that records how the change originated:
+
+| Status | Meaning |
+| --- | --- |
+| `inspired` | The change was adopted from a specific losing draft |
+| `model_unattributed` | The change appeared but could not be attributed to a particular source |
+| `synthesized_unattributed` | The model synthesized new content not present in any draft |
+| `invalid_unattributed` | The change record was malformed and could not be attributed |
+
+When a change is inspired by a specific draft, `refinementChangeInspiredItem` records which draft index and council member provided the inspiration, along with the original item text.
+
+### 12.3 UI Diff Artifacts
+
+`shared/refinementDiffArtifacts.ts` defines the structure used to render refinement diffs in the UI. Each artifact is scoped to a council domain:
+
+| Domain | Covers |
+| --- | --- |
+| `interview` | Interview question refinements |
+| `prd` | PRD epic and user story refinements |
+| `beads` | Bead blueprint refinements |
+
+A `UiRefinementDiffArtifact` contains:
+
+- The winning model ID and generation timestamp
+- An ordered array of `UiRefinementDiffEntry` items, each with:
+  - **`key`** — Stable identifier for the changed item
+  - **`changeType`** — `modified`, `replaced`, `added`, or `removed`
+  - **`itemKind`** — What kind of item (`epic`, `user_story`, `bead`, `question`, etc.)
+  - **Before and after** IDs, labels, and text for `modified` and `replaced` entries
+  - **Inspiration** metadata linking back to the source draft and council member
+
+### 12.4 PRD-Specific Parsing
+
+For PRD refinements, `shared/refinementDiffArtifacts.ts` also defines `ParsedPrdDocument`, `ParsedPrdEpic`, and `ParsedPrdUserStory` types used to compare before/after PRD versions and extract meaningful structural diffs.
+
 ## Related Docs
 
 - [Context Engineering](context-engineering.md)

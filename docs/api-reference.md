@@ -585,13 +585,15 @@ The stream endpoint emits two categories of events:
 
 **Typed ticket events** — broadcast through `server/sse/broadcaster.ts` and defined in `server/sse/eventTypes.ts`:
 
-- `state_change`
-- `log`
-- `progress`
-- `app_error`
-- `bead_complete`
-- `needs_input`
-- `artifact_change`
+| Event type | When emitted | Key payload fields |
+| --- | --- | --- |
+| `state_change` | Ticket transitions between workflow phases | `ticketId`, `from`, `to`, `phaseAttempt`, `previousStatus`, `timestamp` |
+| `log` | A new execution log entry is written | `ticketId`, `logEntry` (id, type, kind, op, timestamp, message) |
+| `progress` | Bead or phase progress percentage changes | `ticketId`, `percentComplete`, `currentBead`, `totalBeads` |
+| `app_error` | A runtime error occurs during workflow execution | `ticketId`, `error` (message, code, phase), `timestamp` |
+| `bead_complete` | A single bead finishes execution (success or failure) | `ticketId`, `beadId`, `status` (done \| error), `iteration`, `timestamp` |
+| `needs_input` | OpenCode has a pending question for the user | `ticketId`, `requestId`, `type`, `question`, `timestamp` |
+| `artifact_change` | A phase artifact is created or updated | `ticketId`, `phase`, `artifactType`, `artifact`, `timestamp` |
 
 SSE replay is an optimization, not the only recovery path. After a reconnect with a remembered event id, the frontend also invalidates the ticket, list, artifacts, interview, setup-plan, bead, and server-log queries so missed events outside the replay buffer are reconciled from durable storage.
 
@@ -604,6 +606,61 @@ Example `state_change` event payload:
   "to": "WAITING_PRD_APPROVAL",
   "phaseAttempt": 1,
   "previousStatus": "VERIFYING_PRD_COVERAGE",
+  "timestamp": "2026-04-23T09:00:00.000Z"
+}
+```
+
+Example `progress` event payload:
+
+```json
+{
+  "ticketId": "AUTH-12",
+  "percentComplete": 65,
+  "currentBead": "api-refresh-endpoint",
+  "totalBeads": 8,
+  "timestamp": "2026-04-23T09:00:00.000Z"
+}
+```
+
+Example `bead_complete` event payload:
+
+```json
+{
+  "ticketId": "AUTH-12",
+  "beadId": "session-store-foundation",
+  "status": "done",
+  "iteration": 1,
+  "timestamp": "2026-04-23T09:00:00.000Z"
+}
+```
+
+Example `log` event payload:
+
+```json
+{
+  "ticketId": "AUTH-12",
+  "logEntry": {
+    "id": "log-1742839200-001",
+    "type": "info",
+    "kind": "session",
+    "op": "append",
+    "timestamp": "2026-04-23T09:00:00.000Z",
+    "message": "Bead session-store-foundation started (iteration 1)"
+  },
+  "timestamp": "2026-04-23T09:00:00.000Z"
+}
+```
+
+Example `app_error` event payload:
+
+```json
+{
+  "ticketId": "AUTH-12",
+  "error": {
+    "message": "OpenCode provider returned error",
+    "code": "OPENCODE_PROVIDER_ERROR",
+    "phase": "CODING"
+  },
   "timestamp": "2026-04-23T09:00:00.000Z"
 }
 ```

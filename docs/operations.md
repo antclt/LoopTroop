@@ -179,6 +179,8 @@ Default local service addresses:
 | Docs | `http://localhost:5174` |
 | OpenCode | `http://127.0.0.1:4096` |
 
+Default port resolution and origin building are implemented in `shared/appConfig.ts`, which validates environment variables and provides fallback defaults for all four services.
+
 When `LOOPTROOP_FRONTEND_ORIGIN` is not explicitly set, LoopTroop derives the frontend origin from `LOOPTROOP_FRONTEND_PORT`, defaulting to `http://localhost:5173`. If `LOOPTROOP_FRONTEND_ORIGIN` is set but cannot be parsed as a URL origin, LoopTroop ignores it and falls back to that derived default.
 
 ## 7. API Rate Limits
@@ -282,6 +284,8 @@ If you run LoopTroop inside Windows Subsystem for Linux (WSL), ensure that both 
 > **Avoid Windows-mounted drives (like `/mnt/c/...` or `/mnt/d/...`) in WSL.**
 >
 > Keeping the LoopTroop codebase or attached projects on Windows-mounted drives severely degrades disk I/O performance. This slows down Git operations, codebase scanning, and test execution. It also disables native file-watching, forcing a fallback to chokidar polling (`CHOKIDAR_USEPOLLING=1`). For optimal performance, always store your workspaces and repositories inside the Linux home directory.
+
+The path detection logic is implemented in `shared/wslPerformance.ts`, which exports `isWslWindowsMountPath()` to identify Windows-mounted paths and `buildWslAppMountedDriveWarning()` / `buildWslProjectMountedDriveWarning()` to generate targeted performance warnings.
 
 ## 13. Audit Warnings
 

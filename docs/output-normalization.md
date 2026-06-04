@@ -624,7 +624,33 @@ Automatic structured retries are attempt history inside one phase run. They appe
 
 Invalid, failed, or timed-out outputs are diagnostic-only. The structured artifact body shows the outcome, model or stage, retry count, validation error, failure class, and short diagnostic excerpts; full malformed model text belongs in Raw attempt views and execution logs only.
 
-## 6. Structured Output Schemas
+## 6. UI Artifact Companions
+
+Artifacts produced by council phases (drafts, votes, refinements) carry companion metadata that enables rich UI rendering without modifying the base artifact schema. The system is defined in `shared/artifactCompanions.ts`.
+
+### 6.1 What A Companion Is
+
+A `UiArtifactCompanionArtifact<T>` wraps a base artifact with UI-oriented metadata:
+
+| Field | Description |
+| --- | --- |
+| `baseArtifactType` | The type of the wrapped artifact (e.g., `prd`, `beads`, `interview`) |
+| `generatedAt` | ISO timestamp of when the companion was generated |
+| `payload` | Arbitrary typed data specific to the artifact domain |
+
+### 6.2 Companion Type Convention
+
+Companion artifacts use a naming convention: `ui_artifact_companion:{baseArtifactType}`. For example, a companion wrapping a PRD draft has the artifact type `ui_artifact_companion:prd`. This allows the frontend to discover companions by type prefix without knowing the exact artifact IDs in advance.
+
+### 6.3 Where Companions Are Used
+
+Companions are attached to council draft and vote artifacts. They carry UI display hints, rendering metadata, and cross-references that the base artifact schema does not define. The companion is parsed and validated at read time — if the JSON payload is malformed, parsing returns `null` rather than failing the base artifact read.
+
+### 6.4 Companion Lifecycle
+
+Companions are generated when the council phase produces its primary artifact. They are stored alongside the base artifact in the `phase_artifacts` table. When a new phase attempt archives the previous one, the companion is archived with the base artifact. Companions are never edited independently — they are replaced when the phase runs again.
+
+## 7. Structured Output Schemas
 
 The canonical definitions for all parsers and validators are defined as Zod schemas under `server/structuredOutput/*`:
 
