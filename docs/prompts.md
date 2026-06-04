@@ -1,8 +1,18 @@
+---
+pageClass: prompt-inventory-page
+---
+
 # Prompt Inventory
 
-LoopTroop keeps model prompts in code and treats the TypeScript implementation as the source of truth. This page is a reference index: it lists the built-in prompt templates and runtime prompt builders, where each is used, and what each one is responsible for. It does not duplicate full prompt bodies.
+LoopTroop prompts are workflow contracts. They define the model role, the task, the allowed tools, the runtime context, and the exact artifact shape the model must return.
 
-## 1. Prompt Assembly Model
+The TypeScript implementation remains the source of truth. This page gives you a readable map of every built-in prompt template and runtime prompt-builder family, plus collapsed copies of the rendered named prompt content for inspection.
+
+::: tip Reading this page
+Use the phase map to jump to the part of the workflow you care about. The named-template tables link to collapsed full prompt content; runtime builders are documented separately because their final text depends on ticket artifacts, validation errors, diffs, or command output.
+:::
+
+## 1. How Prompt Assembly Works
 
 Named prompt templates live in `server/prompts/index.ts` and are exported through `ALL_PROMPTS`. Each template defines an ID, description, system role, task, instructions, expected output format, context inputs, and OpenCode tool policy.
 
@@ -14,50 +24,108 @@ The shared builders apply one of three rule blocks before sending a prompt:
 | `buildSameSessionPromptFromTemplate()` | `SAME_SESSION_RULES` | Existing session | Tells the model to use the current session history plus the provided context. |
 | `buildConversationalPrompt()` | `CONVERSATIONAL_RULES` | Multi-turn session | Supports the interactive interview loop while preserving structured tag output. |
 
+Tool policies are deliberately small:
+
+| Policy | Meaning |
+| --- | --- |
+| `default` | Normal OpenCode tool access for phases that need repository inspection or implementation. |
+| `disabled` | Runtime tools are disabled; the model must answer only from supplied context. |
+| `read_only` | Read-only probing/planning access for setup checks that must not change the workspace. |
+| `execution_setup_online` | Workspace setup access, including online lookup when configured for setup-only tooling discovery. |
+
 Context parts are assembled by `server/opencode/contextBuilder.ts`. See [Context Engineering](context-engineering.md) for the per-status context contract and why prompts receive only the smallest useful artifact slice.
 
-## 2. Named Prompt Templates
+## 2. Phase Map
 
-These templates are exported from `server/prompts/index.ts` through `ALL_PROMPTS`.
+| Workflow area | Named templates | Runtime builders | What to inspect first |
+| --- | --- | --- | --- |
+| [Discovery](#discovery) | `PROM0` | Minimal context assembly | Relevant-file scan and repository evidence gathering. |
+| [Interview](#interview) | `PROM1` to `PROM5` | Interview vote/refine, resume, answer, and retry builders | Question generation, council scoring, adaptive interview batches, and coverage follow-ups. |
+| [PRD](#prd) | `PROM10a` to `PROM13b` | PRD vote/refine and coverage-revision retry builders | Full Answers, PRD drafting, PRD council review, and gap repair. |
+| [Beads](#beads) | `PROM20` to `PROM25` | Bead vote/refine, expansion, and coverage-revision retry builders | Semantic bead planning, voting, refinement, coverage, and expansion. |
+| [Execution Setup](#execution-setup) | `PROM_EXECUTION_*` | Setup-plan and runtime setup retry builders | Capability probing, setup-plan approval, and workspace setup execution. |
+| [Coding](#coding) | `PROM_CODING`, `PROM51` | Bead continuation and marker repair builders | One-bead implementation and recovery notes. |
+| [Final Test And Continuation](#final-test-and-continuation) | `PROM52`, `PROM53`, `PROM54` | Final-test retry and blocked-session continuation builders | Targeted final test generation, retry notes, and preserved-session continuation. |
+| [Pull Request And Repair](#pull-request-and-repair) | Runtime builders only | Candidate-file audit, PR draft, and shared structured retry builders | Final changed-file review, PR text generation, and schema repair prompts. |
 
-| Prompt / builder | Source | Used in / status | Session type | Tool policy | Context inputs | Purpose | Full content |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `PROM0` | `server/prompts/index.ts` | `SCANNING_RELEVANT_FILES` | Fresh | `default` | `ticket_details` | Inspects the repository and returns a structured relevant-files report with rationales and previews. | [Full content](#full-prompt-prom0) |
-| `PROM1` | `server/prompts/index.ts` | `COUNCIL_DELIBERATING` | Fresh council draft | `disabled` | `relevant_files`, `ticket_details` | Drafts candidate interview questions from ticket and repo context. | [Full content](#full-prompt-prom1) |
-| `PROM2` | `server/prompts/index.ts` | `COUNCIL_VOTING_INTERVIEW` | Fresh council vote | `disabled` | `relevant_files`, `ticket_details`, `drafts` | Scores interview drafts with the strict `draft_scores` YAML schema. | [Full content](#full-prompt-prom2) |
-| `PROM3` | `server/prompts/index.ts` | `COMPILING_INTERVIEW` | Fresh refinement | `disabled` | `relevant_files`, `ticket_details`, `drafts` | Refines the winning interview draft using selected improvements from alternatives. | [Full content](#full-prompt-prom3) |
-| `PROM4` | `server/prompts/index.ts` | `WAITING_INTERVIEW_ANSWERS` | Conversational | `disabled` | `ticket_details` | Runs the adaptive interview batch loop and returns tagged batch or completion artifacts. | [Full content](#full-prompt-prom4) |
-| `PROM5` | `server/prompts/index.ts` | `VERIFYING_INTERVIEW_COVERAGE` | Fresh coverage audit | `disabled` | `ticket_details`, `user_answers`, `interview` | Checks whether collected interview answers cover the ticket and can emit targeted follow-up questions. | [Full content](#full-prompt-prom5) |
-| `PROM10a` | `server/prompts/index.ts` | `DRAFTING_PRD` full-answers sub-step | Fresh | `disabled` | `relevant_files`, `ticket_details`, `interview` | Resolves skipped interview answers into a complete Full Answers artifact before PRD drafting. | [Full content](#full-prompt-prom10a) |
-| `PROM10b` | `server/prompts/index.ts` | `DRAFTING_PRD` draft sub-step | Fresh council draft | `disabled` | `relevant_files`, `ticket_details`, `full_answers` | Drafts a structured PRD from the completed interview answers. | [Full content](#full-prompt-prom10b) |
-| `PROM11` | `server/prompts/index.ts` | `COUNCIL_VOTING_PRD` | Fresh council vote | `disabled` | `relevant_files`, `ticket_details`, `interview`, `drafts` | Scores PRD drafts with the strict `draft_scores` YAML schema. | [Full content](#full-prompt-prom11) |
-| `PROM12` | `server/prompts/index.ts` | `REFINING_PRD` | Fresh refinement | `disabled` | `relevant_files`, `ticket_details`, `full_answers`, `drafts` | Refines the winning PRD draft and records machine-readable change metadata. | [Full content](#full-prompt-prom12) |
-| `PROM13` | `server/prompts/index.ts` | `VERIFYING_PRD_COVERAGE` | Fresh coverage audit | `disabled` | `full_answers`, `prd` | Compares the PRD against the adopted Full Answers artifact and reports concrete gaps. | [Full content](#full-prompt-prom13) |
-| `PROM13b` | `server/prompts/index.ts` | `VERIFYING_PRD_COVERAGE` revision sub-step | Fresh revision | `disabled` | `full_answers`, `prd`, `coverage_gaps` | Revises the PRD to resolve specific coverage gaps and records gap-resolution metadata. | [Full content](#full-prompt-prom13b) |
-| `PROM20` | `server/prompts/index.ts` | `DRAFTING_BEADS` draft sub-step | Fresh council draft | `disabled` | `relevant_files`, `ticket_details`, `prd` | Drafts the semantic bead blueprint from the approved PRD. | [Full content](#full-prompt-prom20) |
-| `PROM21` | `server/prompts/index.ts` | `COUNCIL_VOTING_BEADS` | Fresh council vote | `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts` | Scores bead blueprints with the strict `draft_scores` YAML schema. | [Full content](#full-prompt-prom21) |
-| `PROM22` | `server/prompts/index.ts` | `REFINING_BEADS` | Fresh refinement | `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts`, `votes` | Refines the winning semantic bead blueprint using selected alternative-draft improvements. | [Full content](#full-prompt-prom22) |
-| `PROM23` | `server/prompts/index.ts` | `VERIFYING_BEADS_COVERAGE` | Fresh coverage audit | `disabled` | `prd`, `beads` | Checks whether the bead blueprint fully covers the PRD. | [Full content](#full-prompt-prom23) |
-| `PROM24` | `server/prompts/index.ts` | `VERIFYING_BEADS_COVERAGE` revision sub-step | Fresh revision | `disabled` | `prd`, `beads`, `coverage_gaps` | Revises the bead blueprint to address specific coverage gaps. | [Full content](#full-prompt-prom24) |
-| `PROM25` | `server/prompts/index.ts` | `EXPANDING_BEADS` | Fresh | `default` | `relevant_files`, `ticket_details`, `prd`, `beads_draft` | Expands the semantic blueprint into execution-ready bead records. | [Full content](#full-prompt-prom25) |
-| `PROM_EXECUTION_CAPABILITY_PROBE` | `server/prompts/index.ts` | `PRE_FLIGHT_CHECK` | Fresh probe | `read_only` | none | Runs a minimal OpenCode capability probe before execution setup. | [Full content](#full-prompt-prom-execution-capability-probe) |
-| `PROM_EXECUTION_SETUP_PLAN` | `server/prompts/index.ts` | `WAITING_EXECUTION_SETUP_APPROVAL` | Fresh planning | `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan_notes` | Drafts a reviewable workspace setup plan without modifying the repository. | [Full content](#full-prompt-prom-execution-setup-plan) |
-| `PROM_EXECUTION_SETUP_PLAN_REGENERATE` | `server/prompts/index.ts` | `WAITING_EXECUTION_SETUP_APPROVAL` regeneration | Fresh planning | `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan`, `execution_setup_plan_notes` | Revises the current setup plan using user commentary. | [Full content](#full-prompt-prom-execution-setup-plan-regenerate) |
-| `PROM_EXECUTION_SETUP` | `server/prompts/index.ts` | `PREPARING_EXECUTION_ENV` | Fresh execution setup | `execution_setup_online` | `ticket_details`, `beads`, `execution_setup_plan`, `execution_setup_notes` | Executes the approved workspace setup plan and returns a structured setup result. | [Full content](#full-prompt-prom-execution-setup) |
-| `PROM_EXECUTION_SETUP_NOTE` | `server/prompts/index.ts` | `PREPARING_EXECUTION_ENV` retry-note sub-step | Same session | `disabled` | `ticket_details`, `error_context` | Summarizes a failed runtime setup attempt for the next retry. | [Full content](#full-prompt-prom-execution-setup-note) |
-| `PROM_CODING` | `server/prompts/index.ts` | `CODING` | Fresh bead implementation | `default` | `bead_data`, `bead_notes` | Guides the implementer through one bead and requires the bead completion marker. | [Full content](#full-prompt-prom-coding) |
-| `PROM51` | `server/prompts/index.ts` | `CODING` context-wipe sub-step | Same session | `disabled` | `bead_data`, `error_context` | Captures a compact failure note before abandoning a degraded bead session. | [Full content](#full-prompt-prom51) |
-| `PROM52` | `server/prompts/index.ts` | `RUNNING_FINAL_TEST` | Fresh final-test generation | `default` | `ticket_details`, `prd`, `beads`, `final_test_notes` | Adds or updates targeted final tests and returns the commands to run them. | [Full content](#full-prompt-prom52) |
-| `PROM53` | `server/prompts/index.ts` | `RUNNING_FINAL_TEST` retry-note sub-step | Fresh | `disabled` | `ticket_details`, `error_context` | Summarizes a failed final-test attempt for the next retry. | [Full content](#full-prompt-prom53) |
-| `PROM54` | `server/prompts/index.ts` | `BLOCKED_ERROR` continuation into preserved session | Same session | `default` | none | Sends the bare continuation text `continue please` into an eligible preserved OpenCode session. | [Full content](#full-prompt-prom54) |
+## 3. Named Prompt Templates And Text
 
-## 3. Full Named Prompt Content
+All named templates in this section are exported from `server/prompts/index.ts` through `ALL_PROMPTS`. The tables group them by workflow area so the right sidebar outline stays useful and the columns remain readable. The prompt links jump to collapsed text blocks later in this same section.
 
-The blocks below show the rendered base prompt content for each named template. Runtime context sections are represented with placeholders such as `[ticket_details provided at runtime]`; some workflow builders append additional runtime-only sections, which are listed in the next inventory table.
+### Discovery
 
-### PROM0 {#full-prompt-prom0}
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM0` | `SCANNING_RELEVANT_FILES` | Fresh / `default` | `ticket_details` | Inspects the repository and returns a structured relevant-files report with rationales and previews. | [Full content here](#full-prompt-prom0) |
 
-::: details Full PROM0 content
+### Interview
+
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM1` | `COUNCIL_DELIBERATING` | Fresh council draft / `disabled` | `relevant_files`, `ticket_details` | Drafts candidate interview questions from ticket and repo context. | [Full content here](#full-prompt-prom1) |
+| `PROM2` | `COUNCIL_VOTING_INTERVIEW` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `drafts` | Scores interview drafts with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom2) |
+| `PROM3` | `COMPILING_INTERVIEW` | Fresh refinement / `disabled` | `relevant_files`, `ticket_details`, `drafts` | Refines the winning interview draft using selected improvements from alternatives. | [Full content here](#full-prompt-prom3) |
+| `PROM4` | `WAITING_INTERVIEW_ANSWERS` | Conversational / `disabled` | `ticket_details` | Runs the adaptive interview batch loop and returns tagged batch or completion artifacts. | [Full content here](#full-prompt-prom4) |
+| `PROM5` | `VERIFYING_INTERVIEW_COVERAGE` | Fresh coverage audit / `disabled` | `ticket_details`, `user_answers`, `interview` | Checks whether collected interview answers cover the ticket and can emit targeted follow-up questions. | [Full content here](#full-prompt-prom5) |
+
+### PRD
+
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM10a` | `DRAFTING_PRD` full-answers sub-step | Fresh / `disabled` | `relevant_files`, `ticket_details`, `interview` | Resolves skipped interview answers into a complete Full Answers artifact before PRD drafting. | [Full content here](#full-prompt-prom10a) |
+| `PROM10b` | `DRAFTING_PRD` draft sub-step | Fresh council draft / `disabled` | `relevant_files`, `ticket_details`, `full_answers` | Drafts a structured PRD from the completed interview answers. | [Full content here](#full-prompt-prom10b) |
+| `PROM11` | `COUNCIL_VOTING_PRD` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `interview`, `drafts` | Scores PRD drafts with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom11) |
+| `PROM12` | `REFINING_PRD` | Fresh refinement / `disabled` | `relevant_files`, `ticket_details`, `full_answers`, `drafts` | Refines the winning PRD draft and records machine-readable change metadata. | [Full content here](#full-prompt-prom12) |
+| `PROM13` | `VERIFYING_PRD_COVERAGE` | Fresh coverage audit / `disabled` | `full_answers`, `prd` | Compares the PRD against the adopted Full Answers artifact and reports concrete gaps. | [Full content here](#full-prompt-prom13) |
+| `PROM13b` | `VERIFYING_PRD_COVERAGE` revision sub-step | Fresh revision / `disabled` | `full_answers`, `prd`, `coverage_gaps` | Revises the PRD to resolve specific coverage gaps and records gap-resolution metadata. | [Full content here](#full-prompt-prom13b) |
+
+### Beads
+
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM20` | `DRAFTING_BEADS` draft sub-step | Fresh council draft / `disabled` | `relevant_files`, `ticket_details`, `prd` | Drafts the semantic bead blueprint from the approved PRD. | [Full content here](#full-prompt-prom20) |
+| `PROM21` | `COUNCIL_VOTING_BEADS` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts` | Scores bead blueprints with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom21) |
+| `PROM22` | `REFINING_BEADS` | Fresh refinement / `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts`, `votes` | Refines the winning semantic bead blueprint using selected alternative-draft improvements. | [Full content here](#full-prompt-prom22) |
+| `PROM23` | `VERIFYING_BEADS_COVERAGE` | Fresh coverage audit / `disabled` | `prd`, `beads` | Checks whether the bead blueprint fully covers the PRD. | [Full content here](#full-prompt-prom23) |
+| `PROM24` | `VERIFYING_BEADS_COVERAGE` revision sub-step | Fresh revision / `disabled` | `prd`, `beads`, `coverage_gaps` | Revises the bead blueprint to address specific coverage gaps. | [Full content here](#full-prompt-prom24) |
+| `PROM25` | `EXPANDING_BEADS` | Fresh / `default` | `relevant_files`, `ticket_details`, `prd`, `beads_draft` | Expands the semantic blueprint into execution-ready bead records. | [Full content here](#full-prompt-prom25) |
+
+### Execution Setup
+
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM_EXECUTION_CAPABILITY_PROBE` | `PRE_FLIGHT_CHECK` | Fresh probe / `read_only` | none | Runs a minimal OpenCode capability probe before execution setup. | [Full content here](#full-prompt-prom-execution-capability-probe) |
+| `PROM_EXECUTION_SETUP_PLAN` | `WAITING_EXECUTION_SETUP_APPROVAL` | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan_notes` | Drafts a reviewable workspace setup plan without modifying the repository. | [Full content here](#full-prompt-prom-execution-setup-plan) |
+| `PROM_EXECUTION_SETUP_PLAN_REGENERATE` | `WAITING_EXECUTION_SETUP_APPROVAL` regeneration | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan`, `execution_setup_plan_notes` | Revises the current setup plan using user commentary. | [Full content here](#full-prompt-prom-execution-setup-plan-regenerate) |
+| `PROM_EXECUTION_SETUP` | `PREPARING_EXECUTION_ENV` | Fresh execution setup / `execution_setup_online` | `ticket_details`, `beads`, `execution_setup_plan`, `execution_setup_notes` | Executes the approved workspace setup plan and returns a structured setup result. | [Full content here](#full-prompt-prom-execution-setup) |
+| `PROM_EXECUTION_SETUP_NOTE` | `PREPARING_EXECUTION_ENV` retry-note sub-step | Same session / `disabled` | `ticket_details`, `error_context` | Summarizes a failed runtime setup attempt for the next retry. | [Full content here](#full-prompt-prom-execution-setup-note) |
+
+### Coding
+
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM_CODING` | `CODING` | Fresh bead implementation / `default` | `bead_data`, `bead_notes` | Guides the implementer through one bead and requires the bead completion marker. | [Full content here](#full-prompt-prom-coding) |
+| `PROM51` | `CODING` context-wipe sub-step | Same session / `disabled` | `bead_data`, `error_context` | Captures a compact failure note before abandoning a degraded bead session. | [Full content here](#full-prompt-prom51) |
+
+### Final Test And Continuation
+
+| Template | Used in / status | Session / tools | Context inputs | Purpose | Prompt |
+| --- | --- | --- | --- | --- | --- |
+| `PROM52` | `RUNNING_FINAL_TEST` | Fresh final-test generation / `default` | `ticket_details`, `prd`, `beads`, `final_test_notes` | Adds or updates targeted final tests and returns the commands to run them. | [Full content here](#full-prompt-prom52) |
+| `PROM53` | `RUNNING_FINAL_TEST` retry-note sub-step | Fresh / `disabled` | `ticket_details`, `error_context` | Summarizes a failed final-test attempt for the next retry. | [Full content here](#full-prompt-prom53) |
+| `PROM54` | `BLOCKED_ERROR` continuation into preserved session | Same session / `default` | none | Sends the bare continuation text `continue please` into an eligible preserved OpenCode session. | [Full content here](#full-prompt-prom54) |
+
+### Pull Request And Repair
+
+Pull-request drafting, candidate-file auditing, and shared structured retry prompts are runtime builders rather than `ALL_PROMPTS` named templates. They are inventoried in [Runtime Prompt Builders](#runtime-prompt-builders) and [Shared Structured Retry Prompts](#shared-structured-retry-prompts).
+
+### Prompt Text
+
+These blocks are collapsed by default. They show the rendered base prompt text for each named template, with runtime context sections represented by placeholders such as `[ticket_details provided at runtime]`. Some workflow builders append additional runtime-only sections; those are listed in the runtime builder inventory.
+
+#### PROM0 Prompt Text {#full-prompt-prom0}
+
+::: details Rendered PROM0 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -95,9 +163,9 @@ YAML inside <RELEVANT_FILES_RESULT> tags with top-level keys: `file_count` (inte
 ````
 :::
 
-### PROM1 {#full-prompt-prom1}
+#### PROM1 Prompt Text {#full-prompt-prom1}
 
-::: details Full PROM1 content
+::: details Rendered PROM1 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -146,9 +214,9 @@ YAML with top-level `questions` list. Each item: {id, phase, question}. No other
 ````
 :::
 
-### PROM2 {#full-prompt-prom2}
+#### PROM2 Prompt Text {#full-prompt-prom2}
 
-::: details Full PROM2 content
+::: details Rendered PROM2 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -207,9 +275,9 @@ YAML with top-level `draft_scores` mapping keyed by exact draft labels. Each dra
 ````
 :::
 
-### PROM3 {#full-prompt-prom3}
+#### PROM3 Prompt Text {#full-prompt-prom3}
 
-::: details Full PROM3 content
+::: details Rendered PROM3 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -256,9 +324,9 @@ YAML with top-level `questions` list and top-level `changes` list. Each `questio
 ````
 :::
 
-### PROM4 {#full-prompt-prom4}
+#### PROM4 Prompt Text {#full-prompt-prom4}
 
-::: details Full PROM4 content
+::: details Rendered PROM4 prompt
 ````text
 MULTI-TURN SESSION:
 This is a multi-turn conversational session. You will receive user responses to your questions and should adapt your next output accordingly.
@@ -359,9 +427,9 @@ YAML — complete interview results file with schema_version, ticket_id, artifac
 ````
 :::
 
-### PROM5 {#full-prompt-prom5}
+#### PROM5 Prompt Text {#full-prompt-prom5}
 
-::: details Full PROM5 content
+::: details Rendered PROM5 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -405,9 +473,9 @@ YAML with exactly these top-level keys: `status`, `gaps`, `follow_up_questions`.
 ````
 :::
 
-### PROM10a {#full-prompt-prom10a}
+#### PROM10a Prompt Text {#full-prompt-prom10a}
 
-::: details Full PROM10a content
+::: details Rendered PROM10a prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -500,9 +568,9 @@ approval:
 ````
 :::
 
-### PROM10b {#full-prompt-prom10b}
+#### PROM10b Prompt Text {#full-prompt-prom10b}
 
-::: details Full PROM10b content
+::: details Rendered PROM10b prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -603,9 +671,9 @@ approval:
 ````
 :::
 
-### PROM11 {#full-prompt-prom11}
+#### PROM11 Prompt Text {#full-prompt-prom11}
 
-::: details Full PROM11 content
+::: details Rendered PROM11 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -667,9 +735,9 @@ YAML with top-level `draft_scores` mapping keyed by exact draft labels. Each dra
 ````
 :::
 
-### PROM12 {#full-prompt-prom12}
+#### PROM12 Prompt Text {#full-prompt-prom12}
 
-::: details Full PROM12 content
+::: details Rendered PROM12 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -775,9 +843,9 @@ Also include a top-level `changes` list. Each change item: {type, item_type, bef
 ````
 :::
 
-### PROM13 {#full-prompt-prom13}
+#### PROM13 Prompt Text {#full-prompt-prom13}
 
-::: details Full PROM13 content
+::: details Rendered PROM13 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -824,9 +892,9 @@ YAML with exactly these top-level keys: `status`, `gaps`, `follow_up_questions`.
 ````
 :::
 
-### PROM13b {#full-prompt-prom13b}
+#### PROM13b Prompt Text {#full-prompt-prom13b}
 
-::: details Full PROM13b content
+::: details Rendered PROM13b prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -929,9 +997,9 @@ Also include top-level `changes` and `gap_resolutions` lists. `changes` uses the
 ````
 :::
 
-### PROM20 {#full-prompt-prom20}
+#### PROM20 Prompt Text {#full-prompt-prom20}
 
-::: details Full PROM20 content
+::: details Rendered PROM20 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1012,9 +1080,9 @@ No other top-level keys. No prose before or after the YAML.
 ````
 :::
 
-### PROM21 {#full-prompt-prom21}
+#### PROM21 Prompt Text {#full-prompt-prom21}
 
-::: details Full PROM21 content
+::: details Rendered PROM21 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1076,9 +1144,9 @@ YAML with top-level `draft_scores` mapping keyed by exact draft labels. Each dra
 ````
 :::
 
-### PROM22 {#full-prompt-prom22}
+#### PROM22 Prompt Text {#full-prompt-prom22}
 
-::: details Full PROM22 content
+::: details Rendered PROM22 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1157,9 +1225,9 @@ No other top-level keys. No prose before or after the YAML. Also include a top-l
 ````
 :::
 
-### PROM23 {#full-prompt-prom23}
+#### PROM23 Prompt Text {#full-prompt-prom23}
 
-::: details Full PROM23 content
+::: details Rendered PROM23 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1203,9 +1271,9 @@ YAML with exactly these top-level keys: `status`, `gaps`, `follow_up_questions`.
 ````
 :::
 
-### PROM24 {#full-prompt-prom24}
+#### PROM24 Prompt Text {#full-prompt-prom24}
 
-::: details Full PROM24 content
+::: details Rendered PROM24 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1280,9 +1348,9 @@ No other top-level keys. No prose before or after the YAML. Also include a top-l
 ````
 :::
 
-### PROM25 {#full-prompt-prom25}
+#### PROM25 Prompt Text {#full-prompt-prom25}
 
-::: details Full PROM25 content
+::: details Rendered PROM25 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1331,9 +1399,9 @@ JSONL only. One JSON object per line. No markdown fences, no surrounding array, 
 ````
 :::
 
-### PROM_EXECUTION_CAPABILITY_PROBE {#full-prompt-prom-execution-capability-probe}
+#### PROM_EXECUTION_CAPABILITY_PROBE Prompt Text {#full-prompt-prom-execution-capability-probe}
 
-::: details Full PROM_EXECUTION_CAPABILITY_PROBE content
+::: details Rendered PROM_EXECUTION_CAPABILITY_PROBE prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1364,9 +1432,9 @@ Exactly `OK` after one successful read-only workspace check.
 ````
 :::
 
-### PROM_EXECUTION_SETUP_PLAN {#full-prompt-prom-execution-setup-plan}
+#### PROM_EXECUTION_SETUP_PLAN Prompt Text {#full-prompt-prom-execution-setup-plan}
 
-::: details Full PROM_EXECUTION_SETUP_PLAN content
+::: details Rendered PROM_EXECUTION_SETUP_PLAN prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1456,9 +1524,9 @@ Each setup step must have this exact shape:
 ````
 :::
 
-### PROM_EXECUTION_SETUP_PLAN_REGENERATE {#full-prompt-prom-execution-setup-plan-regenerate}
+#### PROM_EXECUTION_SETUP_PLAN_REGENERATE Prompt Text {#full-prompt-prom-execution-setup-plan-regenerate}
 
-::: details Full PROM_EXECUTION_SETUP_PLAN_REGENERATE content
+::: details Rendered PROM_EXECUTION_SETUP_PLAN_REGENERATE prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1546,9 +1614,9 @@ Each setup step must have this exact shape:
 ````
 :::
 
-### PROM_EXECUTION_SETUP {#full-prompt-prom-execution-setup}
+#### PROM_EXECUTION_SETUP Prompt Text {#full-prompt-prom-execution-setup}
 
-::: details Full PROM_EXECUTION_SETUP content
+::: details Rendered PROM_EXECUTION_SETUP prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1679,9 +1747,9 @@ JSON or YAML inside `<EXECUTION_SETUP_RESULT>...</EXECUTION_SETUP_RESULT>` with 
 ````
 :::
 
-### PROM_EXECUTION_SETUP_NOTE {#full-prompt-prom-execution-setup-note}
+#### PROM_EXECUTION_SETUP_NOTE Prompt Text {#full-prompt-prom-execution-setup-note}
 
-::: details Full PROM_EXECUTION_SETUP_NOTE content
+::: details Rendered PROM_EXECUTION_SETUP_NOTE prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1716,9 +1784,9 @@ Plain text - one concise append-only retry note
 ````
 :::
 
-### PROM_CODING {#full-prompt-prom-coding}
+#### PROM_CODING Prompt Text {#full-prompt-prom-coding}
 
-::: details Full PROM_CODING content
+::: details Rendered PROM_CODING prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1772,9 +1840,9 @@ JSON inside <BEAD_STATUS>...</BEAD_STATUS> tags with bead_id, status, checks (te
 ````
 :::
 
-### PROM51 {#full-prompt-prom51}
+#### PROM51 Prompt Text {#full-prompt-prom51}
 
-::: details Full PROM51 content
+::: details Rendered PROM51 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1810,9 +1878,9 @@ Plain text — append-only note for the bead Notes field
 ````
 :::
 
-### PROM52 {#full-prompt-prom52}
+#### PROM52 Prompt Text {#full-prompt-prom52}
 
-::: details Full PROM52 content
+::: details Rendered PROM52 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1869,9 +1937,9 @@ Test file(s) + execution commands
 ````
 :::
 
-### PROM53 {#full-prompt-prom53}
+#### PROM53 Prompt Text {#full-prompt-prom53}
 
-::: details Full PROM53 content
+::: details Rendered PROM53 prompt
 ````text
 CRITICAL OUTPUT RULE:
 Your response must contain ONLY the requested artifact in the exact format specified.
@@ -1906,9 +1974,9 @@ Plain text - one concise append-only retry note
 ````
 :::
 
-### PROM54 {#full-prompt-prom54}
+#### PROM54 Prompt Text {#full-prompt-prom54}
 
-::: details Full PROM54 content
+::: details Rendered PROM54 prompt
 ````text
 continue please
 ````

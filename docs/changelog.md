@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Improved the Prompt Inventory documentation with workflow-grouped prompt tables, styled collapsed prompt content, and a persistent right-sidebar outline collapse control.
 - Added a Prompt Inventory reference page that documents built-in prompt templates, collapsed full prompt content, runtime prompt builders, workflow usage, tool policies, and context inputs.
 - Optimized the landing page (`web.html`) and modernized the build pipeline: compiled Tailwind CSS v4 statically (moving all custom classes, keyframes, scrollbars, and preloaded `@font-face` definitions to `src/web.css` and building to `public/web.css`), converted all screenshot images from PNG to WebP to reduce asset payload size by ~85%, updated references in `web.html`, `README.md`, and `docs/index.md` to use `/media/*.webp`, fixed an HTML nesting bug that broke the Alternate Bead Error tab, implemented Scroll-Spy navigation for header nav links, added a secure-context copy command fallback, and automated the `package.json` version tag injection during builds.
 - Streamlined documentation and README: focused the README documentation table to essential first-time user pages (including LLM Council and Context Engineering), added missing error screenshots, integrated a high-level VM warning and a quoted Mermaid flowchart into the docs landing page to resolve parse errors, added Configuration and Changelog links to the doc map, linked terminology notes internally, and synced the core-philosophy challenges comparison table and optimizations list.
@@ -35,6 +36,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added a persisted right-sidebar outline collapse toggle to the VitePress docs theme, mirroring the existing left sidebar collapse behavior for wide desktop docs pages.
 - Added `docs/prompts.md` as a Prompt Inventory reference page covering named prompt templates, collapsed full prompt content, runtime prompt builders, workflow statuses, session types, tool policies, context inputs, and maintenance guidance.
 - Added a high-level warning alerting users to run LoopTroop in a sandboxed environment/VM on the documentation landing page (`docs/index.md`).
 - Added a simple workflow flowchart using Mermaid to the documentation landing page (`docs/index.md`).
@@ -44,6 +46,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Reworked `docs/prompts.md` into a workflow-oriented reference with a phase map, grouped named-template tables, wider prompt-page layout, and more readable collapsed prompt content styling.
 - Streamlined `README.md` quick navigation start links to fit on a single line.
 - Added missing `bead2.png` and `bead3.png` error view screenshots to the `README.md` gallery.
 - Focused the documentation table in `README.md` to display only the essential five pages for new users.

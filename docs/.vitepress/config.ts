@@ -79,6 +79,10 @@ export default defineConfig({
         if (collapsed === 'true') {
           document.documentElement.classList.add('sidebar-collapsed');
         }
+        const outlineCollapsed = localStorage.getItem('outline-collapsed');
+        if (outlineCollapsed === 'true') {
+          document.documentElement.classList.add('outline-collapsed');
+        }
       })();
       `
     ]
