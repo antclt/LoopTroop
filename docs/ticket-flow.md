@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **TL;DR** — A ticket flows through: scanning → interview → PRD → beads planning → execution setup → bead-by-bead coding → final test → integration → PR → cleanup (interview, PRD and beads are planning loops with LLM council drafting, voting, and refinement stages).
 
-LoopTroop does not move a ticket through a tiny backlog -> coding -> done list. It runs a staged lifecycle with planning loops, approval gates, execution setup, bead-scoped coding, PR delivery, and explicit error recovery. 
+LoopTroop does not move a ticket through a tiny backlog -> coding -> done list. It runs a staged lifecycle with planning loops, approval gates, execution setup, bead-scoped coding, PR delivery, and explicit error recovery.
 
 The canonical workflow metadata lives in `shared/workflowMeta.ts`, the executable transition rules live in `server/machines/ticketMachine.ts`, and the route handling lives under `server/routes/ticketHandlers/`.
 
@@ -31,9 +31,15 @@ DRAFT
 Any active phase can fail into BLOCKED_ERROR.
 BLOCKED_ERROR -> RETRY -> previousStatus
 BLOCKED_ERROR -> CONTINUE -> previousStatus (eligible preserved OpenCode sessions only)
-Any cancellable phase -> CANCELED
+Any non-terminal phase -> CANCELED
 WAITING_PR_REVIEW -> merge or close-unmerged -> CLEANING_ENV
 ```
+
+Useful mental model:
+
+- **Before `PRE_FLIGHT_CHECK`** you are still in editable planning territory: interview, PRD, beads, and setup artifacts can create archived versions and restart downstream work.
+- **From `PRE_FLIGHT_CHECK` onward** the workflow is in execution territory: repository mutations become isolated and tightly controlled, and recovery is driven by execution locks, retries, or explicit blocked-error decisions.
+- **`CODING` is the versioning exception**: retries reset the active bead/checkpoint instead of creating phase-attempt versions.
 
 ---
 
@@ -90,9 +96,9 @@ The underlying state machine enforces valid state transitions and recovery hooks
 ![Error recovery and cancellation state diagram](./media/ticket-flow/07-3-6-error-recovery-cancellation.svg)
 
 **Recovery semantics:**
-- `RETRY`: Re-runs the previous phase from scratch
-- `CONTINUE`: Resumes eligible OpenCode sessions from where they stopped
-- `CANCEL`: Moves to terminal canceled state
+- `RETRY`: Re-enters `previousStatus`; non-implementation phases archive the failed attempt and create a fresh version first, while `CODING` resets the active bead/checkpoint path instead.
+- `CONTINUE`: Appears only when a preserved OpenCode session is still live and eligible; LoopTroop re-enters the interrupted phase and sends exactly `continue please`.
+- `CANCEL`: Available from every non-terminal workflow state and moves the ticket to the terminal canceled state after aborting active work.
 
 ### 3.7 Coverage Control
 
@@ -130,7 +136,9 @@ The transition model enforces these invariants:
 - **The Interview Loop** can self-loop dynamically during active batching or coverage verification.
 - **Spec & Blueprint Coverage Loops** remain bounded inside their groups, revising automatically until clean or capped.
 - **`BLOCKED_ERROR`** stores `previousStatus` in its context to allow precise, phase-scoped recovery.
-- **Cancellation** is only allowed from approval gates and PR review states.
+- **Cancellation** is a workflow-wide safety valve for every non-terminal state, even though the most visible decision points remain approvals, blocked errors, and PR review.
+- **Archived phase attempts** preserve non-implementation retries, regenerations, and planning restarts as read-only history instead of overwriting the last run.
+- **Execution-time human input** can happen without a status change when OpenCode asks a question during runtime setup or coding.
 
 ---
 
@@ -204,6 +212,8 @@ The canonical properties for every workflow phase are detailed in the inventory 
 | `CANCELED` | Canceled | `done` | `canceled` | `done` | — | no | no | — |
 | `BLOCKED_ERROR` | Error | `errors` | `error` | `needs_input` | — | no | no | — |
 
+**Note:** `editable: yes` means the review artifact or planning document can be manually saved from that phase. Interview and PRD edits are accepted only before `PRE_FLIGHT_CHECK`; setup-plan edits are also accepted during `PREPARING_EXECUTION_ENV`, where they trigger a one-step rewind back to setup approval.
+
 ---
 
 ## 6. UI & Frontend Consequences
@@ -214,6 +224,7 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`progressKind`** controls specialized progress tracking visuals (e.g., question batch tallies vs. bead graph lists).
 - **`editable`** toggles raw markdown edit boxes for planning and setup specs.
 - **`multiModelLogs`** decides whether the UI should search for multi-agent council tabs and scoring matrices or render single-model log output.
+- **`phaseAttempt`-scoped artifact/log loading** keeps archived retries and regenerations separated from the live SSE stream.
 
 ---
 
@@ -248,33 +259,46 @@ The state machine metadata directly drives the React user interface. Developers 
 
 ### Pre-Implementation
 - **`PRE_FLIGHT_CHECK`:** Verifies workspace sanitation, Git worktree hygiene, OpenCode reachability, and execution locks. Committable changes outside LoopTroop fail the checks.
-- **`WAITING_EXECUTION_SETUP_APPROVAL`:** Audi-prep checks are presented; the user approves the temporary runtime environment profile.
-- **`PREPARING_EXECUTION_ENV`:** Fetches toolchains, runs probes, sets paths, and creates sandboxed execution wrappers.
+- **`WAITING_EXECUTION_SETUP_APPROVAL`:** The setup-plan draft presents the readiness assessment, required temporary setup steps, and regenerate history. The user can approve, edit, or regenerate it with commentary.
+- **`PREPARING_EXECUTION_ENV`:** Runs only the approved temporary setup, verifies wrappers/probes, may perform setup-scoped online lookup, and emits the reusable execution-setup profile under `.ticket/runtime/execution-setup/**`.
 
 ### Implementation (Coding)
-- **`CODING`:** The executor processes one bead at a time in dependency order. The agent gets narrow contexts and structured completion reminders. Uncommitted project changes are captured in local bead commits.
+- **`CODING`:** The executor processes one bead at a time in dependency order. The agent gets narrow contexts and structured completion reminders. Uncommitted project changes are captured in local bead commits, while retries reset the active bead/checkpoint rather than creating a new phase attempt.
 
 ### Post-Implementation & Delivery
-- **`RUNNING_FINAL_TEST`:** The implementer constructs a whole-ticket test plan and executes tests using runtime wrappers, generating a file-effects checklist.
-- **`INTEGRATING_CHANGES`:** Squashes bead-level changes and tested files into a clean candidate commit on the main ticket branch.
+- **`RUNNING_FINAL_TEST`:** The implementer constructs a whole-ticket test plan, executes it with the approved runtime profile, and records a final-test file-effects audit alongside the test outputs.
+- **`INTEGRATING_CHANGES`:** Squashes bead-level changes and audited candidate files into a clean candidate commit on the main ticket branch. If final testing produced unclassified files, integration blocks for a human include/discard decision.
 - **`CREATING_PULL_REQUEST`:** Performs a final candidate audit (reconciling inclusions/exclusions) before pushing the branch and drafting the PR title/description.
 - **`WAITING_PR_REVIEW`:** Review window. Exits successfully via `merge` (which locks, checks, and finishes) or `close_unmerged`.
 - **`CLEANING_ENV`:** Deletes transient lockfiles, wrapper hooks, and session directories, preserving planning files and audit trails.
+
+### Error & Terminal States
+- **`BLOCKED_ERROR`:** Recovery gate that preserves `previousStatus`, structured diagnostics, and any continuation candidate. Depending on the failure, the user can retry, continue a preserved OpenCode session, resolve final-test file-effects, or cancel.
+- **`COMPLETED`:** Terminal success state after cleanup finishes and execution locks are released. Ticket artifacts, logs, and archived attempts remain available for audit.
+- **`CANCELED`:** Terminal stop state for user-driven cancellation or intentional planning rewinds. Existing artifacts/history remain, but no further automation continues.
 
 ---
 
 ## 8. User Actions & Guard Systems
 
-`getAvailableWorkflowActions()` governs what explicit actions the user can issue depending on active phases:
+`getAvailableWorkflowActions()` defines the static action floor, and the server adds dynamic actions for resumable OpenCode sessions and final-test file-effects recovery. In practice, the main user actions are:
 
-- **`DRAFT`:** `start` (locks configurations), `cancel`.
-- **Gatekeepers (Approvals):** `approve` (must provide `expectedContentSha256` to prevent race conditions; mismatch returns `409`), `cancel`.
-- **`BLOCKED_ERROR`:** `retry` (versions and restarts the failed phase), `continue` (resumes eligible preserved OpenCode sessions), file-effects overrides, `cancel`.
+| Where | Main actions | Notes |
+| --- | --- | --- |
+| `DRAFT` | `start`, `cancel` | `start` locks the ticket's model/configuration choices and creates the isolated workspace. |
+| `WAITING_INTERVIEW_ANSWERS` | batch answer, edit answer, skip all, `cancel` | Interview input is batch-oriented; `skip all` writes a synthetic clean coverage result and jumps straight to interview approval. |
+| Approval gates | `approve`, `cancel` | Interview, PRD, beads, and setup-plan approvals require `expectedContentSha256`; stale approvals return `409` instead of advancing. |
+| `WAITING_EXECUTION_SETUP_APPROVAL` / `PREPARING_EXECUTION_ENV` | edit, regenerate, approve/rewind | Setup-plan saves or regenerations during runtime setup stop the active setup session, archive the current setup/runtime attempts, preserve the tool cache, and require approval again. |
+| `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | Review resolution decides whether the ticket exits with a merged PR or a closed unmerged branch. |
+| `BLOCKED_ERROR` | `retry`, optional `continue`, optional file-effects overrides, `cancel` | `continue` appears only when a preserved OpenCode session is still live. `include-final-test-files` / `discard-final-test-files` appear only for `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED`. |
+| Any other non-terminal status | `cancel` | Cancellation is not limited to gates; the route accepts it from every non-terminal workflow state. |
+| `PREPARING_EXECUTION_ENV` / `CODING` | reply/reject OpenCode questions | OpenCode can request human input mid-session without changing the main ticket status; answering or rejecting the request unblocks that live session in place. |
 
 ### Planning Edit Restarts
 Approved interview and PRD documents can still be edited manually while in planning (before `PRE_FLIGHT_CHECK`). Saving manual changes triggers session cancellation downstream to keep artifacts consistent:
 - Editing **Interview** from PRD/Beads archives the approved interview, aborts downstream sessions, clears downstream drafts, saves/approves the edit, and jumps to `DRAFTING_PRD`.
 - Editing **PRD** from Beads archives the approved PRD, aborts downstream sessions, clears downstream blueprint drafts, saves/approves the edit, and jumps to `DRAFTING_BEADS`.
+- Editing or regenerating the **Execution Setup Plan** while `PREPARING_EXECUTION_ENV` is active performs a runtime rewind: LoopTroop stops setup, archives both setup attempts, preserves `.ticket/runtime/execution-setup/tool-cache`, clears stale runtime outputs, returns to `WAITING_EXECUTION_SETUP_APPROVAL`, and requires a fresh approval before setup resumes.
 
 ---
 
@@ -294,6 +318,11 @@ When a phase encounters a fatal block, it routes to `BLOCKED_ERROR` while storin
   ```text
   continue please
   ```
+
+### Phase Attempts And Version History
+- Every non-implementation manual retry archives the failed phase attempt and creates a fresh active attempt; artifacts and logs can later be inspected through `phaseAttempt`-scoped history.
+- Setup-plan regenerations and post-approval planning edits follow the same versioned-history model instead of overwriting the last approved generation.
+- `CODING` is the exception: recovery stays bead-scoped (`bead_execution:*` artifacts, checkpoint finalization, and worktree reset) rather than creating phase-attempt versions.
 
 ---
 
@@ -321,8 +350,9 @@ Durable checkpoints are saved to the project directory at critical milestones:
 | **Interview** | `.ticket/interview.yaml` + Q&A snapshots + progress markers. |
 | **PRD Specs** | `.ticket/prd.yaml` + per-model Full Answers + candidate coverage histories. |
 | **Blueprints** | `.ticket/beads/<flow>/.beads/issues.jsonl` + coverage reports. |
-| **Pre-Implementation** | `execution_setup_plan` YAML schema + approved SHA hashes. |
-| **Execution** | `.ticket/runtime/execution-log.jsonl` + setup profile + bead notes and diffs. |
+| **Pre-Implementation** | `execution_setup_plan` artifacts + generation reports + approved SHA hashes + `.ticket/runtime/execution-setup-profile.json`. |
+| **Execution** | `.ticket/runtime/execution-log.jsonl` + setup profile/tool cache + bead notes, checkpoints, and diffs. |
+| **Recovery & History** | Archived phase attempts, `final_test_file_effects_audit`, continuation candidates, and read-only prior planning generations addressable by `phaseAttempt`. |
 | **Edits** | Append-only `user_edit_receipt:*` documents recording change differentials and approval resets. |
 | **Delivery** | Holistic test plans, file-effects audits, and Git PR creation reports. |
 
@@ -334,9 +364,11 @@ Several orchestrator modules drive the complex mechanics behind the scenes:
 
 - **Coverage Control (`server/workflow/coverageControl.ts`)**: Manages the PRD and Beads coverage tracking loops, determining whether candidate specs have gaps and whether follow-up verification rounds are needed.
 - **Execution Band (`server/workflow/executionBand.ts`)**: Demarcates the boundary between planning (editable, cancellable restarts) and runtime execution (strict isolated worktree changes).
+- **Phase Attempts (`server/storage/ticketPhaseAttempts.ts`)**: Versions non-implementation retries, setup-plan regenerations, and archived planning generations so prior artifacts stay immutable.
 - **Session Logging (`server/workflow/sessionStatusLogging.ts`)**: Handles the durable recording of session state transitions and OpenCode interactions.
 - **Integration Phase (`server/workflow/phases/integrationPhase.ts`)**: Orchestrates the commit squashing and target branch integration logic after coding and final tests are complete.
 - **Execution Setup Phase (`server/workflow/phases/executionSetupPlanPhase.ts`)**: Manages the pre-flight checks and setup plan drafting, explicitly separating environment prep from active bead coding.
+- **Ticket Handlers (`server/routes/ticketHandlers/**`)**: Implement the route-driven behaviors that sit around the state machine edges, including approval hashes, planning restarts, setup rewinds, blocked-error recovery actions, and OpenCode question replies.
 
 ---
 
