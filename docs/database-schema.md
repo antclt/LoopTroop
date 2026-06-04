@@ -1,123 +1,143 @@
 # Database Schema
 
 > [!IMPORTANT]
-> **TL;DR** — LoopTroop uses two SQLite databases: an app-level DB for projects and settings, and a per-project DB for tickets, artifacts, phases, errors, and sessions. All durable workflow state lives here — not in model memory.
+> **TL;DR** — LoopTroop persists durable state in two SQLite databases plus ticket-owned files: one app DB for global settings and attached-project identity, one per-project DB for workflow records, and `.ticket/**` files for canonical planning docs, logs, and runtime metadata.
 
-LoopTroop currently uses two SQLite databases plus filesystem artifacts.
+LoopTroop does **not** treat model transcripts as source of truth. Durable workflow state is split deliberately:
 
-That split is intentional:
+- the **app DB** stores global configuration and the attached-project registry
+- each attached repository has a **project DB** for tickets, attempts, artifacts, session ownership, and error history
+- the ticket worktree filesystem stores **canonical documents, logs, and per-ticket metadata** that do not belong in relational tables
 
-- the app database stores global application configuration
-- each attached project has its own operational database
-- ticket artifacts and runtime logs live in the project worktree filesystem
+## 1. Storage Layout At A Glance
 
-## 1. Database Locations
+| Layer | Default location | Owns | Notes |
+| --- | --- | --- | --- |
+| App DB | `~/.config/looptroop/app.sqlite` | Profile defaults, app metadata, attached projects | Override with `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
+| Project DB | `<project>/.looptroop/db.sqlite` | Project row, tickets, artifacts, phase attempts, OpenCode session ownership, status/error history | Derived from the attached project root |
+| Ticket filesystem | `<project>/.looptroop/worktrees/<externalId>/.ticket/**` | Canonical docs, runtime logs, bead files, ticket meta, rebuildable projections | Lives inside the ticket worktree, not in the root repo tree |
 
-| Database | Default location | Configuration |
+Both SQLite connections use WAL mode plus SQLite busy timeouts. The app DB connection and path resolution live in `server/db/index.ts`; the app schema is bootstrapped in `server/db/init.ts`. The project DB is created and evolved in `server/db/project.ts`, which also cleans foreign-key orphans before enabling `PRAGMA foreign_keys=ON` so old or manually edited project databases do not start with dangling references.
+
+## 2. Identity And Ownership Boundaries
+
+The main thing to understand is that LoopTroop has **public IDs**, **local row IDs**, and **filesystem paths**, and they are intentionally different:
+
+| Identifier | Stored in | Meaning |
 | --- | --- | --- |
-| App DB | `~/.config/looptroop/app.sqlite` | `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
-| Project DB | `<project>/.looptroop/db.sqlite` | derived from the attached project root |
+| `attached_projects.id` | App DB | Public project id used by the API |
+| `projects.id` | Project DB | Local numeric row id inside that project DB only |
+| `tickets.id` | Project DB | Local numeric foreign-key target inside that project DB |
+| `tickets.external_id` | Project DB + filesystem paths | Human-facing per-project ticket id such as `AUTH-12` |
+| `projectId:externalId` | API/public refs | Composite ticket ref returned by the API, built from `attached_projects.id` + `tickets.external_id` |
 
-Both databases are opened with WAL mode and SQLite foreign-key enforcement enabled. `server/db/index.ts` owns the app DB path, connection lifecycle, and SQLite pragmas; `server/db/init.ts` bootstraps and evolves the app runtime schema. On project DB startup, LoopTroop removes orphan rows from dependent ticket tables before enabling enforcement so partially written or manually edited databases do not keep dangling references.
+Important consequences:
 
-## 2. App Database
+- there are **no cross-database foreign keys** between the app DB and project DB
+- the bridge between them is the attached project root path (`attached_projects.folder_path` / `projects.folder_path`)
+- `projects.id` and `tickets.id` are local implementation details; the API exposes composite refs instead
 
-The app database connection is configured in `server/db/index.ts`; its runtime schema is initialized and evolved by `server/db/init.ts`.
+## 3. App Database
+
+The app database is the global control-plane store.
 
 ### Tables
 
-| Table | Purpose |
-| --- | --- |
-| `profiles` | Singleton profile with model and workflow defaults |
-| `app_meta` | Small app-level key/value metadata |
-| `attached_projects` | Registry of attached project roots |
+| Table | Purpose | Notes |
+| --- | --- | --- |
+| `profiles` | Baseline workflow/profile settings | Treated as a singleton row by the API |
+| `app_meta` | Small app-level key/value metadata | Used for lightweight UI/runtime flags |
+| `attached_projects` | Registry of attached project roots | Provides the public project id |
 
 ### `profiles`
 
-Key columns:
+This row is the default configuration source that projects and tickets inherit from until they override or lock values.
 
-- `main_implementer`
-- `main_implementer_variant`
-- `council_members`
-- `council_member_variants`
-- `min_council_quorum`
-- `per_iteration_timeout`
-- `execution_setup_timeout`
-- `council_response_timeout`
-- `interview_questions`
-- `coverage_follow_up_budget_percent`
-- `max_coverage_passes`
-- `max_prd_coverage_passes`
-- `max_beads_coverage_passes`
-- `structured_retry_count`
-- `max_iterations`
-- `opencode_retry_limit`
-- `opencode_retry_delay`
-- `opencode_steps`
-- `tool_input_max_chars`
-- `tool_output_max_chars`
-- `tool_error_max_chars`
+Important columns:
 
-This table provides the baseline configuration that projects and tickets inherit from when they start. `structured_retry_count` defaults to `1` and is validated by the API/UI as a value from `0` through `5`. `opencode_retry_limit` defaults to `10` and is validated from `0` through `50`; `opencode_retry_delay` is stored in milliseconds, defaults to `60000`, and is validated from `0` through `3600000`. `opencode_steps` defaults to `0` (no limit — OpenCode default) and is validated from `0` through `500`.
+- model selection: `main_implementer`, `main_implementer_variant`, `council_members`, `council_member_variants`
+- workflow budgets and limits: `min_council_quorum`, `interview_questions`, `max_iterations`, `structured_retry_count`
+- timeout settings in milliseconds: `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`
+- coverage controls: `coverage_follow_up_budget_percent`, `max_coverage_passes`, `max_prd_coverage_passes`, `max_beads_coverage_passes`
+- OpenCode retry controls: `opencode_retry_limit`, `opencode_retry_delay`, `opencode_steps`
+- tool log truncation limits: `tool_input_max_chars`, `tool_output_max_chars`, `tool_error_max_chars`
 
-## 3. Project Database
+Operational notes:
 
-The project database is initialized in `server/db/project.ts` and uses the schema definitions from `server/db/schema.ts`.
+- the table shape allows multiple rows, but the API treats it as a **singleton**: `POST /api/profile` rejects a second profile and normal reads use the first row
+- `council_members` is stored as a JSON array string; `council_member_variants` is a JSON object string keyed by model id
+- defaults come from `server/db/defaults.ts`
+- validation ranges are enforced by the API layer in `server/routes/profiles.ts`, not by SQLite column constraints alone
+
+### `app_meta`
+
+`app_meta` is intentionally small and generic: `key`, `value`, and `updated_at`.
+
+Today it is used for startup/UI metadata such as `startup.restore_notice.dismissed_at` in `server/startupState.ts`, and it is the right place for tiny app-wide flags that do not justify a dedicated table.
+
+### `attached_projects`
+
+This table is the app-level registry of attached repositories:
+
+- `folder_path` is unique
+- `id` is the **public project id** used by the API
+- deleting or detaching an attached project removes this registry row, not necessarily the project-local `.looptroop` state
+
+## 4. Project Database
+
+The project database is the operational store for one attached repository. LoopTroop expects one logical `projects` row per attached repo and many ticket-owned rows underneath it.
 
 ### Tables
 
 | Table | Purpose |
 | --- | --- |
-| `projects` | Project metadata and project-level overrides |
-| `tickets` | Ticket records and workflow snapshot fields |
-| `phase_artifacts` | Structured phase artifacts with phase and attempt numbers |
-| `ticket_phase_attempts` | Attempt history per phase |
-| `opencode_sessions` | Owned OpenCode session records |
-| `ticket_status_history` | Status transition history |
-| `ticket_error_occurrences` | Persisted blocked-error occurrences and resolution history |
+| `projects` | Project metadata plus project-level configuration overrides |
+| `tickets` | Ticket records, workflow status, progress counters, and serialized machine snapshot |
+| `phase_artifacts` | Phase-scoped structured artifacts, reports, approvals, UI companions, and read models |
+| `ticket_phase_attempts` | Archived/active phase-version history for non-implementation phases |
+| `opencode_sessions` | Exact OpenCode session ownership records |
+| `ticket_status_history` | Append-only status transition log |
+| `ticket_error_occurrences` | Append-only blocked-error history plus resolution state |
 
 ### `projects`
 
 Important columns:
 
-- `name`
-- `shortname`
-- `icon`
-- `color`
-- `folder_path`
-- `profile_id`
-- `council_members` — JSON array of model IDs, nullable project-level override
-- `max_iterations`
-- `per_iteration_timeout` — milliseconds, nullable project-level override
-- `execution_setup_timeout` — milliseconds, nullable project-level override
-- `council_response_timeout` — milliseconds, nullable project-level override for the user-facing AI Response Timeout setting
-- `min_council_quorum`
-- `interview_questions`
-- `ticket_counter`
+- display/identity: `name`, `shortname`, `icon`, `color`, `folder_path`
+- nullable overrides: `council_members`, `max_iterations`, `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`, `min_council_quorum`, `interview_questions`
+- sequencing: `ticket_counter`
+- metadata: `profile_id`
+
+Operational notes:
+
+- `ticket_counter` is the source for `tickets.external_id`; new tickets are generated as `<shortname>-<counter>`
+- `council_members` is a JSON array string when present
+- `profile_id` is **not** a cross-database foreign key; SQLite cannot enforce a foreign key into the separate app DB, so this column is metadata only
+- project-level overrides are read directly from this row at runtime; they do not require joining back into the app DB
 
 ### `tickets`
 
+This is the operational center of a ticket.
+
 Important columns:
 
-- `external_id`
-- `project_id`
-- `title`
-- `description`
-- `priority`
-- `status`
-- `xstate_snapshot`
-- `branch_name`
-- `current_bead`
-- `total_beads`
-- `percent_complete`
-- `error_message`
-- locked model and planning settings, including interview coverage passes, PRD/beads coverage pass caps, and `locked_structured_retry_count` frozen at ticket start
-- `started_at`
-- `planned_date`
+- identity and status: `external_id`, `project_id`, `title`, `description`, `priority`, `status`
+- persisted machine state: `xstate_snapshot`
+- execution progress: `branch_name`, `current_bead`, `total_beads`, `percent_complete`
+- failure surface: `error_message`
+- frozen-on-start settings: `locked_main_implementer`, `locked_main_implementer_variant`, `locked_council_members`, `locked_council_member_variants`, `locked_interview_questions`, `locked_coverage_follow_up_budget_percent`, `locked_max_coverage_passes`, `locked_max_prd_coverage_passes`, `locked_max_beads_coverage_passes`, `locked_structured_retry_count`
+- lifecycle times: `started_at`, `planned_date`, `created_at`, `updated_at`
 
-This table is the operational center of a ticket, but it is not the only place ticket truth lives. Review artifacts and runtime logs still live in `.ticket/**`. Existing tickets without `locked_structured_retry_count` fall back to the current profile value and then the default structured retry count.
+Operational notes:
+
+- `xstate_snapshot` is a serialized XState snapshot used to restore non-terminal tickets on startup
+- `external_id` is the stable human-facing identifier; the API turns it into a public ticket ref by prefixing the public project id
+- locked configuration columns freeze the profile/project settings that were in force when the ticket started
+- runtime details shown in the UI are enriched from **both** this row and ticket-owned files under `.ticket/**`
 
 ### `phase_artifacts`
+
+This table stores structured workflow artifacts and related UI/read-model payloads.
 
 Columns:
 
@@ -129,15 +149,17 @@ Columns:
 - `created_at`
 - `updated_at`
 
-Important note:
+Operational notes:
 
-- the current DB schema does not include a `file_path` column
-- the frontend artifact normalizer accepts `filePath` in API payloads, but that field is not a physical column in `phase_artifacts`
-- council companion artifacts may store draft/vote metadata and raw attempt diagnostics in `content`; invalid, failed, or timed-out companion payloads intentionally omit malformed model text from structured body fields
+- `content` is typically a JSON string, even when the user-facing canonical document also exists as YAML/JSONL on disk
+- `phase_attempt` versions artifacts across retries, regenerations, and post-approval restarts for tracked phases
+- the database does **not** have a `file_path` column; API artifact payloads may expose `filePath`, but DB-backed artifacts currently return `null`
+- this table stores more than just final docs: examples include `interview`, `prd`, `beads`, `execution_setup_plan`, coverage artifacts, `approval_snapshot:*`, `ui_state:error_attention`, `cleanup_report`, `merge_report`, `final_test_report`, and `pull_request_report`
+- council companion artifacts may embed draft/vote metadata and attempt diagnostics in `content`; malformed model text is intentionally kept out of structured fields
 
 ### `ticket_phase_attempts`
 
-Tracks retry or restart history for individual phases.
+This table tracks active and archived phase versions.
 
 Columns:
 
@@ -149,9 +171,15 @@ Columns:
 - `created_at`
 - `archived_at`
 
+Operational notes:
+
+- it is used for **non-implementation phases**
+- `CODING` does **not** create new phase attempts; coding retries use bead/worktree reset history instead
+- archived attempts are read-only and are what power prior-version artifact/log views
+
 ### `opencode_sessions`
 
-This table is what makes restart-safe session ownership possible.
+This table is what makes restart-safe OpenCode ownership possible.
 
 Columns:
 
@@ -167,9 +195,16 @@ Columns:
 - `last_event_id`
 - `last_event_at`
 
+Operational notes:
+
+- the ownership slot is the full tuple of ticket + phase + phase attempt + optional member/bead/iteration/step
+- reconnect/continue logic validates the **exact** owned active session record, not just “some session for this ticket”
+- `state` is currently `active`, `completed`, or `abandoned`
+- `ticket_id` is nullable and becomes `NULL` if a referenced ticket is removed
+
 ### `ticket_status_history`
 
-A simple transition log:
+This is an append-only transition log with:
 
 - `ticket_id`
 - `previous_status`
@@ -177,9 +212,11 @@ A simple transition log:
 - `reason`
 - `changed_at`
 
+It records explicit status changes, not every internal machine detail. In normal patch flows, `reason` is typically populated from the error message that accompanied the transition.
+
 ### `ticket_error_occurrences`
 
-Stores repeated blocked states as explicit occurrences rather than one mutable error blob.
+This table records blocked errors as explicit occurrences instead of mutating one blob in place.
 
 Columns:
 
@@ -194,67 +231,104 @@ Columns:
 - `resolution_status`
 - `resumed_to_status`
 
-## 4. Relationship Overview
+Operational notes:
+
+- each new blocked incident increments `occurrence_number`
+- `error_codes` is stored as a JSON array string
+- `diagnostic_details` stores normalized diagnostic payloads used for recovery decisions and UI detail
+- resolution is modeled explicitly with `resolved_at`, `resolution_status`, and `resumed_to_status`
+
+## 5. Relationship Overview
+
+Within a project DB, the relational shape is:
 
 ```mermaid
 erDiagram
     projects ||--o{ tickets : has
     tickets ||--o{ phase_artifacts : produces
-    tickets ||--o{ ticket_phase_attempts : retries
+    tickets ||--o{ ticket_phase_attempts : versions
     tickets ||--o{ opencode_sessions : owns
     tickets ||--o{ ticket_status_history : transitions
     tickets ||--o{ ticket_error_occurrences : records
 ```
 
-Ticket-owned rows cascade when a ticket is deleted. `opencode_sessions.ticket_id` is nullable and is set to `NULL` if a referenced ticket is removed.
+Deletion behavior:
 
-## 5. What Is Not In SQLite
+- deleting a ticket cascades through `phase_artifacts`, `ticket_phase_attempts`, `ticket_status_history`, and `ticket_error_occurrences`
+- `opencode_sessions.ticket_id` uses `ON DELETE SET NULL`
+- app DB rows and project DB rows are linked **logically** by project root path, not by SQL foreign key
 
-SQLite is not the whole system.
+## 6. What Lives Outside SQLite
 
-Important non-DB state includes:
+SQLite is not the whole system. Some ticket state is intentionally filesystem-backed:
 
-- `.ticket/relevant-files.yaml`
-- `.ticket/interview.yaml`
-- `.ticket/prd.yaml`
-- `.ticket/beads/<flow>/.beads/issues.jsonl`
-- `.ticket/runtime/execution-log.jsonl`
-- `.ticket/runtime/execution-log.debug.jsonl`
-- `.ticket/runtime/execution-log.ai.jsonl`
-- `.ticket/runtime/state.yaml`
-- `.ticket/runtime/execution-setup-profile.json`
+| Path | Role | Source-of-truth note |
+| --- | --- | --- |
+| `.ticket/relevant-files.yaml` | Canonical relevant-files document | Filesystem artifact |
+| `.ticket/interview.yaml` | Final interview document | Filesystem artifact |
+| `.ticket/prd.yaml` | Final PRD document | Filesystem artifact |
+| `.ticket/beads/<baseBranch>/.beads/issues.jsonl` | Bead plan and bead runtime status/history | Filesystem artifact |
+| `.ticket/meta/ticket.meta.json` | Ticket metadata such as base branch and locked model selection | Filesystem artifact |
+| `.ticket/runtime/execution-log.jsonl` | Main execution log | Filesystem log |
+| `.ticket/runtime/execution-log.debug.jsonl` | Folded forensic/debug log | Filesystem log |
+| `.ticket/runtime/execution-log.ai.jsonl` | AI-detail log channel | Filesystem log |
+| `.ticket/runtime/execution-setup-profile.json` | Reusable execution-setup profile | Filesystem runtime artifact |
+| `.ticket/runtime/state.yaml` | UI-friendly runtime projection | **Rebuildable projection**, not the primary source of truth |
 
-The database tracks and indexes workflow state. The filesystem stores the user-facing and execution-facing artifacts.
+The important split is:
 
-## 6. Indexes And Runtime Behavior
+- the **database** stores indexed workflow records and ownership relationships
+- the **filesystem** stores canonical ticket docs, append-only logs, and per-ticket metadata
+- some filesystem files, especially `runtime/state.yaml`, are **derived read models** rebuilt from authoritative DB/file state
 
-The project DB also creates indexes for:
+## 7. Indexes And Runtime Behavior
 
-- ticket status
-- ticket external id
-- artifact lookup by ticket and phase attempt
-- session lookup by ticket, phase, and ownership fields
-- error occurrence lookup
+LoopTroop creates a small set of runtime-focused indexes rather than a large generic index set.
 
-Combined with WAL mode, this keeps the workflow responsive while the UI polls and the backend streams updates.
+### App DB indexes
 
-## 7. Schema Changes
+- `idx_attached_projects_folder_path` on `attached_projects(folder_path)`
 
-LoopTroop uses Drizzle schema definitions, but the app database is created and updated at server startup by `server/db/init.ts`. For normal app schema changes, update both `server/db/schema.ts` and the runtime bootstrap/evolution logic in `server/db/init.ts`; do not rely on `db:push` or `db:push:app` as the app schema-change workflow.
+### Project DB indexes
 
-`db:generate` and `db:generate:app` are retained for external tooling or migration artifact review. Verify generated output against `server/db/schema.ts` before committing it.
+- ticket lookup: `tickets(project_id)`, `tickets(status)`, `tickets(external_id)`
+- artifact lookup: `phase_artifacts(ticket_id)`, `phase_artifacts(ticket_id, phase, phase_attempt)`
+- phase-attempt lookup: `ticket_phase_attempts(ticket_id, phase, state, attempt_number)` plus a uniqueness index on `(ticket_id, phase, attempt_number)`
+- OpenCode session lookup: `opencode_sessions(session_id)`, `opencode_sessions(ticket_id, phase, state)`, `opencode_sessions(ticket_id, phase, phase_attempt, member_id, bead_id, iteration, step, state)`
+- blocked-error lookup: unique `(ticket_id, occurrence_number)` plus `(ticket_id, resolved_at, occurrence_number)`
 
-For project-local database work, use the explicit scripts and set `LOOPTROOP_PROJECT_DB_PATH`:
+These match the hot runtime paths: ticket board/status queries, phase-attempt version browsing, session reconnect, and blocked-error recovery.
+
+## 8. Changing The Schema Safely
+
+LoopTroop uses Drizzle table definitions, but **runtime bootstrap code is the real startup contract**.
+
+For app DB changes:
+
+1. update `server/db/schema.ts`
+2. update the app bootstrap/evolution logic in `server/db/init.ts`
+
+For project DB changes:
+
+1. update `server/db/schema.ts`
+2. update the project bootstrap/evolution logic in `server/db/project.ts`
+
+Do **not** treat `db:push` or `db:push:app` as the normal app-schema workflow. Likewise, do not assume a project schema change is complete just because Drizzle can generate or push it; the server still needs matching runtime bootstrap logic.
+
+Useful explicit commands:
 
 ```bash
+npm run db:generate:app
 npm run db:generate:project
 npm run db:push:project
 ```
 
-This split prevents accidental pushes to a repo-local project DB when the intended target is the app DB, or vice versa.
+`db:generate` / `db:generate:app` are primarily for migration artifact review or external tooling. `db:push:project` is the explicit project-target push command when you intentionally set `LOOPTROOP_PROJECT_DB_PATH`. Verify generated output against `server/db/schema.ts` before committing it.
 
 ## Related Docs
 
 - [System Architecture](system-architecture.md)
+- [Ticket Flow](ticket-flow.md)
 - [API Reference](api-reference.md)
 - [OpenCode Integration](opencode-integration.md)
+- [Operations Guide](operations.md)
