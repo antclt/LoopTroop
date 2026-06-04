@@ -131,7 +131,7 @@ flowchart TD
 ### Operations
 
 - [Operations Guide](operations.md): startup maintenance, environment variables, runtime storage, diagnostics, and project cleanup.
-- [Runtime Diagnostics](diagnostics.md): local stall and resource-pressure report command.
+- [Runtime Diagnostics](diagnostics.md): stall reports, blocked-error payloads, and structured retry surfaces.
 
 ### Direction
 

@@ -286,7 +286,7 @@ npm run diagnose:stall -- --trend-ms 120000 --trend-interval-ms 1000
 npm run diagnose:stall -- --ticket-path /path/to/worktree/.ticket
 ```
 
-For the full report guide, see [Runtime Diagnostics](diagnostics.md).
+For the full diagnostics guide, including the runtime report plus blocked-error and structured-retry surfaces, see [Runtime Diagnostics](diagnostics.md).
 
 ## 11. OpenCode Reachability
 

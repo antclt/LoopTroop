@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Refined the Runtime Diagnostics docs to separate stall reports from ticket-side diagnostics, align blocked-error field docs with the current code, and document structured retry diagnostics.
 - Refined the Operations Guide to match the implemented startup artifacts, OpenCode log handling, API auth and health surfaces, maintenance scripts, and current audit leftovers.
 - Improved ticket descriptions with Raw/Markdown editing previews and Markdown-only details viewing.
 - Refined the API Reference docs to better match the implemented route constraints, response payloads, archived-attempt behavior, and middleware guard rails.
@@ -86,6 +87,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Reworked `docs/diagnostics.md` so it now distinguishes runtime stall reports from blocked-error and structured-retry diagnostics, documents the current persisted blocked-error fields and redaction behavior accurately, and makes the runtime report sections / flags easier to map back to the implemented script and UI surfaces.
 - Reworked `docs/operations.md` so it now documents the repo-local startup artifact files, explicit-versus-fallback OpenCode startup rules, API token transport options, useful health endpoints, manual maintenance script behavior, mounted-drive warning surfaces, the default OpenCode log directory, and the current `drizzle-kit`/`vitepress`/`mermaid` audit leftovers more precisely.
 - Reworked `docs/api-reference.md` so it now documents the current auth/rate-limit edge cases, singleton profile lifecycle, project-route mutability rules, ticket/UI-state validation limits, standard workflow action response shape, execution-setup regeneration behavior, artifact/history filters, and bead-route fallback responses more precisely.
 - Tightened `docs/prompts.md` against the implemented prompt pipeline: clarified that collapsed prompt text shows the base template render, added code-backed notes for phase allowlists / context trim order / runtime overlays, documented the `PROM53` retry-note wrapper behavior, and called out the conservative candidate-file-audit fallback/report helpers that shape PR creation when classification is unavailable.
