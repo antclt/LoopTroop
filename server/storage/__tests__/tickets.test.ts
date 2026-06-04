@@ -7,8 +7,10 @@ import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { attachProject } from '../projects'
 import {
   createTicket,
+  DISPLAY_ONLY_MOCK_BRANCH_NAME,
   getTicketByRef,
   getTicketPaths,
+  listNonTerminalTickets,
   lockTicketStartConfiguration,
   patchTicket,
   recordTicketErrorOccurrence,
@@ -27,6 +29,13 @@ const errorRepoManager = createFixtureRepoManager({
   templatePrefix: 'looptroop-ticket-error-',
   files: {
     'README.md': '# LoopTroop Ticket Error Test\n',
+  },
+})
+
+const mockRepoManager = createFixtureRepoManager({
+  templatePrefix: 'looptroop-ticket-mock-',
+  files: {
+    'README.md': '# LoopTroop Mock Ticket Test\n',
   },
 })
 
@@ -118,6 +127,51 @@ describe('ticket start configuration locking', () => {
     expect(getTicketByRef(ticket.id)?.lockedCouncilMembers).toEqual(lockedCouncilMembers)
     expect(getTicketPaths(ticket.id)?.debugLogPath).toBe(getTicketDebugLogPath(repoDir, ticket.externalId))
     expect(getTicketPaths(ticket.id)?.aiLogPath).toBe(getTicketAiLogPath(repoDir, ticket.externalId))
+  })
+})
+
+describe('display-only mock tickets', () => {
+  beforeEach(() => {
+    clearProjectDatabaseCache()
+    initializeDatabase()
+    sqlite.exec('DELETE FROM attached_projects; DELETE FROM profiles;')
+  })
+
+  afterAll(() => {
+    clearProjectDatabaseCache()
+    mockRepoManager.cleanup()
+  })
+
+  it('keeps mock tickets visible but excludes them from startup hydration and actions', () => {
+    const repoDir = mockRepoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'LoopTroop',
+      shortname: 'LOOP',
+    })
+
+    const mockTicket = createTicket({
+      projectId: project.id,
+      title: 'Display-only mock',
+      description: 'Mock tickets should not run.',
+    })
+    patchTicket(mockTicket.id, {
+      branchName: DISPLAY_ONLY_MOCK_BRANCH_NAME,
+      status: 'SCANNING_RELEVANT_FILES',
+    })
+
+    const realTicket = createTicket({
+      projectId: project.id,
+      title: 'Real running ticket',
+      description: 'Real tickets should still hydrate.',
+    })
+    patchTicket(realTicket.id, {
+      status: 'SCANNING_RELEVANT_FILES',
+    })
+
+    expect(getTicketByRef(mockTicket.id)?.availableActions).toEqual([])
+    expect(getTicketByRef(realTicket.id)?.availableActions.length).toBeGreaterThan(0)
+    expect(listNonTerminalTickets().map((ticket) => ticket.id)).toEqual([realTicket.id])
   })
 })
 

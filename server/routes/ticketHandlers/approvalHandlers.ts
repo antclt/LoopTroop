@@ -31,6 +31,7 @@ import {
   emitRoutePhaseLog,
   getTicketParam,
   preparePlanningRestart,
+  rejectDisplayOnlyMockTicket,
   respondWithState,
 } from './routeUtils'
 import { approvalRequestSchema, rawPrdSaveSchema, structuredPrdSaveSchema } from './schemas'
@@ -57,6 +58,8 @@ export async function handleApproveTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
 
   const approvalStates = ['WAITING_INTERVIEW_APPROVAL', 'WAITING_PRD_APPROVAL', 'WAITING_BEADS_APPROVAL', 'WAITING_EXECUTION_SETUP_APPROVAL']
   if (!approvalStates.includes(ticket.status)) {
@@ -97,6 +100,8 @@ export async function handlePutPrd(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!isStatusAtOrPast(ticket.status, 'WAITING_PRD_APPROVAL') || !isBeforeExecution(ticket.status, ticket.previousStatus)) {
     return c.json({ error: 'Ticket is not in a state where PRD can be edited' }, 409)
   }
@@ -283,6 +288,8 @@ export async function handleApproveInterview(c: Context) {
 function approveInterviewForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_INTERVIEW_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for interview approval' }, 409)
   }
@@ -319,6 +326,8 @@ export async function handleApprovePrd(c: Context) {
 function approvePrdForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_PRD_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for PRD approval' }, 409)
   }
@@ -355,6 +364,8 @@ export async function handleApproveBeads(c: Context) {
 function approveBeadsForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_BEADS_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for beads approval' }, 409)
   }
@@ -396,6 +407,8 @@ export async function handleApproveExecutionSetupPlan(c: Context) {
 function approveExecutionSetupPlanForRoute(c: Context, ticketId: string, expectedContentSha256: string) {
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_EXECUTION_SETUP_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for execution setup plan approval' }, 409)
   }

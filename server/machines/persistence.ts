@@ -10,6 +10,7 @@ import {
   findTicketRefByLocalId,
   getTicketByRef,
   getTicketContext,
+  isDisplayOnlyMockTicket,
   listNonTerminalTickets,
   patchTicket,
   parseLockedCouncilMembers,
@@ -330,6 +331,9 @@ export function ensureActorForTicket(ticketRef: string | number) {
   if (!ticket) throw new Error(`Ticket ${resolvedTicketRef} not found`)
   if (TERMINAL_STATES.includes(ticket.localTicket.status as (typeof TERMINAL_STATES)[number])) {
     throw new Error(`Ticket ${resolvedTicketRef} is terminal (${ticket.localTicket.status})`)
+  }
+  if (isDisplayOnlyMockTicket(ticket.localTicket)) {
+    throw new Error(`Ticket ${resolvedTicketRef} is a display-only mock ticket and cannot run workflow actors`)
   }
 
   const input = {

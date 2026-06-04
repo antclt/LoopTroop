@@ -22,6 +22,7 @@ import {
   getTicketParam,
   prepareExecutionSetupPlanRestart,
   prepareExecutionSetupRuntimeRewind,
+  rejectDisplayOnlyMockTicket,
 } from './routeUtils'
 import {
   rawExecutionSetupPlanSaveSchema,
@@ -82,6 +83,8 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!isEditableExecutionSetupPlanStatus(ticket.status)) {
     return c.json({ error: 'Ticket is not waiting for execution setup plan approval or preparing workspace runtime' }, 409)
   }
@@ -204,6 +207,8 @@ export async function handleRegenerateExecutionSetupPlan(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!isEditableExecutionSetupPlanStatus(ticket.status)) {
     return c.json({ error: 'Ticket is not waiting for execution setup plan approval or preparing workspace runtime' }, 409)
   }

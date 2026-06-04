@@ -6,7 +6,7 @@ import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { broadcaster } from '../../sse/broadcaster'
 import { attachProject } from '../../storage/projects'
-import { createTicket, getTicketByRef, getTicketPaths } from '../../storage/tickets'
+import { createTicket, DISPLAY_ONLY_MOCK_BRANCH_NAME, getTicketByRef, getTicketPaths, patchTicket } from '../../storage/tickets'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 
 vi.mock('../../machines/persistence', async () => {
@@ -178,6 +178,27 @@ describe('ticketRouter POST /tickets/:id/start', () => {
     ])
 
     broadcaster.clearTicket(ticket.id)
+  })
+
+  it('rejects display-only mock tickets before workspace initialization', async () => {
+    const { app, ticket } = setupStartTicketApp()
+    patchTicket(ticket.id, {
+      branchName: DISPLAY_ONLY_MOCK_BRANCH_NAME,
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/start`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: 'Display-only mock tickets cannot be started',
+    })
+    expect(initializeTicket).not.toHaveBeenCalled()
+    expect(getTicketByRef(ticket.id)).toMatchObject({
+      status: 'DRAFT',
+      branchName: DISPLAY_ONLY_MOCK_BRANCH_NAME,
+    })
   })
 
   it('locks the configured structured retry count at ticket start', async () => {

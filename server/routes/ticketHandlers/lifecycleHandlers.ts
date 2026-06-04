@@ -22,6 +22,7 @@ import {
   getTicketByRef,
   getTicketContext,
   getTicketPaths,
+  isDisplayOnlyMockTicket,
   isAttemptTrackedPhase,
   lockTicketStartConfiguration,
   patchTicket,
@@ -51,6 +52,7 @@ import {
   emitRoutePhaseLog,
   getProfileDefaults,
   getTicketParam,
+  rejectDisplayOnlyMockTicket,
   respondWithState,
 } from './routeUtils'
 import { cancelTicketSchema } from './schemas'
@@ -116,6 +118,9 @@ export async function handleStartTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticketContext = getTicketContext(ticketId)
   if (!ticketContext) return c.json({ error: 'Ticket not found' }, 404)
+  if (isDisplayOnlyMockTicket(ticketContext.localTicket)) {
+    return c.json({ error: 'Display-only mock tickets cannot be started' }, 409)
+  }
   if (ticketContext.localTicket.status !== 'DRAFT') {
     return c.json({ error: 'Ticket can only be started from DRAFT status' }, 409)
   }
@@ -326,6 +331,8 @@ export async function handleCancelTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (['COMPLETED', 'CANCELED'].includes(ticket.status)) {
     return c.json({ error: 'Cannot cancel a terminal ticket' }, 409)
   }
@@ -364,6 +371,8 @@ export function handleMergeTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_PR_REVIEW') {
     return c.json({ error: 'Ticket is not waiting for pull request review' }, 409)
   }
@@ -429,6 +438,8 @@ export function handleCloseUnmergedTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_PR_REVIEW') {
     return c.json({ error: 'Ticket is not waiting for pull request review' }, 409)
   }
@@ -465,6 +476,8 @@ export function handleRetryTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'BLOCKED_ERROR') {
     return c.json({ error: 'Retry only works from BLOCKED_ERROR state' }, 409)
   }
@@ -521,6 +534,8 @@ export async function handleContinueTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'BLOCKED_ERROR') {
     return c.json({ error: 'Continue only works from BLOCKED_ERROR state' }, 409)
   }
@@ -579,6 +594,8 @@ export function handleIncludeFinalTestFilesTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!getActiveFinalTestFileEffectsBlock(ticket)) {
     return c.json({ error: 'Include in PR is only available for unresolved final-test file effects blocks' }, 409)
   }
@@ -617,6 +634,8 @@ export function handleDiscardFinalTestFilesTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!getActiveFinalTestFileEffectsBlock(ticket)) {
     return c.json({ error: 'Discard and Continue is only available for unresolved final-test file effects blocks' }, 409)
   }

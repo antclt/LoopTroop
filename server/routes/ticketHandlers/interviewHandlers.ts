@@ -42,6 +42,7 @@ import {
   emitRoutePhaseLog,
   getTicketParam,
   preparePlanningRestart,
+  rejectDisplayOnlyMockTicket,
   respondWithState,
 } from './routeUtils'
 import {
@@ -134,6 +135,8 @@ export async function handleSkipTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_INTERVIEW_ANSWERS') {
     return c.json({ error: 'Ticket is not waiting for interview answers' }, 409)
   }
@@ -167,6 +170,8 @@ export async function handleAnswerBatch(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_INTERVIEW_ANSWERS') {
     return c.json({ error: 'Ticket is not waiting for interview answers' }, 409)
   }
@@ -264,6 +269,8 @@ export async function handleEditAnswer(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_INTERVIEW_ANSWERS') {
     return c.json({ error: 'Ticket is not waiting for interview answers' }, 409)
   }
@@ -306,6 +313,8 @@ export async function handlePutInterviewAnswers(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!isStatusAtOrPast(ticket.status, 'WAITING_INTERVIEW_APPROVAL') || !isBeforeExecution(ticket.status, ticket.previousStatus)) {
     return c.json({ error: 'Ticket is not in a state where interview can be edited' }, 409)
   }
@@ -380,6 +389,8 @@ export async function handlePutInterview(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
   if (!isStatusAtOrPast(ticket.status, 'WAITING_INTERVIEW_APPROVAL') || !isBeforeExecution(ticket.status, ticket.previousStatus)) {
     return c.json({ error: 'Ticket is not in a state where interview can be edited' }, 409)
   }

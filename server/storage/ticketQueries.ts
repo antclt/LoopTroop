@@ -29,6 +29,12 @@ import { isContinuableBlockedError } from '../opencode/sessionContinuation'
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
 
+export const DISPLAY_ONLY_MOCK_BRANCH_NAME = '__looptroop_display_only_mock__'
+
+export function isDisplayOnlyMockTicket(ticket: Pick<LocalTicketRow, 'branchName'>): boolean {
+  return ticket.branchName === DISPLAY_ONLY_MOCK_BRANCH_NAME
+}
+
 const TrimmedNonEmptyStringSchema = z.string().trim().min(1)
 const LockedCouncilMembersSchema = z.array(TrimmedNonEmptyStringSchema)
 const LockedCouncilMemberVariantsSchema = z.record(z.string(), TrimmedNonEmptyStringSchema).superRefine((value, ctx) => {
@@ -456,6 +462,7 @@ function readReviewCutoffStatus(
 export function toPublicTicket(projectId: number, ticket: LocalTicketRow): PublicTicket {
   const project = getProjectById(projectId)
   const projectContext = getProjectContextById(projectId)
+  const isMockTicket = isDisplayOnlyMockTicket(ticket)
   const baseBranch = project ? resolveTicketBaseBranch(project.folderPath, ticket.externalId) : 'unknown'
   const lockedCouncilMembers = parseLockedCouncilMembers(ticket.lockedCouncilMembers)
   const lockedCouncilMemberVariants = parseLockedCouncilMemberVariants(ticket.lockedCouncilMemberVariants)
@@ -510,13 +517,15 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     projectId,
     lockedCouncilMembers,
     lockedCouncilMemberVariants,
-    availableActions: addFinalTestFileEffectActionsWhenAvailable(
-      addContinueActionWhenAvailable(
-        getAvailableWorkflowActions(ticket.status),
-        continuationCandidate,
+    availableActions: isMockTicket
+      ? []
+      : addFinalTestFileEffectActionsWhenAvailable(
+        addContinueActionWhenAvailable(
+          getAvailableWorkflowActions(ticket.status),
+          continuationCandidate,
+        ),
+        activeErrorOccurrence,
       ),
-      activeErrorOccurrence,
-    ),
     previousStatus,
     reviewCutoffStatus,
     errorOccurrences,
@@ -836,7 +845,10 @@ export function getTicketStorageContext(ticketRef: string): { projectId: number;
 }
 
 export function listNonTerminalTickets(): PublicTicket[] {
-  return listTickets().filter(ticket => !['COMPLETED', 'CANCELED'].includes(ticket.status))
+  return listTickets().filter(ticket => (
+    !['COMPLETED', 'CANCELED'].includes(ticket.status)
+    && !isDisplayOnlyMockTicket(ticket)
+  ))
 }
 
 export function getTicketPaths(ticketRef: string): {

@@ -20,7 +20,9 @@ import {
   EXECUTION_SETUP_RUNTIME_REWIND_PHASES,
   getTicketByRef,
   INTERVIEW_EDIT_RESTART_PHASES,
+  isDisplayOnlyMockTicket,
   PRD_EDIT_RESTART_PHASES,
+  type PublicTicket,
   type PublicTicketPhaseAttemptRow,
 } from '../../storage/tickets'
 import { clearExecutionSetupRuntimeArtifacts } from '../../phases/executionSetup/storage'
@@ -110,6 +112,11 @@ export function getRequiredRouteParam(c: Context, name: string): string {
     throw new Error(`Route is missing required parameter "${name}"`)
   }
   return value
+}
+
+export function rejectDisplayOnlyMockTicket(c: Context, ticket: Pick<PublicTicket, 'branchName'>) {
+  if (!isDisplayOnlyMockTicket(ticket)) return null
+  return c.json({ error: 'Display-only mock tickets are board-only and cannot run workflow actions' }, 409)
 }
 
 export function getMachineContext(ticketId: string): MachineTicketContext {

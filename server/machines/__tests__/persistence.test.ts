@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync } from 'node:fs'
 import { appendLogEvent } from '../../log/executionLog'
 import { broadcaster } from '../../sse/broadcaster'
-import { patchTicket, getTicketByRef, getTicketPaths } from '../../storage/tickets'
+import { DISPLAY_ONLY_MOCK_BRANCH_NAME, patchTicket, getTicketByRef, getTicketPaths } from '../../storage/tickets'
 import { TEST, makeTicketContextFromTicket } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
 import { ensureActorForTicket, hydrateAllTickets, revertTicketToApprovalStatus, stopActor } from '../persistence'
@@ -91,6 +91,33 @@ describe('hydrateAllTickets', () => {
     } finally {
       stopActor(ticket.id)
     }
+  })
+
+  it('does not hydrate or actor-create display-only mock tickets', () => {
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Display-only mock actor guard',
+    })
+
+    const snapshot = {
+      status: 'active',
+      value: 'SCANNING_RELEVANT_FILES',
+      historyValue: {},
+      context: makeTicketContextFromTicket(ticket, {
+        status: 'SCANNING_RELEVANT_FILES',
+      }),
+      children: {},
+    }
+
+    patchTicket(ticket.id, {
+      branchName: DISPLAY_ONLY_MOCK_BRANCH_NAME,
+      status: 'SCANNING_RELEVANT_FILES',
+      xstateSnapshot: JSON.stringify(snapshot),
+    })
+
+    expect(getTicketByRef(ticket.id)?.availableActions).toEqual([])
+    expect(hydrateAllTickets()).toBe(0)
+    expect(attachWorkflowRunner).not.toHaveBeenCalled()
+    expect(() => ensureActorForTicket(ticket.id)).toThrow(/display-only mock ticket/i)
   })
 
   it('persists blocked-error diagnostics from actor ERROR events into public tickets', () => {

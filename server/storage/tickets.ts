@@ -9,7 +9,9 @@ export type {
 export type { PublicTicketPhaseAttemptRow } from './ticketPhaseAttempts'
 export {
   buildTicketRef,
+  DISPLAY_ONLY_MOCK_BRANCH_NAME,
   parseTicketRef,
+  isDisplayOnlyMockTicket,
   listTickets,
   getTicketByRef,
   findTicketRefByLocalId,

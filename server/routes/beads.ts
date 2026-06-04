@@ -2,7 +2,7 @@ import { Hono } from 'hono'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 import { z } from 'zod'
-import { getTicketByRef, getTicketPaths, getLatestPhaseArtifact } from '../storage/tickets'
+import { getTicketByRef, getTicketPaths, getLatestPhaseArtifact, isDisplayOnlyMockTicket } from '../storage/tickets'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { syncTicketRuntimeProjection } from '../storage/ticketRuntimeProjection'
 import { clearExecutionSetupState } from '../phases/executionSetup/storage'
@@ -83,6 +83,9 @@ beadsRouter.put('/tickets/:id/beads', async (c) => {
   const ticketId = c.req.param('id')
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  if (isDisplayOnlyMockTicket(ticket)) {
+    return c.json({ error: 'Display-only mock tickets are board-only and cannot run workflow actions' }, 409)
+  }
   if (ticket.status !== 'WAITING_BEADS_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for beads approval' }, 409)
   }
