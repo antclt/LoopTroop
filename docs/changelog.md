@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Refined the Configuration docs to match the implemented ticket-lock boundaries, project-override behavior, model-picker UX, and ambiguous interview-question guidance.
 - Refined the Database Schema docs to match the implemented app/project storage boundaries, public-vs-local IDs, filesystem ownership, and runtime schema bootstrap workflow.
 - Refined the Frontend docs to match the current React shell, ticket dashboard orchestration, project-management modals, live-update recovery, and actual shortcut behavior.
 - Refined the OpenCode Integration docs to match the current adapter stack, tool-policy layer, question APIs, and model-discovery behavior.
@@ -79,6 +80,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Reworked `docs/configuration.md` so it now distinguishes ticket-start locks from live-read settings, documents the actual configuration-dialog model picker / variant behavior, clarifies project-override scope, and removes ambiguous guidance around `Max Interview Questions`; aligned the configuration UI hint and profile-route comment with that guidance.
 - Reworked `docs/database-schema.md` so it now reflects the live storage model more accurately: clarified public project/ticket identifiers versus local DB row ids, documented the app/project database ownership boundary and the lack of cross-database foreign keys, added missing filesystem-backed state such as `ticket.meta.json`, marked `runtime/state.yaml` as a rebuildable projection, and documented that both app and project schema evolution are runtime-bootstrapped in `server/db/init.ts` and `server/db/project.ts`.
 - Reworked `docs/frontend.md` so it now reflects the current UI more accurately: documented `AppShell`/`TicketDashboard` responsibilities, corrected the real SSE event names and recovery hooks, replaced stale interview-control references with the actual `InterviewQAView` structure, expanded the project-management modal coverage, and clarified that the shortcuts overlay currently advertises more keys than are actually bound.
 - Reworked `docs/opencode-integration.md` to remove stale ambiguity and document the current OpenCode runtime more accurately: adapter/bootstrap selection, session-scoped permissions, per-prompt tool policies, aggregate question routes, health/model discovery flow, mock-mode behavior, and session reuse controls.

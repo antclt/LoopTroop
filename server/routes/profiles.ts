@@ -18,7 +18,7 @@ const profileSchema = z.object({
   perIterationTimeout: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(), // 0 = no timeout
   executionSetupTimeout: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(), // 0 = no timeout
   councilResponseTimeout: z.number().int().min(10_000).max(MAX_TIMEOUT_MS).optional(),
-  interviewQuestions: z.number().int().min(0).max(50).optional(), // 0 = infinite questions
+  interviewQuestions: z.number().int().min(0).max(50).optional(), // 0 is accepted, but normal runs should keep a positive interview budget
   coverageFollowUpBudgetPercent: z.number().int().min(0).max(100).optional(),
   maxCoveragePasses: z.number().int().min(1).max(10).optional(),
   maxPrdCoveragePasses: z.number().int().min(2).max(20).optional(),

@@ -407,7 +407,7 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
             <NumericField fieldKey="minCouncilQuorum" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Minimum council votes required (1–4)" />
           </div>
           <div className="mt-3">
-            <NumericField fieldKey="interviewQuestions" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum clarifying questions (5–50)" />
+            <NumericField fieldKey="interviewQuestions" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum initial clarifying questions (0–50; keep above 0 for normal runs)." />
           </div>
           <div className="mt-3">
             <NumericField fieldKey="structuredRetryCount" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Retries after invalid structured output (0–5)." />

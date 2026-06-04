@@ -3,7 +3,7 @@
 > [!IMPORTANT]
 > **TL;DR** — Most runtime behavior — council size, retry budgets, timeouts, quorum rules, and model selection — is configurable through the UI settings panel. Defaults are tuned for overnight runs; adjust them to match your provider limits and cost tolerance.
 
-The singleton profile is the baseline configuration, accessible through the **Configuration** button in the LoopTroop UI. Changes take effect on the next phase that reads the value — you do not need to restart the server.
+The singleton profile is the baseline configuration, accessible through the **Configuration** button in the LoopTroop UI. You do not need to restart the server after editing it, but settings are not all consumed at the same moment: some are frozen when a ticket starts, while others are read later at phase or session boundaries.
 
 ## Scope And Inheritance
 
@@ -11,11 +11,11 @@ LoopTroop applies configuration in three layers:
 
 | Layer | What it controls | When it applies |
 | --- | --- | --- |
-| Profile | Default settings for the whole app | Used when no project override exists |
-| Project override | Optional override for a small subset of settings | Applied to future tickets in that project |
-| Ticket lock | Frozen effective values for one ticket run | Applied from `start` until the ticket finishes |
+| Profile | App-wide baseline values | Used whenever no project override exists |
+| Project override | Optional overrides for a small execution/planning subset | Applied when a phase reads that setting |
+| Ticket start lock | Frozen planning-critical values captured on **Start** | Stays fixed for that ticket run |
 
-Project-level overrides are supported by the project API even though the main UI focuses on profile editing. The overrideable fields are:
+The main UI edits the singleton profile. Project-level overrides are supported by the project API / local project state even though there is no full project-override editor in the main configuration modal. The overrideable fields are:
 
 - `councilMembers`
 - `maxIterations` (`Max Bead Retries`)
@@ -25,31 +25,68 @@ Project-level overrides are supported by the project API even though the main UI
 - `minCouncilQuorum`
 - `interviewQuestions`
 
-If a project override is set, newly started tickets in that project inherit that value instead of the profile default. Existing tickets keep the locked values they already started with.
+If a project override is set, it wins over the profile for that field. Fields without project-override support always come from the profile.
+
+### What locks when you press Start
+
+These values are captured before the ticket enters `SCANNING_RELEVANT_FILES` and stay fixed for that ticket even if you edit the profile afterward:
+
+| Locked at start | Why it is frozen |
+| --- | --- |
+| Main implementer model + effort variant | The same model lineup must own the full run for auditability and retry consistency |
+| Council members + their effort variants | Council drafting/voting must stay comparable across the ticket lifecycle |
+| Max Interview Questions | The compiled interview contract should not change mid-run |
+| Coverage Follow-Up Budget | Interview follow-up budget is part of the approved planning envelope |
+| Interview / PRD / Beads Coverage Passes | Coverage-loop budgets must stay stable for that ticket |
+| Structured Output Retries | Repair behavior must stay stable across the ticket's structured phases |
+
+### What is read later instead of locked
+
+These values are not frozen into the ticket-start lock. They are picked up when the relevant phase, prompt, or log pipeline reads them:
+
+| Read later | Typical read timing |
+| --- | --- |
+| AI Response Timeout, Min Council Quorum | When a planning/final-test model phase starts |
+| Per-Iteration Timeout, Execution Setup Timeout, Max Bead Retries | When execution setup, coding, or final-test attempts are prepared |
+| OpenCode Retry Limit, OpenCode Retry Grace Window, OpenCode Max Steps | When new OpenCode prompt/session settings are assembled |
+| Tool Input / Output / Error Max Chars | When tool-log formatting runs (backend cache is refreshed periodically) |
+
+That means an edit can affect a ticket that is already in progress **only if the ticket has not yet crossed the boundary where that specific value is read**. It does not rewrite already-running prompts, already-started timers, or already-locked planning budgets.
+
+## Configuration Dialog Behavior
+
+The docs links on each control point back to this page, but the UI itself also has a few behaviors worth knowing:
+
+- **OpenCode health is checked live.** The dialog shows whether OpenCode is reachable, whether model discovery is still loading, and whether the connected providers currently expose any models.
+- **The reload button clears the cached model query and fetches providers/models again.** Use it after changing OpenCode providers or when the catalog was empty during startup.
+- **Model pickers default to connected providers only.** Inside the picker you can search by model name, provider, or family; filter to free models; and optionally enable **Show all providers** to browse the full OpenCode catalog instead of only currently connected providers.
+- **Duplicate model selection is prevented.** The main implementer is auto-included in the council, and the picker disables models already chosen in another council slot.
+- **Effort controls are conditional.** The effort / thinking picker only appears when the selected model advertises variants, and the saved variant is stored per slot.
+- **Numeric validation is strict.** All numeric fields must be whole numbers. The UI shows timeout/delay inputs in seconds and coverage in percent, while the API stores timeout/delay values in milliseconds.
 
 ## Quick Reference
 
-| Setting | Default | Range | Group |
-| --- | --- | --- | --- |
-| [Main Implementer Model](#main-implementer-model) | _(required)_ | any available model | AI Models |
-| [Council Members](#council-members) | _(required, 1–3 additional)_ | any available models | AI Models |
-| [OpenCode Retry Limit](#opencode-retry-limit) | 10 | 0–50 | OpenCode Provider Recovery |
-| [OpenCode Retry Grace Window](#opencode-retry-grace-window) | 60 s | 0–3600 s | OpenCode Provider Recovery |
-| [OpenCode Max Steps](#opencode-max-steps) | 0 (no limit) | 0–500 | OpenCode Provider Recovery |
-| [AI Response Timeout](#ai-response-timeout) | 1200 s | 10–3600 s | AI Thinking |
-| [Min Council Quorum](#min-council-quorum) | 2 | 1–4 | AI Thinking |
-| [Max Interview Questions](#max-interview-questions) | 50 | 0–50 | AI Thinking |
-| [Structured Output Retries](#structured-output-retries) | 1 | 0–5 | AI Thinking |
-| [Coverage Follow-Up Budget](#coverage-follow-up-budget) | 20 % | 0–100 % | Coverage |
-| [Interview Coverage Passes](#interview-coverage-passes) | 2 | 1–10 | Coverage |
-| [PRD Coverage Passes](#prd-coverage-passes) | 5 | 2–20 | Coverage |
-| [Beads Coverage Passes](#beads-coverage-passes) | 5 | 2–20 | Coverage |
-| [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Execution Phase |
-| [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Execution Phase |
-| [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Execution Phase |
-| [Tool Input Max Chars](#tool-input-max-chars) | 4,000 | 500–50,000 | Logging |
-| [Tool Output Max Chars](#tool-output-max-chars) | 12,000 | 1,000–100,000 | Logging |
-| [Tool Error Max Chars](#tool-error-max-chars) | 6,000 | 500–50,000 | Logging |
+| Setting | Default | Range | Group | Read timing |
+| --- | --- | --- | --- | --- |
+| [Main Implementer Model](#main-implementer-model) | _(required)_ | any available model | AI Models | ticket start lock |
+| [Council Members](#council-members) | _(required, 1–3 additional)_ | any available models | AI Models | ticket start lock |
+| [OpenCode Retry Limit](#opencode-retry-limit) | 10 | 0–50 | OpenCode Provider Recovery | next OpenCode prompt/session |
+| [OpenCode Retry Grace Window](#opencode-retry-grace-window) | 60 s | 0–3600 s | OpenCode Provider Recovery | next OpenCode prompt/session |
+| [OpenCode Max Steps](#opencode-max-steps) | 0 (no limit) | 0–500 | OpenCode Provider Recovery | next coding/final-test session |
+| [AI Response Timeout](#ai-response-timeout) | 1200 s | 10–3600 s | AI Thinking | next planning/final-test model phase |
+| [Min Council Quorum](#min-council-quorum) | 2 | 1–4 | AI Thinking | next planning phase |
+| [Max Interview Questions](#max-interview-questions) | 50 | 0–50 | AI Thinking | ticket start lock |
+| [Structured Output Retries](#structured-output-retries) | 1 | 0–5 | AI Thinking | ticket start lock |
+| [Coverage Follow-Up Budget](#coverage-follow-up-budget) | 20 % | 0–100 % | Coverage | ticket start lock |
+| [Interview Coverage Passes](#interview-coverage-passes) | 2 | 1–10 | Coverage | ticket start lock |
+| [PRD Coverage Passes](#prd-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
+| [Beads Coverage Passes](#beads-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
+| [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Execution Phase | next coding/final-test attempt |
+| [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Execution Phase | next execution-setup attempt |
+| [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Execution Phase | next execution/final-test attempt |
+| [Tool Input Max Chars](#tool-input-max-chars) | 4,000 | 500–50,000 | Logging | live log formatting (cached briefly) |
+| [Tool Output Max Chars](#tool-output-max-chars) | 12,000 | 1,000–100,000 | Logging | live log formatting (cached briefly) |
+| [Tool Error Max Chars](#tool-error-max-chars) | 6,000 | 500–50,000 | Logging | live log formatting (cached briefly) |
 
 ---
 
@@ -60,7 +97,7 @@ If a project override is set, newly started tickets in that project inherit that
 **Type:** model selector  
 **Required:** yes
 
-The main implementer is the primary model LoopTroop assigns to a ticket. It is locked-in at the moment the ticket enters `SCANNING_RELEVANT_FILES` and remains the ticket's execution owner for the entire lifecycle.
+The main implementer is the primary model LoopTroop assigns to a ticket. LoopTroop validates and locks it when you press **Start**, then uses that same model from `SCANNING_RELEVANT_FILES` through final verification.
 
 **What it does:**
 
@@ -106,6 +143,8 @@ Diversity matters more than raw quality here. Mixing models from different famil
 
 The minimum viable council is the main implementer plus one additional member. The `Min Council Quorum` setting determines how many members must return a valid response before the pipeline trusts the result.
 
+The UI prevents duplicate picks across council slots, so if you cannot select a model twice that is intentional rather than a catalog bug.
+
 ::: tip
 Up to 3 council slots are available in addition to the main implementer, for a maximum council size of 4.
 :::
@@ -118,7 +157,7 @@ Up to 3 council slots are available in addition to the main implementer, for a m
 
 **Type:** variant selector (per model, optional)
 
-Some models expose multiple effort or thinking modes (for example, low / medium / high reasoning effort, or extended thinking budget variants). When a model supports variants, an effort picker appears below the model selector for both the main implementer and each council member.
+Some models expose multiple effort or thinking modes (for example, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`). When a selected model advertises variants, an effort picker appears below that slot's model selector. If a model exposes no variants, the control stays hidden.
 
 **What it does:**
 
@@ -142,11 +181,11 @@ These settings apply to OpenCode prompt execution across the workflow, not only 
 **Default:** 10
 **Range:** 0–50
 
-How many continuable OpenCode `session.status` retry events LoopTroop allows before it blocks the active prompt for human decision.
+How many continuable OpenCode `session.status` retry events LoopTroop allows before it stops waiting for provider recovery and blocks the active prompt for human decision.
 
-This is separate from `Max Bead Retries` and `Structured Output Retries`. It applies to provider or transport interruptions inside a single OpenCode prompt, such as rate limits, usage limits, resource exhaustion, overload/capacity, temporary unavailability, timeouts/deadlines, fetch failures, and network/socket resets.
+This is separate from `Max Bead Retries` and `Structured Output Retries`. It applies to provider/transport interruptions **inside one OpenCode prompt**, such as rate limits, usage limits, overload, temporary unavailability, timeouts, fetch failures, and socket resets.
 
-When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` with provider diagnostics so you can Continue when the owned session is preserved, Retry, or Cancel. CODING has one extra protection: these provider stalls do not consume the bead retry budget or wait for the bead iteration timeout. Provider/session timeouts, retry-budget exhaustion, 408/429, selected 5xx/529, overload, and transport failures may preserve the session for Continue when diagnostics prove it is resumable. `HTTP 402 Payment Required` provider blocks can also use Continue after the payment or workspace condition clears, while ordinary implementation failures, workflow-owned bead iteration timeouts, malformed completion markers, failed tests, and non-continuable auth/configuration/request errors keep their existing behavior.
+When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` with provider diagnostics. If the session is provably resumable, the UI can offer **Continue**; otherwise you fall back to **Retry** or **Cancel**. During `CODING`, provider stalls handled here do **not** consume the bead retry budget by themselves.
 
 **Trade-offs:**
 
@@ -166,7 +205,7 @@ When the limit is reached, LoopTroop routes the active phase to `BLOCKED_ERROR` 
 **Default:** 60 s
 **Range:** 0–3600 s
 
-How long LoopTroop lets any OpenCode prompt remain in a continuable retry state without progress before it blocks, even if the retry count has not reached `OpenCode Retry Limit`.
+How long LoopTroop lets an OpenCode prompt sit in a continuable retry state with no real progress before it blocks, even if the retry count has not yet reached `OpenCode Retry Limit`.
 
 The timer starts when OpenCode reports a matching retry status and is cleared by real prompt progress. Set it to 0 to disable the grace timer and rely only on the retry count.
 
@@ -297,7 +336,7 @@ After `COMPILING_INTERVIEW` finishes, the interview document can have up to this
 
 - Lower for routine or well-scoped tickets where you already know the requirements.
 - Keep at maximum (50) for exploratory or large-scope work where ambiguity is costly later.
-- Set to 0 to skip the interview question batch entirely and go straight to coverage (rarely useful unless you pre-fill answers externally).
+- Treat `0` as an edge-case/testing value, not as the normal way to skip the interview. The workflow still expects a real compiled interview artifact; use **Skip All** during the interview itself if you want to advance with minimal answers.
 
 **See also:** [Ticket Flow → Interview](/ticket-flow#interview)
 
@@ -530,6 +569,8 @@ Startup and manual-retry recovery can avoid a fresh attempt when the interrupted
 ## Logging
 
 These three settings control how much of each tool call is stored in the LoopTroop logs. They do not affect what the model sees during execution — only what is persisted for display in the UI and diagnostics.
+
+The backend reads these caps live from the profile, but it caches them briefly to avoid a database read on every stream event. In practice, a change usually shows up quickly without requiring a restart, but it may not affect lines already emitted moments earlier.
 
 ### Tool Input Max Chars
 
