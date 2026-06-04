@@ -17,6 +17,7 @@ import { TicketActions } from './TicketActions'
 import { ErrorBanner } from './ErrorBanner'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { TicketDescriptionViewer } from './TicketDescriptionViewer'
 
 interface DashboardHeaderProps {
   ticket: Ticket
@@ -141,7 +142,7 @@ function CopyableDescription({ description }: { description: string }) {
               </Tooltip>
       </div>
       <div className="mt-1 rounded-md border border-border/50 bg-muted/30 p-3 max-h-[300px] overflow-y-auto">
-        <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-muted-foreground">{description}</p>
+        <TicketDescriptionViewer description={description} />
       </div>
     </div>
   )

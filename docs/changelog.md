@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Improved ticket details by rendering pasted Markdown descriptions as safe, read-only rich text.
 - Refined the API Reference docs to better match the implemented route constraints, response payloads, archived-attempt behavior, and middleware guard rails.
 - Refined the Prompt Inventory docs to better explain code-enforced context assembly, runtime retry overlays, and conservative prompt-driven fallback paths.
 - Refined the Configuration docs to match the implemented ticket-lock boundaries, project-override behavior, model-picker UX, and ambiguous interview-question guidance.
@@ -56,6 +57,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added safe read-only Markdown rendering for ticket descriptions in the Ticket Details dialog, including headings, lists, task lists, code blocks, links, blockquotes, and tables while keeping the copied description text unchanged.
 - Added worktree changes classification documentation (committable, looptroopExcluded, setupExcluded, generatedNoise) to the post-implementation file effects audit section.
 - Added coverage control documentation (resolveCoverageRunState, resolveCoverageGapDisposition, termination conditions) to the ticket flow state machine section.
 - Added execution band documentation (single-ticket-per-project lock, status membership validation) to the ticket flow state machine section.

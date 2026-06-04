@@ -196,7 +196,7 @@ Several UI components exist specifically to inspect durable workflow state:
 | `PhaseArtifactsPanel` | Phase-specific artifact viewer |
 | `PrdApprovalPane` | PRD approval editor plus compact read-only Full Answers context for the winning draft |
 | `WorkspacePhaseSummary` | Compact summary for the selected phase; its `(details)` button opens the expanded workflow metadata from `shared/workflowMeta.ts` while keeping the selected status lightweight above the workspace |
-| `DashboardHeader` details dialog | Ticket metadata, project info, file locations, copy/reveal actions, and on-demand ticket size breakdown |
+| `DashboardHeader` details dialog | Ticket metadata, project info, safe read-only Markdown rendering for ticket descriptions, file locations, copy/reveal actions, and on-demand ticket size breakdown |
 | `VerificationSummaryPanel` | Delivery actions during PR review |
 | `PhaseReviewView` | Historical artifact review with phase-attempt support |
 | `FullLogView` | Ticket-wide log inspection |
