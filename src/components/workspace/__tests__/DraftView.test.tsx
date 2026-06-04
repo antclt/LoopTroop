@@ -238,4 +238,19 @@ describe('DraftView', () => {
       body: JSON.stringify({ description: updatedDescription }),
     }))
   })
+
+  it('previews Markdown descriptions and switches back to the raw source', () => {
+    renderWithProviders(<DraftView ticket={makeTicket({ description: '# Scope\nUse **bold** details.', availableActions: ['start', 'cancel'] })} />)
+
+    expect(screen.getByRole('tab', { name: 'Markdown' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: 'Scope' })).toBeInTheDocument()
+    expect(screen.getByText('bold').tagName).toBe('STRONG')
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Raw' }))
+
+    expect(screen.getByRole('tab', { name: 'Raw' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText((_content, element) =>
+      element?.tagName === 'P' && element.textContent === '# Scope\nUse **bold** details.',
+    )).toBeInTheDocument()
+  })
 })

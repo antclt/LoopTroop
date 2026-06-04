@@ -196,12 +196,14 @@ Several UI components exist specifically to inspect durable workflow state:
 | `PhaseArtifactsPanel` | Phase-specific artifact viewer |
 | `PrdApprovalPane` | PRD approval editor plus compact read-only Full Answers context for the winning draft |
 | `WorkspacePhaseSummary` | Compact summary for the selected phase; its `(details)` button opens the expanded workflow metadata from `shared/workflowMeta.ts` while keeping the selected status lightweight above the workspace |
-| `DashboardHeader` details dialog | Ticket metadata, project info, safe read-only Markdown rendering for ticket descriptions, file locations, copy/reveal actions, and on-demand ticket size breakdown |
+| `DashboardHeader` details dialog | Ticket metadata, project info, Markdown-rendered ticket descriptions, file locations, copy/reveal actions, and on-demand ticket size breakdown |
 | `VerificationSummaryPanel` | Delivery actions during PR review |
 | `PhaseReviewView` | Historical artifact review with phase-attempt support |
 | `FullLogView` | Ticket-wide log inspection |
 
 The frontend is built around the assumption that users must be able to inspect prior attempts and artifacts without replaying the run mentally from logs.
+
+Ticket descriptions use Raw/Markdown tabs while users create or edit draft descriptions. Raw remains the editable/plain-text source, while Markdown previews the same stored text as safe rich text. Read-only Ticket Details descriptions render the Markdown view directly without extra view controls.
 
 `WorkspacePhaseSummary` enriches only the live status title with transient progress details. While a ticket is actively implementing, it shows bead and iteration wording such as `Implementing (working on bead 3 of 10, iteration 2 of 5)`. While coverage is active, it shows pass details and, for PRD/Beads coverage, the candidate version being checked. Manual non-implementation retries show the active phase attempt, for example `Refining Specs (retry attempt 2)`. These additions disappear as soon as the ticket transitions away from that status, so historical review and past timeline rows return to the plain phase label.
 

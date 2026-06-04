@@ -105,6 +105,27 @@ describe('DashboardHeader', () => {
     expect(within(projectSection as HTMLElement).getByText('🧭')).toBeInTheDocument()
   })
 
+  it('shows ticket details descriptions as Markdown without view tabs', () => {
+    const ticket = makeTicket({
+      description: '# Scope\nUse **bold** details.',
+      status: 'DRAFTING_PRD',
+      availableActions: ['cancel'],
+    })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+
+    expect(screen.getByRole('heading', { name: 'Scope' })).toBeInTheDocument()
+    expect(screen.getByText('bold').tagName).toBe('STRONG')
+    expect(screen.queryByRole('tab', { name: 'Markdown' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Raw' })).not.toBeInTheDocument()
+  })
+
   it('shows the cancel button labeled "Cancel…" when cancel action is available on a non-DRAFT ticket', () => {
     const ticket = makeTicket({ status: 'DRAFTING_PRD', availableActions: ['cancel'] })
 

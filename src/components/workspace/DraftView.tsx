@@ -10,6 +10,8 @@ import { useProfile } from '@/hooks/useProfile'
 import { CalendarDays } from 'lucide-react'
 import { EffortBadge } from '@/components/shared/EffortBadge'
 import { CollapsiblePhaseLogSection } from '@/components/workspace/CollapsiblePhaseLogSection'
+import { TicketDescriptionTabs, type TicketDescriptionMode } from '@/components/ticket/TicketDescriptionTabs'
+import { TicketDescriptionViewer } from '@/components/ticket/TicketDescriptionViewer'
 
 const PRIORITY_LABELS: Record<number, string> = { 1: 'Very High', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Very Low' }
 const PRIORITY_COLORS: Record<number, string> = {
@@ -85,6 +87,7 @@ export function DraftView({ ticket }: DraftViewProps) {
   const [isStartAttemptActive, setIsStartAttemptActive] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [descriptionDraft, setDescriptionDraft] = useState(ticket.description ?? '')
+  const [descriptionMode, setDescriptionMode] = useState<TicketDescriptionMode>('markdown')
   const [isEditingDescription, setIsEditingDescription] = useState(false)
   const [descriptionError, setDescriptionError] = useState<string | null>(null)
   const [lastSyncedDescription, setLastSyncedDescription] = useState(ticket.description ?? '')
@@ -139,6 +142,7 @@ export function DraftView({ ticket }: DraftViewProps) {
 
   const handleEditDescription = () => {
     setDescriptionDraft(savedDescription)
+    setDescriptionMode('raw')
     setDescriptionError(null)
     setIsEditingDescription(true)
   }
@@ -259,28 +263,39 @@ export function DraftView({ ticket }: DraftViewProps) {
           <div className="w-full rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-2">
               <h4 className="text-xs font-medium">Description</h4>
-              {!isEditingDescription && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleEditDescription}
-                  className="h-6 px-1.5 text-[11px]"
-                >
-                  {hasDescription ? 'Edit Description' : 'Add Description'}
-                </Button>
-              )}
+              <div className="flex items-center gap-1.5">
+                <TicketDescriptionTabs mode={descriptionMode} onModeChange={setDescriptionMode} />
+                {!isEditingDescription && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleEditDescription}
+                    className="h-7 px-2 text-[11px]"
+                  >
+                    {hasDescription ? 'Edit Description' : 'Add Description'}
+                  </Button>
+                )}
+              </div>
             </div>
 
             {isEditingDescription ? (
               <>
-                <textarea
-                  aria-label="Ticket description"
-                  value={descriptionDraft}
-                  onChange={(event) => setDescriptionDraft(event.target.value)}
-                  className="mt-2 min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  placeholder="Describe what you want to build..."
-                />
+                {descriptionMode === 'raw' ? (
+                  <textarea
+                    aria-label="Ticket description"
+                    value={descriptionDraft}
+                    onChange={(event) => setDescriptionDraft(event.target.value)}
+                    className="mt-2 min-h-[140px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    placeholder="Describe what you want to build..."
+                  />
+                ) : (
+                  <div className="mt-2 min-h-[140px] max-h-[300px] overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2">
+                    {descriptionDraft
+                      ? <TicketDescriptionViewer description={descriptionDraft} className="text-xs" />
+                      : <p className="text-xs text-muted-foreground">No description yet.</p>}
+                  </div>
+                )}
                 <div className="mt-2 flex justify-end gap-2">
                   <Button
                     type="button"
@@ -308,7 +323,9 @@ export function DraftView({ ticket }: DraftViewProps) {
               </>
             ) : hasDescription ? (
               <div className="mt-2 max-h-[300px] overflow-y-auto">
-                <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{descriptionDraft}</p>
+                {descriptionMode === 'markdown'
+                  ? <TicketDescriptionViewer description={descriptionDraft} className="text-xs" />
+                  : <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{descriptionDraft}</p>}
               </div>
             ) : (
               <p className="mt-2 text-xs text-muted-foreground">

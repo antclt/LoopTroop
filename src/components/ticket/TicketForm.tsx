@@ -9,6 +9,8 @@ import { LoadingText } from '@/components/ui/LoadingText'
 import { ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { TicketDescriptionViewer } from './TicketDescriptionViewer'
+import { TicketDescriptionTabs, type TicketDescriptionMode } from './TicketDescriptionTabs'
 
 interface TicketFormProps {
   onClose: () => void
@@ -21,6 +23,7 @@ export function TicketForm({ onClose }: TicketFormProps) {
   const { data: projects = [] } = useProjects()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
+  const [descriptionMode, setDescriptionMode] = useState<TicketDescriptionMode>('raw')
   const [priority, setPriority] = useState(3)
   const [projectId, setProjectId] = useState<number | ''>('')
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false)
@@ -165,20 +168,32 @@ export function TicketForm({ onClose }: TicketFormProps) {
           </div>
 
           <div>
-            <Tooltip>
-                        <TooltipTrigger asChild>
-                          <label className="text-sm font-medium block mb-1">
-                                    Description
-                                  </label>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-center text-balance">Detailed implementation request</TooltipContent>
-                      </Tooltip>
-            <textarea
-              value={description}
-              onChange={e => setDescription(e.target.value)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[100px]"
-              placeholder="Describe what you want to build..."
-            />
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <Tooltip>
+                          <TooltipTrigger asChild>
+                            <label className="text-sm font-medium">
+                                      Description
+                                    </label>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-center text-balance">Detailed implementation request</TooltipContent>
+                        </Tooltip>
+              <TicketDescriptionTabs mode={descriptionMode} onModeChange={setDescriptionMode} />
+            </div>
+            {descriptionMode === 'raw' ? (
+              <textarea
+                aria-label="Ticket description"
+                value={description}
+                onChange={e => setDescription(e.target.value)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm min-h-[140px]"
+                placeholder="Describe what you want to build..."
+              />
+            ) : (
+              <div className="min-h-[140px] max-h-[280px] overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2">
+                {description
+                  ? <TicketDescriptionViewer description={description} />
+                  : <p className="text-sm text-muted-foreground">No description yet.</p>}
+              </div>
+            )}
           </div>
 
           <div>
