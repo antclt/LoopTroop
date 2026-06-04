@@ -33,6 +33,19 @@ Every file created or modified during the run is evaluated. The audit classifies
 
 Only files that explicitly pass the audit (or are manually approved via user override) are staged for the final integration commit. Files proven to be unintended side effects of testing are reverted or discarded.
 
+### 2.1 Worktree Changes Classification
+
+The audit uses a four-category classification system implemented in `server/git/worktreeChanges.ts`:
+
+| Category | Meaning | Examples |
+| --- | --- | --- |
+| **committable** | Source code, new tests, documentation, intended assets | `.ts`, `.js`, `.css` files in `src/`, `test/` |
+| **looptroopExcluded** | LoopTroop's own runtime state | `.looptroop/**`, `.ticket/**`, `.opencode/**` |
+| **setupExcluded** | Environment setup byproducts declared in the execution setup plan | Declared `tempRoots`, tool-cache directories |
+| **generatedNoise** | Unintended test/build outputs | `node_modules/`, `dist/`, `__pycache__/`, lockfiles in cache dirs |
+
+`classifyWorktreePath()` determines the category for each changed path by checking against known exclusion patterns. `summarizeWorktreeChanges()` runs `git status` and returns a categorized `WorktreeChangeSummary` that the file effects audit uses to build the include/exclude/review decision list. `buildWorktreeDirtyError()` and `buildGeneratedNoiseWarning()` produce structured error/warning objects for the UI.
+
 ---
 
 ## 3. Integration & PR publishing (`CREATING_PULL_REQUEST` & `WAITING_PR_REVIEW`)

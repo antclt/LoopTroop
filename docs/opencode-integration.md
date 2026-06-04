@@ -143,6 +143,21 @@ If OpenCode cannot verify an exact session because the server is down or restart
 
 For Continue, the route performs one extra live check: if the OpenCode server can no longer read the preserved session by exact id, the request returns `409` and leaves the ticket in `BLOCKED_ERROR`.
 
+### 7.1 Session Continuation
+
+`server/opencode/sessionContinuation.ts` manages the eligibility logic for Continue actions. It determines whether a blocked ticket can resume its preserved OpenCode session instead of starting a fresh attempt.
+
+**Eligibility criteria:**
+- The ticket must be in `BLOCKED_ERROR` with a known `previousStatus`.
+- An active error occurrence with a diagnostic `sessionId` must exist.
+- A matching active `opencode_sessions` row must exist for that ticket, previous phase, and session ID.
+- The OpenCode server must still have the session addressable by that exact ID (verified by a live remote check).
+- The error diagnostics must be of a continuable type (retryable provider errors, HTTP 402/408/429/500/502/503/504/529, rate/usage limits).
+
+**Non-continuable errors:** Auth failures, invalid requests, permission errors, missing API keys, model-not-found, and non-402 insufficient-quota signals are not eligible for Continue.
+
+When all checks pass, the Continue action records a pending continuation keyed by `sessionId`. The next owned session prompt consumes this and sends exactly `continue please` — no context rebuild, no new attempt version.
+
 ## 8. Streaming
 
 OpenCode stream events are consumed server-side and then translated into LoopTroop's own ticket event model.

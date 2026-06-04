@@ -94,6 +94,35 @@ The underlying state machine enforces valid state transitions and recovery hooks
 - `CONTINUE`: Resumes eligible OpenCode sessions from where they stopped
 - `CANCEL`: Moves to terminal canceled state
 
+### 3.7 Coverage Control
+
+Interview, PRD, and beads coverage loops are managed by `server/workflow/coverageControl.ts`. Each phase uses a shared `resolveCoverageRunState()` mechanism that tracks:
+
+- **Coverage pass number**: How many times coverage has been run for the current artifact version.
+- **Pass limit**: The configured cap (`maxCoveragePasses`, `maxPrdCoveragePasses`, or `maxBeadsCoveragePasses`) per coverage phase.
+- **Budget**: The follow-up budget percentage that limits interview coverage depth.
+
+`resolveCoverageGapDisposition()` determines whether the pass loop should:
+- **Continue**: Gaps were found and the pass limit has not been reached — return to refinement.
+- **Terminate as clean**: No gaps remain; advance to approval.
+- **Terminate as capped**: Gaps remain but the pass limit is exhausted; advance to approval with warnings.
+
+Coverage budgets and limits apply independently per phase. Interview coverage budget is shared between compiled and follow-up questions; PRD and beads coverage use only pass counts.
+
+### 3.8 Execution Band
+
+The execution band (`server/workflow/executionBand.ts`) is the set of statuses between pre-flight readiness and environment cleanup:
+
+```
+PRE_FLIGHT_CHECK → WAITING_EXECUTION_SETUP_APPROVAL → PREPARING_EXECUTION_ENV
+  → CODING → RUNNING_FINAL_TEST → INTEGRATING_CHANGES
+  → CREATING_PULL_REQUEST → WAITING_PR_REVIEW → CLEANING_ENV
+```
+
+Only one ticket per project may occupy the execution band at a time. `isExecutionBandStatus()` validates membership and the project execution lock prevents concurrent execution tickets from creating Git conflicts in the same repository.
+
+The single-ticket lock is enforced by the **project execution lock** check during `PRE_FLIGHT_CHECK`: if another ticket for the same project is already in the execution band, the incoming ticket blocks with a concurrency error.
+
 ### Key Observations
 
 The transition model enforces these invariants:

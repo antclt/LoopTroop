@@ -347,6 +347,61 @@ flowchart LR
     SSE --> Hooks
 ```
 
+## 12. Startup State System
+
+On startup, LoopTroop captures and restores durable state through `server/startupState.ts`. The workflow runner hydrates ticket actors from the project database and attempts to reconnect owned OpenCode sessions that survived the restart.
+
+### Startup Classification
+
+`classifyStartupStorageKind()` determines the current storage condition:
+
+| Kind | Meaning |
+| --- | --- |
+| `fresh` | First-ever startup — no prior app database exists. |
+| `empty_existing` | App database exists but has no attached projects. |
+| `restored` | Database found with existing projects — full state restoration. |
+
+### Restore Flow
+
+1. `initializeStartupState()` reads the app database path, profile count, and attached project count, then persists the startup classification.
+2. `getStartupStatus()` returns cached startup info for the health endpoint (`/api/health/startup`).
+3. The UI may show a restore notice based on the startup status.
+4. `dismissStartupRestoreNotice()` removes the restore notice after the user acknowledges it.
+5. The backend scans active session records in each project database, attempts reconnect for owned OpenCode sessions, and abandons stale session records that no longer exist remotely.
+
+Session recovery is best-effort. If OpenCode is unavailable during startup, ticket actors are still hydrated from durable workflow state and later phase work either reconnects, creates fresh owned sessions, or blocks with a persisted error.
+
+The startup health endpoint (`GET /api/health/startup`) exposes the storage path, kind, profile/project counts, dismissed state, and human-readable summary for diagnostics.
+
+## 13. IO Utilities
+
+The IO layer provides crash-safe file operations and recovery used by the entire workflow engine. All modules live in `server/io/`.
+
+| Module | Purpose | Key Export |
+| --- | --- | --- |
+| `atomicWrite.ts` | Crash-safe file writes | `safeAtomicWrite(filePath, content)` — writes to a `.tmp` file, calls `fsync`, renames to the target path, then best-effort fsyncs the parent directory. Prevents partial overwrites on system failure. |
+| `atomicAppend.ts` | Crash-safe line appends | `safeAtomicAppend(filePath, line)` — opens with the `a+` flag, checks trailing newline, adds a `\n` prefix when needed, then calls `fsync`. Used for durable JSONL log appends. |
+| `jsonl.ts` | JSON Lines I/O | `readJsonl<T>()`, `writeJsonl<T>()`, `appendJsonl<T>()` — type-safe JSONL read/write/append with graceful malformed-line skipping and newline integrity. |
+| `recovery.ts` | Crash recovery | `recoverOrphanTmpFiles(folder)` — recursively promotes `.tmp` files to their target paths after a crash; `fixTrailingLineCorruption(filePath)` — validates and truncates trailing corrupt JSONL lines (scans backward in 8KB chunks, stays under 4MB scan limit). |
+
+These utilities form the durability backbone: atomic writes protect mutable state files (YAML artifacts), atomic appends protect append-only logs (execution-log JSONL), and recovery handles the crash edge case where atomic operations were interrupted.
+
+## 14. Session Status Logging
+
+OpenCode session status events are translated into normalized log entries by `server/workflow/sessionStatusLogging.ts`. Each entry captures the retry event or phase change as a structured log record.
+
+`buildSessionStatusLogEntries()` converts OpenCode `SessionStatusStreamEvent` objects into `SessionStatusLogEntry[]` — ordered, typed log entries with:
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Stable entry identifier |
+| `type` | `info` or `error` |
+| `kind` | `session` or `error` |
+| `op` | `append`, `upsert`, or `finalize` — determines how the log viewer merges this entry |
+| `content` | Human-readable description of the status event |
+
+The log builder handles retry status events (rate limits, usage limits, timeouts, transport errors) and session phase transitions. These entries feed the execution log alongside normal phase log entries, giving the UI a unified view of model and workflow activity.
+
 ## Related Docs
 
 - [Core Philosophy](core-philosophy.md)

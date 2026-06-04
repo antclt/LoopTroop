@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added documentation for the worktree changes classification system, coverage control loop, execution band concurrency lock, IO utilities (atomic write/append/JSONL/recovery), startup state system, and session continuation eligibility logic across the architecture docs.
 - Updated the system architecture, API reference, output normalization, ticket flow, opencode integration, frontend, and LLM council documentation to cover missing core modules and architectural components.
 - Documented the Structured Interventions subsystem and added a performance warning for Windows-mounted drives inside WSL.
 - Added two new documentation pages for Pre-Implementation and Post-Implementation workflow phases, and updated the VitePress configuration and index doc map.
@@ -40,6 +41,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added worktree changes classification documentation (committable, looptroopExcluded, setupExcluded, generatedNoise) to the post-implementation file effects audit section.
+- Added coverage control documentation (resolveCoverageRunState, resolveCoverageGapDisposition, termination conditions) to the ticket flow state machine section.
+- Added execution band documentation (single-ticket-per-project lock, status membership validation) to the ticket flow state machine section.
+- Added startup state system documentation (storage classification, restore flow, startup health endpoint) to the system architecture page.
+- Added IO utilities documentation (atomicWrite, atomicAppend, JSONL, recovery) with durability guarantees to the system architecture page.
+- Added session status logging documentation (buildSessionStatusLogEntries, entry structure) to the system architecture page.
+- Added session continuation eligibility documentation (continuable vs non-continuable errors, Continue mechanics) to the opencode integration page.
 - Expanded documentation across 7 core architecture guides to cover missing components: Data Access Layer, IO Utilities, Shared Layer, Modular Ticket Handlers, Structured Output Schemas, Advanced Workflow Mechanics, and Frontend coverage controls.
 - Added documentation for the Structured Interventions diagnostic subsystem (categories, stages, and UI behavior) in [output-normalization.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/output-normalization.md).
 - Added a performance warning cautioning WSL users against cloning repositories or running projects on Windows-mounted drives (like `/mnt/c/`) in [operations.md](file:///wsl.localhost/Ubuntu/home/liviu/LoopTroop/docs/operations.md).
