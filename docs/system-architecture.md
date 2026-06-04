@@ -1,39 +1,42 @@
 # System Architecture
 
 > [!IMPORTANT]
-> **TL;DR** — LoopTroop runs as a local Hono backend + React frontend backed by SQLite. Each ticket executes in its own git worktree, and all AI work flows through OpenCode as the sole model gateway. No cloud dependency, no hosted backend.
+> **TL;DR** — LoopTroop is a local control plane: a React browser client talks to a Hono backend, durable state lives in SQLite plus `.ticket/**` artifacts, each ticket executes in its own git worktree, and all model work goes through OpenCode behind a session-ownership layer. On restart, the backend rebuilds runtime projections, hydrates ticket actors, and reconnects only the sessions it still owns.
 
 This document is the canonical architecture reference for the current LoopTroop application.
 
-LoopTroop is not a thin chat wrapper around a coding model. It is a long-running workflow system with explicit planning phases, durable storage, isolated execution worktrees, and resumable OpenCode session ownership. The core architectural choice is simple: important state must live outside the model.
+LoopTroop is not a thin chat wrapper around a coding model. It is a long-running workflow system with explicit planning phases, durable storage, isolated execution worktrees, resumable ticket actors, and restart-aware OpenCode session ownership. The core architectural rule is simple: **important state must survive the model and survive the browser**.
 
 ## 1. Mental Model
 
-LoopTroop operates as a layered system:
+LoopTroop operates as a layered local system:
 
-1. The React SPA renders the live ticket workspace and review tools.
-2. The Hono API exposes ticket, project, artifact, and streaming endpoints.
-3. Workflow actors and phase orchestrators drive tickets through planning, approval, execution, and delivery.
-4. OpenCode sessions do the model work, but only against tightly assembled context.
-5. SQLite, JSONL logs, and `.ticket/**` artifacts hold the durable truth.
-6. Git worktrees and GitHub delivery convert the plan into an isolated change set and then a PR outcome.
+1. The browser runs a React SPA plus local providers for UI state, log caching, and AI question handling.
+2. A Hono API owns the REST and SSE boundary and applies auth, rate limiting, and JSON validation before requests reach workflow code.
+3. XState ticket actors hold the live workflow state machine, while the workflow runner dispatches the phase-specific handlers.
+4. Council orchestration and structured-output normalization turn raw model text into bounded, typed artifacts before anything becomes canonical.
+5. Durable truth lives in SQLite, `.ticket/**` artifacts, runtime projections, and JSONL logs rather than in model transcripts.
+6. OpenCode sessions do the model work inside isolated ticket worktrees, and Git/GitHub delivery turns the resulting change set into a PR outcome.
 
 ## 2. Runtime Actors
 
 | Actor | Responsibility | Primary modules |
 | --- | --- | --- |
-| React SPA | Ticket dashboard, workspace views, navigator, approvals, live logs | `src/App.tsx`, `src/components/ticket/*`, `src/components/workspace/*` |
-| React Query hooks | Fetching, cache invalidation, optimistic updates, SSE integration | `src/hooks/*` |
+| Browser shell | App bootstrap, modal/URL coordination, dashboard vs ticket workspace switching, startup notices | `src/main.tsx`, `src/App.tsx`, `src/components/layout/*` |
+| Browser state providers | Persistent UI state, AI question queue, per-ticket log cache and recovery | `src/context/UIContext.tsx`, `src/context/AIQuestionContext.tsx`, `src/context/LogContext.tsx` |
+| React Query + SSE hooks | Fetching, cache invalidation, replay recovery, startup-status fetches | `src/hooks/*`, especially `useTickets.ts`, `useTicketArtifacts.ts`, `useSSE.ts`, `useStartupStatus.ts` |
 | Hono API | REST routes and SSE endpoint under `/api` | `server/index.ts`, `server/routes/*` |
-| Workflow metadata | Canonical phase list, UI view mapping, grouping, review metadata | `shared/workflowMeta.ts` |
-| Phase orchestrators | Planning, approval, execution, PR delivery, retry and recovery logic | `server/workflow/*`, `server/phases/*` |
-| OpenCode adapter | Session creation, prompting, event streaming, questions, health | `server/opencode/adapter.ts` |
-| Session manager | Ownership tracking, reconnect validation, completion and abandonment | `server/opencode/sessionManager.ts` |
-| SSE broadcaster | Ticket-scoped event fan-out plus replay buffer for reconnect | `server/sse/broadcaster.ts` |
-| App database | Singleton profile and attached-project registry | `server/db/index.ts`, `server/db/init.ts` |
-| Project database | Tickets, artifacts, sessions, attempts, history, error occurrences | `server/db/project.ts` |
-| Ticket filesystem | Human-readable and execution-time artifacts inside the ticket worktree | `server/storage/*`, `server/phases/*` |
+| API guard rails | CORS, token auth, per-bucket rate limiting, JSON validation | `server/middleware/*` |
+| Ticket state machine | Canonical ticket statuses, legal transitions, blocked-error resume rules | `server/machines/ticketMachine.ts`, `server/machines/types.ts` |
+| Actor persistence and hydration | Snapshot reconciliation, safe restore, startup hydration of non-terminal tickets | `server/machines/persistence.ts`, `server/startup.ts` |
+| Phase orchestrators | Planning, approval, execution, retry, cleanup, and delivery logic | `server/workflow/*`, `server/phases/*` |
+| Council + structured output layer | Draft/vote/refine orchestration, tagged-output parsing, schema normalization, retry diagnostics | `server/council/*`, `server/structuredOutput/*`, `server/phases/parserTaggedStructuredOutput.ts`, `server/lib/structuredOutput*.ts` |
+| OpenCode integration | Session creation, prompting, event/question translation, ownership validation, blocked-error diagnostics | `server/opencode/*` |
+| SSE broadcaster + execution logging | Ticket-scoped fan-out, replay buffer, durable log ingestion, session-status log translation | `server/sse/broadcaster.ts`, `server/log/*`, `server/workflow/sessionStatusLogging.ts` |
+| App database | Singleton profile, attached projects, startup UI meta | `server/db/index.ts`, `server/db/init.ts` |
+| Project database + ticket storage | Tickets, artifacts, phase attempts, OpenCode sessions, error history, runtime projections | `server/db/project.ts`, `server/storage/*` |
 | Git and GitHub layer | Worktrees, diffs, commits, PR creation, merge/close flows | `server/phases/execution/gitOps.ts`, `server/git/*` |
+| Startup bootstrap | Database init, crash recovery, WSL/runtime diagnostics, actor hydration, session reconnect | `server/startup.ts`, `server/startupState.ts`, `server/runtime.ts` |
 
 ## 3. Authoritative Data Ownership
 
@@ -41,21 +44,20 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 
 | Storage location | Canonical contents | Notes |
 | --- | --- | --- |
-| `~/.config/looptroop/app.sqlite` by default | Singleton profile, attached projects, app meta | Configurable via `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
-| `<project>/.looptroop/db.sqlite` | Projects, tickets, phase artifacts, phase attempts, OpenCode sessions, status history, error occurrences | This is the project-local operational database |
-| `<project>/.looptroop/worktrees/<ticket>/` | The isolated ticket worktree used for planning artifacts and code changes | Each ticket gets its own worktree; startup blocks if `.looptroop` is tracked by Git so stale runtime data cannot be checked out into new worktrees; `.ticket/**` artifacts inside the worktree are local LoopTroop state and are excluded from bead commits and PR diffs |
-| `.ticket/relevant-files.yaml` | Relevant file scan output used by later planning phases | Replaces older `codebase-map.yaml` terminology |
+| `~/.config/looptroop/app.sqlite` by default | Singleton profile, attached projects, app meta such as startup restore-notice dismissal | Configurable via `LOOPTROOP_CONFIG_DIR` or `LOOPTROOP_APP_DB_PATH` |
+| `<project>/.looptroop/db.sqlite` | Tickets, runtime metadata, OpenCode session ownership, `phase_artifacts`, `ticket_phase_attempts`, status history, error occurrences | This is the project-local operational database |
+| `<project>/.looptroop/worktrees/<ticket>/` | The isolated ticket worktree used for planning artifacts, runtime files, and code changes | Startup blocks if `.looptroop` is tracked by Git so stale runtime data cannot be checked out into new worktrees; `.ticket/**` stays local LoopTroop state and is excluded from bead commits and PR diffs |
+| `.ticket/relevant-files.yaml` | Relevant-file scan output used by later planning phases | Replaces older `codebase-map.yaml` terminology |
 | `.ticket/interview.yaml` and `.ticket/prd.yaml` | Editable review artifacts for the approved planning stages | These are user-facing canonical documents |
-| `.ticket/beads/<flow>/.beads/issues.jsonl` | The current bead plan for a given flow or base branch | Stored as line-oriented JSONL, but rewritten atomically on updates |
-| `.ticket/runtime/execution-log.jsonl` | Durable normal execution and phase log stream | Read by `/api/files/:ticketId/logs` and folded for UI display; internal CMD rows are result-only summaries rather than recurring progress streams |
-| `.ticket/runtime/execution-log.debug.jsonl` | Persisted debug/forensic execution log stream | Read by `/api/files/:ticketId/logs?channel=debug`; supports the same log filters |
-| `.ticket/runtime/execution-log.ai.jsonl` | Persisted AI detail log stream for prompts, thinking, tool calls, and completed model rows | Read by `/api/files/:ticketId/logs?channel=ai`; folded into AI/model log views; live rows come from OpenCode global events filtered back to the owned session and broadcast as fast live-only upserts; finalized assistant message parts for each completed prompt are persisted and also backfilled from `session.messages()` so multi-message tool-use detail history does not depend on a browser or live SSE stream being open |
-| `.ticket/runtime/state.yaml` | Runtime state projection for the active execution | Used for restart and status projection |
-| `.ticket/runtime/execution-setup-profile.json` | Concrete execution environment profile | Separate from the reviewable setup plan artifact |
-| `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps, approval receipts, user-edit receipts, cleanup reports, and content hashes for reviewed artifacts |
+| `.ticket/beads/<flow>/.beads/issues.jsonl` | The current bead plan for a given flow or base branch | Stored as JSONL, rewritten atomically on updates |
+| `.ticket/runtime/execution-log.jsonl`, `.debug.jsonl`, `.ai.jsonl` | Durable workflow, debug, and AI-detail log channels | The UI consumes these both live through SSE and on reload through `/api/files/:ticketId/logs` |
+| `.ticket/runtime/state.yaml` | Derived runtime projection for the active non-terminal ticket | Rebuilt from ticket state on startup; convenient to inspect, but not the only source of truth |
+| `.ticket/runtime/execution-setup-profile.json` | Concrete execution environment profile produced after approved setup runs | Separate from the reviewable execution setup plan artifact |
+| `.ticket/runtime/execution-setup/**`, especially `tool-cache/` | Ticket-owned temp roots, wrapper outputs, execution-only toolchains, and reusable caches | Preserved across setup-plan rewinds when safe so retries do not throw away valid tool caches |
+| `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps, approval receipts, edit receipts, cleanup/integration reports, and content hashes |
 
 > Note
-> SQLite and the filesystem are complementary, not redundant. The database is optimized for querying and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable while staying local to LoopTroop rather than becoming target-repository branch content.
+> SQLite and the filesystem are complementary, not redundant. The database is optimized for querying, ownership, and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable without polluting the target repository branch.
 
 ## 4. End-to-End Ticket Lifecycle
 
@@ -86,7 +88,9 @@ Planning is intentionally artifact-driven.
 
 The planning phases are not one long conversation. Each stage assembles a new context window from durable artifacts and runs in its own session scope.
 
-Only accepted, normalized planning outputs become artifact body content. Rejected or uncorrectable model responses are retained as diagnostics/raw attempts so downstream stages do not consume malformed text as if it were canonical planning state.
+Councils are a reusable subsystem, not bespoke logic embedded in each phase. `server/council/pipeline.ts` handles the common draft -> quorum -> vote -> refine shape, while each phase provides its own context and normalization rules.
+
+Structured output is a hard boundary. `server/structuredOutput/*` and `server/phases/parserTaggedStructuredOutput.ts` normalize, validate, and optionally repair model output before anything becomes canonical artifact content. Rejected or uncorrectable responses are preserved as diagnostics and raw attempts so downstream phases never consume malformed text as if it were approved state.
 
 Human approval gates are content-addressed. The API exposes the current artifact hash for interview, PRD, beads, and execution setup plan views; approval requests must send `expectedContentSha256`; stale approvals return `409` instead of approving bytes the user did not review. Approval snapshots and receipts keep the reviewed raw content plus `content_sha256`, and interview/PRD receipts also record the post-stamp stored hash when approval metadata changes the YAML.
 
@@ -99,10 +103,11 @@ Execution is built around beads, not around one monolithic coding prompt.
 3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots, exposing setup-scoped OpenCode `websearch`/`webfetch` for unresolved official launcher artifact lookup, validating declared wrappers and `tooling_probe_commands`, requiring `tool_requirements.provisioning_attempts` evidence for failed launcher provisioning, and rejecting ready results that leave committable project changes behind.
 4. `CODING` selects the next runnable bead from the scheduler.
 5. `executeBead()` starts or reattaches to the owned OpenCode session for that bead attempt.
-6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path.
+6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path instead of silently progressing.
 7. If the attempt stalls or fails, LoopTroop generates a context wipe note, resets the worktree to the bead start commit, and retries in fresh context.
 8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
 9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper and PR creation auditing the final candidate files before anything is pushed.
+10. During all non-terminal execution states, runtime projections and execution logs are updated so a restarted backend or reloaded browser can restore the ticket from durable state rather than from memory.
 
 See [Beads & Execution](beads.md).
 
@@ -112,14 +117,15 @@ Recovery is a first-class architectural concern.
 
 | Failure type | Recovery strategy |
 | --- | --- |
-| Browser reload, close, or reconnect gap | REST state remains canonical; the browser log cache restores best-effort active log detail, SSE reconnect includes the last event id, replays buffered live events including the latest streaming upsert per log entry, and then refetches tickets, artifacts, bead state, interview state, and complete matching server logs |
-| Frontend crash or tab close | Interview and approval drafts are persisted as ticket UI-state artifacts, with unload-time keepalive flushing for the latest unsaved snapshot |
+| Browser reload, close, or reconnect gap | REST state remains canonical; the browser keeps the last SSE event id, restores best-effort log cache detail, replays buffered live events, and then refetches tickets, artifacts, bead state, interview state, and matching server logs |
+| Frontend crash or tab close | Interview drafts, approval drafts, and browser-cached logs are persisted locally and flushed on unload with best-effort keepalive behavior |
+| Crash during atomic write or append | Startup promotes orphan `.tmp` files, repairs trailing corrupt JSONL lines when safe, and rebuilds runtime projections |
 | Invalid model output | Retry with repair or explicit re-prompt, depending on phase |
 | Bead execution stall | Generate context wipe note, reset worktree, retry in fresh session |
-| OpenCode reconnect gap | Validate owned session against remote sessions and recreate if needed |
-| Backend process restart | Validate or reconstruct serialized actor snapshots, start actors from durable ticket state, and immediately process restored active snapshots |
-| User edits approved planning artifact | Before `PRE_FLIGHT_CHECK`, archive the current approved planning version and downstream phase attempts, cancel active downstream sessions intentionally, save and approve the edit as the new active version, clear stale downstream artifacts/UI state, and restart from the next drafting phase |
-| User edits or regenerates setup plan during runtime setup | While still in `PREPARING_EXECUTION_ENV`, stop active runtime setup, archive the approved setup-plan attempt and runtime attempt, clear stale setup profile outputs while preserving the tool cache, return quietly to `WAITING_EXECUTION_SETUP_APPROVAL`, and require approval again; the fresh attempt is filled only by the requested edit or regeneration |
+| OpenCode reconnect gap | Validate the exact owned session against remote sessions and recreate only when ownership can no longer be proven |
+| Backend process restart | Reconcile persisted XState snapshots, hydrate ticket actors from durable ticket state, and immediately process restored active snapshots |
+| User edits approved interview or PRD | Archive the active approved generation and downstream attempts, cancel downstream sessions intentionally, clear stale downstream artifacts/UI state, persist a `user_edit_receipt:*`, and restart from the next drafting phase |
+| User edits or regenerates setup plan during runtime setup | Stop active runtime setup, archive both setup-plan and runtime attempts, preserve the tool cache when safe, clear stale setup outputs, and return to `WAITING_EXECUTION_SETUP_APPROVAL` for fresh approval |
 | Stale approval | Return `409` with the expected and current SHA-256 hashes, keeping the ticket at the approval gate |
 | Bead finalization failure | Keep the bead retryable, avoid `bead_complete`, send `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED`, and route to `BLOCKED_ERROR` |
 | Cleanup warning | Persist a `cleanup_report` with `status: warning`, expose the cleanup summary on the ticket, and still complete the ticket |
@@ -127,13 +133,11 @@ Recovery is a first-class architectural concern.
 
 LoopTroop tries hard to preserve the work product while discarding the bad conversational state that produced the failure.
 
-Planning edit restarts are intentionally cancellation-based. Editing an approved interview from later PRD or beads planning cancels active downstream planning sessions as intentional cancellation, archives the current approved interview version plus downstream PRD/beads phase attempts, removes stale PRD/beads artifacts and approval UI state, writes an append-only `user_edit_receipt:interview`, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`. Editing an approved PRD from beads planning applies the same rule to the current approved PRD version and downstream beads attempts, writes `user_edit_receipt:prd`, then starts `DRAFTING_BEADS`. Beads and execution setup plan manual edits write matching `user_edit_receipt:*` artifacts. Archived approved versions are read-only planning generations backed by phase attempts, and explicit writes to archived phase attempts return `409`. Setup-plan edits have one post-approval exception: while `PREPARING_EXECUTION_ENV` is active, editing or regenerating stops that runtime setup, archives both attempts, clears stale runtime profile outputs while preserving `.ticket/runtime/execution-setup/tool-cache`, and returns to `WAITING_EXECUTION_SETUP_APPROVAL` without auto-approval. This route-driven rewind also suppresses the restored approval actor's immediate auto-draft, so a manual edit cannot be overwritten by a competing draft and regenerate starts exactly one commented setup-plan session. These routes otherwise stop at the planning boundary: at `PRE_FLIGHT_CHECK` or later, interview and PRD edit saves return `409` instead of modifying execution readiness, and setup-plan changes reject from `CODING` onward. Existing tickets and projects, including `PCKM-22`, are not migrated or repaired by this behavior.
-
 If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`.
 
 ## 8. Restart And Session Ownership
 
-LoopTroop tracks session ownership in the project database so it can decide whether a remote OpenCode session still belongs to the exact workflow slot that wants to use it.
+LoopTroop pairs persisted ticket snapshots with OpenCode session ownership records so it can decide whether a remote session still belongs to the exact workflow slot that wants to use it.
 
 Ownership keys can include:
 
@@ -152,9 +156,11 @@ This lets LoopTroop safely reconnect in cases like:
 - multi-model council phases where each member has its own session identity
 - bead execution where iteration and bead identity both matter
 
-It deliberately does not mean "resume any random prior stream." Reconnect only succeeds if the ticket is still in the same phase and the owned active session still exists remotely.
+Reconnect deliberately does **not** mean "resume any random old transcript." Validation succeeds only if the ticket is still in the same workflow state, the project database still records that ownership slot as active, and the exact remote session still exists.
 
-Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `list`, and message-read calls are guarded so an OpenCode restart cannot indefinitely block the workflow runner.
+Snapshot restore is equally defensive. `server/machines/persistence.ts` reconciles persisted XState snapshots with the ticket row; if the snapshot is missing required structure, cannot be reconciled, or would resume from an unprovable state, the ticket is rebuilt conservatively or moved to `BLOCKED_ERROR` instead of guessing.
+
+Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `list`, `getSession`, and message-read calls are guarded so an OpenCode restart cannot indefinitely block the workflow runner.
 
 ## 9. Module Map
 
@@ -162,66 +168,70 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 
 | Area | Modules |
 | --- | --- |
-| App shell and routing | `src/App.tsx` |
-| Ticket workspace | `src/components/ticket/ActiveWorkspace.tsx`, `NavigatorPanel.tsx` |
-| Workspace views | `src/components/workspace/*` |
-| Data hooks | `src/hooks/useTickets.ts`, `useTicketArtifacts.ts`, `useWorkflowMeta.ts`, `useSSE.ts` |
+| App bootstrap and query client | `src/main.tsx`, `src/lib/queryClient.ts` |
+| App shell, modal routing, startup overlays | `src/App.tsx`, `src/components/layout/*`, `src/components/shared/StartupRestorePopup.tsx`, `src/components/shared/WelcomeDisclaimer.tsx` |
+| Ticket workspace and shared UI | `src/components/ticket/*`, `src/components/workspace/*`, `src/components/shared/*` |
+| Browser state providers | `src/context/UIContext.tsx`, `src/context/AIQuestionContext.tsx`, `src/context/LogContext.tsx` |
+| Data hooks and live updates | `src/hooks/useTickets.ts`, `useTicketArtifacts.ts`, `useTicketPhaseAttempts.ts`, `useWorkflowMeta.ts`, `useSSE.ts`, `useStartupStatus.ts`, `useRecoveryAutoReload.ts` |
 
 ### API Surface
 
 | Area | Modules |
 | --- | --- |
 | App entry and route mounting | `server/index.ts` |
-| Ticket routes | `server/routes/tickets.ts`, `server/routes/ticketHandlers/` |
+| Middleware and request guards | `server/middleware/apiAuth.ts`, `rateLimit.ts`, `validation.ts` |
+| Ticket routes and modular ticket handlers | `server/routes/tickets.ts`, `server/routes/ticketHandlers/*` |
 | Files, beads, streaming | `server/routes/files.ts`, `beads.ts`, `stream.ts` |
 | Profile, projects, health, models, workflow meta | `server/routes/profiles.ts`, `projects.ts`, `health.ts`, `models.ts`, `workflow.ts` |
 
-### Workflow Engine
+### Ticket Orchestration
 
 | Area | Modules |
 | --- | --- |
-| Workflow runner and phase transitions | `server/workflow/*` |
-| Planning phases | `server/workflow/phases/*`, `server/phases/interview/*`, `server/phases/prd/*`, `server/phases/beads/*` |
-| Execution phases | `server/phases/preflight/*`, `server/phases/execution/*`, `server/phases/executionSetup/*`, `server/phases/executionSetupPlan/*`, `server/phases/finalTest/*`, `server/phases/integration/*`, `server/phases/cleanup/*`, `server/phases/verification/*` |
+| Ticket status machine | `server/machines/ticketMachine.ts`, `server/machines/types.ts` |
+| Actor persistence and restore | `server/machines/persistence.ts` |
+| Workflow runner and phase dispatch | `server/workflow/runner.ts`, `server/workflow/phases/*` |
+| Planning phases | `server/phases/interview/*`, `server/phases/prd/*`, `server/phases/beads/*`, `server/phases/executionSetupPlan/*` |
+| Execution and delivery phases | `server/phases/preflight/*`, `server/phases/executionSetup/*`, `server/phases/execution/*`, `server/phases/finalTest/*`, `server/phases/integration/*`, `server/phases/cleanup/*`, `server/phases/verification/*` |
+| Ticket initialization and relevant-file preparation | `server/ticket/create.ts`, `server/ticket/initialize.ts`, `server/ticket/relevantFiles.ts`, `server/ticket/metadata.ts` |
+
+### Council And Structured Output
+
+| Area | Modules |
+| --- | --- |
+| Reusable council pipeline | `server/council/pipeline.ts`, `drafter.ts`, `voter.ts`, `refiner.ts`, `quorum.ts` |
+| Structured-output schemas and normalizers | `server/structuredOutput/*` |
+| Tagged marker extraction and repair-aware parsing | `server/phases/parserTaggedStructuredOutput.ts` |
+| Retry policy, raw-attempt capture, prompt echo detection | `server/lib/structuredOutputRetry.ts`, `structuredRawAttempts.ts`, `structuredRetryDiagnostics.ts`, `promptEcho.ts` |
 
 ### Persistence
 
 | Area | Modules |
 | --- | --- |
-| App DB connection and SQLite pragmas | `server/db/index.ts` |
-| App DB runtime schema bootstrap | `server/db/init.ts` |
-| Project DB bootstrap | `server/db/project.ts` |
-| Schema | `server/db/schema.ts` |
-| Ticket artifact data access | `server/storage/ticketArtifacts.ts` |
-| Ticket phase attempt data access | `server/storage/ticketPhaseAttempts.ts` |
-| Ticket mutation helpers | `server/storage/ticketMutations.ts` |
-| Ticket runtime state projection | `server/storage/ticketRuntimeProjection.ts` |
+| App DB connection and schema bootstrap | `server/db/index.ts`, `server/db/init.ts` |
+| Project DB bootstrap and schema | `server/db/project.ts`, `server/db/schema.ts` |
+| Project attach, repo-path normalization, local exclude setup | `server/storage/projects.ts`, `server/storage/paths.ts`, `server/git/repository.ts` |
+| Ticket artifact and attempt storage | `server/storage/ticketArtifacts.ts`, `ticketPhaseAttempts.ts`, `ticketMutations.ts`, `ticketQueries.ts` |
+| Ticket runtime projection | `server/storage/ticketRuntimeProjection.ts` |
 
-### IO Utilities
+### Observability And Recovery
 
 | Area | Modules |
 | --- | --- |
-| Atomic file append (durable logs) | `server/io/atomicAppend.ts` |
-| Atomic file write (durable state) | `server/io/atomicWrite.ts` |
-
-### Shared Layer
-
-| Area | Modules |
-| --- | --- |
-| Error codes and diagnostics | `shared/errorCodes.ts`, `shared/structuredRetryDiagnostics.ts` |
-| Artifact and repair definitions | `shared/artifactCompanions.ts`, `shared/yamlRepair.ts` |
-| Interventions and refinements | `shared/structuredInterventions.ts`, `shared/refinementDiffArtifacts.ts` |
-| OpenCode catalog and auth | `shared/opencodeCatalog.ts`, `shared/opencodeAuth.ts` |
-| WSL performance utilities | `shared/wslPerformance.ts` |
+| SSE replay and fan-out | `server/sse/broadcaster.ts`, `server/routes/stream.ts` |
+| Execution log ingestion and dedupe | `server/log/executionLog.ts`, `readDedupe.ts`, `commandLogger.ts` |
+| Startup bootstrap and restore state | `server/startup.ts`, `server/startupState.ts`, `server/runtime.ts` |
+| Crash-safe IO and recovery | `server/io/atomicWrite.ts`, `atomicAppend.ts`, `jsonl.ts`, `recovery.ts` |
 
 ### OpenCode Integration
 
 | Area | Modules |
 | --- | --- |
-| Adapter and factory | `server/opencode/adapter.ts`, `factory.ts` |
+| Adapter and factory | `server/opencode/adapter.ts`, `server/opencode/factory.ts` |
 | Context assembly | `server/opencode/contextBuilder.ts` |
 | Session ownership and reconnect | `server/opencode/sessionManager.ts` |
-| Prompt runner | `server/workflow/runOpenCodePrompt.ts` |
+| Prompt runner and phase bridge | `server/workflow/runOpenCodePrompt.ts` |
+| Question handling and blocked-error mapping | `server/routes/ticketHandlers/openCodeQuestionHandlers.ts`, `server/opencode/blockedErrorDiagnostics.ts` |
 
 ## 10. ASCII Overview
 
@@ -229,31 +239,42 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 User
   |
   v
-React SPA
-  |  REST (/api/*)                    SSE (/api/stream)
-  |-------------------------------> Hono API <------------------+
-  |                                                            |
-  |                                                            v
-  |                                                     SSE broadcaster
-  |                                                            |
-  v                                                            |
-Workspace views <----------------------------------------------+
+React SPA + browser providers
+  |  REST (/api/*)                         SSE (/api/stream)
+  |-------------------------------------> Hono API <--------------------+
+  |                                         |                           |
+  |                                         v                           |
+  |                                 auth / rate limit / validation      |
+  |                                         |                           |
+  |                                         v                           |
+  |                                  routes + ticket handlers           |
+  |                                         |                           |
+  |                                         v                           |
+  |                             ticket machine + workflow runner        |
+  |                               |            |            |           |
+  |                               |            |            |           |
+  |                               v            v            v           |
+  |                         council pipeline  phase logic  OpenCode     |
+  |                               |                         adapter      |
+  |                               v                            |         |
+  |                     structured output layer                v         |
+  |                                                            OpenCode |
+  |                                                              server |
+  |                                                                 |   |
+  |                                                                 v   |
+  |                                                          provider models
   |
-  v
-Workflow actors and phase orchestrators
-  |            |                 |                 |
-  |            |                 |                 |
-  v            v                 v                 v
-App DB     Project DB      Ticket worktree    OpenCode adapter/session manager
-                               |                        |
-                               v                        v
-                         .ticket artifacts         OpenCode server
-                         runtime JSONL/logs             |
-                               |                        v
-                               +-------------------- Provider models
-  |
-  v
-git worktree, commits, PR creation, merge/close
+  +<--------------------------- SSE broadcaster <-------------------+
+                                ^            ^
+                                |            |
+                        project DB      runtime logs/state
+                                ^            ^
+                                |            |
+                        app DB / project DB / ticket worktree /.ticket/**
+
+Startup bootstrap runs before normal traffic:
+  initialize DB -> recover temp/log files -> rebuild runtime projections ->
+  hydrate ticket actors -> reconnect owned OpenCode sessions
 ```
 
 ## 11. Detailed Mermaid Diagram
@@ -262,36 +283,38 @@ git worktree, commits, PR creation, merge/close
 flowchart LR
     subgraph Browser["Browser"]
         User[User]
-        SPA[React SPA]
-        Hooks[React Query hooks<br/>useTickets / useSSE / useTicketArtifacts]
-        Workspace[ActiveWorkspace + NavigatorPanel + workspace views]
+        SPA[React SPA<br/>App shell + workspace views]
+        Providers[UI providers<br/>UIContext / AIQuestionProvider / LogProvider]
+        Hooks[React Query hooks<br/>useTickets / useSSE / useStartupStatus]
     end
 
     subgraph API["Backend API"]
         Hono[Hono app<br/>server/index.ts]
-        Routes[Routes<br/>tickets, files, beads, stream,<br/>profile, projects, models, health, workflow]
+        Middleware[Middleware<br/>auth + rate limit + validation]
+        Routes[Routes + ticket handlers]
         SSE[SSE broadcaster<br/>ticket replay buffer]
     end
 
     subgraph Workflow["Workflow engine"]
-        Meta[workflowMeta<br/>phase ids, groups, ui views]
-        Actors[Ticket actors / workflow state]
-        Planning[Planning orchestrators<br/>scan, interview, PRD, beads, setup plan]
-        Exec[Execution orchestrators<br/>preflight, setup, coding, final test, delivery]
-        Context[Context builder<br/>phase allowlists + trimming]
-        Prompt[runOpenCodePrompt<br/>runOpenCodeSessionPrompt]
-        Sessions[SessionManager<br/>ownership, reconnect, abandon, complete]
+        Startup[Startup bootstrap<br/>init DB / recover / reconnect]
+        Machine[Ticket machine<br/>XState status graph]
+        Persistence[Machine persistence<br/>hydrate / reconcile snapshots]
+        Runner[Workflow runner<br/>dispatch phase handlers]
+        Council[Council pipeline]
+        Structured[Structured output layer<br/>normalize / repair / retry]
     end
 
     subgraph Storage["Durable storage"]
-        AppDB[App DB<br/>~/.config/looptroop/app.sqlite]
-        ProjectDB[Project DB<br/>&lt;repo&gt;/.looptroop/db.sqlite]
+        AppDB[App DB<br/>profile + attached projects + app meta]
+        ProjectDB[Project DB<br/>tickets / attempts / artifacts / sessions]
         Worktree[Ticket worktree<br/>&lt;repo&gt;/.looptroop/worktrees/&lt;ticket&gt;]
-        TicketFiles[.ticket artifacts<br/>relevant-files.yaml<br/>interview.yaml<br/>prd.yaml<br/>beads/**/.beads/issues.jsonl]
-        RuntimeFiles[.ticket/runtime<br/>execution-log.jsonl<br/>execution-log.debug.jsonl<br/>execution-log.ai.jsonl<br/>state.yaml<br/>execution-setup-profile.json]
+        TicketFiles[.ticket artifacts<br/>relevant-files / interview / PRD / beads]
+        RuntimeFiles[.ticket/runtime<br/>logs / state.yaml / setup profile / tool-cache]
     end
 
     subgraph AI["OpenCode"]
+        Context[Context builder]
+        SessionMgr[Session manager<br/>ownership + reconnect]
         Adapter[OpenCode adapter]
         OpenCode[OpenCode server]
         Models[Provider models]
@@ -299,57 +322,74 @@ flowchart LR
     end
 
     subgraph Delivery["Delivery"]
-        Git[git worktree / snapshot / reset / commit]
-        GitHub[GitHub PR lifecycle<br/>create, merge, close-unmerged]
+        Git[git worktree / reset / commit]
+        GitHub[GitHub PR lifecycle<br/>create / merge / close-unmerged]
     end
 
     User --> SPA
-    SPA --> Workspace
+    SPA --> Providers
     SPA --> Hooks
     Hooks -->|REST| Hono
     Hooks -->|SSE subscribe| SSE
-    Hono --> Routes
-    Routes --> Meta
-    Routes --> Actors
+
+    Hono --> Middleware
+    Middleware --> Routes
+    Routes --> Machine
+    Routes --> Adapter
     Routes --> SSE
 
-    Actors --> Planning
-    Actors --> Exec
-    Planning --> Context
-    Exec --> Context
-    Planning --> Prompt
-    Exec --> Prompt
-    Prompt --> Sessions
-    Prompt --> Adapter
-    Sessions --> ProjectDB
+    Startup --> AppDB
+    Startup --> ProjectDB
+    Startup --> RuntimeFiles
+    Startup --> Persistence
+    Persistence --> Machine
 
-    Routes --> AppDB
-    Routes --> ProjectDB
-    Planning --> ProjectDB
-    Exec --> ProjectDB
-    Planning --> Worktree
-    Exec --> Worktree
-    Worktree --> TicketFiles
-    Worktree --> RuntimeFiles
-    Exec --> Git
-    Git --> Worktree
-    Exec --> GitHub
-    GitHub --> Git
+    Machine --> Runner
+    Machine --> ProjectDB
+    Runner --> Council
+    Runner --> Structured
+    Runner --> Context
+    Runner --> ProjectDB
+    Runner --> Worktree
+    Runner --> Git
+    Runner --> GitHub
 
+    Council --> Structured
+    Structured --> ProjectDB
+
+    Context --> Adapter
+    Runner --> SessionMgr
+    SessionMgr --> ProjectDB
+    SessionMgr --> Adapter
     Adapter --> OpenCode
     OpenCode --> Models
     OpenCode --> Questions
-    Routes --> Adapter
     Questions --> Routes
 
-    RuntimeFiles --> SSE
+    Worktree --> TicketFiles
+    Worktree --> RuntimeFiles
+    Git --> Worktree
+    GitHub --> Git
+
     ProjectDB --> SSE
+    RuntimeFiles --> SSE
     SSE --> Hooks
 ```
 
 ## 12. Startup State System
 
-On startup, LoopTroop captures and restores durable state through `server/startupState.ts`. The workflow runner hydrates ticket actors from the project database and attempts to reconnect owned OpenCode sessions that survived the restart.
+On startup, LoopTroop restores durable state through `server/startup.ts` and `server/startupState.ts`. The workflow runner hydrates ticket actors from the project database, and the OpenCode layer attempts to reconnect only sessions that still match a valid ownership record.
+
+### Bootstrap Sequence
+
+`startupSequence()` performs the runtime bootstrap in this order:
+
+1. Initialize the app/project databases and create runtime indexes.
+2. Classify the startup storage state and capture runtime diagnostics such as WSL mounted-drive warnings.
+3. Recover ticket runtime artifacts by promoting orphan `.tmp` files, repairing trailing JSONL corruption where safe, and rebuilding `.ticket/runtime/state.yaml` projections.
+4. Start the WAL checkpoint timer and probe OpenCode health.
+5. Hydrate XState actors for non-terminal tickets from attached project databases.
+6. Validate and reconnect active OpenCode sessions; records that no longer map to a live owned session are marked abandoned.
 
 ### Startup Classification
 
@@ -364,18 +404,17 @@ On startup, LoopTroop captures and restores durable state through `server/startu
 ### Restore Flow
 
 1. `initializeStartupState()` reads the app database path, profile count, and attached project count, then persists the startup classification.
-2. `getStartupStatus()` returns cached startup info for the health endpoint (`/api/health/startup`).
-3. The UI may show a restore notice based on the startup status.
-4. `dismissStartupRestoreNotice()` removes the restore notice after the user acknowledges it.
-5. The backend scans active session records in each project database, attempts reconnect for owned OpenCode sessions, and abandons stale session records that no longer exist remotely.
+2. `getStartupStatus()` exposes the cached startup snapshot through `GET /api/health/startup`.
+3. The frontend uses `useStartupStatus()` and `StartupRestorePopup` to show restore context after a real restore.
+4. `dismissStartupRestoreNotice()` persists the user's dismissal in app metadata so the restore notice does not keep reappearing.
 
 Session recovery is best-effort. If OpenCode is unavailable during startup, ticket actors are still hydrated from durable workflow state and later phase work either reconnects, creates fresh owned sessions, or blocks with a persisted error.
 
-The startup health endpoint (`GET /api/health/startup`) exposes the storage path, kind, profile/project counts, dismissed state, and human-readable summary for diagnostics.
+The startup health endpoint exposes the storage path, kind, source, runtime warning state, restored project list, dismissed state, and human-readable summary for diagnostics and UI messaging.
 
 ## 13. IO Utilities
 
-The IO layer provides crash-safe file operations and recovery used by the entire workflow engine. All modules live in `server/io/`.
+The IO layer provides crash-safe file operations and recovery used by the workflow engine. All modules live in `server/io/`.
 
 | Module | Purpose | Key Export |
 | --- | --- | --- |
@@ -384,11 +423,11 @@ The IO layer provides crash-safe file operations and recovery used by the entire
 | `jsonl.ts` | JSON Lines I/O | `readJsonl<T>()`, `writeJsonl<T>()`, `appendJsonl<T>()` — type-safe JSONL read/write/append with graceful malformed-line skipping and newline integrity. |
 | `recovery.ts` | Crash recovery | `recoverOrphanTmpFiles(folder)` — recursively promotes `.tmp` files to their target paths after a crash; `fixTrailingLineCorruption(filePath)` — validates and truncates trailing corrupt JSONL lines (scans backward in 8KB chunks, stays under 4MB scan limit). |
 
-These utilities form the durability backbone: atomic writes protect mutable state files (YAML artifacts), atomic appends protect append-only logs (execution-log JSONL), and recovery handles the crash edge case where atomic operations were interrupted.
+These utilities form the durability backbone: atomic writes protect mutable state files (YAML and JSON artifacts), atomic appends protect append-only logs, and recovery handles the edge case where a process stops mid-write.
 
 ## 14. Session Status Logging
 
-OpenCode session status events are translated into normalized log entries by `server/workflow/sessionStatusLogging.ts`. Each entry captures the retry event or phase change as a structured log record.
+OpenCode session status events are translated into normalized log entries by `server/workflow/sessionStatusLogging.ts`. Each entry captures a retry event or phase change as a structured execution-log record so live SSE views and reload-time log reads converge on the same timeline.
 
 `buildSessionStatusLogEntries()` converts OpenCode `SessionStatusStreamEvent` objects into `SessionStatusLogEntry[]` — ordered, typed log entries with:
 
@@ -400,14 +439,17 @@ OpenCode session status events are translated into normalized log entries by `se
 | `op` | `append`, `upsert`, or `finalize` — determines how the log viewer merges this entry |
 | `content` | Human-readable description of the status event |
 
-The log builder handles retry status events (rate limits, usage limits, timeouts, transport errors) and session phase transitions. These entries feed the execution log alongside normal phase log entries, giving the UI a unified view of model and workflow activity.
+The log builder handles retry status events (rate limits, usage limits, timeouts, transport errors) and session phase transitions. These entries feed the normal execution log alongside phase log entries, while the separate AI-detail log keeps prompt/tool-call depth when that channel is needed.
 
 ## Related Docs
 
 - [Core Philosophy](core-philosophy.md)
 - [Context Engineering](context-engineering.md)
-- [LLM Council](llm-council.md)
+- [Ticket Flow & State Machine](ticket-flow.md)
 - [Beads & Execution](beads.md)
 - [OpenCode Integration](opencode-integration.md)
+- [Frontend](frontend.md)
+- [Output Normalization](output-normalization.md)
 - [Database Schema](database-schema.md)
 - [API Reference](api-reference.md)
+- [Operations Guide](operations.md)

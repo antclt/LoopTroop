@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Refined the System Architecture docs so they now match the implemented startup bootstrap, ticket-state persistence, request guard rails, structured-output pipeline, and browser recovery model.
 - Reworked the Beads & Execution and Pre-Implementation docs to match the implemented setup approval, runtime rewind, retry/recovery, and reusable artifact model.
 - Expanded the PRD docs to match the implemented Full Answers pipeline, versioned coverage loop, approval UI, and post-approval edit/restart behavior.
 - Refined the Interview docs so they now match the implemented lifecycle more closely, including live session behavior, follow-up source types, approval/edit semantics, and the exact interview artifact structure.
@@ -75,6 +76,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Rewrote `docs/system-architecture.md` to make the runtime model easier to follow and closer to the code: clarified the browser/provider layer, documented the request guard-rail middleware, added missing ticket-machine, startup-bootstrap, council, and structured-output subsystems, expanded the storage ownership section to cover derived runtime projections and setup tool caches, refreshed the architecture diagrams, and replaced the densest recovery prose with clearer recovery rules.
 - Rewrote `docs/beads.md` so it now matches the current runtime instead of the older execution-loop/setup description: clarified approval semantics and downstream invalidation, documented the actual execution-setup plan/profile contract, added missing session-preservation and restart-recovery behavior, expanded the artifact/API inventory, and tightened the scheduler/finalization explanations.
 - Reworked `docs/pre-implementation.md` to match the implemented pre-flight, setup-plan approval, and runtime-setup flow: corrected the readiness checks, documented versioned setup-plan edits/regeneration and runtime rewinds, clarified setup validation/evidence rules, and added the real profile/report/runtime-artifact outputs consumed by coding and final testing.
 - Rewrote `docs/prd.md` to align it with the implemented PRD lifecycle: clarified the two-part Full Answers -> PRD drafting flow, documented per-model Full Answers semantics and failure handling, expanded the canonical PRD schema and story verification shape, described versioned PRD coverage behavior and conservative change-metadata handling, and added the real approval/edit semantics around hash-guarded approval, draft re-saving, and downstream beads restart after post-approval edits.
