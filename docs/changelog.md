@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Tightened docs-to-code coverage by correcting stale frontend behavior notes and documenting project-level configuration overrides plus startup shell surfaces.
 - Added documentation for the worktree changes classification system, coverage control loop, execution band concurrency lock, IO utilities (atomic write/append/JSONL/recovery), startup state system, and session continuation eligibility logic across the architecture docs.
 - Updated the system architecture, API reference, output normalization, ticket flow, opencode integration, frontend, and LLM council documentation to cover missing core modules and architectural components.
 - Documented the Structured Interventions subsystem and added a performance warning for Windows-mounted drives inside WSL.
@@ -70,6 +71,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Corrected stale frontend documentation to match the current implementation: removed the old Zustand claim, fixed the documented keyboard shortcuts, clarified that `AIQuestionProvider` handles OpenCode human-input requests rather than interview batches, and documented startup overlays plus project-level configuration overrides in the configuration and API guides.
 - Enhanced SSE event type documentation in the API reference with a table covering all 7 event types, their trigger conditions, key payload fields, and payload examples for `progress`, `bead_complete`, `log`, `app_error`, and `needs_input`.
 - Added explicit `shared/wslPerformance.ts` module reference to the WSL mounted-drive warning in the operations guide.
 - Renumbered structured output schemas section from 6 to 7 after inserting the UI Artifact Companions section.

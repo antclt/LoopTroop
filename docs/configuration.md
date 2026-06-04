@@ -1,9 +1,31 @@
 # Configuration Reference
 
 > [!IMPORTANT]
-> **TL;DR** — All runtime behavior — council size, retry budgets, timeouts, quorum rules, and model selection — is configurable through the UI settings panel. Defaults are tuned for overnight runs; adjust them to match your provider limits and cost tolerance.
+> **TL;DR** — Most runtime behavior — council size, retry budgets, timeouts, quorum rules, and model selection — is configurable through the UI settings panel. Defaults are tuned for overnight runs; adjust them to match your provider limits and cost tolerance.
 
-All configuration lives in your profile, accessible via the **Configuration** button in the LoopTroop UI. Changes take effect on the next phase that reads the value — you do not need to restart the server.
+The singleton profile is the baseline configuration, accessible through the **Configuration** button in the LoopTroop UI. Changes take effect on the next phase that reads the value — you do not need to restart the server.
+
+## Scope And Inheritance
+
+LoopTroop applies configuration in three layers:
+
+| Layer | What it controls | When it applies |
+| --- | --- | --- |
+| Profile | Default settings for the whole app | Used when no project override exists |
+| Project override | Optional override for a small subset of settings | Applied to future tickets in that project |
+| Ticket lock | Frozen effective values for one ticket run | Applied from `start` until the ticket finishes |
+
+Project-level overrides are supported by the project API even though the main UI focuses on profile editing. The overrideable fields are:
+
+- `councilMembers`
+- `maxIterations` (`Max Bead Retries`)
+- `perIterationTimeout`
+- `executionSetupTimeout`
+- `councilResponseTimeout` (`AI Response Timeout`)
+- `minCouncilQuorum`
+- `interviewQuestions`
+
+If a project override is set, newly started tickets in that project inherit that value instead of the profile default. Existing tickets keep the locked values they already started with.
 
 ## Quick Reference
 

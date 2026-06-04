@@ -120,6 +120,8 @@ Example profile update payload:
 | `GET` | `/api/projects/:id/worktrees/size` | Get the total disk size of all worktrees for a project |
 | `DELETE` | `/api/projects/:id/worktrees` | Delete worktrees for completed and canceled tickets only; active ticket worktrees are left untouched |
 
+`GET /api/projects/check-git` returns attach-flow metadata in addition to simple validity. When relevant, the response also includes `scope` (`root` or `subfolder`), `repoRoot`, `githubRepoSlug`, `hasLoopTroopState`, `existingProject`, and `performanceWarning` for WSL mounted-drive performance warnings.
+
 Example project attachment payload:
 
 ```json
@@ -132,6 +134,22 @@ Example project attachment payload:
   "profileId": 1
 }
 ```
+
+Create and update routes also accept optional project-level overrides for future tickets in that project:
+
+```json
+{
+  "councilMembers": "[\"openai/gpt-5.4\",\"anthropic/claude-sonnet-4\"]",
+  "maxIterations": 7,
+  "perIterationTimeout": 1500000,
+  "executionSetupTimeout": 1800000,
+  "councilResponseTimeout": 1500000,
+  "minCouncilQuorum": 2,
+  "interviewQuestions": 40
+}
+```
+
+These fields override the profile baseline only for newly started tickets in that project. Existing tickets keep their locked values.
 
 Worktree size response:
 

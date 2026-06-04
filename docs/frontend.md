@@ -1,7 +1,7 @@
 # Frontend
 
 > [!IMPORTANT]
-> **TL;DR** — The frontend is a local React + TypeScript SPA using Vite, Zustand, and SSE for real-time updates. It renders ticket workflow, approval gates, coding progress, bead grids, artifact inspection, and phase-versioned history.
+> **TL;DR** — The frontend is a local React + TypeScript SPA using Vite, React Query, React Context, and SSE for real-time updates. It renders ticket workflow, approval gates, coding progress, bead grids, artifact inspection, and phase-versioned history.
 
 The frontend is a React 19 SPA that renders the ticket dashboard, the live workspace, review panes, and the navigator surfaces around them.
 
@@ -25,6 +25,16 @@ The app shell also polls `/api/health` for the global reconnecting banner. After
 | Active workspace | Chooses the live view for the selected phase | `src/components/ticket/ActiveWorkspace.tsx` |
 | Navigator | Timeline, approval navigation, context tree, errors, full log entry point | `src/components/ticket/NavigatorPanel.tsx` |
 | Workspace views | Draft, council, interview, approval, coding, error, canceled, review, full log | `src/components/workspace/*` |
+
+### App Shell, Startup Overlays, And Modal Routes
+
+`App.tsx` and `AppShell.tsx` also own several shell-level surfaces outside the active ticket workspace:
+
+- `WelcomeDisclaimer` for the first-run long-workflow warning, including the optional WSL mounted-drive warning from startup status
+- `StartupRestorePopup` when LoopTroop restores existing local profile/project state
+- centered modal routes for Configuration (`/config`), Projects (`/project/new`), and New Ticket (`/ticket/new`)
+- deep-link ticket selection from `/ticket/:externalId`
+- header controls for New Ticket, Projects, Configuration, Docs, Refresh, and theme switching
 
 ## 2. Active Workspace Routing
 
@@ -107,6 +117,7 @@ It also merges persisted bead artifacts with runtime bead overlays from the live
 | `useTickets(projectId?)` | Ticket list with auto-refresh for active tickets |
 | `useTicket(id)` | Individual ticket with active-state refresh |
 | `useProfile()` | Singleton profile query against `/api/profile` |
+| `useStartupStatus()` | Startup storage/runtime state for restore notices and WSL warnings |
 | `useOpenCodeModels()` | Connected models only |
 | `useAllOpenCodeModels()` | Full catalog including disconnected providers |
 
@@ -274,15 +285,17 @@ Profile settings are inherited by new tickets at start time. The locked copies i
 
 ## 11. Context Providers
 
-Three React context providers wrap the ticket workspace and wire up cross-cutting concerns:
+Three React context providers supply cross-cutting app-shell and workspace state:
 
 | Provider | Location | Purpose |
 | --- | --- | --- |
 | `LogProvider` | `LogContext.tsx` | Owns the in-memory execution log for the active ticket. Merges SSE-delivered log rows immediately and handles reconnect recovery by re-requesting the server log and merging by stable entry identity. |
-| `UIProvider` | `UIContext.tsx` | Manages workspace UI state: selected phase, open panels, mobile nav visibility, and the full-log toggle. |
-| `AIQuestionProvider` | `AIQuestionContext.tsx` | Manages the queue of pending AI question batches for the active interview. Drives `InterviewQAView` without requiring prop drilling. |
+| `UIProvider` | `UIContext.tsx` | Manages app UI state such as the selected ticket, filters, sidebar state, log panel height, and theme. It persists that state to `localStorage` and keeps the browser URL in sync with the active view. |
+| `AIQuestionProvider` | `AIQuestionContext.tsx` | Manages the queue of pending OpenCode human-input requests across active tickets, including minimize/reopen state and answer/reject actions for the AI-question popup. |
 
 These providers are composed in `TicketDashboard` around `ActiveWorkspace` and the navigator surfaces.
+
+Interview draft persistence is separate: `InterviewQAView` uses `useBatchSubmit()` and ticket UI-state artifacts for interview answers, while `AIQuestionProvider` is specifically for execution-time OpenCode questions.
 
 ## 12. Kanban Board
 
@@ -290,19 +303,16 @@ These providers are composed in `TicketDashboard` around `ActiveWorkspace` and t
 
 Ticket placement comes from the `kanbanPhase` mapping in `workflowMeta.ts`/`STATUS_TO_PHASE`. To Do is for created-but-not-started tickets, Needs Input is for any user-owned pause including blocked errors, In Progress is for active AI or system workflow work, and Done is for completed or canceled terminal tickets. `KanbanColumn` handles the per-column layout and empty-column suppression.
 
-Press `k` anywhere outside a text input to navigate to the Kanban board.
+The Kanban board is the default root view when no ticket is selected. Clicking the app logo or closing the active ticket returns to it.
 
 ## 13. Keyboard Shortcuts
 
-`KeyboardShortcuts` (`src/components/shared/KeyboardShortcuts.tsx`) registers a global `?` handler and renders a centered overlay when triggered.
+`KeyboardShortcuts` (`src/components/shared/KeyboardShortcuts.tsx`) currently registers a global `?` handler and renders a centered overlay when triggered. `Escape` is also wired through the overlay, ticket dashboard, and modal wrappers to close the active surface.
 
 | Key | Action |
 | --- | --- |
 | `?` | Toggle the keyboard shortcuts overlay |
-| `Escape` | Close current view or modal |
-| `n` | Create a new ticket |
-| `k` | Navigate to the Kanban board |
-| `/` | Focus the search input |
+| `Escape` | Close the keyboard overlay, active modal, or selected ticket dashboard |
 
 Shortcuts are suppressed when focus is inside an `<input>` or `<textarea>`.
 
