@@ -1,105 +1,182 @@
 # Pre-Implementation
 
-Before LoopTroop enters the coding execution stage, it runs a series of strict environment validation gates and sets up a localized execution container. This ensures that when the implementer starts coding, it has a clean workspace, access to the correct tools, and a reliable execution environment.
+Pre-implementation is the execution-band handoff between approved planning and real code changes. It verifies that the ticket can safely leave planning, turns the setup contract into a reviewable artifact, and prepares temporary runtime state that later coding and final-test phases can reuse.
 
-Pre-implementation is split into three phases: **Checking Readiness** (`PRE_FLIGHT_CHECK`), **Approving Setup** (`WAITING_EXECUTION_SETUP_APPROVAL`), and **Preparing Runtime** (`PREPARING_EXECUTION_ENV`).
+LoopTroop splits this into three workflow statuses:
+
+| Status | Purpose | Main outputs |
+| --- | --- | --- |
+| `PRE_FLIGHT_CHECK` | Deterministic readiness gate before any setup or coding work starts. | `preflight_report` artifact + per-check SYS log entries |
+| `WAITING_EXECUTION_SETUP_APPROVAL` | Drafts and pauses on the reviewable setup contract. | `execution_setup_plan`, generation report, notes, approval receipt, edit receipts |
+| `PREPARING_EXECUTION_ENV` | Executes only the approved temporary setup and emits the reusable runtime profile. | `execution_setup_profile`, `execution_setup_report`, runtime files under `.ticket/runtime/execution-setup/**` |
 
 ---
 
-## 1. Checking Readiness (`PRE_FLIGHT_CHECK`)
+## 1. `PRE_FLIGHT_CHECK`: deterministic readiness gate
 
-LoopTroop does not start writing code on an unverified workspace. When a ticket transitions out of the beads planning stage, it invokes the **Pre-Flight Doctor** (`server/phases/preflight/doctor.ts`) to run 19 automated integrity checks.
+When the beads plan is approved, LoopTroop runs the **Pre-Flight Doctor** (`server/phases/preflight/doctor.ts`). This phase does not prepare tooling yet; it only proves that the ticket is safe to enter execution setup.
 
-These checks are grouped into six main categories:
+### 1.1 What it validates
 
-### 1.1 OpenCode & Model Connectivity
-- **OpenCode Connectivity**: Verifies that the local OpenCode server is reachable and responsive to basic HTTP probes.
-- **Main Implementer Availability**: Queries the provider catalog to check if the locked main implementer model is online and properly configured in OpenCode.
-- **OpenCode Execution Capability**: Creates a temporary execution-mode session and runs a read-only probe prompt (`PROM_EXECUTION_CAPABILITY_PROBE`). It expects the model to reply exactly `OK` to ensure tool-calling, API connectivity, and model adherence to instructions are fully functional before attempting to execute beads.
+The doctor checks six areas:
 
-### 1.2 Ticket & Planning Artifacts
-- **Ticket Directory**: Confirms the workspace ticket directory `.ticket/` exists on disk.
-- **Relevant Files**: Checks for the presence of the `relevant-files.yaml` index generated during the early discovery phase.
-- **Beads Available**: Verifies that at least one bead has been planned and expanded for execution.
-- **Beads Approval**: Confirms that the beads plan has a valid, untampered user approval receipt from the planning stage.
+| Area | What LoopTroop verifies |
+| --- | --- |
+| **OpenCode and model reachability** | OpenCode health, locked main-implementer availability, and a real execution-mode probe session using `PROM_EXECUTION_CAPABILITY_PROBE`, which must return exactly `OK`. |
+| **Ticket and planning artifacts** | The ticket workspace exists, `relevant-files.yaml` is checked and warned on when missing, at least one bead exists, and the beads approval receipt is available. |
+| **Dependency graph integrity** | No dangling references, self-dependencies, duplicate bead ids, or cycles, and at least one bead is runnable immediately. |
+| **Git safety** | The ticket worktree exists, is on a real branch, and has no pre-existing committable project changes. Generated or local untracked noise is downgraded to warnings with suggested `.gitignore` entries. |
+| **GitHub delivery prerequisites** | `origin` resolves to GitHub, `gh` is installed, authentication works, and the authenticated account can access the target repo. |
+| **Concurrency and budget guards** | No other ticket in the same project is already inside the execution band, and `maxIterations` is valid (`0` means unlimited). |
 
-### 1.3 Dependency Graph Integrity
-- **Dangling Dependencies**: Scans the bead list to make sure no bead blocks on a non-existent bead ID.
-- **Self-Dependencies**: Verifies no bead is blocked by or blocks itself.
-- **Duplicate Bead IDs**: Checks for duplicate identifiers in the planned beads list to prevent namespace collisions.
-- **Circular Dependencies**: Traverses the dependency graph to ensure there are no circular blockers (e.g., Bead A blocks Bead B which blocks Bead A).
-- **Runnable Bead Check**: Confirms the graph contains at least one bead with zero unsatisfied dependencies that can start immediately, ensuring the execution engine doesn't deadlock at the very beginning.
+### 1.2 Why the execution probe matters
 
-### 1.4 Git Safety & Cleanliness
-- **Git Worktree Presence**: Checks that the ticket's isolated Git worktree exists on disk.
-- **HEAD State**: Verifies the worktree is active on a valid branch and not in a detached HEAD state.
-- **Worktree Cleanliness**: Runs a workspace audit. If there are pre-existing, committable project changes outside LoopTroop's tracking paths, the check fails to prevent capturing unrelated edits in bead commits. Untracked noise is reported as warnings and suggested for `.gitignore`.
+The execution-capability probe is stricter than a plain health check. LoopTroop creates a temporary execution-mode OpenCode session with the same locked model and variant planned for real work, dispatches a tiny read-only prompt, requires the exact response `OK`, and then tears the session down. That catches session-creation, tool-policy, or model-behavior failures before runtime setup or coding starts.
 
-### 1.5 GitHub Integration
-- **GitHub Origin Remote**: Checks that the repository remote resolves to `github.com`.
-- **GitHub CLI Installation**: Verifies the `gh` binary is installed on the host system, which is required for PR generation.
-- **GitHub Auth Status**: Checks that the `gh` CLI is properly authenticated.
-- **GitHub Repository Access**: Confirms that the authenticated CLI has read-write access to the remote target repository.
+### 1.3 Outcomes and failure behavior
 
-### 1.6 Concurrency & Budgets
-- **Project Execution Lock**: Verifies no other ticket for the same project is currently in the execution band, avoiding Git conflicts across concurrent processes.
-- **Runtime Budget**: Validates that `maxIterations` is defined and non-negative, preventing unbounded Ralph loops.
+- LoopTroop persists a `preflight_report` artifact containing every pass, warning, and failure.
+- Each check is also emitted into the **SYS** log so the UI shows the same detail without opening raw artifacts.
+- Any `fail` result routes the ticket to `BLOCKED_ERROR`.
+- `warning` results are preserved but do **not** block execution.
 
 > [!WARNING]
-> Any check failing with a **Critical Failure** routes the ticket to `BLOCKED_ERROR`. Warnings (such as generated untracked noise files) are displayed but allow the pipeline to proceed.
+> This phase is intentionally non-mutating. If the worktree already contains committable project changes, LoopTroop blocks here instead of letting setup or coding absorb unrelated edits into later bead commits.
 
 ---
 
-## 2. Approving Setup (`WAITING_EXECUTION_SETUP_APPROVAL`)
+## 2. `WAITING_EXECUTION_SETUP_APPROVAL`: reviewable setup contract
 
-Once pre-flight checks pass, LoopTroop drafts an environment setup blueprint. This step uses the main implementer model to decide what compilers, runtimes, package managers, and test suites are required for the project.
+After pre-flight passes, LoopTroop asks the locked main implementer to audit the approved ticket context and draft an `execution_setup_plan`. This is still a planning-style approval gate: no setup commands run until the user approves the contract.
 
-### 2.1 The Setup Plan Draft
-LoopTroop prompts the model with `PROM_EXECUTION_SETUP_PLAN`, feeding it the ticket details, relevant files, approved beads, PRD, and any prior reusable setup profile. The model returns a structured `execution_setup_plan` centered on readiness and temporary-only preparation, including:
+### 2.1 How the draft is generated
 
-- **`readiness`**: Whether the current environment is already `ready`, only `partial`, or still `missing` key requirements, plus evidence and remaining gaps.
-- **`temp_roots`**: Approved runtime paths LoopTroop may use for temporary setup work.
-- **`steps`**: Ordered setup steps with concrete commands, required/optional flags, rationale, and cautions.
-- **`project_commands`**: Discovered full-project command families such as prepare, full test, lint, and typecheck.
-- **`quality_gate_policy`**: The default gate policy the later coding loop should follow.
-- **`cautions`**: User-facing warnings or assumptions that remain relevant even after approval.
+`server/workflow/phases/executionSetupPlanPhase.ts` assembles the execution-setup planning context from durable artifacts, including ticket details, relevant files, approved beads, and any prior reusable execution-setup profile. On first entry, the draft is generated automatically if no current setup-plan artifact exists.
 
-This phase is critical because LoopTroop does not allow arbitrary system-level installations (for example `sudo apt-get install`) during bead execution. Missing tooling must either be provisioned safely under approved temporary roots or surfaced explicitly before coding starts.
+The setup-plan artifact is structured around a small, explicit contract:
 
-### 2.2 Human Gate & Regeneration
-The setup plan is presented to the user on the dashboard. The user has three choices:
-1. **Direct Edit**: Modify readiness details, setup steps, command families, cautions, or the raw plan directly in the UI editor.
-2. **Regenerate**: Provide natural-language comments (e.g., "Use Node 20 instead of Node 18", "Skip the database seeding script") and trigger `PROM_EXECUTION_SETUP_PLAN_REGENERATE` to rewrite the plan.
-3. **Approve**: Locks in the setup plan. Approval is content-hash protected to avoid stale-tab overrides.
+| Section | Meaning |
+| --- | --- |
+| `readiness` | Whether the environment is already `ready`, only `partial`, or still `missing` key requirements, plus supporting evidence and gaps. |
+| `temp_roots` | Repository-local or runtime-owned paths the next phase may use for temporary setup work. |
+| `steps` | Ordered setup actions with `id`, `title`, `purpose`, `commands`, `required`, `rationale`, and step-level `cautions`. |
+| `project_commands` | Discovered project-wide command families such as prepare, full test, lint, and typecheck. |
+| `quality_gate_policy` | The default policy later coding and final-test phases should follow for tests, lint, typecheck, and full-project fallback behavior. |
+| `cautions` | User-facing warnings or assumptions that should remain visible after approval. |
+
+If the workspace is already ready, LoopTroop treats that as a first-class result: `steps` can be empty, and the artifact stays reviewable instead of inventing filler setup commands.
+
+### 2.2 Edit, regenerate, and version semantics
+
+This approval gate is more than a single draft:
+
+1. **Manual edit** updates the structured plan or raw content directly. LoopTroop saves the canonical normalized artifact and records append-only `user_edit_receipt:execution_setup_plan` history with before/after hashes.
+2. **Regenerate** appends the commentary into `execution_setup_plan_notes`, archives the active attempt, and starts a fresh background generation using the current plan plus the user's note as context.
+3. **Archived attempts stay read-only.** Older setup-plan versions remain available through phase-attempt history, but explicit writes to archived attempts are rejected.
+
+The generation report also preserves:
+
+- the raw model output
+- validation errors
+- structured-output retry diagnostics
+- rejected/accepted raw attempts when formatting or schema repair was needed
+- regenerate commentary history
+
+### 2.3 Approval handoff and rewind behavior
+
+Approving the plan stores an approval receipt with the reviewed `content_sha256`, step count, and command count. Stale approvals fail with `409` instead of silently approving newer content.
+
+While the ticket is still in `PREPARING_EXECUTION_ENV`, editing or regenerating the setup plan triggers a **runtime rewind** rather than an in-place overwrite:
+
+- the active setup session is stopped
+- the current setup-plan attempt and runtime attempt are archived
+- stale runtime outputs are cleared
+- `.ticket/runtime/execution-setup/tool-cache` is preserved
+- the ticket returns to `WAITING_EXECUTION_SETUP_APPROVAL`
+- approval is required again before setup restarts
+
+That keeps the approved contract explicit and prevents a running setup session from drifting away from what the user last reviewed.
 
 ---
 
-## 3. Preparing Runtime (`PREPARING_EXECUTION_ENV`)
+## 3. `PREPARING_EXECUTION_ENV`: temporary runtime setup
 
-After user approval, the environment setup runner executes the plan steps sequentially.
+Once the plan is approved, LoopTroop moves to `server/workflow/phases/executionSetupPhase.ts`. This phase is AI-driven and retryable, but it is still **not** a bead: it never creates commits, never pushes, and never counts as implementation progress.
 
 ```mermaid
 flowchart TD
-    A[Read Approved Setup Plan] --> B[Verify readiness assessment]
+    A[Read approved setup plan] --> B[Verify approved readiness assessment]
     B --> C{Setup still needed?}
-    C -- Yes --> D[Provision approved temp paths and run setup commands]
-    C -- No --> E[Emit reusable runtime profile]
-    D --> F[Write env.sh and run wrappers when needed]
-    F --> G[Validate wrapper and tooling probes]
-    E --> G
-    G --> H{Validation OK?}
-    H -- Yes --> I[Ready for Coding]
-    H -- No --> J[Setup Failure / BLOCKED_ERROR]
+    C -- No --> D[Emit reusable execution setup profile]
+    C -- Yes --> E[Run approved temporary setup commands]
+    E --> F[Record wrappers probes and reusable artifacts]
+    D --> G[Validate wrapper and tooling probes]
+    F --> G
+    G --> H{All checks pass?}
+    H -- Yes --> I[Advance to CODING]
+    H -- No --> J[Retry or BLOCKED_ERROR]
 ```
 
-### 3.1 Provisioning Temporary Runtime Paths
-If the approved plan says setup is still needed, LoopTroop prepares only temporary runtime state under approved paths such as `.ticket/runtime/execution-setup/**`. If a required launcher or toolchain is missing, the setup agent must first try distinct safe user-space provisioning strategies before reporting a tooling failure, or record why no safe provisioning path exists.
+### 3.1 Approved-plan-first execution
 
-### 3.2 Running Setup Commands
-Approved setup commands are executed inside the isolated worktree directory. Standard output and errors are captured in the execution log. If setup claims the environment is ready, LoopTroop still validates declared wrappers and tooling probes before accepting the runtime profile. If any required setup command, wrapper validation, or tooling probe fails, the phase routes to `BLOCKED_ERROR` for user intervention.
+The setup agent reads the **approved** plan first. User edits override the model's original draft. If the approved plan says the environment is already ready and that still holds, the phase should stay nearly no-op: verify the claim, emit the reusable profile, and move on without inventing bootstrap work.
 
-### 3.3 Generating The Runtime Profile
-When setup succeeds, LoopTroop emits a reusable `execution_setup_profile` describing what was actually prepared: bootstrap commands, tooling probe commands, optional tool-requirement evidence, reusable artifacts such as `.ticket/runtime/execution-setup/run`, discovered project command families, and the quality-gate policy for later coding and final-test phases. If tooling was provisioned, wrapper artifacts such as `env.sh` and `run` ensure later commands execute in the same validated environment instead of rediscovering runtime state ad hoc.
+When setup is still needed, the agent may:
+
+- run only the approved temporary setup steps
+- inspect the repository and invoke repo-native bootstrap commands
+- prepare runtime-owned wrappers or caches
+- create reusable artifacts under `.ticket/runtime/execution-setup/**`
+
+If required launchers or toolchains are missing, the agent must try real user-space provisioning strategies under approved temp roots before reporting failure. Simple PATH edits, wrapper creation, cache inspection, or version probes do **not** count as provisioning strategies.
+
+### 3.2 Validation rules before a profile is accepted
+
+LoopTroop does not trust a superficially valid setup response. A setup result is accepted only when all of the following are true:
+
+- the structured result parses and all setup checks pass
+- declared wrappers can launch a no-op command successfully
+- declared `tooling_probe_commands` exist and succeed
+- profiles that declare wrappers or project command families include non-mutating probes
+- failed tooling results include durable `tool_requirements` evidence:
+  - either at least two distinct `provisioning_attempts` strategies with real commands
+  - or a `not_provisionable` result with a concrete `failure_reason`
+
+LoopTroop also audits the worktree after each ready-looking attempt. Committable project changes left behind by setup fail the attempt. Generated noise is kept as a warning and copied into the profile cautions with suggested `.gitignore` entries.
+
+### 3.3 Setup-scoped web tools, retries, and reset behavior
+
+This is the one execution-band phase where LoopTroop can enable setup-scoped `websearch` and `webfetch` so the agent can look up official release or launcher metadata when repository files do not identify a required tool artifact locally.
+
+If an attempt fails:
+
+1. LoopTroop appends an execution-setup retry note.
+2. It resets tracked files back to the setup phase start commit.
+3. It preserves LoopTroop-owned runtime artifacts under `.ticket`, especially `tool-cache`.
+4. It clears stale profile and wrapper outputs.
+5. It retries until the normal setup budget is exhausted or a repeated tooling blocker becomes terminal.
+
+The final report keeps the retry notes and per-attempt history so the user can see how setup evolved and why it eventually succeeded or blocked.
+
+### 3.4 What gets persisted
+
+Successful or failed setup attempts produce durable artifacts:
+
+| Artifact or path | Purpose |
+| --- | --- |
+| `execution_setup_profile` | Canonical reusable profile containing temp roots, bootstrap commands, tooling probes, optional tool-requirement evidence, reusable artifacts, discovered project commands, and quality-gate policy. |
+| `execution_setup_report` | Final status, attempt history, retry notes, structured-output diagnostics, worktree warnings, raw attempts, and the diff between approved-plan commands and any audited execution-time additions. |
+| `.ticket/runtime/execution-setup-profile.json` | Mirror of the accepted profile for later phases that prefer reading a file path instead of loading the artifact body inline. |
+| `.ticket/runtime/execution-setup/**` | Runtime-owned temp state such as `env.sh`, `run`, caches, and tool downloads. |
+
+### 3.5 Impact on later phases
+
+Pre-implementation directly shapes later execution:
+
+- **Coding** receives the reusable setup profile path instead of rediscovering environment state from scratch.
+- **Final testing** reuses the validated wrapper from the setup profile when generating commands.
+- **Bead commits** ignore setup-owned runtime roots so prepared toolchains and caches do not become implementation diffs.
+- **Cleanup** removes the temporary runtime roots at ticket end while leaving the audit artifacts and execution log intact.
 
 ---
 
@@ -107,3 +184,4 @@ When setup succeeds, LoopTroop emits a reusable `execution_setup_profile` descri
 
 - [Ticket Flow & State Machine](ticket-flow.md)
 - [Beads & Execution](beads.md)
+- [Post-Implementation](post-implementation.md)
