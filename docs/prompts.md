@@ -6,10 +6,12 @@ pageClass: prompt-inventory-page
 
 LoopTroop prompts are workflow contracts. They define the model role, the task, the allowed tools, the runtime context, and the exact artifact shape the model must return.
 
-The TypeScript implementation remains the source of truth. This page gives you a readable map of every built-in prompt and runtime prompt-builder family, plus collapsed copies of the rendered prompt content for inspection.
+The TypeScript implementation remains the source of truth. This page gives you a readable map of every built-in prompt and runtime prompt-builder family, plus collapsed copies of the base rendered prompt content for inspection.
 
 ::: tip Reading this page
-Use the phase map to jump to the part of the workflow you care about. The built-in prompt tables link to collapsed full prompt content; runtime builders are documented separately because their final text depends on ticket artifacts, validation errors, diffs, or command output.
+Use the phase map to jump to the part of the workflow you care about. The built-in prompt tables link to collapsed base-template renders; runtime builders are documented separately because their final text depends on ticket artifacts, validation errors, diffs, or command output.
+
+This page inventories model-facing prompt text. Parser, repair, and report-builder code is only called out here when it materially changes prompt assembly, retry behavior, or a user-visible fallback path.
 :::
 
 ## 1. How Prompt Assembly Works
@@ -34,6 +36,16 @@ Tool policies are deliberately small:
 | `execution_setup_online` | Workspace setup access, including online lookup when configured for setup-only tooling discovery. |
 
 Context parts are assembled by `server/opencode/contextBuilder.ts`. See [Context Engineering](context-engineering.md) for the per-status context contract and why prompts receive only the smallest useful artifact slice.
+
+The code adds a few important behaviors that are easy to miss if you only read the prompt templates:
+
+| Behavior | What the code does | Why it matters on this page |
+| --- | --- | --- |
+| Phase allowlists | `buildMinimalContext()` only includes the sources named in `PHASE_ALLOWLISTS` for the active phase. | The `Context inputs` column is enforced in code, not just documented as guidance. |
+| Stable ordering | `sortContextParts()` keeps `ticket_details` first, then preserves the phase-defined order for the remaining parts. | The ticket requirement stays near the top of the final prompt even when many artifacts are present. |
+| Token-budget trimming | When context is too large, `TRIM_PRIORITY` drops low-priority slices first, starting with error/retry notes and moving upward toward larger planning artifacts only when necessary. | Older notes can disappear before core artifacts such as `ticket_details`, `prd`, or `execution_setup_plan`; that is intentional rather than a docs gap. |
+| Short-lived context cache | Frequently reused context slices are cached for five minutes. | This affects read performance, not the prompt contract. |
+| Runtime overlays | Some helpers append extra labeled sections or schema reminders on top of a base prompt, while others only supply context to a shared council pipeline. | The runtime builder inventory below mixes true prompt builders with context-supplying helpers on purpose; both change the effective prompt path. |
 
 ## 2. Phase Map
 
@@ -2015,6 +2027,12 @@ These builders assemble prompt variants around the built-in prompts or create st
 | `buildPullRequestPrompt()` | `server/workflow/phases/pullRequestPhase.ts` | `CREATING_PULL_REQUEST` PR draft sub-step | Fresh | `disabled` | `ticket_details`, `prd`, integration report, final test report, final diff | Drafts reviewer-friendly PR title and body fields from final candidate evidence. |
 | Pull-request draft structured retry | `server/workflow/phases/pullRequestPhase.ts` | `CREATING_PULL_REQUEST` PR draft retry | Same session when recoverable, fresh session otherwise | `disabled` | Validation error, raw response, PR draft schema reminder | Corrects malformed PR draft YAML before falling back to deterministic PR text. |
 
+Code-backed notes:
+
+- `buildPrdContextBuilder()` and `buildBeadsContextBuilder()` are selector helpers rather than standalone prose builders. They still matter here because they decide which base prompt (`PROM11`/`PROM12` or `PROM21`/`PROM22`) reaches the shared council vote/refine pipeline.
+- `generateFinalTestRetryNote()` wraps `PROM53` with `buildMinimalContext('preflight', ticketState)` plus generated `error_context`, so the retry note always carries ticket details even though the helper itself only emits a small append-only note.
+- Candidate-file auditing also has non-prompt fallback/report helpers in `server/phases/integration/candidateFileAudit.ts`: `buildCandidateFileAuditReport()` shapes the stored audit artifact, and `buildIncludeAllCandidateFileAudit()` keeps every changed file when classification is unavailable instead of inventing exclusions.
+
 ## 5. Shared Structured Retry Prompts
 
 Most structured-output failures use `buildStructuredRetryPrompt()` from `server/structuredOutput/yamlUtils.ts`. The shared retry prompt appends the validation error, an optional schema reminder, and the previous invalid response, then asks for only the corrected artifact.
@@ -2031,5 +2049,6 @@ When adding or changing a prompt:
 2. Update this inventory with the prompt ID or builder, source path, workflow status, session type, tool policy, context inputs, and purpose.
 3. Update [Context Engineering](context-engineering.md) if the prompt receives new context parts or changes status-level context behavior.
 4. Update [Output Normalization](output-normalization.md) if the expected output shape, parser, repair rules, or retry behavior changes.
+5. Update this page even when the base prompt text did not change but the effective prompt path did, such as a new phase allowlist entry, trim-priority change, retry wrapper, or conservative fallback around a prompt-driven phase.
 
 Prompt text can be inspected in live runs through raw attempt diagnostics when the phase stores an initial prompt. This page remains the stable docs index for which prompt families exist and where they are used.
