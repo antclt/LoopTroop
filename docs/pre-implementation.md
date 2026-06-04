@@ -55,17 +55,20 @@ These checks are grouped into six main categories:
 Once pre-flight checks pass, LoopTroop drafts an environment setup blueprint. This step uses the main implementer model to decide what compilers, runtimes, package managers, and test suites are required for the project.
 
 ### 2.1 The Setup Plan Draft
-LoopTroop prompts the model with `PROM_EXECUTION_SETUP_PLAN`, feeding it the ticket details, relevant files, approved beads, PRD, and execution setup profiles. The model returns a structured `execution_setup_plan` containing:
+LoopTroop prompts the model with `PROM_EXECUTION_SETUP_PLAN`, feeding it the ticket details, relevant files, approved beads, PRD, and any prior reusable setup profile. The model returns a structured `execution_setup_plan` centered on readiness and temporary-only preparation, including:
 
-- **`commands`**: Setup commands to run (e.g., `npm ci`, `pip install -r requirements.txt`, `cargo build`).
-- **`environment_variables`**: Key-value environment settings (e.g., `NODE_ENV: test`, `RUST_BACKTRACE: 1`).
-- **`tool_cache`**: User-space toolchains, dependencies, or package structures to provision locally.
+- **`readiness`**: Whether the current environment is already `ready`, only `partial`, or still `missing` key requirements, plus evidence and remaining gaps.
+- **`temp_roots`**: Approved runtime paths LoopTroop may use for temporary setup work.
+- **`steps`**: Ordered setup steps with concrete commands, required/optional flags, rationale, and cautions.
+- **`project_commands`**: Discovered full-project command families such as prepare, full test, lint, and typecheck.
+- **`quality_gate_policy`**: The default gate policy the later coding loop should follow.
+- **`cautions`**: User-facing warnings or assumptions that remain relevant even after approval.
 
-This phase is critical because LoopTroop does not allow arbitrary system-level installations (e.g., `sudo apt-get install`) during bead execution. All dependencies must be provisioned locally or validated during this setup phase.
+This phase is critical because LoopTroop does not allow arbitrary system-level installations (for example `sudo apt-get install`) during bead execution. Missing tooling must either be provisioned safely under approved temporary roots or surfaced explicitly before coding starts.
 
 ### 2.2 Human Gate & Regeneration
 The setup plan is presented to the user on the dashboard. The user has three choices:
-1. **Direct Edit**: Modify the commands, variables, or YAML plan directly in the UI editor.
+1. **Direct Edit**: Modify readiness details, setup steps, command families, cautions, or the raw plan directly in the UI editor.
 2. **Regenerate**: Provide natural-language comments (e.g., "Use Node 20 instead of Node 18", "Skip the database seeding script") and trigger `PROM_EXECUTION_SETUP_PLAN_REGENERATE` to rewrite the plan.
 3. **Approve**: Locks in the setup plan. Approval is content-hash protected to avoid stale-tab overrides.
 
@@ -77,24 +80,26 @@ After user approval, the environment setup runner executes the plan steps sequen
 
 ```mermaid
 flowchart TD
-    A[Read Approved Setup Plan] --> B[Provision local Tool Cache]
-    B --> C[Run Setup Commands]
-    C --> D[Compile / Install deps]
-    D --> E[Write env.sh & run wrappers]
-    E --> F[Validate Wrapper Script]
-    F --> G{Wrapper OK?}
-    G -- Yes --> H[Ready for Coding]
-    G -- No --> I[Setup Failure / BLOCKED_ERROR]
+    A[Read Approved Setup Plan] --> B[Verify readiness assessment]
+    B --> C{Setup still needed?}
+    C -- Yes --> D[Provision approved temp paths and run setup commands]
+    C -- No --> E[Emit reusable runtime profile]
+    D --> F[Write env.sh and run wrappers when needed]
+    F --> G[Validate wrapper and tooling probes]
+    E --> G
+    G --> H{Validation OK?}
+    H -- Yes --> I[Ready for Coding]
+    H -- No --> J[Setup Failure / BLOCKED_ERROR]
 ```
 
-### 3.1 Provisioning the Tool Cache
-LoopTroop will attempt to resolve any declared `tool_cache` requirements using local, non-destructive provisioning paths. For example, if a specific Python version is needed, it might probe `pyenv` or `conda`; for Node.js, it might use `nvm` or isolated global modules.
+### 3.1 Provisioning Temporary Runtime Paths
+If the approved plan says setup is still needed, LoopTroop prepares only temporary runtime state under approved paths such as `.ticket/runtime/execution-setup/**`. If a required launcher or toolchain is missing, the setup agent must first try distinct safe user-space provisioning strategies before reporting a tooling failure, or record why no safe provisioning path exists.
 
 ### 3.2 Running Setup Commands
-Commands declared in the setup plan are executed inside the isolated worktree directory. Standard output and errors are captured in the execution log. If any setup command exits with a non-zero status code, the environment preparation fails and routes to `BLOCKED_ERROR` for user intervention.
+Approved setup commands are executed inside the isolated worktree directory. Standard output and errors are captured in the execution log. If setup claims the environment is ready, LoopTroop still validates declared wrappers and tooling probes before accepting the runtime profile. If any required setup command, wrapper validation, or tooling probe fails, the phase routes to `BLOCKED_ERROR` for user intervention.
 
-### 3.3 Generating Wrapper Scripts
-LoopTroop generates local execution wrappers (e.g., `env.sh`) that inject the declared `environment_variables` and prepend any provisioned tool cache directories to the `PATH`. These wrapper scripts ensure that every bead execution and final test command runs in an identical, isolated environment, shielding the execution from host-machine variations and system-level conflicts.
+### 3.3 Generating The Runtime Profile
+When setup succeeds, LoopTroop emits a reusable `execution_setup_profile` describing what was actually prepared: bootstrap commands, tooling probe commands, optional tool-requirement evidence, reusable artifacts such as `.ticket/runtime/execution-setup/run`, discovered project command families, and the quality-gate policy for later coding and final-test phases. If tooling was provisioned, wrapper artifacts such as `env.sh` and `run` ensure later commands execute in the same validated environment instead of rediscovering runtime state ad hoc.
 
 ---
 

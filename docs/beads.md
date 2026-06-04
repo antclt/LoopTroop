@@ -1,25 +1,33 @@
 # Beads & Execution
 
 > [!IMPORTANT]
-> **TL;DR** — Instead of handing an entire feature to one giant coding session, LoopTroop decomposes the approved PRD epics and stories into the smallest implementation units called beads. Each bead is executed one at a time in an isolated worktree with bounded retries. Failed attempts reset the worktree to the bead's start commit and retry in a fresh, clean session with a compact failure note instead of a bloated conversation history.
+> **TL;DR** - LoopTroop does not hand an entire feature to one long coding chat. It first turns the approved PRD into small, dependency-ordered beads, then runs those beads one at a time in an isolated worktree with strict retries, hard resets, structured completion markers, and explicit runtime-setup handoff.
 
-Beads are LoopTroop's primary execution units. They serve as the structural bridge between the approved Product Requirements Document (PRD) and the live coding run, functioning as both the execution plan and the execution memory.
+Beads are LoopTroop's execution units. They are the bridge between the approved PRD and the live coding loop: small enough to keep context narrow, but structured enough to encode dependency order, file scope, verification intent, retry history, and durable recovery metadata.
 
-The core data model lives in `server/phases/beads/types.ts`. The execution orchestrator lives in `server/phases/execution/executor.ts`, and the workflow-side orchestration that manages coding loops and resumes interrupted sessions lives in `server/workflow/phases/executionPhase.ts` and `server/workflow/phases/beadsPhase.ts`.
+The canonical bead model lives in `server/phases/beads/types.ts`. Runtime scheduling lives in `server/phases/execution/scheduler.ts`. The coding loop is split between `server/phases/execution/executor.ts` and `server/workflow/phases/executionPhase.ts`. The setup handoff immediately before coding lives in `server/workflow/phases/executionSetupPhase.ts`, `server/phases/executionSetupPlan/types.ts`, and `server/phases/executionSetup/types.ts`.
 
-Note: LoopTroop implements only some of the bead ideas, not the full methodology from Steve Yegge, available here - https://github.com/gastownhall/beads. 
+LoopTroop implements only part of the broader "beads" idea popularized by Steve Yegge. Its implementation is intentionally pragmatic: deterministic scheduling, small coding slices, strong retry/reset semantics, and durable workflow artifacts.
 
 ---
 
-## 1. What A Bead Is
+## 1. Where This Page Fits
 
-A bead is designed to be small enough to execute in a highly focused, narrow context, but rich enough to encode:
-- What must be changed (target files, descriptions)
-- What depends on what (dependency graph edges)
-- How to verify completion (test commands, acceptance criteria)
-- What happened in prior attempts (iteration counts, notes)
+This page starts at the point where beads are already expanded into execution-ready records and reviewed by a human. The earlier beads planning loop (`DRAFTING_BEADS` -> `COUNCIL_VOTING_BEADS` -> `REFINING_BEADS` -> `VERIFYING_BEADS_COVERAGE` -> `EXPANDING_BEADS`) is covered mainly in [Ticket Flow](ticket-flow.md) and [LLM Council](llm-council.md).
 
-LoopTroop plans features as a bead graph and executes this graph in a strict, scheduler-enforced dependency order.
+What this page focuses on:
+
+- the final approved bead shape
+- how beads are stored, edited, and approved
+- how approved beads hand off into execution setup
+- how the coding scheduler, retry loop, and recovery paths work
+- which artifacts and APIs expose execution state
+
+---
+
+## 2. What An Approved Bead Contains
+
+A bead is the smallest unit LoopTroop will schedule for coding. It carries enough structure to drive execution without forcing the coding model to infer its own work order.
 
 ### Current Bead Shape
 
@@ -27,26 +35,32 @@ LoopTroop plans features as a bead graph and executes this graph in a strict, sc
 | --- | --- | --- |
 | `id` | `string` | Stable bead identifier |
 | `title` | `string` | Short execution title |
-| `prdRefs` | `string[]` | PRD references that justify the bead |
-| `description` | `string` | Full execution task description |
-| `contextGuidance` | `{ patterns: string[]; anti_patterns: string[] }` | Local implementation guidance |
+| `prdRefs` | `string[]` | PRD epic/story references that justify the bead |
+| `description` | `string` | Full coding task description |
+| `contextGuidance` | `{ patterns: string[]; anti_patterns: string[] }` | Local implementation guardrails |
 | `acceptanceCriteria` | `string[]` | Completion requirements |
-| `tests` | `string[]` | What should be verified |
-| `testCommands` | `string[]` | Concrete commands to run |
-| `priority` | `number` | Execution order |
-| `status` | `'pending' \| 'in_progress' \| 'done' \| 'error'` | Current execution state |
+| `tests` | `string[]` | Verification intent in prose |
+| `testCommands` | `string[]` | Concrete commands the bead expects to run |
+| `priority` | `number` | Deterministic execution order among runnable beads |
+| `status` | `'pending' \| 'in_progress' \| 'done' \| 'error'` | Runtime state |
 | `issueType` | `string` | Task, bug, chore, or similar |
 | `externalRef` | `string` | Parent ticket reference |
-| `labels` | `string[]` | PRD or planning labels |
-| `dependencies` | `{ blocked_by: string[]; blocks: string[] }` | Execution graph edges |
+| `labels` | `string[]` | Planning labels |
+| `dependencies` | `{ blocked_by: string[]; blocks: string[] }` | Dependency graph edges |
 | `targetFiles` | `string[]` | Expected file touch set |
-| `notes` | `string` | Durable notes string carried across attempts |
-| `iteration` | `number` | Current attempt count for the bead |
-| `createdAt` | `string` | ISO timestamp — set when beads are approved |
+| `notes` | `string` | Append-only retry/context-wipe notes |
+| `iteration` | `number` | Current execution attempt number |
+| `createdAt` | `string` | ISO timestamp set when beads are approved |
 | `updatedAt` | `string` | ISO timestamp |
 | `completedAt` | `string` | Completion timestamp |
-| `startedAt` | `string` | Start timestamp — set on first iteration, preserved across retries |
-| `beadStartCommit` | `string \| null` | Git snapshot used for reset and retry |
+| `startedAt` | `string` | First-start timestamp, preserved across retries |
+| `beadStartCommit` | `string \| null` | Git snapshot used for reset/retry |
+
+### Why These Fields Matter At Runtime
+
+- **Planning fields** (`prdRefs`, `description`, `acceptanceCriteria`, `testCommands`, `targetFiles`) keep each coding session narrow.
+- **Graph fields** (`priority`, `dependencies`) let the scheduler choose work deterministically instead of letting the model decide its own sequence.
+- **Recovery fields** (`status`, `iteration`, `notes`, `startedAt`, `beadStartCommit`) make retries durable across resets, backend restarts, and blocked-error recovery.
 
 ### Example Bead
 
@@ -96,99 +110,211 @@ LoopTroop plans features as a bead graph and executes this graph in a strict, sc
 
 ---
 
-## 2. Storage Model
+## 3. Storage, Editing, And Approval Semantics
 
-The editable bead plan for a ticket is stored under:
+The editable bead plan for a ticket is stored as JSONL under:
 
 ```text
 .ticket/beads/<flow>/.beads/issues.jsonl
 ```
 
 - **`flow`** defaults to the ticket base branch when not provided.
-- The file is a line-oriented JSONL format.
-- `GET /api/tickets/:id/beads` returns the canonical plan hash in the `X-Content-Sha256` header.
-- `PUT /api/tickets/:id/beads` rewrites the full file atomically only while the ticket is in `WAITING_BEADS_APPROVAL`.
-- The server also refreshes the approval snapshot, writes `user_edit_receipt:beads`, and clears execution-setup state after updates.
+- The format is line-oriented JSONL, but the runtime reads it as a bead array.
+- `GET /api/tickets/:id/beads` returns the current plan and exposes the exact plan hash in `X-Content-Sha256`.
+- `PUT /api/tickets/:id/beads` rewrites the entire file atomically, but only while the ticket is in `WAITING_BEADS_APPROVAL`.
+
+### What Saving A Beads Edit Really Does
+
+Saving the beads plan is not a cosmetic UI action. It is a workflow mutation with downstream consequences:
+
+1. the canonical JSONL file is replaced atomically
+2. the beads approval snapshot is refreshed
+3. a `user_edit_receipt:beads` artifact is appended with before/after hashes
+4. execution-setup state is cleared so stale setup assumptions cannot survive a changed bead plan
+
+That invalidation is important. If the execution blueprint changes, any previously drafted setup-plan assumptions may no longer be valid, so LoopTroop forces setup to be regenerated/reapproved from the updated bead plan.
+
+### Approval Gate Behavior
+
+`WAITING_BEADS_APPROVAL` is the last human gate before execution-band work begins.
+
+- Approval is hash-guarded against the exact reviewed content.
+- The approved bead set becomes the authoritative execution plan consumed by pre-flight and coding.
+- After approval, the coding agent does **not** receive the full plan every time. It receives the active bead plus narrow runtime context for that bead iteration.
 
 ---
 
-## 3. The Execution Loop
+## 4. The Handoff Between Beads And Coding
 
-LoopTroop executes approved work through a bounded bead loop rather than one giant autonomous coding session.
+Approved beads do not go straight into `CODING`. They first pass through a deterministic execution-band handoff:
 
-### Execution Phases Around The Loop
-
-| UI group | Phase | Purpose |
-| --- | --- | --- |
-| Pre-Implementation | `PRE_FLIGHT_CHECK` | Confirm the ticket is ready to leave planning |
-| Pre-Implementation | `WAITING_EXECUTION_SETUP_APPROVAL` | Human review of the setup plan |
-| Pre-Implementation | `PREPARING_EXECUTION_ENV` | Materialize the execution environment |
-| Implementation | `CODING` | Run beads one at a time with bounded retries |
-| Post-Implementation | `RUNNING_FINAL_TEST` | Validate the full result after all beads are done |
-| Post-Implementation | `INTEGRATING_CHANGES` | Prepare the final change set |
-| Post-Implementation | `CREATING_PULL_REQUEST` | Publish the delivery PR |
-| Post-Implementation | `WAITING_PR_REVIEW` | Wait for merge or close-unmerged outcome |
-| Post-Implementation | `CLEANING_ENV` | Remove temporary execution state |
-
-*Note: `RUNNING_FINAL_TEST` and `CREATING_PULL_REQUEST` include model-output prompts governed by the AI Response Timeout. Test shell commands and coding work are governed by execution-band timeout controls.*
-
----
-
-## 4. The Bead Execution Cycle
-
-`executeBead()` is the heart of the execution phase. For each individual bead, the executor runs the following cycle:
-
-1. **Load:** Load the active bead specification and the current execution profile.
-2. **Recover or Reset:** Recover any interrupted `in_progress` bead from a matching checkpoint when possible, or hard-reset it to its recorded start commit snapshot before attempting a retry.
-3. **Session Hook:** Start or reattach to the owned OpenCode session for that bead iteration.
-4. **Prompt:** Prompt the model with the coding template and the narrow context slice, watching OpenCode retry status events for provider-side backoffs.
-5. **Enforce Completion:** Require structured completion markers so the system can verify when the attempt actually finished.
-6. **Persist:** Save the execution checkpoint, then finalize the local work.
-7. **Complete:** Mark the bead `done` only after local finalization succeeds, or trigger a retry/blocking error path if execution or finalization fails.
-
----
-
-## 5. Bead Lifecycle & Scheduler Rules
-
-### Bead Lifecycle States
-
-| Bead status | Meaning |
+| Phase | Purpose |
 | --- | --- |
-| `pending` | Planned but not yet started. |
-| `in_progress` | Currently selected by the execution loop. |
-| `done` | OpenCode succeeded and local finalization succeeded: committable project changes were committed regardless of language, or the bead was a true no-op. |
-| `error` | Last attempt or finalization failed, needing retry or manual recovery. |
+| `WAITING_BEADS_APPROVAL` | Human approval of the expanded execution plan |
+| `PRE_FLIGHT_CHECK` | Deterministic readiness checks against the worktree, dependency graph, Git/GitHub integration, and coding-agent capability |
+| `WAITING_EXECUTION_SETUP_APPROVAL` | Human review of the runtime setup contract |
+| `PREPARING_EXECUTION_ENV` | Temporary-only runtime preparation and reusable profile generation |
+| `CODING` | Bead-by-bead coding with retries, resets, and checkpoint recovery |
+| `RUNNING_FINAL_TEST` | Whole-change validation after all beads are done |
+| `INTEGRATING_CHANGES` | Prepare the final integrated change set |
+| `CREATING_PULL_REQUEST` | Draft and publish the delivery PR |
+| `WAITING_PR_REVIEW` | Wait for merge or close-unmerged outcome |
+| `CLEANING_ENV` | Remove temporary execution artifacts |
+
+`BLOCKED_ERROR` can interrupt any of the execution-band phases above.
+
+---
+
+## 5. Execution Setup Is Part Of The Execution Story
+
+The current runtime no longer treats setup as a loose list of `commands`, `environment_variables`, and `tool_cache` entries. The setup contract is now split into two distinct artifacts:
+
+| Artifact | Produced in | Purpose |
+| --- | --- | --- |
+| `execution_setup_plan` | `WAITING_EXECUTION_SETUP_APPROVAL` | Human-reviewed contract describing whether setup is needed and, if so, which temporary steps are allowed |
+| `execution_setup_profile` | `PREPARING_EXECUTION_ENV` | Machine-validated runtime profile describing the environment that coding and final test should reuse |
+
+### 5.1 Approved Setup Plan Shape
+
+The setup plan is an approval artifact, not the final runtime state. Its key fields are:
+
+- **`readiness`**: `status`, `actionsRequired`, evidence, and remaining gaps
+- **`tempRoots`**: approved temporary directories the setup phase may use
+- **`steps`**: ordered setup steps with `commands`, `required`, rationale, and cautions
+- **`projectCommands`**: discovered full-project command families (`prepare`, `testFull`, `lintFull`, `typecheckFull`)
+- **`qualityGatePolicy`**: default policy later coding beads should follow
+- **`cautions`**: user-facing warnings or assumptions
+
+This matters because the setup gate is now explicitly allowed to conclude that the environment is already ready. In that case, the plan can be approved with zero setup steps and the next phase mostly becomes verification plus profile emission.
+
+### 5.2 Runtime Setup Profile Shape
+
+The setup profile is the durable runtime contract that later phases reuse. It records:
+
+- **`bootstrapCommands`** actually used during setup
+- **`toolingProbeCommands`** used to verify the prepared runtime
+- optional **`toolRequirements`** evidence showing provisioning attempts or safe failure reasons
+- **`reusableArtifacts`** such as `.ticket/runtime/execution-setup/run`
+- **`projectCommands`** and **`qualityGatePolicy`** for later commands
+- **`cautions`** copied forward for visibility
+
+When setup provisions tooling, LoopTroop expects reusable runtime artifacts under `.ticket/runtime/execution-setup/**`, commonly including:
+
+- `.ticket/runtime/execution-setup/env.sh`
+- `.ticket/runtime/execution-setup/run`
+- `.ticket/runtime/execution-setup-profile.json`
+
+Final testing reuses this validated runtime wrapper instead of rediscovering the environment from scratch.
+
+### 5.3 What Setup Is Allowed To Do
+
+`PREPARING_EXECUTION_ENV` is deliberately narrow:
+
+- it must respect the approved setup plan first
+- it should verify readiness before running bootstrap commands
+- it may prepare temporary-only tooling under LoopTroop-owned runtime paths
+- it must not quietly leave committable project changes behind
+- it may use setup-scoped online lookup (`websearch` / `webfetch`) when local metadata is insufficient to resolve a required launcher or version
+
+This is why the setup phase belongs in the Beads & Execution story: it is the controlled runtime bridge between an approved plan and a safe coding loop.
+
+---
+
+## 6. Scheduler Rules And Bead Lifecycle
+
+LoopTroop keeps scheduling intentionally simple and deterministic.
+
+### Bead Status Meanings
+
+| Status | Meaning |
+| --- | --- |
+| `pending` | Planned and eligible for future scheduling |
+| `in_progress` | Selected by the coding loop |
+| `done` | OpenCode succeeded **and** local finalization succeeded |
+| `error` | The last attempt failed or finalization failed; manual recovery/retry is required |
 
 ### Scheduler Rules
 
-The scheduler logic is intentionally simple and deterministic, preventing the coding model from deciding its own work order:
-- `getRunnable(beads)` returns pending beads whose dependencies are fully satisfied.
-- `getNextBead(beads)` selects the next unblocked runnable bead based on priority.
-- `isAllComplete(beads)` decides whether all beads are `done`, permitting the execution stage to advance.
+`server/phases/execution/scheduler.ts` enforces three core rules:
+
+- `getRunnable(beads)` returns only beads whose status is `pending` and whose `blocked_by` dependencies are already `done`
+- `getNextBead(beads)` picks the runnable bead with the lowest `priority`
+- `isAllComplete(beads)` advances the workflow only when every bead is `done`
+
+Important consequences:
+
+- beads in `error` are never auto-selected again
+- interrupted `in_progress` beads are handled by recovery logic first, not by the scheduler
+- the model never chooses its own work order
 
 ---
 
-## 6. Structured Completion & Corrective Reminders
+## 7. The Single-Bead Execution Cycle
 
-LoopTroop does not trust plain prose statements like "I have completed the task." The executor enforces a strict protocol using two types of structured reminders:
+`executeBead()` is the core loop for one bead attempt.
 
-- **Completion-marker reminder:** Sent when a response is missing or has a malformed `<BEAD_STATUS>` marker, prompting the model to re-emit machine-checkable state.
-- **Continuation reminder:** Sent when the marker is valid but not all validation gates are passing, instructing the agent to keep working and re-emit the marker when done.
+1. **Select** - mark the next runnable bead `in_progress`, persist `startedAt`, and record `beadStartCommit`.
+2. **Assemble narrow context** - load the active bead plus focused runtime context for that bead.
+3. **Create or reattach session** - own the OpenCode session for that bead iteration.
+4. **Prompt** - send the coding prompt and watch OpenCode stream/status events.
+5. **Enforce structured completion** - require a valid `<BEAD_STATUS>` marker instead of trusting free-form prose.
+6. **Retry inside the session when safe** - use structured retry prompts or "keep working" reminders when the marker is malformed or the gates are not yet passing.
+7. **Persist checkpoint** - write `bead_execution:{beadId}` with the execution result and checkpoint metadata.
+8. **Finalize locally** - create the bead commit when Git-visible project changes exist, or record a true no-op completion.
+9. **Capture diff and advance** - persist `bead_diff:{beadId}`, mark the bead `done`, and either choose the next runnable bead or advance to final test.
 
-These reminders force the model to emit machine-readable progress state. If the marker is missing or malformed, LoopTroop retries with a corrective prompt instead of guessing what happened.
+### What "done" Really Means
+
+`done` is not "the model said it finished." It means:
+
+- the completion marker passed validation
+- required checks were reported as passing
+- local finalization succeeded
+- a bead commit exists when committable project changes were present, regardless of language or extension
+
+If local finalization fails after model success, the bead does **not** become `done`; the ticket routes into `BLOCKED_ERROR` with `BEAD_FINALIZATION_FAILED`.
 
 ---
 
-## 7. Bounded Ralph-Style Retry & Context Wipe Notes
+## 8. Structured Completion And Corrective Prompts
 
-### The Ralph Loop Philosophy
+LoopTroop does not trust plain language like "done" or "tests pass now."
 
-> **TL;DR** — Each bead has a limited time (configurable) to finish what it is trying to do. If it runs out of time, LoopTroop writes a note summarizing what went wrong and offering suggestions for the next attempt, then starts the bead fresh in a clean session with a reset worktree. The number of retries is also configurable.
+Each bead attempt must end with exactly one `<BEAD_STATUS>...</BEAD_STATUS>` block containing:
 
-> [!NOTE]
-> **The Ralph Loop Philosophy:** Instead of trying to talk an AI out of a degraded coding spiral, LoopTroop acts like a strict manager. It says: "stop, write down what failed, throw away your scratchpad, and start over with a clean head."
+- `bead_id`
+- `status`
+- `checks.tests`
+- `checks.lint`
+- `checks.typecheck`
+- `checks.qualitative`
 
-When a bead attempt fails (or the per-iteration deadline fires), LoopTroop abandons the degraded transcript, resets the workspace, and starts fresh.
+If the output is malformed or missing the marker, LoopTroop does **not** guess. It sends a structured retry reminder that asks for the exact schema again.
+
+If the marker shape is valid but the bead is still incomplete, LoopTroop sends a continuation reminder instructing the agent to keep editing, rerun the failing checks, and only return once the bead is actually complete.
+
+This two-stage enforcement matters:
+
+- **schema repair path** for malformed completion output
+- **keep-working path** for valid-but-incomplete output
+
+That prevents the executor from confusing formatting errors with genuine implementation failure.
+
+---
+
+## 9. Retry, Reset, And Context-Wipe Notes
+
+When a bead attempt fails, LoopTroop does not keep piling more context into the same degraded session.
+
+### Retry Philosophy
+
+For ordinary implementation failure or a workflow-owned per-iteration timeout:
+
+1. capture a compact retry note from the failing session when possible
+2. append that note to the bead's durable `notes`
+3. hard-reset the worktree to `beadStartCommit`
+4. abandon the old session
+5. retry in a fresh session with the accumulated notes as compact guidance
 
 ```mermaid
 flowchart TD
@@ -199,96 +325,167 @@ flowchart TD
     B -- no --> N[Generate context wipe note]
     N --> E[Reset worktree to bead start commit]
     E --> F{Retry budget left?}
-    F -- yes --> G[Fresh session, next iteration]
+    F -- yes --> G[Fresh session next iteration]
     G --> A
     F -- no --> H[Enter BLOCKED_ERROR]
 ```
 
-### Context Wipe Notes
+### What The Retry Note Tries To Preserve
 
-Before abandoning a failing session, `generateContextWipeNote()` sends a context-capture prompt to the still-open session to summarize the attempt. For iteration timeouts, this capture is best-effort: LoopTroop may query the session for notes, but the session is no longer allowed to preserve or finalize the bead.
+The context-wipe note is intentionally short. It tries to preserve only:
 
-The note is extremely compact and explicitly answers:
-1. What the bead was trying to do.
-2. What failed.
-3. What was already tried.
-4. What the next fresh attempt should keep in mind.
+1. what the bead was trying to do
+2. what failed
+3. what was already tried
+4. what the next fresh attempt should remember
 
-If the model fails to generate a good note, LoopTroop falls back to a simpler, synthesized system failure note.
+If the model cannot produce a good note, LoopTroop falls back to a deterministic system-generated note based on the recorded errors, recent failing tool excerpts, and truncated last output.
 
----
+### Retry Budget Exhaustion
 
-## 8. Session Strategy
-
-Execution combines fresh, isolated sessions with ownership-aware reconnect:
-
-- **Fresh session per retry:** Prevents carrying corrupted reasoning or stale timed-out completions into the next iteration.
-- **Ownership-aware reconnect:** Survives backend process restarts or temporary browser disconnections if the same owned session still exists.
-- **Explicit lifecycle:** Keeps session state transparent and auditable in `opencode_sessions`.
+If the bead reaches the configured retry cap, LoopTroop marks it `error`, attaches `BEAD_RETRY_BUDGET_EXHAUSTED`, and routes the ticket to `BLOCKED_ERROR`.
 
 ---
 
-## 9. OpenCode Retry Budget
+## 10. Session Ownership, Preservation, And Continue
 
-OpenCode can emit `session.status` retry events while backing off from provider interruptions (rate limits, overloaded capacity, timeout/deadline errors, socket resets). LoopTroop treats matching retry states as shared prompt-level blockers across the workflow.
+Execution uses owned OpenCode sessions, but not every failure is handled the same way.
 
-The execution profile controls two limits:
-- **`OpenCode Retry Limit`:** The number of matching retry events allowed before blocking (default: 10).
-- **`OpenCode Retry Grace Window`:** How long a prompt may remain in a matching retry state without progress before blocking (default: 60 seconds).
+### Fresh Session Versus Preserved Session
 
-In any owned phase, retry-budget exhaustion can preserve the active OpenCode session and route the ticket to `BLOCKED_ERROR`. Resuming via **Continue** sends exactly `continue please` into that same session. During `CODING`, this prevents provider stalls from consuming the bead iteration timeout or bead retry budget.
+- **Ordinary bead failure or workflow-owned iteration timeout** -> no Continue; LoopTroop captures notes, resets, and retries in a fresh session
+- **Continuable provider/session interruption** -> the active session may be preserved and the ticket may enter `BLOCKED_ERROR` with **Continue**
 
----
+### When Continue Is Available
 
-## 10. Worktree Hygiene
+During `CODING`, LoopTroop can preserve the active session for provider-side interruptions such as:
 
-Execution is fully isolated inside the ticket worktree. Important `gitOps.ts` behaviors include:
-- **Diff capture:** Excludes `.ticket/**` and `.looptroop/**` folders from staging and review diffs.
-- **Commit capture:** A local bead commit is required when Git-visible project changes exist in any language or file extension. Ephemeral setups and caches are excluded.
-- **Hard reset:** Resets can hard-reset and clean the worktree back to `beadStartCommit` while preserving the LoopTroop-owned `.ticket/` directory containing planning artifacts, approvals, and logs.
-- **Noise exclusion:** Common generated paths like `node_modules` or `dist` are skipped only if untracked, with `.gitignore` suggestions surfaced in warnings.
+- retry-budget exhaustion on matching OpenCode retry states
+- selected provider/session timeouts
+- transport or session failures that remain safely resumable
 
----
+When Continue is available, returning from `BLOCKED_ERROR` sends exactly:
 
-## 11. Success & Failure Paths
+```text
+continue please
+```
 
-### Success Path
-A successful bead execution:
-1. Persists a `bead_execution:{beadId}` checkpoint.
-2. Creates the local bead commit (or records a no-op completion if no changes exist).
-3. Updates bead status to `done` only after local finalization succeeds.
-4. Captures the bead diff artifact (`bead_diff:<beadId>`) exposed at `GET /api/tickets/:id/beads/:beadId/diff`.
-5. Hands control back to the scheduler.
+into that preserved session.
 
-### Failure Path & Blocked-Error
-LoopTroop distinguishes between recoverable iteration failure and terminal blockage. If local finalization fails after OpenCode reported success, LoopTroop broadcasts `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED` and routes the ticket to `BLOCKED_ERROR`.
+This distinction is important:
 
-On startup or manual retry, `CODING` recovery checks if the interrupted `in_progress` bead has a current matching `bead_execution:<beadId>` checkpoint. If it matches, LoopTroop resumes finalization from the checkpoint instead of re-running the bead. Otherwise, recovery falls back to the reset/retry path.
+- **workflow-owned timeouts** consume bead attempts and trigger reset/retry
+- **provider/session interruptions** can preserve the session and avoid consuming the bead's retry budget in the same way
 
 ---
 
-## 12. Execution Configuration Controls
+## 11. Recovery After Backend Restart
+
+`CODING` is restart-aware.
+
+If the backend restarts while a bead is `in_progress`, LoopTroop checks the latest `bead_execution:{beadId}` artifact before deciding what to do.
+
+It will finalize from that checkpoint only when the checkpoint still matches the current:
+
+- bead id
+- iteration
+- `startedAt`
+- `updatedAt`
+- `beadStartCommit`
+
+If the checkpoint is missing, stale, malformed, or mismatched, LoopTroop does **not** trust it as proof of success. It resets the bead to its start snapshot, returns it to `pending`, and lets the scheduler choose the next valid attempt.
+
+---
+
+## 12. Worktree Hygiene And Finalization
+
+Execution is isolated inside the ticket worktree, and the local Git rules are strict.
+
+### Important Behaviors
+
+- **Bead start snapshot**: every new bead records `beadStartCommit` before coding
+- **Reset on retry**: retries hard-reset and clean back to that snapshot
+- **Metadata preservation**: LoopTroop-owned planning/runtime paths are preserved appropriately during resets
+- **Commit capture**: Git-visible project changes produce a local bead commit regardless of language or extension
+- **No-op completion**: a true no-op bead can still finish successfully when no committable project changes were needed
+- **Noise handling**: generated/untracked noise is surfaced as warnings rather than silently swept into bead commits
+
+### Diff Capture
+
+After successful local finalization, LoopTroop captures a code-oriented bead diff and exposes it as `bead_diff:{beadId}`. This lets the UI and API show what that bead actually changed without mixing in `.ticket/**` metadata.
+
+---
+
+## 13. Artifacts, APIs, And What You Can Inspect
+
+Beads and execution are highly artifact-driven. The most important pieces are:
+
+| Artifact / API | Meaning |
+| --- | --- |
+| `.ticket/beads/<flow>/.beads/issues.jsonl` | Canonical persisted bead plan |
+| `GET /api/tickets/:id/beads` | Returns the plan and `X-Content-Sha256` |
+| `PUT /api/tickets/:id/beads` | Rewrites the plan during `WAITING_BEADS_APPROVAL` |
+| `GET /api/tickets/:id/beads/:beadId/diff` | Returns the captured diff for a completed bead when available |
+| `approval_receipt` for beads | Hash-guarded proof that the reviewed bead plan was approved |
+| `user_edit_receipt:beads` | Append-only audit trail for manual bead edits |
+| `execution_setup_plan` | Approved runtime-setup contract between beads and coding |
+| `execution_setup_report` / `execution_setup_retry_notes` | Setup execution diagnostics and retry history |
+| `execution_setup_profile` | Reusable runtime profile for coding and final test |
+| `bead_execution:{beadId}` | Latest raw execution/checkpoint artifact for that bead |
+| `bead_diff:{beadId}` | Captured diff after successful finalization |
+
+In the UI, `CODING` also exposes bead progress directly:
+
+- the workspace title shows current bead and iteration progress while coding is active
+- the left timeline keeps the last known bead count for later review
+- per-bead raw input/output and iteration history are inspectable from the coding view
+
+---
+
+## 14. Configuration Controls That Shape The Loop
+
+Three runtime controls matter most here:
 
 ### Execution Setup Timeout
-The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` step after the setup plan is approved. The setup agent must attempt safe user-space provisioning under `.ticket/runtime/execution-setup/tool-cache` if version/info probes fail, rather than blocking immediately. If setup provisions tooling, it writes `env.sh` and `run` wrappers. LoopTroop validates the declared wrapper before coding begins, and final testing automatically reuses this validated wrapper.
+
+The maximum runtime for `PREPARING_EXECUTION_ENV`. This bounds the setup agent while it verifies readiness, provisions temporary tooling, validates wrappers/probes, and emits the reusable runtime profile.
 
 ### Per-Iteration Timeout
-The maximum allowed runtime for one bead attempt in `CODING` (before the system aborts, captures a context-wipe note, hard-resets, and retries in a fresh session).
+
+The maximum runtime for one bead attempt in `CODING`. When this workflow-owned deadline fires, LoopTroop captures retry notes if possible, resets to `beadStartCommit`, and retries in a fresh session.
 
 ### Max Bead Retries
-Defines how many fresh-session re-attempts LoopTroop allows for a bead before it marks the bead with `BEAD_RETRY_BUDGET_EXHAUSTED` and enters `BLOCKED_ERROR`.
+
+The maximum number of fresh-session attempts LoopTroop allows for a bead before routing to `BLOCKED_ERROR` with `BEAD_RETRY_BUDGET_EXHAUSTED`.
+
+### OpenCode Retry Budget
+
+Separate from bead retries, the execution profile also defines how long and how often matching OpenCode retry states may persist before the workflow blocks on a provider/session problem instead of burning bead time.
 
 ---
 
-## 13. Why Beads & Execution Loops Matter Architecturally
+## 15. Why This Architecture Matters
 
-Without beads and execution loops, AI coding orchestrators collapse back into a single long-running chat session with weak recovery, weaker context engineering, and no auditability. Beads limit context size, provide clear checkpoint boundaries, preserve execution history, and enforce scheduling constraints safely outside the language model itself.
+Without beads, the coding phase collapses into a single long-running AI transcript with weak recovery and poor auditability.
+
+LoopTroop's bead-and-execution model gives it:
+
+- narrow context slices instead of giant conversations
+- deterministic dependency order outside the model
+- durable restart/recovery checkpoints
+- hard resets instead of degraded-chat spirals
+- explicit runtime setup contracts before coding starts
+- bead-level audit artifacts instead of one opaque final diff
+
+That combination is what makes the system durable at repository scale rather than just "a coding chat that ran for a long time."
 
 ---
 
 ## Related Docs
 
 - [Ticket Flow](ticket-flow.md)
+- [Pre-Implementation](pre-implementation.md)
+- [Post-Implementation](post-implementation.md)
 - [Context Engineering](context-engineering.md)
 - [OpenCode Integration](opencode-integration.md)
 - [System Architecture](system-architecture.md)
