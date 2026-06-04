@@ -16,10 +16,13 @@ This page documents the current HTTP surface exposed by `server/index.ts` and th
 | Streaming | Live ticket updates use Server-Sent Events from `/api/stream` |
 | Error shape | Error responses usually include `error` and sometimes `details` or `message` |
 | Content hashes | Human-reviewed artifacts expose lowercase SHA-256 hashes so approval requests can prove which bytes were reviewed |
+| Action responses | Most workflow action routes return `message`, `ticketId`, `status`, `state`, and the latest `ticket` snapshot |
 
-When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `X-LoopTroop-Token: <token>` or `Authorization: Bearer <token>`. The only query-token exception is `/api/stream`, where browser `EventSource` clients may use `apiToken=<token>` because they cannot set custom headers. `npm run dev` generates an ephemeral token when needed and keeps it server-side; the Vite dev proxy injects it for same-origin `/api` requests.
+When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `X-LoopTroop-Token: <token>` or `Authorization: Bearer <token>`. The only query-token exception is `/api/stream`, where browser `EventSource` clients may use `apiToken=<token>` because they cannot set custom headers. That query-token path is intentionally stream-only and less secure than header auth because URLs can be logged. `npm run dev` generates an ephemeral token when needed and keeps it server-side; the Vite dev proxy injects it for same-origin `/api` requests.
 
-All `/api/*` routes share a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. When a limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying.
+Invalid or missing credentials return `401`. If auth is required but no backend token is configured and unauthenticated mode is not allowed, the middleware returns `503`.
+
+All `/api/*` routes share a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. When a limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying. Forwarded client IP headers are ignored unless `LOOPTROOP_TRUST_PROXY=1` is set, so local development typically uses a single shared `local` bucket identity.
 
 ## Health, Models, Workflow Meta, And Streaming
 
@@ -33,7 +36,7 @@ All `/api/*` routes share a global per-client rate limit, with separate buckets 
 | `GET` | `/api/workflow/meta` | Current workflow groups and phases |
 | `GET` | `/api/stream?ticketId=<id>` | Ticket-scoped SSE stream using the composite ticket ref; validates the ticket and enforces stream caps |
 
-`/api/stream` also accepts `lastEventId` and, when header auth is not available, `apiToken` query parameters. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible.
+`/api/stream` also accepts `lastEventId` and, when header auth is not available, `apiToken` query parameters. Browsers normally send `Last-Event-ID` automatically only for native reconnects; the frontend persists the last event id per ticket and sends the query value after reloads so the backend can replay buffered events when possible. The stream route rejects the 7th concurrent client for the same ticket and rejects new streams once the global total reaches 100 active clients.
 
 Example health payload:
 
@@ -66,6 +69,8 @@ LoopTroop uses a singleton profile, not a collection.
 | `GET` | `/api/profile` | Returns the singleton profile or `null` |
 | `POST` | `/api/profile` | Creates the singleton profile |
 | `PATCH` | `/api/profile` | Updates the singleton profile |
+
+`POST /api/profile` returns `409` when the profile already exists. `PATCH /api/profile` returns `404` when no profile has been created yet.
 
 Example profile update payload:
 
@@ -106,6 +111,19 @@ Example profile update payload:
 
 `opencodeSteps` sets the maximum number of steps OpenCode is allowed to perform per session. When the limit is reached, OpenCode instructs the model to summarize its work and close the session; LoopTroop then starts a fresh session to continue. Defaults to `0` (no limit — OpenCode default), accepts `0` through `500`.
 
+Selected validation ranges that are easy to miss when calling the API directly:
+
+| Field(s) | Accepted values | Notes |
+| --- | --- | --- |
+| `minCouncilQuorum` | `1` to `4` | Must not exceed the practical council size |
+| `interviewQuestions` | `0` to `50` | `0` is accepted, though normal runs typically keep a positive interview budget |
+| `coverageFollowUpBudgetPercent` | `0` to `100` | Percentage budget for coverage follow-up questions |
+| `maxCoveragePasses` | `1` to `10` | Shared generic coverage loop |
+| `maxPrdCoveragePasses`, `maxBeadsCoveragePasses` | `2` to `20` | PRD and beads coverage loops have a stricter lower bound |
+| `maxIterations` | `0` to `20` | `0` is allowed for tickets that should not iterate |
+| `toolInputMaxChars`, `toolErrorMaxChars` | `500` to `50000` | Applied to OpenCode tool transcript truncation |
+| `toolOutputMaxChars` | `1000` to `100000` | Higher lower bound because tool output is usually larger |
+
 ## Project Routes
 
 | Method | Route | Notes |
@@ -134,6 +152,17 @@ Example project attachment payload:
   "profileId": 1
 }
 ```
+
+Direct attachment/update validation and mutability rules:
+
+| Field | Create | Patch | Notes |
+| --- | --- | --- | --- |
+| `name` | required | optional | `1` to `100` characters |
+| `shortname` | required | not accepted | `3` to `5` uppercase letters or digits |
+| `folderPath` | required | not accepted | Must resolve to a git repository; outside tests, the repository must also have a GitHub `origin` |
+| `profileId` | optional | not accepted | Attach-time only |
+| `icon`, `color` | optional | optional | `color` must be `#RRGGBB` |
+| Project overrides listed below | optional | optional | Apply only to future ticket starts |
 
 Create and update routes also accept optional project-level overrides for future tickets in that project:
 
@@ -185,8 +214,8 @@ Ticket routes are implemented using a modular handler architecture located in `s
 | `GET` | `/api/tickets` | Optionally filtered with `?project=` or `?projectId=` |
 | `GET` | `/api/tickets/:id` | Get one ticket by composite ticket ref |
 | `GET` | `/api/tickets/:id/size` | Recursively measure the ticket worktree and return logs/artifacts/source breakdown; returns `{ "size": 0, "exists": false }` when no worktree exists yet |
-| `POST` | `/api/tickets` | Create a ticket; title max 500 characters and description max 10,000 characters |
-| `PATCH` | `/api/tickets/:id` | Update title, description, or priority |
+| `POST` | `/api/tickets` | Create a ticket; title max 500 characters, description max 10,000 characters, priority `1` through `5` |
+| `PATCH` | `/api/tickets/:id` | Update title, description, or priority; title max 200 characters, priority `1` through `5` |
 | `DELETE` | `/api/tickets/:id` | Only allowed for `COMPLETED` or `CANCELED` |
 | `GET` | `/api/tickets/:id/ui-state?scope=...` | Read persisted UI state |
 | `PUT` | `/api/tickets/:id/ui-state` | Save persisted UI state |
@@ -202,7 +231,7 @@ Example ticket creation payload:
 }
 ```
 
-Create-ticket validation requires a non-empty title up to 500 characters. The optional description is capped at 10,000 characters.
+Create-ticket validation requires a non-empty title up to 500 characters. The optional description is capped at 10,000 characters. Update validation is slightly narrower: patched titles are capped at 200 characters, and `status` is API-protected so workflow transitions must go through the action routes below.
 
 All ticket route params shown as `:id` or `:ticketId` use the composite public ticket ref, such as `1:AUTH-12`. The browser URL uses only the external ticket id (`/ticket/AUTH-12`), but API callers should send the composite ref returned by ticket list/detail payloads.
 
@@ -267,6 +296,8 @@ Example UI-state response:
 
 `clientRevision` is optional for direct callers but recommended. When present, stale lower revisions are ignored so delayed autosaves cannot overwrite newer UI state.
 
+UI-state `scope` must match `^[a-zA-Z0-9:_-]+$` and be at most 80 characters. Stored UI-state payloads are capped at 1 MiB. Successful `PUT` responses include `ignored`; when the supplied `clientRevision` is older than the currently stored revision, the server keeps the newer state and returns `ignored: true` instead of overwriting it.
+
 ### Workflow Actions
 
 | Method | Route | Notes |
@@ -308,6 +339,21 @@ Malformed or missing hashes return `400`. If the current server artifact no long
 
 Successful approvals write durable `approval_receipt` phase artifacts. Approval snapshots and receipts include `content_sha256`; interview and PRD receipts also include `stored_content_sha256` when approval stamping changes the persisted YAML.
 
+Most action routes in this section respond with the latest machine snapshot so callers can refresh local state without making an immediate follow-up read:
+
+```json
+{
+  "message": "Start action accepted",
+  "ticketId": "1:AUTH-12",
+  "status": "SCANNING_RELEVANT_FILES",
+  "state": "SCANNING_RELEVANT_FILES",
+  "ticket": {
+    "id": "1:AUTH-12",
+    "status": "SCANNING_RELEVANT_FILES"
+  }
+}
+```
+
 The Continue endpoint is available only from `BLOCKED_ERROR`. It requires a known `previousStatus`, an unresolved active error occurrence with a diagnostic `sessionId`, a matching active `opencode_sessions` row for that ticket and previous phase, and an OpenCode session that is still addressable by that exact id. It returns `409` and leaves the ticket blocked when those checks fail. On success it dispatches `CONTINUE`, records the pending session continuation, and the next owned prompt sends exactly `continue please` without creating a fresh phase attempt.
 
 The final-test file-effects recovery endpoints are available only from `BLOCKED_ERROR` when the active error code is `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` and the previous status is `INTEGRATING_CHANGES`. `include-final-test-files` writes a `final_test_file_effects_override` artifact with `include_unclassified_as_candidate`; `discard-final-test-files` removes/reverts only files listed by the latest `final_test_file_effects_audit` as produced or changed during final testing, then writes a `discard_unclassified` override. Both routes dispatch `RETRY` into a fresh integration attempt and do not use the OpenCode `/continue` session path.
@@ -339,6 +385,8 @@ The cancel endpoint accepts an optional JSON request body to trigger cleanup at 
 | `PATCH` | `/api/tickets/:id/edit-answer` | Edit a previously recorded answer while waiting for interview answers |
 
 Interview responses include `contentSha256` for the reviewed raw interview bytes. PRD file responses from `/api/files/:ticketId/prd` include `contentSha256` for the returned file content.
+
+`POST /api/tickets/:id/skip` accepts the same body shape as `answer-batch`, so the client can persist already entered answers before skipping the remaining questions.
 
 Interview and PRD approval edits are planning-only. After approval, saving an interview edit is allowed while the ticket is still before `PRE_FLIGHT_CHECK`; if PRD or beads planning already exists, LoopTroop archives the current approved interview version and downstream PRD/beads phase attempts, cancels active downstream sessions as intentional cancellation, clears stale downstream artifacts and approval UI state, writes a `user_edit_receipt:interview` artifact, saves and approves the edited interview as the new active version, and starts `DRAFTING_PRD`. Saving a PRD edit follows the same contract for the current approved PRD version and downstream beads attempts, writes `user_edit_receipt:prd`, then starts `DRAFTING_BEADS`.
 
@@ -406,6 +454,15 @@ Structured interview-answer approval payload:
 }
 ```
 
+Edit-answer payload:
+
+```json
+{
+  "questionId": "q-auth-1",
+  "answer": "Support password login and SSO."
+}
+```
+
 ### Execution Setup Plan Routes
 
 | Method | Route | Notes |
@@ -464,9 +521,11 @@ Execution setup plan read response:
 }
 ```
 
-Execution setup plan reads may select archived versions with `phaseAttempt`. Archived reads stay available, but explicit writes to non-current phase attempts return `409` because archived versions are read-only. Successful manual saves write `user_edit_receipt:execution_setup_plan`.
+Execution setup plan reads may select archived versions with `phaseAttempt`. Archived reads stay available, but explicit writes to non-current phase attempts return `409` because archived versions are read-only. Invalid `phaseAttempt` values return `400`. Successful manual saves write `user_edit_receipt:execution_setup_plan`.
 
-`PUT /execution-setup-plan` and `POST /regenerate-execution-setup-plan` are normally accepted only while the ticket is in `WAITING_EXECUTION_SETUP_APPROVAL`. They are also accepted from `PREPARING_EXECUTION_ENV` as a one-step runtime rewind: LoopTroop stops active runtime setup, archives the approved setup-plan attempt and current runtime attempt with `execution_setup_runtime_rewind`, clears stale setup profile/runtime outputs while preserving `.ticket/runtime/execution-setup/tool-cache`, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and requires approval again. During that route-driven rewind, the restored approval actor does not auto-draft from the empty fresh attempt; manual edits save the supplied plan, and regenerate starts only the requested commented generation. These routes still reject from `CODING` and later statuses.
+Successful `PUT /execution-setup-plan` responses return the saved `raw`, normalized `plan`, `contentSha256`, and current route state (`status`, `state`, `ticket`) so the client does not need an immediate follow-up fetch.
+
+`PUT /execution-setup-plan` and `POST /regenerate-execution-setup-plan` are normally accepted only while the ticket is in `WAITING_EXECUTION_SETUP_APPROVAL`. They are also accepted from `PREPARING_EXECUTION_ENV` as a one-step runtime rewind: LoopTroop stops active runtime setup, archives the approved setup-plan attempt and current runtime attempt with `execution_setup_runtime_rewind`, clears stale setup profile/runtime outputs while preserving `.ticket/runtime/execution-setup/tool-cache`, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and requires approval again. During that route-driven rewind, the restored approval actor does not auto-draft from the empty fresh attempt; manual edits save the supplied plan, and regenerate starts only the requested commented generation. `POST /regenerate-execution-setup-plan` returns immediately after scheduling background regeneration; the new draft then arrives through normal artifact/log/SSE updates. These routes still reject from `CODING` and later statuses.
 
 Regeneration payload:
 
@@ -513,6 +572,8 @@ Regeneration payload:
 | `POST` | `/api/tickets/:id/opencode/questions/:requestId/reply` | Submit question answers |
 | `POST` | `/api/tickets/:id/opencode/questions/:requestId/reject` | Reject a question request |
 
+List responses return `{ "questions": [...] }`, and the aggregate route may also include `{ "errors": [...] }` when some tickets fail question discovery.
+
 Reply payload:
 
 ```json
@@ -524,12 +585,46 @@ Reply payload:
 }
 ```
 
+The outer `answers` array must stay in the same order as the returned `questions` array for that request. Each inner array carries the answer values for one question, which lets multi-select prompts submit more than one string.
+
 ### Artifact And History Routes
 
 | Method | Route | Notes |
 | --- | --- | --- |
 | `GET` | `/api/tickets/:id/artifacts` | List ticket artifacts, optionally filtered |
 | `GET` | `/api/tickets/:id/phases/:phase/attempts` | List phase attempt history |
+
+`GET /api/tickets/:id/artifacts` accepts optional `phase` and `phaseAttempt` query filters. When `phaseAttempt` is omitted, the backend resolves the current active attempt for that phase; supplying `phaseAttempt=1` is how clients intentionally read archived planning generations after an edit/retry/regenerate flow.
+
+Example artifact list item:
+
+```json
+{
+  "id": 84,
+  "ticketId": "1:AUTH-12",
+  "phase": "WAITING_PRD_APPROVAL",
+  "phaseAttempt": 1,
+  "artifactType": "approval_receipt",
+  "filePath": null,
+  "content": "{\"content_sha256\":\"...\"}",
+  "createdAt": "2026-04-23T09:00:00.000Z",
+  "updatedAt": "2026-04-23T09:00:00.000Z"
+}
+```
+
+Example phase-attempt list item:
+
+```json
+{
+  "ticketId": "1:AUTH-12",
+  "phase": "WAITING_PRD_APPROVAL",
+  "attemptNumber": 2,
+  "state": "active",
+  "archivedReason": null,
+  "createdAt": "2026-04-23T09:00:00.000Z",
+  "archivedAt": null
+}
+```
 
 Ticket list and detail responses include a cleanup summary derived from the latest `cleanup_report` artifact:
 
@@ -590,7 +685,7 @@ There is no generic filesystem browser or arbitrary file read route under `/api/
 | `PUT` | `/api/tickets/:id/beads` | Replace bead plan only while the ticket is in `WAITING_BEADS_APPROVAL`; accepts optional safe relative `?flow=` |
 | `GET` | `/api/tickets/:id/beads/:beadId/diff` | Read diff artifact for a bead |
 
-The `flow` value must be a safe relative branch/flow name. Absolute paths, backslashes, `.` segments, and `..` traversal segments are rejected. Bead reads and writes expose the canonical plan hash through the `X-Content-Sha256` response header. Manual bead edits write `user_edit_receipt:beads` and invalidate the execution setup plan.
+The `flow` value must be a safe relative branch/flow name. Absolute paths, backslashes, `.` segments, and `..` traversal segments are rejected. When `flow` is omitted, the route falls back to the ticket's base branch. Bead reads and writes expose the canonical plan hash through the `X-Content-Sha256` response header; even an empty plan returns `[]` with the hash of the empty content. Manual bead edits write `user_edit_receipt:beads` and invalidate the execution setup plan. `GET /api/tickets/:id/beads/:beadId/diff` returns `{ "diff": "", "captured": false }` when no diff artifact exists yet.
 
 ## SSE Events
 
