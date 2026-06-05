@@ -334,6 +334,8 @@ Interview draft persistence is separate: `InterviewQAView` uses `useBatchSubmit(
 
 Ticket placement comes from the `kanbanPhase` mapping in `workflowMeta.ts`/`STATUS_TO_PHASE`. To Do is for created-but-not-started tickets, Needs Input is for any user-owned pause including blocked errors, In Progress is for active AI or system workflow work, and Done is for completed or canceled terminal tickets. `KanbanColumn` handles the per-column layout and empty-column suppression.
 
+The board keeps fixed relative column weights on wide screens, with To Do and Done intentionally narrower than the middle workflow columns. Ticket cards therefore wrap long titles, project names, status badges, and timestamps inside the existing column width rather than forcing horizontal scrolling or clipping narrow edge columns.
+
 The Kanban board is the default root view when no ticket is selected. Clicking the app logo or closing the active ticket returns to it.
 
 ## 13. Keyboard Shortcuts

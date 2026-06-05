@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Fixed narrow To Do and Done kanban columns so ticket details wrap inside the existing column widths instead of clipping.
 - Kept display-only mock tickets visible on the board while preventing them from hydrating, running, or exposing workflow actions.
 - Refined the Runtime Diagnostics docs to separate stall reports from ticket-side diagnostics, align blocked-error field docs with the current code, and document structured retry diagnostics.
 - Refined the Operations Guide to match the implemented startup artifacts, OpenCode log handling, API auth and health surfaces, maintenance scripts, and current audit leftovers.
@@ -148,6 +149,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Removed now-redundant documentation files `docs/state-machine.md` and `docs/execution-loop.md` whose content is now merged into `docs/ticket-flow.md` and `docs/beads.md` respectively.
 
 #### Fixed
+- Fixed ticket card overflow in the narrower To Do and Done kanban columns by allowing grid columns and card metadata rows to shrink and wrap within the existing board layout, avoiding horizontal scrollbars or column width changes.
 - Prevented display-only mock tickets from being restored as active workflow actors on startup and hid all workflow actions for those tickets.
 - Replaced the live Mermaid diagrams in `docs/ticket-flow.md` with embedded SVG exports generated from the same flow definitions, so section 2 and all section 3 state diagrams render consistently in VS Code Markdown Preview while the omitted loopback semantics remain documented immediately below the affected charts.
 - Repaired text-preserving YAML quote recovery for model outputs that include unescaped inner quotes in one-line scalars or omit the closing quote on a quoted list item before the next structured block, reducing avoidable Full Answers and PRD draft retries.

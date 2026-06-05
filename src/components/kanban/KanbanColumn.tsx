@@ -50,17 +50,17 @@ export function KanbanColumn({ column, tickets, projectMap }: KanbanColumnProps)
   }
 
   return (
-    <Card className="flex flex-col overflow-hidden">
-      <CardHeader className="flex-shrink-0 pb-3">
+    <Card className="flex min-w-0 flex-col overflow-hidden">
+      <CardHeader className="min-w-0 flex-shrink-0 pb-3">
         <Tooltip>
           <TooltipTrigger asChild>
             <div
               tabIndex={0}
-              className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="min-w-0 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
             >
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-sm font-medium">{column.title}</CardTitle>
-                <Badge variant="secondary" className="text-xs">
+              <div className="flex min-w-0 items-center justify-between gap-2">
+                <CardTitle className="min-w-0 text-sm font-medium">{column.title}</CardTitle>
+                <Badge variant="secondary" className="shrink-0 text-xs">
                   {tickets.length}
                 </Badge>
               </div>
@@ -70,14 +70,14 @@ export function KanbanColumn({ column, tickets, projectMap }: KanbanColumnProps)
           <TooltipContent className="max-w-xs text-center text-balance">{column.tooltip}</TooltipContent>
         </Tooltip>
       </CardHeader>
-      <CardContent className="flex-1 overflow-hidden px-3 pb-3">
-        <ScrollArea className="h-full">
+      <CardContent className="min-w-0 flex-1 overflow-hidden px-3 pb-3">
+        <ScrollArea className="h-full min-w-0">
           {tickets.length === 0 ? (
             <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border">
               <p className="text-sm text-muted-foreground">No tickets</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="min-w-0 space-y-2">
               {paginatedTickets.map((ticket) => {
                 const project = projectMap.get(ticket.projectId)
                 return (

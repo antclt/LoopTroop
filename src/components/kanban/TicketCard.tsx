@@ -151,7 +151,7 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
   return (
     <Card
       className={cn(
-        'cursor-pointer p-3 transition-all hover:shadow-md',
+        'min-w-0 max-w-full cursor-pointer overflow-hidden p-3 transition-all hover:shadow-md',
         isError && !errorSeen && 'animate-pulse border-destructive border-2 ring-4 ring-red-500/70 bg-red-50/60 dark:bg-red-950/30 shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_20px_rgba(239,68,68,0.4),0_10px_30px_rgba(239,68,68,0.3)]',
         hasPendingAIQuestion && !(isError && !errorSeen) && 'animate-pulse border-2 bg-primary/5',
       )}
@@ -168,37 +168,37 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
       onClick={handleClick}
       aria-label={`Open ticket ${ticket.externalId}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-mono text-muted-foreground">{ticket.externalId}</span>
-        <div className="flex items-center gap-1">
+      <div className="flex min-w-0 items-start justify-between gap-2">
+        <span className="min-w-0 flex-1 break-words text-xs font-mono text-muted-foreground [overflow-wrap:anywhere]">{ticket.externalId}</span>
+        <div className="flex shrink-0 items-center gap-1">
           <PriorityArrows priority={ticket.priority} />
           {isInProgress && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           {hasPendingAIQuestion && <HelpCircle className="h-3 w-3" style={{ color: attentionColor }} />}
           {isError && <AlertTriangle className="h-3 w-3 text-destructive" />}
         </div>
       </div>
-      <p className="mt-1 text-sm font-medium leading-tight">{ticket.title}</p>
-      <div className="mt-2 flex items-center gap-1.5">
-        {projectIcon && (projectIcon.startsWith('data:') ? <img src={projectIcon} className="h-4 w-4 rounded" alt="" /> : <span className="text-xs">{projectIcon}</span>)}
-        {projectName && <span className="text-xs text-muted-foreground">{projectName}</span>}
+      <p className="mt-1 break-words text-sm font-medium leading-tight [overflow-wrap:anywhere]">{ticket.title}</p>
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-1.5">
+        {projectIcon && (projectIcon.startsWith('data:') ? <img src={projectIcon} className="h-4 w-4 shrink-0 rounded" alt="" /> : <span className="shrink-0 text-xs">{projectIcon}</span>)}
+        {projectName && <span className="min-w-0 max-w-full break-words text-xs text-muted-foreground [overflow-wrap:anywhere]">{projectName}</span>}
       </div>
-      <div className="mt-2 flex items-center justify-between gap-1.5">
-        <div className="flex items-center gap-1.5 min-w-0">
+      <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1">
+        <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1.5">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge className={cn('text-xs truncate max-w-[180px]', getStatusColor(ticket.status))}>
+              <Badge className={cn('min-w-0 max-w-full break-words text-xs leading-4 whitespace-normal [overflow-wrap:anywhere] sm:max-w-[180px]', getStatusColor(ticket.status))}>
                 {statusLabel}
               </Badge>
             </TooltipTrigger>
             <TooltipContent className="max-w-xs text-center text-balance">{STATUS_DESCRIPTIONS[ticket.status] ?? statusLabel}</TooltipContent>
           </Tooltip>
           {ticket.status === 'COMPLETED' && ticket.completionDisposition && (
-            <Badge variant="outline" className="text-[10px]">
+            <Badge variant="outline" className="shrink-0 text-[10px]">
               {ticket.completionDisposition === 'merged' ? 'Merged' : 'Unmerged'}
             </Badge>
           )}
           {hasPendingAIQuestion && (
-            <Badge variant="outline" className="text-[10px]" style={{ borderColor: attentionColor, color: attentionColor }}>
+            <Badge variant="outline" className="shrink-0 text-[10px]" style={{ borderColor: attentionColor, color: attentionColor }}>
               AI question {pendingAIQuestions}
             </Badge>
           )}
@@ -216,7 +216,7 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
         </div>
         <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="text-xs text-muted-foreground shrink-0">
+                  <span className="ml-auto shrink-0 text-xs text-muted-foreground">
                         {getRelativeTime(ticket.updatedAt)}
                       </span>
                 </TooltipTrigger>
