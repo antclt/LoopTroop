@@ -78,3 +78,11 @@ body {
 .section-label {
   @apply text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground;
 }
+
+.scroll-area-content-block [data-radix-scroll-area-viewport] > div {
+  display: block !important;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}

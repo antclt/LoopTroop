@@ -71,7 +71,7 @@ export function KanbanColumn({ column, tickets, projectMap }: KanbanColumnProps)
         </Tooltip>
       </CardHeader>
       <CardContent className="min-w-0 flex-1 overflow-hidden px-3 pb-3">
-        <ScrollArea className="h-full min-w-0">
+        <ScrollArea className="h-full min-w-0" contentLayout="block">
           {tickets.length === 0 ? (
             <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border">
               <p className="text-sm text-muted-foreground">No tickets</p>
