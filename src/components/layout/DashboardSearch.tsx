@@ -64,11 +64,11 @@ function DashboardSearchInput({
       <input
         ref={inputRef}
         id={id}
-        type="search"
+        type="text"
         role="searchbox"
         value={value}
         disabled={isDisabled}
-        placeholder="Search tickets"
+        placeholder="Search"
         autoComplete="off"
         onFocus={() => setIsFocused(true)}
         onBlur={() => {
@@ -84,7 +84,7 @@ function DashboardSearchInput({
             onEscapeWithEmptyQuery?.()
           }
         }}
-        className="h-9 w-full rounded-md border border-input bg-background py-1.5 pl-9 pr-3 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        className="h-8 w-full rounded-full border border-border/40 bg-muted/55 py-1 pl-3 pr-8 text-sm text-foreground shadow-[inset_0_1px_2px_rgba(15,23,42,0.08)] outline-none transition-colors placeholder:text-muted-foreground hover:bg-muted/70 focus:border-border focus:bg-background focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-muted/35 dark:shadow-[inset_0_1px_2px_rgba(0,0,0,0.25)] dark:hover:bg-muted/50"
       />
       {hasValue ? (
         <Tooltip>
@@ -94,15 +94,15 @@ function DashboardSearchInput({
               onClick={onClear}
               disabled={isDisabled}
               aria-label="Clear ticket search"
-              className="absolute left-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
+              className="absolute right-2 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-background/80 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-background/30"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           </TooltipTrigger>
           <TooltipContent>Clear search</TooltipContent>
         </Tooltip>
       ) : (
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
       )}
       {shouldShowSuggestions && (
         <div
@@ -200,7 +200,7 @@ export function DashboardSearch({ isModalOpen = false }: DashboardSearchProps) {
         {...searchInputProps}
         id="dashboard-ticket-search"
         inputRef={desktopInputRef}
-        className="hidden w-[min(22rem,34vw)] md:block"
+        className="hidden w-[20ch] md:block"
       />
       <Tooltip>
         <TooltipTrigger asChild>

@@ -9,6 +9,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added dashboard ticket search for finding tickets by ID, title, or project, with mobile and keyboard support.
+- Refined the dashboard ticket search into a smaller, subtler pill control with the search/clear icon on the right.
 - Fixed dashboard startup for browsers with older saved UI filter state.
 - Marked display-only mock/demo tickets with a superscript `(M)` beside their ticket ID in the board and dashboard.
 - Fixed narrow To Do and Done kanban columns so ticket details wrap inside the existing column widths instead of clipping.
@@ -93,6 +94,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Refined the dashboard ticket search styling to use a compact ~20-character desktop width, softer pill-shaped chrome, and right-aligned search/clear affordances while preserving the same filtering behavior.
 - Marked display-only mock/demo tickets with a superscript `(M)` beside their external ID in kanban cards, the selected-ticket dashboard header/details, and terminal delete confirmation copy while keeping the raw `externalId` unchanged for routes, storage, file paths, and artifacts; ticket API payloads now expose `isDisplayOnlyMock` so the UI does not infer that state from reserved branch names.
 - Reworked `docs/diagnostics.md` so it now distinguishes runtime stall reports from blocked-error and structured-retry diagnostics, documents the current persisted blocked-error fields and redaction behavior accurately, and makes the runtime report sections / flags easier to map back to the implemented script and UI surfaces.
 - Reworked `docs/operations.md` so it now documents the repo-local startup artifact files, explicit-versus-fallback OpenCode startup rules, API token transport options, useful health endpoints, manual maintenance script behavior, mounted-drive warning surfaces, the default OpenCode log directory, and the current `drizzle-kit`/`vitepress`/`mermaid` audit leftovers more precisely.
