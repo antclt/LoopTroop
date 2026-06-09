@@ -19,6 +19,22 @@ const defaultState: UIState = {
 
 const VALID_VIEWS: UIState['activeView'][] = ['kanban', 'ticket', 'project', 'config']
 
+function normalizeUIState(value: Partial<UIState>): UIState {
+  const activeView = VALID_VIEWS.includes(value.activeView as UIState['activeView'])
+    ? value.activeView
+    : defaultState.activeView
+
+  return {
+    ...defaultState,
+    ...value,
+    activeView: activeView ?? defaultState.activeView,
+    filters: {
+      ...defaultState.filters,
+      ...(value.filters ?? {}),
+    },
+  }
+}
+
 function isValidUIState(value: unknown): value is Partial<UIState> {
   if (typeof value !== 'object' || value === null) return false
   const obj = value as Record<string, unknown>
@@ -43,10 +59,7 @@ function getInitialState(): UIState {
       if (stored) {
         const parsed = JSON.parse(stored) as unknown
         if (!isValidUIState(parsed)) return defaultState
-        const activeView = VALID_VIEWS.includes(parsed.activeView as UIState['activeView'])
-          ? parsed.activeView
-          : 'kanban'
-        return { ...defaultState, ...parsed, activeView: activeView ?? 'kanban' }
+        return normalizeUIState(parsed)
       }
     } catch {
       // ignore parse errors
@@ -66,7 +79,7 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case 'SET_LOG_PANEL_HEIGHT':
       return { ...state, logPanelHeight: action.height }
     case 'SET_FILTER':
-      return { ...state, filters: { ...state.filters, ...action.filter } }
+      return { ...state, filters: { ...defaultState.filters, ...state.filters, ...action.filter } }
     case 'SET_THEME':
       return { ...state, theme: action.theme }
     case 'CLOSE_TICKET':

@@ -136,7 +136,7 @@ export function DashboardSearch({ isModalOpen = false }: DashboardSearchProps) {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false)
   const desktopInputRef = useRef<HTMLInputElement>(null)
   const mobileInputRef = useRef<HTMLInputElement>(null)
-  const query = state.filters.search
+  const query = state.filters?.search ?? ''
   const queryPrefix = normalizePrefix(query)
   const isKanbanView = state.activeView === 'kanban'
 

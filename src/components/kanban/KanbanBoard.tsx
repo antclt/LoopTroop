@@ -50,7 +50,7 @@ export function KanbanBoard() {
   const { state, dispatch } = useUI()
   const { data: tickets, isLoading: isLoadingTickets } = useTickets()
   const { data: projects = [] } = useProjects()
-  const searchQuery = state.filters.search
+  const searchQuery = state.filters?.search ?? ''
   const isSearchActive = searchQuery.trim().length > 0
 
   const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
