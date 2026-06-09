@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useBackendHealth } from '@/hooks/useBackendHealth'
 import { useRecoveryAutoReload } from '@/hooks/useRecoveryAutoReload'
+import { DashboardSearch } from './DashboardSearch'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -34,7 +35,7 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
 
   return (
     <div className="min-h-screen">
-      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 flex h-14 items-center justify-between border-b border-border bg-background/95 px-6 backdrop-blur supports-[backdrop-filter]:bg-background/60 relative">
         <button
           className="flex items-center gap-2 cursor-pointer"
           onClick={() => {
@@ -47,7 +48,8 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
             LoopTroop
           </span>
         </button>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <DashboardSearch isModalOpen={isModalOpen} />
           <Tooltip>
             <TooltipTrigger asChild>
               <button

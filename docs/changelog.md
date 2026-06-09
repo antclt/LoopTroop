@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Added dashboard ticket search for finding tickets by ID, title, or project, with mobile and keyboard support.
 - Marked display-only mock/demo tickets with a superscript `(M)` beside their ticket ID in the board and dashboard.
 - Fixed narrow To Do and Done kanban columns so ticket details wrap inside the existing column widths instead of clipping.
 - Kept display-only mock tickets visible on the board while preventing them from hydrating, running, or exposing workflow actions.
@@ -63,6 +64,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added dashboard ticket search beside **New Ticket**, including persisted `filters.search` UI state, client-side kanban filtering by external ticket ID/title/project name/project shortname, compact ticket-ID matching such as `LOO15` to `LOO-15`, project-name prefix suggestions from all attached projects, mobile search popover behavior, `/` focus, `Escape`/clear recovery, and the empty search-results state.
 - Added Raw/Markdown tabs for ticket descriptions while creating or editing draft tickets, plus Markdown-only rendering in Ticket Details, including safe rich previews for headings, lists, task lists, code blocks, links, blockquotes, and tables while keeping the stored/copied description text unchanged.
 - Added worktree changes classification documentation (committable, looptroopExcluded, setupExcluded, generatedNoise) to the post-implementation file effects audit section.
 - Added coverage control documentation (resolveCoverageRunState, resolveCoverageGapDisposition, termination conditions) to the ticket flow state machine section.

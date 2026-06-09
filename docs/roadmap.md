@@ -941,9 +941,9 @@ search: false
         *   Dispatcher is the only component allowed to mutate tracker state (`issues.jsonl`, dependency links, and authoritative bead status).
         *   Worker engines run in `worker_mode` with one pre-assigned bead (`forced_bead_id`) and must not run tracker discovery/sync/select-next-task inside worktree folders.
         *   Worker output is merged first; only after merge + verification succeeds may dispatcher mark bead `done` and advance dependency graph state.
-*   **Kanban Filtering (Operator-grade):** Add sorting and filtering (labels, priority, project, status), keep filter controls visible in empty-result states, show explicit "No results" state, and provide one-click "Clear Filters" recovery.
+*   **Kanban Filtering (Operator-grade):** Ticket search by external `ticket_id`, title, project name, and project shortname is implemented on the dashboard with compact ID matching and empty-result recovery. Broader sorting and filtering remain future work: labels, priority, project/status facets, saved presets, date/health chips, and operator triage filters.
     *   Default Priority Sorting: The dashboard columns (To Do, Needs Input, In Progress, Done) sort tickets by Priority (Very High → Very Low) by default.
-    *   Add real-time ticket search by `ticket_id`, title, and description keywords.
+    *   Expand real-time ticket search beyond the implemented external `ticket_id`, title, project name, and project shortname fields only if a future search index intentionally includes more metadata.
     *   Add relative-date chips in list cards (`Today HH:MM`, `Yesterday`, weekday) with absolute timestamp tooltip.
     *   Add run-health chip on active tickets with: `phase`, `bead x/y`, `last_model_response_age`, `retry n/max`, and `last_error_hash`.
     *   Add coarse AFK-readiness indicator per active ticket (`Safe for AFK` / `Needs Attention`) with machine-readable reasons (`waiting_input`, `doctor_not_ready`, `provider_unreachable`, `keepalive_missing`, `disk_headroom_low`).

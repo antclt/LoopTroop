@@ -15,16 +15,18 @@ interface KanbanColumnProps {
   column: KanbanColumnConfig
   tickets: Ticket[]
   projectMap: Map<number, Project>
+  emptyLabel?: string
+  resetKey?: string
 }
 
-export function KanbanColumn({ column, tickets, projectMap }: KanbanColumnProps) {
+export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tickets', resetKey = '' }: KanbanColumnProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageInput, setPageInput] = useState('1')
 
   useEffect(() => {
     setCurrentPage(1)
     setPageInput('1')
-  }, [tickets.length])
+  }, [resetKey, tickets.length])
 
   useEffect(() => {
     setPageInput(String(currentPage))
@@ -74,7 +76,7 @@ export function KanbanColumn({ column, tickets, projectMap }: KanbanColumnProps)
         <ScrollArea className="h-full min-w-0" contentLayout="block">
           {tickets.length === 0 ? (
             <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-border">
-              <p className="text-sm text-muted-foreground">No tickets</p>
+              <p className="text-sm text-muted-foreground">{emptyLabel}</p>
             </div>
           ) : (
             <div className="min-w-0 space-y-2">

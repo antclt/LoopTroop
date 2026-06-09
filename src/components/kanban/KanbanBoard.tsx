@@ -2,10 +2,13 @@ import { useMemo } from 'react'
 import { KanbanColumn } from './KanbanColumn'
 import { useTickets } from '@/hooks/useTickets'
 import { useProjects } from '@/hooks/useProjects'
+import { useUI } from '@/context/useUI'
 import { STATUS_TO_PHASE } from '@/lib/workflowMeta'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, X } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Button } from '@/components/ui/button'
+import { ticketMatchesDashboardSearch } from './kanbanSearch'
 
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'
 
@@ -44,15 +47,25 @@ const columns: KanbanColumnConfig[] = [
 ]
 
 export function KanbanBoard() {
+  const { state, dispatch } = useUI()
   const { data: tickets, isLoading: isLoadingTickets } = useTickets()
   const { data: projects = [] } = useProjects()
+  const searchQuery = state.filters.search
+  const isSearchActive = searchQuery.trim().length > 0
 
   const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
 
+  const filteredTickets = useMemo(() => (
+    (tickets ?? []).filter((ticket) => ticketMatchesDashboardSearch(ticket, projectMap.get(ticket.projectId), searchQuery))
+  ), [projectMap, searchQuery, tickets])
+
   const ticketsByPhase = useMemo(() => columns.map(col => ({
     ...col,
-    tickets: (tickets ?? []).filter(t => (STATUS_TO_PHASE[t.status] ?? 'todo') === col.id),
-  })), [tickets])
+    tickets: filteredTickets.filter(t => (STATUS_TO_PHASE[t.status] ?? 'todo') === col.id),
+  })), [filteredTickets])
+
+  const hasLoadedTickets = Array.isArray(tickets)
+  const hasNoSearchResults = hasLoadedTickets && isSearchActive && filteredTickets.length === 0
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
@@ -81,6 +94,27 @@ export function KanbanBoard() {
           </div>
         </div>
       )}
+      {hasNoSearchResults && (
+        <div
+          className="border-b border-border bg-muted/30 px-4 py-3 shrink-0"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">No tickets match this search.</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => dispatch({ type: 'SET_FILTER', filter: { search: '' } })}
+              className="w-fit"
+            >
+              <X className="mr-1 h-4 w-4" />
+              Clear search
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="grid flex-1 grid-cols-1 gap-4 p-4 md:grid-cols-2 lg:grid-cols-[1fr_2fr_2fr_1fr] overflow-hidden">
         {ticketsByPhase.map((col) => (
           <KanbanColumn
@@ -88,6 +122,8 @@ export function KanbanBoard() {
             column={col}
             tickets={col.tickets}
             projectMap={projectMap}
+            emptyLabel={isSearchActive ? 'No matching tickets' : 'No tickets'}
+            resetKey={searchQuery}
           />
         ))}
       </div>

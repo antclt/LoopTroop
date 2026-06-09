@@ -37,7 +37,7 @@ Most modal routes and workspace views are also lazy-loaded through `lazyWithChun
 - `StartupRestorePopup` when LoopTroop restores existing local profile/project state
 - centered modal routes for Configuration (`/config`), Projects (`/project/new`), and New Ticket (`/ticket/new`)
 - deep-link ticket selection from `/ticket/:externalId`
-- header controls for New Ticket, Projects, Configuration, Docs, Refresh, and theme switching
+- header controls for dashboard search, New Ticket, Projects, Configuration, Docs, Refresh, and theme switching; on desktop the ticket search sits beside **New Ticket**, while mobile uses a search popover to preserve header space
 - display-only mock/demo ticket IDs render with a superscript `(M)` marker in board cards and selected-ticket dashboard surfaces while keeping the raw external ID for routing, file paths, and artifacts
 
 ### Ticket Dashboard Coordination
@@ -324,7 +324,7 @@ Among the custom LoopTroop state providers, three carry most of the frontend-spe
 | Provider | Location | Purpose |
 | --- | --- | --- |
 | `LogProvider` | `LogContext.tsx` | Owns the in-memory execution log for the active ticket. Merges SSE-delivered log rows immediately and handles reconnect recovery by re-requesting the server log and merging by stable entry identity. |
-| `UIProvider` | `UIContext.tsx` | Manages app UI state such as the selected ticket, filters, sidebar state, log panel height, and theme. It persists that state to `localStorage` and keeps the browser URL in sync with the active view. |
+| `UIProvider` | `UIContext.tsx` | Manages app UI state such as the selected ticket, `filters.search`, sidebar state, log panel height, and theme. It persists that state to `localStorage` and keeps the browser URL in sync with the active view. |
 | `AIQuestionProvider` | `AIQuestionContext.tsx` | Manages the queue of pending OpenCode human-input requests across active tickets, including minimize/reopen state, answer/reject actions, and periodic recovery from `/api/opencode/questions`. |
 
 Interview draft persistence is separate: `InterviewQAView` uses `useBatchSubmit()` and ticket UI-state artifacts for interview answers, while `AIQuestionProvider` is specifically for execution-time OpenCode questions.
@@ -339,17 +339,25 @@ The board keeps fixed relative column weights on wide screens, with To Do and Do
 
 The Kanban board is the default root view when no ticket is selected. Clicking the app logo or closing the active ticket returns to it.
 
+Dashboard ticket search is shell-level chrome for the root board. `AppShell` renders the search input beside **New Ticket** on desktop and moves the same control into a mobile search popover on small screens. The value is stored as `filters.search` in persisted `UIState`, so it survives refreshes and normal dashboard navigation.
+
+Kanban search filtering is client-side and intentionally narrow. It filters the already-loaded ticket list by external ticket ID, title, attached project name, and project shortname only; ticket descriptions, status labels, phase text, and other metadata are not part of the dashboard search index. External IDs use compact matching that strips separators and ignores case, so a search such as `LOO15` matches `LOO-15`.
+
+Project-name prefix suggestions are generated from all attached projects, not only projects that currently have visible matching tickets. Choosing a suggestion writes that project name into the search field and uses the same client-side filter path as typed input.
+
+When a search has no matches, the board shows an explicit empty search-results state with a clear action while keeping the dashboard search control available. Clearing the search restores the normal unfiltered board; it does not change ticket status placement, column grouping, auto-refresh behavior, or selected-ticket routing.
+
 ## 13. Keyboard Shortcuts
 
-`KeyboardShortcuts` (`src/components/shared/KeyboardShortcuts.tsx`) currently registers a global `?` handler and renders a centered overlay when triggered. `Escape` is also wired through the overlay, ticket dashboard, and modal wrappers to close the active surface.
+`KeyboardShortcuts` (`src/components/shared/KeyboardShortcuts.tsx`) registers the global `?` help overlay. Dashboard search adds its own `/` focus shortcut, and `Escape` is shared across the overlay, dashboard search, ticket dashboard, and modal wrappers.
 
 | Key | Action |
 | --- | --- |
 | `?` | Toggle the keyboard shortcuts overlay unless focus is already inside an input-like control |
-| `Escape` | Close the keyboard overlay; elsewhere the dashboard and modal wrappers also use `Escape` to close the current surface |
-| `n`, `k`, `/` | Listed in the overlay copy today, but `KeyboardShortcuts.tsx` does not currently register handlers for them |
+| `/` | Focus dashboard search from the kanban/root dashboard unless focus is already inside an input-like control; on mobile, open and focus the search popover |
+| `Escape` | Close the keyboard overlay; in dashboard search, clear a non-empty search or close the mobile search popover; elsewhere the dashboard and modal wrappers also use `Escape` to close the current surface |
 
-Shortcut toggling is suppressed when focus is inside an `<input>`, `<textarea>`, `<select>`, or another textbox-like editable control.
+Shortcut toggling and dashboard-search focusing are suppressed when focus is inside an `<input>`, `<textarea>`, `<select>`, or another textbox-like editable control.
 
 ## 14. Ticket Cancel Confirmation Dialog
 
