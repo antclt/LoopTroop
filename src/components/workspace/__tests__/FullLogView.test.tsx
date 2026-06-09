@@ -90,6 +90,7 @@ function makeTicket(overrides: Omit<Partial<Ticket>, 'runtime'> & { runtime?: Pa
     id: TEST.ticketId,
     externalId: TEST.externalId,
     projectId: TEST.projectId,
+    isDisplayOnlyMock: false,
     title: 'Ticket title',
     description: null,
     priority: 1,

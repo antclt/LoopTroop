@@ -83,4 +83,33 @@ describe('KanbanColumn', () => {
     expect(screen.queryByLabelText('Open ticket TEST-31')).not.toBeInTheDocument()
     expect(screen.getByText('of 3')).toBeInTheDocument()
   })
+
+  it('marks display-only mock ticket IDs on cards', () => {
+    const ticket = makeTicket({
+      externalId: 'TEST-99',
+      isDisplayOnlyMock: true,
+      title: 'Mock workflow sample',
+      status: 'DRAFT',
+    })
+
+    render(
+      <TooltipProvider>
+        <UIProvider>
+          <KanbanColumn
+            column={{
+              id: 'todo',
+              title: 'To Do',
+              description: 'Backlog',
+              tooltip: 'Tickets that have not started yet.',
+            }}
+            tickets={[ticket]}
+            projectMap={new Map<number, Project>()}
+          />
+        </UIProvider>
+      </TooltipProvider>,
+    )
+
+    expect(screen.getByLabelText('Open ticket TEST-99 mock demo ticket')).toBeInTheDocument()
+    expect(screen.getByLabelText('TEST-99 mock demo ticket')).toHaveTextContent('TEST-99(M)')
+  })
 })

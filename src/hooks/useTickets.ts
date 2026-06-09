@@ -59,6 +59,7 @@ export interface Ticket {
   id: string
   externalId: string
   projectId: number
+  isDisplayOnlyMock: boolean
   title: string
   description: string | null
   priority: number

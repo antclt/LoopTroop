@@ -126,6 +126,29 @@ describe('DashboardHeader', () => {
     expect(screen.queryByRole('tab', { name: 'Raw' })).not.toBeInTheDocument()
   })
 
+  it('marks display-only mock tickets in the header and details external ID', () => {
+    const ticket = makeTicket({
+      isDisplayOnlyMock: true,
+      status: 'DRAFTING_PRD',
+      availableActions: ['cancel'],
+    })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    expect(screen.getByLabelText(`${ticket.externalId} mock demo ticket`)).toHaveTextContent(`${ticket.externalId}(M)`)
+
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+
+    const externalIdSection = screen.getByText('External ID').parentElement
+    expect(externalIdSection).not.toBeNull()
+    expect(within(externalIdSection as HTMLElement).getByLabelText(`${ticket.externalId} mock demo ticket`))
+      .toHaveTextContent(`${ticket.externalId}(M)`)
+  })
+
   it('shows the cancel button labeled "Cancel…" when cancel action is available on a non-DRAFT ticket', () => {
     const ticket = makeTicket({ status: 'DRAFTING_PRD', availableActions: ['cancel'] })
 

@@ -15,12 +15,15 @@ import {
 } from '@/lib/errorTicketSeen'
 import { getStatusColor, getRelativeTime, getStatusProgress, getStatusRingColor } from './ticketCardUtils'
 import { ProgressRing } from './ProgressRing'
+import { TicketExternalId } from '@/components/ticket/TicketExternalId'
+import { getTicketExternalIdLabel } from '@/lib/ticketDisplay'
 
 
 interface TicketCardProps {
   ticket: {
     id: string
     externalId: string
+    isDisplayOnlyMock?: boolean | null
     title: string
     priority: number
     status: string
@@ -166,10 +169,14 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
           : {}),
       }}
       onClick={handleClick}
-      aria-label={`Open ticket ${ticket.externalId}`}
+      aria-label={`Open ticket ${getTicketExternalIdLabel(ticket.externalId, ticket.isDisplayOnlyMock)}`}
     >
       <div className="flex min-w-0 items-start justify-between gap-2">
-        <span className="min-w-0 flex-1 break-words text-xs font-mono text-muted-foreground [overflow-wrap:anywhere]">{ticket.externalId}</span>
+        <TicketExternalId
+          externalId={ticket.externalId}
+          isDisplayOnlyMock={ticket.isDisplayOnlyMock}
+          className="min-w-0 flex-1 break-words text-xs font-mono text-muted-foreground [overflow-wrap:anywhere]"
+        />
         <div className="flex shrink-0 items-center gap-1">
           <PriorityArrows priority={ticket.priority} />
           {isInProgress && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}

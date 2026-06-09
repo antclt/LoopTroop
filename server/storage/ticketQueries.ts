@@ -79,6 +79,7 @@ export interface TicketErrorOccurrence {
 export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncilMembers' | 'lockedCouncilMemberVariants'> {
   id: string
   projectId: number
+  isDisplayOnlyMock: boolean
   lockedCouncilMembers: string[]
   lockedCouncilMemberVariants: Record<string, string> | null
   availableActions: string[]
@@ -515,6 +516,7 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     ...ticket,
     id: buildTicketRef(projectId, ticket.externalId),
     projectId,
+    isDisplayOnlyMock: isMockTicket,
     lockedCouncilMembers,
     lockedCouncilMemberVariants,
     availableActions: isMockTicket

@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { useUI } from '@/context/useUI'
 import { useDeleteTicket, type Ticket } from '@/hooks/useTickets'
+import { TicketExternalId } from '@/components/ticket/TicketExternalId'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface TerminalTicketDeleteProps {
@@ -72,7 +73,10 @@ export function TerminalTicketDelete({
           <DialogHeader>
             <DialogTitle>Delete Ticket</DialogTitle>
             <DialogDescription>
-              Permanently delete {ticket.externalId}. This removes the {statusLabel} ticket from all stored
+              Permanently delete <TicketExternalId
+                externalId={ticket.externalId}
+                isDisplayOnlyMock={ticket.isDisplayOnlyMock}
+              />. This removes the {statusLabel} ticket from all stored
               state, including logs, artifacts, cached UI state, and its worktree data.
             </DialogDescription>
           </DialogHeader>

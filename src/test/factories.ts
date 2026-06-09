@@ -32,6 +32,7 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     id: TEST.ticketId,
     externalId: TEST.externalId,
     projectId: TEST.projectId,
+    isDisplayOnlyMock: false,
     title: 'Test ticket',
     description: null,
     priority: 3,

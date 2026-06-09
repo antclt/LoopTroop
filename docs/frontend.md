@@ -38,6 +38,7 @@ Most modal routes and workspace views are also lazy-loaded through `lazyWithChun
 - centered modal routes for Configuration (`/config`), Projects (`/project/new`), and New Ticket (`/ticket/new`)
 - deep-link ticket selection from `/ticket/:externalId`
 - header controls for New Ticket, Projects, Configuration, Docs, Refresh, and theme switching
+- display-only mock/demo ticket IDs render with a superscript `(M)` marker in board cards and selected-ticket dashboard surfaces while keeping the raw external ID for routing, file paths, and artifacts
 
 ### Ticket Dashboard Coordination
 

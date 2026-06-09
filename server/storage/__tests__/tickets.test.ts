@@ -170,6 +170,8 @@ describe('display-only mock tickets', () => {
     })
 
     expect(getTicketByRef(mockTicket.id)?.availableActions).toEqual([])
+    expect(getTicketByRef(mockTicket.id)?.isDisplayOnlyMock).toBe(true)
+    expect(getTicketByRef(realTicket.id)?.isDisplayOnlyMock).toBe(false)
     expect(getTicketByRef(realTicket.id)?.availableActions.length).toBeGreaterThan(0)
     expect(listNonTerminalTickets().map((ticket) => ticket.id)).toEqual([realTicket.id])
   })

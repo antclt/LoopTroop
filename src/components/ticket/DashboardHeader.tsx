@@ -18,6 +18,7 @@ import { ErrorBanner } from './ErrorBanner'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TicketDescriptionViewer } from './TicketDescriptionViewer'
+import { TicketExternalId } from './TicketExternalId'
 
 interface DashboardHeaderProps {
   ticket: Ticket
@@ -338,7 +339,12 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-1.5 shrink-0">
             <ProjectIcon icon={project?.icon} imageClassName="h-4 w-4" emojiClassName="text-sm" />
-            <span className="font-mono text-sm font-semibold" style={{ color: project?.color ?? undefined }}>{ticket.externalId}</span>
+            <TicketExternalId
+              externalId={ticket.externalId}
+              isDisplayOnlyMock={ticket.isDisplayOnlyMock}
+              className="font-mono text-sm font-semibold"
+              style={{ color: project?.color ?? undefined }}
+            />
           </div>
           {isEditingTitle ? (
             <input
@@ -427,7 +433,12 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
             )}
             <div>
               <span className="text-xs font-medium text-muted-foreground">External ID</span>
-              <p className="font-mono mt-0.5">{ticket.externalId}</p>
+              <p className="font-mono mt-0.5">
+                <TicketExternalId
+                  externalId={ticket.externalId}
+                  isDisplayOnlyMock={ticket.isDisplayOnlyMock}
+                />
+              </p>
             </div>
             <div>
               <span className="text-xs font-medium text-muted-foreground">Priority</span>

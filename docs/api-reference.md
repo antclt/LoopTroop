@@ -235,6 +235,8 @@ Create-ticket validation requires a non-empty title up to 500 characters. The op
 
 All ticket route params shown as `:id` or `:ticketId` use the composite public ticket ref, such as `1:AUTH-12`. The browser URL uses only the external ticket id (`/ticket/AUTH-12`), but API callers should send the composite ref returned by ticket list/detail payloads.
 
+Ticket list/detail payloads also include `isDisplayOnlyMock`, a boolean UI hint for board-only mock/demo tickets. These tickets keep their raw `externalId` for routing and storage, but clients can use the flag to add display-only markers and hide workflow controls without parsing reserved branch names.
+
 Example ticket size response:
 
 ```json

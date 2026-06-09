@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Marked display-only mock/demo tickets with a superscript `(M)` beside their ticket ID in the board and dashboard.
 - Fixed narrow To Do and Done kanban columns so ticket details wrap inside the existing column widths instead of clipping.
 - Kept display-only mock tickets visible on the board while preventing them from hydrating, running, or exposing workflow actions.
 - Refined the Runtime Diagnostics docs to separate stall reports from ticket-side diagnostics, align blocked-error field docs with the current code, and document structured retry diagnostics.
@@ -89,6 +90,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Marked display-only mock/demo tickets with a superscript `(M)` beside their external ID in kanban cards, the selected-ticket dashboard header/details, and terminal delete confirmation copy while keeping the raw `externalId` unchanged for routes, storage, file paths, and artifacts; ticket API payloads now expose `isDisplayOnlyMock` so the UI does not infer that state from reserved branch names.
 - Reworked `docs/diagnostics.md` so it now distinguishes runtime stall reports from blocked-error and structured-retry diagnostics, documents the current persisted blocked-error fields and redaction behavior accurately, and makes the runtime report sections / flags easier to map back to the implemented script and UI surfaces.
 - Reworked `docs/operations.md` so it now documents the repo-local startup artifact files, explicit-versus-fallback OpenCode startup rules, API token transport options, useful health endpoints, manual maintenance script behavior, mounted-drive warning surfaces, the default OpenCode log directory, and the current `drizzle-kit`/`vitepress`/`mermaid` audit leftovers more precisely.
 - Reworked `docs/api-reference.md` so it now documents the current auth/rate-limit edge cases, singleton profile lifecycle, project-route mutability rules, ticket/UI-state validation limits, standard workflow action response shape, execution-setup regeneration behavior, artifact/history filters, and bead-route fallback responses more precisely.

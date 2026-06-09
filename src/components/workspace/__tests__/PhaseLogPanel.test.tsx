@@ -89,6 +89,7 @@ function makeTicket(runtimeOverrides: Partial<Ticket['runtime']> = {}): Ticket {
     id: 'ticket-1',
     externalId: 'T-1',
     projectId: 1,
+    isDisplayOnlyMock: false,
     title: 'Test ticket',
     description: null,
     priority: 1,
