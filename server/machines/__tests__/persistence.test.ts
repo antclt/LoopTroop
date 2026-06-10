@@ -114,7 +114,7 @@ describe('hydrateAllTickets', () => {
       xstateSnapshot: JSON.stringify(snapshot),
     })
 
-    expect(getTicketByRef(ticket.id)?.availableActions).toEqual([])
+    expect(getTicketByRef(ticket.id)?.availableActions).toEqual(['cancel'])
     expect(hydrateAllTickets()).toBe(0)
     expect(attachWorkflowRunner).not.toHaveBeenCalled()
     expect(() => ensureActorForTicket(ticket.id)).toThrow(/display-only mock ticket/i)

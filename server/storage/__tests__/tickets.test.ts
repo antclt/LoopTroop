@@ -142,7 +142,7 @@ describe('display-only mock tickets', () => {
     mockRepoManager.cleanup()
   })
 
-  it('keeps mock tickets visible but excludes them from startup hydration and actions', () => {
+  it('keeps mock tickets visible, cancelable, and excluded from startup hydration', () => {
     const repoDir = mockRepoManager.createRepo()
     const project = attachProject({
       folderPath: repoDir,
@@ -169,11 +169,14 @@ describe('display-only mock tickets', () => {
       status: 'SCANNING_RELEVANT_FILES',
     })
 
-    expect(getTicketByRef(mockTicket.id)?.availableActions).toEqual([])
+    expect(getTicketByRef(mockTicket.id)?.availableActions).toEqual(['cancel'])
     expect(getTicketByRef(mockTicket.id)?.isDisplayOnlyMock).toBe(true)
     expect(getTicketByRef(realTicket.id)?.isDisplayOnlyMock).toBe(false)
     expect(getTicketByRef(realTicket.id)?.availableActions.length).toBeGreaterThan(0)
     expect(listNonTerminalTickets().map((ticket) => ticket.id)).toEqual([realTicket.id])
+
+    patchTicket(mockTicket.id, { status: 'CANCELED' })
+    expect(getTicketByRef(mockTicket.id)?.availableActions).toEqual([])
   })
 })
 

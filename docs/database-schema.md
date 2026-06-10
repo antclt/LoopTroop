@@ -133,7 +133,7 @@ Operational notes:
 - `xstate_snapshot` is a serialized XState snapshot used to restore non-terminal tickets on startup
 - `external_id` is the stable human-facing identifier; the API turns it into a public ticket ref by prefixing the public project id
 - locked configuration columns freeze the profile/project settings that were in force when the ticket started
-- `branch_name = '__looptroop_display_only_mock__'` is reserved for board-only mock/demo tickets; these rows are returned for display, projected through the API with `isDisplayOnlyMock: true`, and excluded from startup hydration and workflow actions
+- `branch_name = '__looptroop_display_only_mock__'` is reserved for board-only mock/demo tickets; these rows are returned for display, projected through the API with `isDisplayOnlyMock: true`, excluded from startup hydration and runnable workflow actions, and expose only Cancel while non-terminal
 - runtime details shown in the UI are enriched from **both** this row and ticket-owned files under `.ticket/**`
 
 ### `phase_artifacts`

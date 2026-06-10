@@ -35,6 +35,10 @@ export function isDisplayOnlyMockTicket(ticket: Pick<LocalTicketRow, 'branchName
   return ticket.branchName === DISPLAY_ONLY_MOCK_BRANCH_NAME
 }
 
+function getDisplayOnlyMockTicketActions(status: string): string[] {
+  return status === 'COMPLETED' || status === 'CANCELED' ? [] : ['cancel']
+}
+
 const TrimmedNonEmptyStringSchema = z.string().trim().min(1)
 const LockedCouncilMembersSchema = z.array(TrimmedNonEmptyStringSchema)
 const LockedCouncilMemberVariantsSchema = z.record(z.string(), TrimmedNonEmptyStringSchema).superRefine((value, ctx) => {
@@ -520,7 +524,7 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     lockedCouncilMembers,
     lockedCouncilMemberVariants,
     availableActions: isMockTicket
-      ? []
+      ? getDisplayOnlyMockTicketActions(ticket.status)
       : addFinalTestFileEffectActionsWhenAvailable(
         addContinueActionWhenAvailable(
           getAvailableWorkflowActions(ticket.status),

@@ -331,8 +331,6 @@ export async function handleCancelTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
-  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
-  if (mockResponse) return mockResponse
   if (['COMPLETED', 'CANCELED'].includes(ticket.status)) {
     return c.json({ error: 'Cannot cancel a terminal ticket' }, 409)
   }
@@ -347,10 +345,18 @@ export async function handleCancelTicket(c: Context) {
   }
 
   try {
-    ensureActorForTicket(ticketId)
-    sendTicketEvent(ticketId, { type: 'CANCEL' })
-    cancelTicket(ticketId)
-    await abortTicketSessions(ticketId)
+    if (isDisplayOnlyMockTicket(ticket)) {
+      patchTicket(ticketId, {
+        status: 'CANCELED',
+        xstateSnapshot: null,
+        errorMessage: null,
+      })
+    } else {
+      ensureActorForTicket(ticketId)
+      sendTicketEvent(ticketId, { type: 'CANCEL' })
+      cancelTicket(ticketId)
+      await abortTicketSessions(ticketId)
+    }
   } catch (err) {
     console.error(`[tickets] Failed to send CANCEL to ticket ${ticketId}:`, err)
     return c.json({ error: 'Failed to cancel ticket', details: String(err) }, 500)

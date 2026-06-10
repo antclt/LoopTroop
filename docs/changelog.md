@@ -11,9 +11,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added dashboard ticket search for finding tickets by ID, title, or project, with mobile and keyboard support.
 - Refined the dashboard ticket search into a smaller, subtler pill control with the search/clear icon on the right.
 - Fixed dashboard startup for browsers with older saved UI filter state.
+- Restored the Cancel action for non-terminal display-only mock/demo tickets while keeping runnable workflow actions blocked.
+- Updated OpenCode SDK and React Query dependencies.
 - Marked display-only mock/demo tickets with a superscript `(M)` beside their ticket ID in the board and dashboard.
 - Fixed narrow To Do and Done kanban columns so ticket details wrap inside the existing column widths instead of clipping.
-- Kept display-only mock tickets visible on the board while preventing them from hydrating, running, or exposing workflow actions.
+- Kept display-only mock tickets visible on the board while preventing them from hydrating or running workflow actions.
 - Refined the Runtime Diagnostics docs to separate stall reports from ticket-side diagnostics, align blocked-error field docs with the current code, and document structured retry diagnostics.
 - Refined the Operations Guide to match the implemented startup artifacts, OpenCode log handling, API auth and health surfaces, maintenance scripts, and current audit leftovers.
 - Improved ticket descriptions with Raw/Markdown editing previews and Markdown-only details viewing.
@@ -94,6 +96,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Preserved raw per-bead execution attempts in `bead_execution:<beadId>` artifacts, including initial prompts, final model responses or diagnostics, outcomes, model/session audit context, and bead-iteration log metadata for live inspection.
 
 #### Changed
+- Restored the dashboard Cancel button and cancel API path for non-terminal display-only mock/demo tickets; canceling these tickets now moves them directly to Canceled without hydrating workflow actors, while Start and other runnable workflow actions remain blocked.
+- Updated `@opencode-ai/sdk` to `1.17.0` and `@tanstack/react-query` / `@tanstack/query-core` to `5.101.0`.
 - Refined the dashboard ticket search styling to use a compact ~20-character desktop width, softer pill-shaped chrome, and right-aligned search/clear affordances while preserving the same filtering behavior.
 - Marked display-only mock/demo tickets with a superscript `(M)` beside their external ID in kanban cards, the selected-ticket dashboard header/details, and terminal delete confirmation copy while keeping the raw `externalId` unchanged for routes, storage, file paths, and artifacts; ticket API payloads now expose `isDisplayOnlyMock` so the UI does not infer that state from reserved branch names.
 - Reworked `docs/diagnostics.md` so it now distinguishes runtime stall reports from blocked-error and structured-retry diagnostics, documents the current persisted blocked-error fields and redaction behavior accurately, and makes the runtime report sections / flags easier to map back to the implemented script and UI surfaces.

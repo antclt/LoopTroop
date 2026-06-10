@@ -38,7 +38,7 @@ Most modal routes and workspace views are also lazy-loaded through `lazyWithChun
 - centered modal routes for Configuration (`/config`), Projects (`/project/new`), and New Ticket (`/ticket/new`)
 - deep-link ticket selection from `/ticket/:externalId`
 - header controls for dashboard search, New Ticket, Projects, Configuration, Docs, Refresh, and theme switching; on desktop the ticket search sits beside **New Ticket**, while mobile uses a search popover to preserve header space
-- display-only mock/demo ticket IDs render with a superscript `(M)` marker in board cards and selected-ticket dashboard surfaces while keeping the raw external ID for routing, file paths, and artifacts
+- display-only mock/demo ticket IDs render with a superscript `(M)` marker in board cards and selected-ticket dashboard surfaces while keeping the raw external ID for routing, file paths, and artifacts; the dashboard exposes Cancel for non-terminal mock/demo tickets while keeping runnable workflow controls hidden
 
 ### Ticket Dashboard Coordination
 

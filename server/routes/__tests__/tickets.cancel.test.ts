@@ -7,7 +7,7 @@ import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { attachProject } from '../../storage/projects'
-import { createTicket, getTicketByRef, patchTicket } from '../../storage/tickets'
+import { createTicket, DISPLAY_ONLY_MOCK_BRANCH_NAME, getTicketByRef, patchTicket } from '../../storage/tickets'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { initializeTicket } from '../../ticket/initialize'
 import { getTicketAiLogPath, getTicketDebugLogPath, getTicketExecutionLogPath } from '../../storage/paths'
@@ -36,6 +36,7 @@ vi.mock('../../machines/persistence', () => ({
   stopActor: vi.fn(() => true),
 }))
 
+import { ensureActorForTicket, sendTicketEvent } from '../../machines/persistence'
 import { ticketRouter } from '../tickets'
 
 const repoManager = createFixtureRepoManager({
@@ -80,6 +81,7 @@ describe('ticketRouter POST /tickets/:id/cancel', () => {
   app.route('/api', ticketRouter)
 
   beforeEach(() => {
+    vi.clearAllMocks()
     clearProjectDatabaseCache()
     initializeDatabase()
     sqlite.exec('DELETE FROM attached_projects; DELETE FROM profiles;')
@@ -211,5 +213,41 @@ describe('ticketRouter POST /tickets/:id/cancel', () => {
       method: 'POST',
     })
     expect(response.status).toBe(409)
+  })
+
+  it('cancels display-only mock tickets without hydrating workflow actors', async () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'MockCancel',
+      shortname: 'MOCK',
+    })
+    const ticket = createTicket({
+      projectId: project.id,
+      title: 'Mock cancel route test',
+      description: 'Display-only mock tickets should still be cancelable.',
+    })
+    patchTicket(ticket.id, {
+      branchName: DISPLAY_ONLY_MOCK_BRANCH_NAME,
+      status: 'SCANNING_RELEVANT_FILES',
+      errorMessage: 'Synthetic progress state',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/cancel`, {
+      method: 'POST',
+    })
+
+    expect(response.status).toBe(200)
+    const payload = await response.json() as Record<string, unknown>
+    expect(payload.message).toBe('Cancel action accepted')
+    expect(payload.status).toBe('CANCELED')
+    expect(getTicketByRef(ticket.id)).toMatchObject({
+      status: 'CANCELED',
+      isDisplayOnlyMock: true,
+      availableActions: [],
+      errorMessage: null,
+    })
+    expect(ensureActorForTicket).not.toHaveBeenCalled()
+    expect(sendTicketEvent).not.toHaveBeenCalled()
   })
 })
