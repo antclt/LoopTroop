@@ -11,6 +11,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added dashboard ticket search for finding tickets by ID, title, or project, with mobile and keyboard support.
 - Refined the dashboard ticket search into a smaller, subtler pill control with the search/clear icon on the right.
 - Fixed dashboard startup for browsers with older saved UI filter state.
+- Fixed project execution locks so display-only mock/demo tickets no longer block real tickets.
 - Restored the Cancel action for non-terminal display-only mock/demo tickets while keeping runnable workflow actions blocked.
 - Updated OpenCode SDK and React Query dependencies.
 - Marked display-only mock/demo tickets with a superscript `(M)` beside their ticket ID in the board and dashboard.
@@ -160,6 +161,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Removed now-redundant documentation files `docs/state-machine.md` and `docs/execution-loop.md` whose content is now merged into `docs/ticket-flow.md` and `docs/beads.md` respectively.
 
 #### Fixed
+- Fixed project execution-band conflict detection so display-only mock/demo tickets in statuses such as `WAITING_PR_REVIEW` do not reserve execution capacity or block real tickets from entering pre-flight.
 - Fixed a startup crash when an older persisted `looptroop-ui-state` filter object did not include the newer `filters.search` field, normalizing missing filter defaults before dashboard search renders.
 - Fixed ticket card overflow in the narrower To Do and Done kanban columns by allowing grid columns, scroll-area content, and card metadata rows to shrink and wrap within the existing board layout, avoiding horizontal scrollbars or column width changes.
 - Prevented display-only mock tickets from being restored as active workflow actors on startup and hid all workflow actions for those tickets.

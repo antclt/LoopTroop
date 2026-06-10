@@ -8,6 +8,7 @@ import { attachProject } from '../projects'
 import {
   createTicket,
   DISPLAY_ONLY_MOCK_BRANCH_NAME,
+  findProjectExecutionBandConflict,
   getTicketByRef,
   getTicketPaths,
   listNonTerminalTickets,
@@ -177,6 +178,42 @@ describe('display-only mock tickets', () => {
 
     patchTicket(mockTicket.id, { status: 'CANCELED' })
     expect(getTicketByRef(mockTicket.id)?.availableActions).toEqual([])
+  })
+
+  it('ignores mock tickets when checking project execution-band conflicts', () => {
+    const repoDir = mockRepoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'LoopTroop',
+      shortname: 'LOOP',
+    })
+
+    const mockTicket = createTicket({
+      projectId: project.id,
+      title: 'Mock PR review ticket',
+      description: 'This display-only mock should not reserve execution.',
+    })
+    patchTicket(mockTicket.id, {
+      branchName: DISPLAY_ONLY_MOCK_BRANCH_NAME,
+      status: 'WAITING_PR_REVIEW',
+    })
+
+    expect(findProjectExecutionBandConflict(project.id)).toBeNull()
+
+    const realTicket = createTicket({
+      projectId: project.id,
+      title: 'Real execution ticket',
+      description: 'This real ticket should still reserve execution.',
+    })
+    patchTicket(realTicket.id, {
+      status: 'CODING',
+    })
+
+    expect(findProjectExecutionBandConflict(project.id)).toMatchObject({
+      ticketId: realTicket.id,
+      externalId: realTicket.externalId,
+      status: 'CODING',
+    })
   })
 })
 

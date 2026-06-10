@@ -747,11 +747,16 @@ export function findProjectExecutionBandConflict(
     externalId: tickets.externalId,
     title: tickets.title,
     status: tickets.status,
+    branchName: tickets.branchName,
   })
     .from(tickets)
     .orderBy(desc(tickets.updatedAt))
     .all()
-    .find((candidate) => candidate.externalId !== excludedExternalId && executionBandStatusSet.has(candidate.status))
+    .find((candidate) => (
+      candidate.externalId !== excludedExternalId
+      && !isDisplayOnlyMockTicket(candidate)
+      && executionBandStatusSet.has(candidate.status)
+    ))
 
   return conflict
     ? {

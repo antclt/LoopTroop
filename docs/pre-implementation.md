@@ -27,7 +27,7 @@ The doctor checks six areas:
 | **Dependency graph integrity** | No dangling references, self-dependencies, duplicate bead ids, or cycles, and at least one bead is runnable immediately. |
 | **Git safety** | The ticket worktree exists, is on a real branch, and has no pre-existing committable project changes. Generated or local untracked noise is downgraded to warnings with suggested `.gitignore` entries. |
 | **GitHub delivery prerequisites** | `origin` resolves to GitHub, `gh` is installed, authentication works, and the authenticated account can access the target repo. |
-| **Concurrency and budget guards** | No other ticket in the same project is already inside the execution band, and `maxIterations` is valid (`0` means unlimited). |
+| **Concurrency and budget guards** | No other real workflow ticket in the same project is already inside the execution band; display-only mock/demo tickets are ignored because they cannot run workflow work. `maxIterations` must also be valid (`0` means unlimited). |
 
 ### 1.2 Why the execution probe matters
 
