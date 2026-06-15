@@ -46,6 +46,16 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 
 </details>
 
+### 🎬 Video Demo
+
+<details>
+<summary><strong>Click to expand the video demo</strong></summary>
+
+[![LoopTroop Demo](https://img.youtube.com/vi/LYiYkooc_iY/maxresdefault.jpg)](https://www.youtube.com/watch?v=LYiYkooc_iY)
+*Watch a full walkthrough of LoopTroop in action.*
+
+</details>
+
 ---
 
 ## What is LoopTroop?
