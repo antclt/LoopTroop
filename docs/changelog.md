@@ -8,6 +8,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+
+### Detailed Changes
+
+---
+
+## 0.3.0 (2026-06-15)
+
+### Summary
 - Added dashboard ticket search for finding tickets by ID, title, or project, with mobile and keyboard support.
 - Refined the dashboard ticket search into a smaller, subtler pill control with the search/clear icon on the right.
 - Fixed dashboard startup for browsers with older saved UI filter state.
