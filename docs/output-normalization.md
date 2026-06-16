@@ -62,11 +62,14 @@ Artifacts are sometimes wrapped in explanation text, markdown headings, or other
 3. The inner content of any ` ```yaml ` / ` ```yml ` / ` ```json ` / ` ```jsonl ` code fence.
 4. The inner content of any `<TAG>…</TAG>` XML envelope specified by the parser.
 5. Everything from the first line matching a known top-level key (e.g. `schema_version:`, `beads:`, `epics:`) to the end of the output.
+6. Everything from a known top-level key when short same-line prose is glued directly before it, e.g. `Checking the result.status: clean`.
 
 All variants with and without transcript-prefix stripping are tried. The first one that produces a valid artifact wins.
 
 When the winning candidate is not the full raw output, a **Candidate Recovery** warning is recorded:
 > *Recovered the structured artifact from surrounding transcript or wrapper text before validation.*
+
+Same-line glued key recovery only removes the wrapper/prose prefix. The recovered candidate must still parse and pass the artifact schema; invalid structured content after the recovered key remains a validation failure.
 
 #### Tagged-candidate extraction (`<TAG>…</TAG>`)
 
@@ -416,7 +419,7 @@ The durable `interview.yaml` artifact also applies a few root-level canonicaliza
 
 When the coverage checker returns a list of gap strings, each item is wrapped in double quotes to prevent YAML from coercing values like `true`, `null`, or values containing `: `.
 
-Coverage revision metadata must reference each provided gap. PRD and beads coverage accept exact references first; if a model only changes harmless formatting such as quote style or whitespace, the reference is canonicalized back to the provided gap text and a repair warning is recorded.
+Coverage revision metadata must reference each provided gap. PRD and beads coverage accept exact references first; if a model only changes harmless formatting such as quote style, escaped quote/backtick spelling, or whitespace, the reference is canonicalized back to the provided gap text and a repair warning is recorded.
 
 ---
 

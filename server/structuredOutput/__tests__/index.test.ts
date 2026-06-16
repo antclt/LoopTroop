@@ -32,6 +32,7 @@ const VOTE_CATEGORIES = [
   'Minimal complexity / good decomposition',
   'Risks / edge cases addressed',
 ]
+const CANDIDATE_RECOVERY_WARNING = 'Recovered the structured artifact from surrounding transcript or wrapper text before validation.'
 
 function buildInterviewContent(
   ticketId: string,
@@ -243,6 +244,80 @@ describe.concurrent('structured output normalization', () => {
         question: 'What behavior should the API expose?',
       },
     ])
+  })
+
+  it('recovers structured artifacts when commentary is glued to the first root key', () => {
+    const questions = normalizeInterviewQuestionsOutput([
+      'I am narrowing this to the minimum useful set.questions:',
+      '  - id: Q01',
+      '    phase: foundation',
+      '    question: What ambiguity should be removed first?',
+    ].join('\n'), 10)
+    expect(questions.ok).toBe(true)
+    if (!questions.ok) return
+    expect(questions.repairWarnings).toContain(CANDIDATE_RECOVERY_WARNING)
+    expect(questions.value.questions[0]?.id).toBe('Q01')
+
+    const votes = normalizeVoteScorecardOutput([
+      'Checking feasibility before scoring.draft_scores:',
+      '  Draft 1:',
+      '    Coverage of requirements: 16',
+      '    Correctness / feasibility: 17',
+      '    Testability: 18',
+      '    Minimal complexity / good decomposition: 19',
+      '    Risks / edge cases addressed: 20',
+      '    total_score: 90',
+    ].join('\n'), ['Draft 1'], VOTE_CATEGORIES)
+    expect(votes.ok).toBe(true)
+    if (!votes.ok) return
+    expect(votes.repairWarnings).toContain(CANDIDATE_RECOVERY_WARNING)
+    expect(votes.value.draftScores['Draft 1']?.total_score).toBe(90)
+
+    const coverage = normalizeCoverageResultOutput([
+      'Reading the artifacts before calling this complete.status: clean',
+      'gaps: []',
+      'follow_up_questions: []',
+    ].join('\n'))
+    expect(coverage.ok).toBe(true)
+    if (!coverage.ok) return
+    expect(coverage.repairWarnings).toContain(CANDIDATE_RECOVERY_WARNING)
+    expect(coverage.value.status).toBe('clean')
+
+    const beads = normalizeBeadSubsetYamlOutput([
+      'Updating the affected bead only: keep it scoped.beads:',
+      '  - id: parser-recovery',
+      '    title: Recover parser candidate boundaries',
+      '    prdRefs:',
+      '      - EPIC-1',
+      '    description: Recover existing structured content after glued prose.',
+      '    contextGuidance:',
+      '      patterns:',
+      '        - Keep candidate recovery text-preserving.',
+      '      anti_patterns:',
+      '        - Do not invent missing fields.',
+      '    acceptanceCriteria:',
+      '      - Glued prose before the root key is ignored.',
+      '    tests:',
+      '      - Parser regression covers glued root keys.',
+      '    testCommands:',
+      '      - npm run test:server',
+    ].join('\n'))
+    expect(beads.ok).toBe(true)
+    if (!beads.ok) return
+    expect(beads.repairWarnings).toContain(CANDIDATE_RECOVERY_WARNING)
+    expect(beads.value[0]?.id).toBe('parser-recovery')
+  })
+
+  it('still rejects invalid content after a recovered root key', () => {
+    const result = normalizeCoverageResultOutput([
+      'Reading the artifacts before calling this complete.status: maybe',
+      'gaps: []',
+      'follow_up_questions: []',
+    ].join('\n'))
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toBe('Coverage output missing valid status')
   })
 
   it('normalizes refinement output wrapped in ```yaml code fences', () => {

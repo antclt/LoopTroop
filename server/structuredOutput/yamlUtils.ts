@@ -64,10 +64,57 @@ export function collectStructuredCandidates(
       if (index >= 0) {
         addCandidate(candidates, seen, lines.slice(index).join('\n'))
       }
+
+      for (const candidate of collectGluedTopLevelHintCandidates(lines, options.topLevelHints)) {
+        addCandidate(candidates, seen, candidate)
+      }
     }
   }
 
   return candidates
+}
+
+function collectGluedTopLevelHintCandidates(lines: string[], topLevelHints: string[]): string[] {
+  const candidates: string[] = []
+
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const line = lines[lineIndex] ?? ''
+    for (const startIndex of findGluedTopLevelHintStarts(line, topLevelHints)) {
+      const candidateLines = lines.slice(lineIndex)
+      candidateLines[0] = line.slice(startIndex)
+      candidates.push(candidateLines.join('\n'))
+    }
+  }
+
+  return candidates
+}
+
+function findGluedTopLevelHintStarts(line: string, topLevelHints: string[]): number[] {
+  const starts: number[] = []
+
+  for (const hint of topLevelHints) {
+    const trimmedHint = hint.trim()
+    if (!trimmedHint) continue
+
+    const pattern = new RegExp(`(^|[^A-Za-z0-9_-])(${escapeRegExp(trimmedHint)}\\s*:)`, 'gi')
+    for (const match of line.matchAll(pattern)) {
+      const boundary = match[1] ?? ''
+      const start = (match.index ?? 0) + boundary.length
+      if (start === 0) continue
+      if (!looksLikeRecoverableGluedPrefix(line.slice(0, start))) continue
+      starts.push(start)
+    }
+  }
+
+  return [...new Set(starts)].sort((left, right) => left - right)
+}
+
+function looksLikeRecoverableGluedPrefix(prefix: string): boolean {
+  const trimmed = prefix.trim()
+  if (!trimmed || trimmed.length > 240) return false
+  if (!/[A-Za-z]/.test(trimmed)) return false
+  if (/```|<\/?[A-Za-z_][A-Za-z0-9_-]*\s*\/?>/.test(trimmed)) return false
+  return true
 }
 
 export function collectTaggedCandidates(rawContent: string, tag: string): string[] {

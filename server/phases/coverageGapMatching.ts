@@ -7,6 +7,7 @@ function normalizeCoverageGapForMatching(value: string): string {
   return value
     .normalize('NFKC')
     .trim()
+    .replace(/\\(["'`])/gu, '$1')
     .replace(/[\u2018\u2019\u201A\u201B]/gu, "'")
     .replace(/[\u201C\u201D\u201E\u201F]/gu, '"')
     .replace(/[`'"]/gu, '')

@@ -8,8 +8,16 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
 
 ### Detailed Changes
+
+#### Fixed
+- Recovered structured artifacts when short commentary is glued directly before a known root key such as `questions:`, `draft_scores:`, `status:`, or `beads:`, while preserving schema validation for the recovered content.
+- Canonicalized harmless escaped-quote differences in PRD and beads coverage gap references so coverage revision metadata can match the originally provided gap text without inventing content.
+
+#### Maintenance
+- Updated `hono` to 4.12.25 and `typescript-eslint` to 8.61.0.
 
 ---
 

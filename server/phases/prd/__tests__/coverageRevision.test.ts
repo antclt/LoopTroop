@@ -191,6 +191,44 @@ describe.concurrent('PRD coverage revision diffs', () => {
     ]))
   })
 
+  it('canonicalizes escaped quote differences in PRD coverage gap references', () => {
+    const coverageGap = 'MVP requirement \\"ranking pipeline hook\\" has no dedicated user story.'
+    const currentCandidateContent = buildPrdContent([
+      'Use vitest for coverage diff regression checks.',
+    ])
+    const revised = jsYaml.load(buildPrdContent([
+      'Use vitest for coverage diff regression checks.',
+      'Add a user story for the ranking pipeline hook.',
+    ], {
+      storyTitle: 'Ranking pipeline hook',
+    })) as Record<string, unknown>
+
+    revised.gap_resolutions = [{
+      gap: 'MVP requirement "ranking pipeline hook" has no dedicated user story.',
+      action: 'updated_prd',
+      rationale: 'The revised PRD adds a user story for the ranking pipeline hook.',
+      affected_items: [{
+        item_type: 'user_story',
+        id: 'US-1',
+        label: 'Ranking pipeline hook',
+      }],
+    }]
+
+    const result = validatePrdCoverageRevisionOutput(
+      jsYaml.dump(revised, { lineWidth: 120, noRefs: true }) as string,
+      {
+        ticketId: 'POBA-3',
+        interviewContent: buildInterviewContent(),
+        currentCandidateContent,
+        coverageGaps: [coverageGap],
+      },
+    )
+
+    expect(result.repairApplied).toBe(true)
+    expect(result.repairWarnings.join('\n')).toContain('Canonicalized PRD coverage gap reference')
+    expect(result.gapResolutions[0]?.gap).toBe(coverageGap)
+  })
+
   it('drops section-level affected_items references that the PRD coverage schema cannot represent', () => {
     const coverageGap = 'Clarify the API contracts section.'
     const currentCandidateContent = buildPrdContent([
