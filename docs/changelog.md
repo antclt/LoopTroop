@@ -9,13 +9,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
-- Added a compact contact and social media directory section at the bottom of the marketing landing page.
+- Added a compact contact section at the bottom of the marketing landing page.
 - Fixed the flash/split-second visibility of the floating "Back to top" button on landing page load by initializing it with hidden styles.
 
 ### Detailed Changes
 
 #### Added
-- Added a contact and social media links section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`), alongside the official LoopTroop social media profiles.
+- Added a contact section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`) alongside a text reference pointing to the official LoopTroop socials.
 
 #### Fixed
 - Fixed an issue where the floating "Back to top" button briefly flashed on page load by explicitly applying `opacity-0` and `pointer-events-none` classes to the element in `web.html`, preventing transition-on-load issues before its scroll position is verified.
