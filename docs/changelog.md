@@ -10,6 +10,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Summary
 - Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
 - Added a compact contact and social media directory section at the bottom of the marketing landing page.
+- Fixed the flash/split-second visibility of the floating "Back to top" button on landing page load by initializing it with hidden styles.
 
 ### Detailed Changes
 
@@ -17,6 +18,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a contact and social media links section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`), alongside the official LoopTroop social media profiles.
 
 #### Fixed
+- Fixed an issue where the floating "Back to top" button briefly flashed on page load by explicitly applying `opacity-0` and `pointer-events-none` classes to the element in `web.html`, preventing transition-on-load issues before its scroll position is verified.
 - Recovered structured artifacts when short commentary is glued directly before a known root key such as `questions:`, `draft_scores:`, `status:`, or `beads:`, while preserving schema validation for the recovered content.
 - Canonicalized harmless escaped-quote differences in PRD and beads coverage gap references so coverage revision metadata can match the originally provided gap text without inventing content.
 
