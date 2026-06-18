@@ -9,8 +9,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
+- Added a compact contact and social media directory section at the bottom of the marketing landing page.
 
 ### Detailed Changes
+
+#### Added
+- Added a contact and social media links section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`), alongside the official LoopTroop social media profiles.
 
 #### Fixed
 - Recovered structured artifacts when short commentary is glued directly before a known root key such as `questions:`, `draft_scores:`, `status:`, or `beads:`, while preserving schema validation for the recovered content.
