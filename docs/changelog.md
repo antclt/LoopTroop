@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Fixed the dark/light mode toggle on the marketing landing page by configuring Tailwind CSS v4 class-based dark mode.
 - Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
 - Added a compact contact section at the bottom of the marketing landing page.
 - Fixed the flash/split-second visibility of the floating "Back to top" button on landing page load by initializing it with hidden styles.
@@ -18,6 +19,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a contact section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`) alongside a text reference pointing to the official LoopTroop socials.
 
 #### Fixed
+- Fixed the marketing landing page (`web.html`) theme toggle by adding the custom variant `dark` selector configuration to `src/web.css` so Tailwind CSS v4 compiles class-based dark mode styles rather than media-query-only styles.
 - Fixed an issue where the floating "Back to top" button briefly flashed on page load by explicitly applying `opacity-0` and `pointer-events-none` classes to the element in `web.html`, preventing transition-on-load issues before its scroll position is verified.
 - Recovered structured artifacts when short commentary is glued directly before a known root key such as `questions:`, `draft_scores:`, `status:`, or `beads:`, while preserving schema validation for the recovered content.
 - Canonicalized harmless escaped-quote differences in PRD and beads coverage gap references so coverage revision metadata can match the originally provided gap text without inventing content.
