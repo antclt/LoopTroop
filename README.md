@@ -15,6 +15,9 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 
 **Start here:** [Docs](https://www.looptroop.ovh/docs/) | [Getting Started](https://www.looptroop.ovh/docs/getting-started) | [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow) | [LLM Council](https://www.looptroop.ovh/docs/llm-council) | [Context Engineering](https://www.looptroop.ovh/docs/context-engineering) | [Beads & Execution](https://www.looptroop.ovh/docs/beads)
 
+![LoopTroop workflow demo](docs/media/20260619104032-26sec-captions.gif)
+*A 26-second animated walkthrough of a complete ticket lifecycle, from initial requirement gathering to automated execution.*
+
 ### 📸 Screenshots
 
 <details>
@@ -46,13 +49,13 @@ Instead of trusting a single, endless AI chat session - where the conversation h
 
 </details>
 
-### 🎬 Video Demo
+### 🎬 16 Min Deep Dive - Presentation & Full Ticket Demo
 
 <details>
-<summary><strong>Click to expand the video demo</strong></summary>
+<summary><strong>Click to expand the presentation and demo</strong></summary>
 
 [![LoopTroop Demo](https://img.youtube.com/vi/LYiYkooc_iY/maxresdefault.jpg)](https://www.youtube.com/watch?v=LYiYkooc_iY)
-*Watch a full walkthrough of LoopTroop in action.*
+*Watch the full 16-minute presentation and ticket demo.*
 
 </details>
 

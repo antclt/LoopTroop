@@ -8,6 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Updated the README with a new walkthrough animation GIF and renamed the video demo section.
 - Fixed the dark/light mode toggle on the marketing landing page by configuring Tailwind CSS v4 class-based dark mode.
 - Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
 - Added a compact contact section at the bottom of the marketing landing page.
@@ -17,6 +18,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Added
 - Added a contact section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`) alongside a text reference pointing to the official LoopTroop socials.
+
+#### Changed
+- Updated `README.md` to display a 26-second animated walkthrough GIF showing LoopTroop's automated ticket lifecycle execution, and renamed the video demo section to highlight the 16-minute deep dive presentation and ticket demo.
 
 #### Fixed
 - Fixed the marketing landing page (`web.html`) theme toggle by adding the custom variant `dark` selector configuration to `src/web.css` so Tailwind CSS v4 compiles class-based dark mode styles rather than media-query-only styles.
