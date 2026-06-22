@@ -6,6 +6,7 @@ import { installDevApiGuard } from './lib/devApi'
 import { UIProvider } from './context/UIContext'
 import { TooltipProvider } from './components/ui/tooltip'
 import { ErrorBoundary } from './components/shared/ErrorBoundary'
+import { AppCrashScreen } from './components/shared/AppCrashScreen'
 import App from './App'
 import './index.css'
 
@@ -21,14 +22,7 @@ createRoot(rootEl).render(
     <QueryClientProvider client={queryClient}>
       <UIProvider>
         <TooltipProvider>
-          <ErrorBoundary fallback={(
-            <div className="flex min-h-screen items-center justify-center p-8 text-center">
-              <div>
-                <h1 className="text-2xl font-bold text-destructive">App crashed</h1>
-                <p className="mt-2 text-muted-foreground">Something went wrong. Please refresh the page.</p>
-              </div>
-            </div>
-          )}>
+          <ErrorBoundary fallback={(details) => <AppCrashScreen {...details} />}>
             <App />
           </ErrorBoundary>
         </TooltipProvider>

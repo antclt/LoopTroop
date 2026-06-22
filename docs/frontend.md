@@ -186,6 +186,8 @@ The current batch can come from the persisted interview session snapshot or the 
 
 Approval panes use the same success-aware debounced UI-state pattern for editor drafts. This protects large manual edits if the browser tab closes before the debounce timer finishes.
 
+Artifact edits in the approval panes are made through the shared `YamlEditor` (`src/components/editor/YamlEditor.tsx`), a CodeMirror-based YAML surface with line numbers, syntax highlighting, and bracket matching, used in both editable and read-only modes. When a manual edit would invalidate downstream artifacts, the pane raises a `CascadeWarning` (`src/components/editor/CascadeWarning.tsx`) confirmation dialog before committing the change, so the user knows the edit cascades into later phases. The interview, PRD, and execution-setup-plan approval panes all share these two surfaces via `ApprovalView`.
+
 `PrdApprovalPane` keeps the PRD editor as the primary surface. When the winning PRD draft has a Part 1 Full Answers artifact, the header shows a compact `Full Answers` chip that opens the read-only complete interview answer set used by that winning draft.
 
 ## 8. Artifact And Review Surfaces
@@ -317,7 +319,7 @@ The current frontend project modal is intentionally scoped to attachment metadat
 
 ## 11. Context Providers
 
-The provider stack is split across `main.tsx`, `App.tsx`, and `TicketDashboard.tsx`. `main.tsx` installs the React Query client, `UIProvider`, `TooltipProvider`, and the app-wide `ErrorBoundary`; `App.tsx` adds `ToastProvider` and `AIQuestionProvider`; `TicketDashboard.tsx` mounts `LogProvider` for the active ticket.
+The provider stack is split across `main.tsx`, `App.tsx`, and `TicketDashboard.tsx`. `main.tsx` installs the React Query client, `UIProvider`, `TooltipProvider`, and the app-wide `ErrorBoundary`; `App.tsx` adds `ToastProvider` and `AIQuestionProvider`; `TicketDashboard.tsx` mounts `LogProvider` for the active ticket. The app-wide `ErrorBoundary` renders the `AppCrashScreen` fallback, which shows the `App crashed` message plus a `Show details` panel exposing the caught error message, stack trace, and React component stack (with copy-to-clipboard and a Refresh action).
 
 Among the custom LoopTroop state providers, three carry most of the frontend-specific cross-cutting state:
 

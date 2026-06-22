@@ -71,6 +71,7 @@ The report combines several layers of evidence:
 | `--ticket-path <path>` | none | You want runtime sizing focused on one ticket; pass a `.ticket` dir, its `runtime` dir, or the worktree root |
 | `--backend-port`, `--frontend-port`, `--opencode-url` | auto-detect when possible | You started the stack on non-default ports or against a non-default OpenCode server |
 | `--no-color` | off | You are piping the report or running in CI; `NO_COLOR` is also respected |
+| `--help` | off | You want the built-in usage summary of all flags without running a diagnostic pass |
 
 Examples:
 

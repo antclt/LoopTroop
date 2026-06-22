@@ -702,13 +702,13 @@ The stream endpoint emits two categories of events:
 
 | Event type | When emitted | Key payload fields |
 | --- | --- | --- |
-| `state_change` | Ticket transitions between workflow phases | `ticketId`, `from`, `to`, `phaseAttempt`, `previousStatus`, `timestamp` |
-| `log` | A new execution log entry is written | `ticketId`, `logEntry` (id, type, kind, op, timestamp, message) |
-| `progress` | Bead or phase progress percentage changes | `ticketId`, `percentComplete`, `currentBead`, `totalBeads` |
-| `app_error` | A runtime error occurs during workflow execution | `ticketId`, `error` (message, code, phase), `timestamp` |
-| `bead_complete` | A single bead finishes execution (success or failure) | `ticketId`, `beadId`, `status` (done \| error), `iteration`, `timestamp` |
-| `needs_input` | OpenCode has a pending question for the user | `ticketId`, `requestId`, `type`, `question`, `timestamp` |
-| `artifact_change` | A phase artifact is created or updated | `ticketId`, `phase`, `artifactType`, `artifact`, `timestamp` |
+| `state_change` | Ticket transitions between workflow phases | `ticketId`, `from`, `to`, `phaseAttempt`, `previousStatus` |
+| `log` | A new execution log entry is written | flat `LogEvent` fields: `ticketId`, `type`, `content`, `kind`, `op`, `phase`, `entryId`, … (no `logEntry` wrapper) |
+| `bead_complete` | A single bead finishes execution | `ticketId`, `beadId`, `title`, `completed`, `total` |
+| `needs_input` | A pending question or interview batch needs the user | `ticketId`, `type`, plus a shape that varies by source (interview batch: `batch`; OpenCode question: `requestId`, `questions`, `answers`, `tool`, …) |
+| `artifact_change` | A phase artifact is created or updated | `ticketId`, `phase`, `artifactType`, `artifact` |
+
+> The `SSEEventType` union in `server/sse/eventTypes.ts` also declares `progress` and `app_error`, but no broadcaster call site emits them today. They are reserved type slots, not live events — runtime errors surface as `log` entries (`kind: 'error'`) instead.
 
 SSE replay is an optimization, not the only recovery path. After a reconnect with a remembered event id, the frontend also invalidates the ticket, list, artifacts, interview, setup-plan, bead, and server-log queries so missed events outside the replay buffer are reconciled from durable storage.
 
@@ -725,58 +725,29 @@ Example `state_change` event payload:
 }
 ```
 
-Example `progress` event payload:
-
-```json
-{
-  "ticketId": "AUTH-12",
-  "percentComplete": 65,
-  "currentBead": "api-refresh-endpoint",
-  "totalBeads": 8,
-  "timestamp": "2026-04-23T09:00:00.000Z"
-}
-```
-
 Example `bead_complete` event payload:
 
 ```json
 {
   "ticketId": "AUTH-12",
   "beadId": "session-store-foundation",
-  "status": "done",
-  "iteration": 1,
-  "timestamp": "2026-04-23T09:00:00.000Z"
+  "title": "Session store foundation",
+  "completed": 3,
+  "total": 8
 }
 ```
 
-Example `log` event payload:
+Example `log` event payload (flat `LogEvent`, no wrapper):
 
 ```json
 {
   "ticketId": "AUTH-12",
-  "logEntry": {
-    "id": "log-1742839200-001",
-    "type": "info",
-    "kind": "session",
-    "op": "append",
-    "timestamp": "2026-04-23T09:00:00.000Z",
-    "message": "Bead session-store-foundation started (iteration 1)"
-  },
-  "timestamp": "2026-04-23T09:00:00.000Z"
-}
-```
-
-Example `app_error` event payload:
-
-```json
-{
-  "ticketId": "AUTH-12",
-  "error": {
-    "message": "OpenCode provider returned error",
-    "code": "OPENCODE_PROVIDER_ERROR",
-    "phase": "CODING"
-  },
-  "timestamp": "2026-04-23T09:00:00.000Z"
+  "type": "session",
+  "kind": "session",
+  "op": "append",
+  "phase": "CODING",
+  "entryId": "log-1742839200-001",
+  "content": "Bead session-store-foundation started (iteration 1)"
 }
 ```
 

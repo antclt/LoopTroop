@@ -367,7 +367,8 @@ Several orchestrator modules drive the complex mechanics behind the scenes:
 - **Phase Attempts (`server/storage/ticketPhaseAttempts.ts`)**: Versions non-implementation retries, setup-plan regenerations, and archived planning generations so prior artifacts stay immutable.
 - **Session Logging (`server/workflow/sessionStatusLogging.ts`)**: Handles the durable recording of session state transitions and OpenCode interactions.
 - **Integration Phase (`server/workflow/phases/integrationPhase.ts`)**: Orchestrates the commit squashing and target branch integration logic after coding and final tests are complete.
-- **Execution Setup Phase (`server/workflow/phases/executionSetupPlanPhase.ts`)**: Manages the pre-flight checks and setup plan drafting, explicitly separating environment prep from active bead coding.
+- **Pre-Flight Check (`handlePreFlight` in `server/workflow/phases/verificationPhase.ts`, backed by `server/phases/preflight/doctor.ts`)**: Runs the pre-flight readiness checks before execution setup begins.
+- **Execution Setup Plan (`server/workflow/phases/executionSetupPlanPhase.ts`)**: Handles setup-plan approval state and draft regeneration, explicitly separating environment prep from active bead coding.
 - **Ticket Handlers (`server/routes/ticketHandlers/**`)**: Implement the route-driven behaviors that sit around the state machine edges, including approval hashes, planning restarts, setup rewinds, blocked-error recovery actions, and OpenCode question replies.
 
 ---

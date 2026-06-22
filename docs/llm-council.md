@@ -61,7 +61,7 @@ The goal is not consensus chat. The goal is competitive evaluation under the sam
 
 ## 5. Step 3: Refinement
 
-Once a winner is selected, the winning direction is refined into the canonical artifact for the phase. This process is driven by the orchestration logic in `server/workflow/council/refiner.ts` and supported by utilities in `server/workflow/council/draftUtils.ts` to merge the strongest elements from competing drafts into the final output.
+Once a winner is selected, the winning direction is refined into the canonical artifact for the phase. This process is driven by the orchestration logic in `server/council/refiner.ts` and supported by utilities in `server/council/draftUtils.ts` to merge the strongest elements from competing drafts into the final output.
 
 That refined artifact is what later phases see:
 

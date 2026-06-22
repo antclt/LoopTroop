@@ -106,7 +106,7 @@ All scripts are available with `npm run <name>`.
 | Script | Purpose |
 | --- | --- |
 | `dev` | Full stack: frontend, backend, docs server, OpenCode watcher, and dev preflight. **Standard start command.** |
-| `dev:app` | Frontend and backend only — no docs server, no OpenCode watcher. Use when OpenCode is already running externally and docs are not needed locally. |
+| `dev:app` | Frontend and backend only — no docs server, no OpenCode watcher. Use when OpenCode is already running externally and docs are not needed locally. Note: this bypasses the `predev` preflight (the `predev` hook only runs for `dev`), so dependency sync, npm audit, OpenCode upgrade, port-conflict cleanup, and the auto-generated `OPENCODE_SERVER_PASSWORD` / `LOOPTROOP_API_TOKEN` are skipped — set those yourself when needed. |
 | `dev:frontend` | Vite dev server only. |
 | `dev:backend` | Backend Hono API server only. |
 | `dev:opencode` | OpenCode watcher only. |

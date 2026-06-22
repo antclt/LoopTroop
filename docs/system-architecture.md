@@ -192,7 +192,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | Actor persistence and restore | `server/machines/persistence.ts` |
 | Workflow runner and phase dispatch | `server/workflow/runner.ts`, `server/workflow/phases/*` |
 | Planning phases | `server/phases/interview/*`, `server/phases/prd/*`, `server/phases/beads/*`, `server/phases/executionSetupPlan/*` |
-| Execution and delivery phases | `server/phases/preflight/*`, `server/phases/executionSetup/*`, `server/phases/execution/*`, `server/phases/finalTest/*`, `server/phases/integration/*`, `server/phases/cleanup/*`, `server/phases/verification/*` |
+| Execution and delivery phases | `server/phases/preflight/*`, `server/phases/executionSetup/*`, `server/phases/execution/*`, `server/phases/finalTest/*`, `server/phases/integration/*`, `server/phases/cleanup/*` |
 | Ticket initialization and relevant-file preparation | `server/ticket/create.ts`, `server/ticket/initialize.ts`, `server/ticket/relevantFiles.ts`, `server/ticket/metadata.ts` |
 
 ### Council And Structured Output
@@ -200,6 +200,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | Area | Modules |
 | --- | --- |
 | Reusable council pipeline | `server/council/pipeline.ts`, `drafter.ts`, `voter.ts`, `refiner.ts`, `quorum.ts` |
+| Prompt template layer | `server/prompts/index.ts` (per-phase prompt templates), `server/prompts/globalRules.ts` (`GLOBAL_RULES`, `SAME_SESSION_RULES`, `CONVERSATIONAL_RULES`) |
 | Structured-output schemas and normalizers | `server/structuredOutput/*` |
 | Tagged marker extraction and repair-aware parsing | `server/phases/parserTaggedStructuredOutput.ts` |
 | Retry policy, raw-attempt capture, prompt echo detection | `server/lib/structuredOutputRetry.ts`, `structuredRawAttempts.ts`, `structuredRetryDiagnostics.ts`, `promptEcho.ts` |

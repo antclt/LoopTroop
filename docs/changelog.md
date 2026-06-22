@@ -8,19 +8,30 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- Corrected documentation drift across the API, workflow, architecture, frontend, and operations docs to match the current code (SSE event payloads, pre-flight attribution, council module paths, prompt-template subsystem, YAML approval editor, and dev-script caveats).
 - Updated the README with a new walkthrough animation GIF and renamed the video demo section.
 - Fixed the dark/light mode toggle on the marketing landing page by configuring Tailwind CSS v4 class-based dark mode.
 - Hardened structured-output recovery so common glued prose and escaped-quote coverage references no longer cause avoidable parser failures.
 - Added a compact contact section at the bottom of the marketing landing page.
 - Fixed the flash/split-second visibility of the floating "Back to top" button on landing page load by initializing it with hidden styles.
+- Added a "Show details" section to the full-app crash screen so the underlying error message, stack trace, and component stack are visible (and copyable) without opening the console.
 
 ### Detailed Changes
 
 #### Added
 - Added a contact section at the bottom of the landing page, offering direct contact options via email (`contact@looptroop.ovh`) and Twitter (`@liviusa`) alongside a text reference pointing to the official LoopTroop socials.
+- Added an expandable "Show details" panel to the top-level `App crashed` screen (`src/components/shared/AppCrashScreen.tsx`). The `ErrorBoundary` now forwards the caught `error` and `componentStack` to a render-prop fallback, surfacing the error name, message, full stack trace, and React component stack on screen with a copy-to-clipboard action and an explicit Refresh button.
 
 #### Changed
 - Updated `README.md` to display a 26-second animated walkthrough GIF showing LoopTroop's automated ticket lifecycle execution, and renamed the video demo section to highlight the 16-minute deep dive presentation and ticket demo.
+
+#### Documentation
+- Corrected the API Reference SSE event table and examples to match the broadcaster: removed the never-emitted `progress` and `app_error` events (noted as reserved type slots), fixed the `bead_complete` payload (`beadId`, `title`, `completed`, `total`), documented `log` as a flat `LogEvent` with no `logEntry` wrapper, and described the source-dependent `needs_input` shapes.
+- Fixed Ticket Flow pre-flight attribution: pre-flight runs in `handlePreFlight` (`server/workflow/phases/verificationPhase.ts`, backed by `server/phases/preflight/doctor.ts`), while `executionSetupPlanPhase.ts` only handles setup-plan approval and draft regeneration.
+- Fixed the LLM Council refinement module paths from the non-existent `server/workflow/council/*` to the real `server/council/*`.
+- Updated System Architecture: removed the stale `server/phases/verification/*` reference (the directory holds only tests) and added the `server/prompts/*` prompt-template layer to the module map.
+- Documented the shared `YamlEditor` and `CascadeWarning` approval surfaces in the Frontend docs.
+- Documented the `diagnose:stall --help` flag, the `dev:app` preflight-bypass caveat, and synced `.env.example` with `LOOPTROOP_DEV_HOST`, `LOOPTROOP_OPENCODE_LOGS`, and `LOOPTROOP_OPENCODE_PERMISSION_MODE`.
 
 #### Fixed
 - Fixed the marketing landing page (`web.html`) theme toggle by adding the custom variant `dark` selector configuration to `src/web.css` so Tailwind CSS v4 compiles class-based dark mode styles rather than media-query-only styles.
