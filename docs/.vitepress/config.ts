@@ -1,3 +1,4 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitepress'
 
 const githubRepo = 'https://github.com/looptroop-ai/LoopTroop'
@@ -91,6 +92,18 @@ export default defineConfig({
   ],
   cleanUrls: true,
   lastUpdated: true,
+  vite: {
+    resolve: {
+      alias: [
+        {
+          find: /^.*\/VPDocFooterLastUpdated\.vue$/,
+          replacement: fileURLToPath(
+            new URL('./theme/VPDocFooterLastUpdated.vue', import.meta.url)
+          )
+        }
+      ]
+    }
+  },
   markdown: {
     config(md) {
       md.set({ html: false })
