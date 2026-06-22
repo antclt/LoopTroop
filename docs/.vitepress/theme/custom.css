@@ -332,3 +332,8 @@
     max-width: 100% !important;
   }
 }
+
+/* Hide default footer edit-info block as it's replaced by CustomDocFooter */
+.VPDocFooter .edit-info {
+  display: none !important;
+}

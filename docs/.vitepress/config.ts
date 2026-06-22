@@ -105,18 +105,6 @@ export default defineConfig({
       // ignore
     }
   },
-  vite: {
-    resolve: {
-      alias: [
-        {
-          find: /^.*\/VPDocFooterLastUpdated\.vue$/,
-          replacement: fileURLToPath(
-            new URL('./theme/VPDocFooterLastUpdated.vue', import.meta.url)
-          )
-        }
-      ]
-    }
-  },
   markdown: {
     config(md) {
       md.set({ html: false })
