@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import { execSync } from 'node:child_process'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitepress'
@@ -100,6 +101,12 @@ export default defineConfig({
       ).toString().trim()
       if (commitHash) {
         pageData.frontmatter.lastUpdatedCommitHash = commitHash
+        const relativeFilePath = `docs/${pageData.relativePath}`
+        const fileDiffHash = crypto
+          .createHash('sha256')
+          .update(relativeFilePath)
+          .digest('hex')
+        pageData.frontmatter.lastUpdatedFileDiffHash = fileDiffHash
       }
     } catch (e) {
       // ignore

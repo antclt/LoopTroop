@@ -28,8 +28,10 @@ const date = computed(() => {
 const commitUrl = computed(() => {
   const hash = frontmatter.value.lastUpdatedCommitHash
   if (!hash) return null
+  const diffHash = frontmatter.value.lastUpdatedFileDiffHash
   const repo = theme.value.editLink?.pattern?.split('/edit/')[0] || 'https://github.com/looptroop-ai/LoopTroop'
-  return `${repo}/commit/${hash}`
+  const anchor = diffHash ? `#diff-${diffHash}` : ''
+  return `${repo}/commit/${hash}${anchor}`
 })
 
 const isoDatetime = computed(() => date.value ? date.value.toISOString() : '')
