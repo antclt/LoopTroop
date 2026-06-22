@@ -99,7 +99,7 @@ export default defineConfig({
         `git log -1 --pretty="%H" -- "${pageData.filePath}"`
       ).toString().trim()
       if (commitHash) {
-        (pageData as any).lastUpdatedCommitHash = commitHash
+        pageData.frontmatter.lastUpdatedCommitHash = commitHash
       }
     } catch (e) {
       // ignore

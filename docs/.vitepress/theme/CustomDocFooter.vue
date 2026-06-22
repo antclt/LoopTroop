@@ -26,7 +26,7 @@ const date = computed(() => {
 })
 
 const commitUrl = computed(() => {
-  const hash = (page.value as any).lastUpdatedCommitHash
+  const hash = frontmatter.value.lastUpdatedCommitHash
   if (!hash) return null
   const repo = theme.value.editLink?.pattern?.split('/edit/')[0] || 'https://github.com/looptroop-ai/LoopTroop'
   return `${repo}/commit/${hash}`
