@@ -96,7 +96,7 @@ export default defineConfig({
   transformPageData(pageData) {
     try {
       const commitHash = execSync(
-        `git log -1 --pretty="%H" -- "${pageData.filePath}"`
+        `git log -1 --pretty="%H" -- "docs/${pageData.relativePath}"`
       ).toString().trim()
       if (commitHash) {
         pageData.frontmatter.lastUpdatedCommitHash = commitHash
