@@ -58,6 +58,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Updated `hono` to 4.12.25 and `typescript-eslint` to 8.61.0.
 - Stabilized the council pipeline hard-deadline unit test so full-suite timing variance no longer causes false failures while preserving the partial-result assertion.
 - Refreshed the generated marketing CSS asset from the 0.3.1 site build so tracked deploy assets match the current source and package version.
+- Ignored the generated `site/` deployment output in ESLint so `npm run lint` remains valid after running `npm run site:build`.
 
 ---
 
