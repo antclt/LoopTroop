@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vitepress'
 
@@ -92,6 +93,18 @@ export default defineConfig({
   ],
   cleanUrls: true,
   lastUpdated: true,
+  transformPageData(pageData) {
+    try {
+      const commitHash = execSync(
+        `git log -1 --pretty="%H" -- "${pageData.filePath}"`
+      ).toString().trim()
+      if (commitHash) {
+        (pageData as any).lastUpdatedCommitHash = commitHash
+      }
+    } catch (e) {
+      // ignore
+    }
+  },
   vite: {
     resolve: {
       alias: [

@@ -9,6 +9,13 @@ const date = computed(() => {
   return new Date(page.value.lastUpdated)
 })
 
+const commitUrl = computed(() => {
+  const hash = (page.value as any).lastUpdatedCommitHash
+  if (!hash) return null
+  const repo = theme.value.editLink?.pattern?.split('/edit/')[0] || 'https://github.com/looptroop-ai/LoopTroop'
+  return `${repo}/commit/${hash}`
+})
+
 const isoDatetime = computed(() => date.value ? date.value.toISOString() : '')
 const datetime = ref('')
 
@@ -30,7 +37,10 @@ onMounted(() => {
 <template>
   <p v-if="date" class="VPLastUpdated">
     {{ theme.lastUpdated?.text || theme.lastUpdatedText || 'Last updated' }}:
-    <time :datetime="isoDatetime">{{ datetime }}</time>
+    <a v-if="commitUrl" :href="commitUrl" target="_blank" rel="noopener noreferrer" class="commit-link">
+      <time :datetime="isoDatetime">{{ datetime }}</time>
+    </a>
+    <time v-else :datetime="isoDatetime">{{ datetime }}</time>
   </p>
 </template>
 
@@ -40,6 +50,18 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 500;
   color: var(--vp-c-text-2);
+}
+
+.commit-link {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  transition: color 0.25s;
+}
+
+.commit-link:hover {
+  color: var(--vp-c-brand-2);
+  text-decoration-style: solid;
 }
 
 @media (min-width: 640px) {
