@@ -18,8 +18,27 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const repoRoot = resolve(__dirname, '..')
-const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-const binExtension = process.platform === 'win32' ? '.cmd' : ''
+const isWindows = process.platform === 'win32'
+const npmCommand = isWindows ? 'npm.cmd' : 'npm'
+const binExtension = isWindows ? '.cmd' : ''
+
+/**
+ * Windows `.cmd`/`.bat` shims (npm.cmd, tsx.cmd, ...) are batch scripts that
+ * can only run via cmd.exe. Since the BatBadBut fix (Node 18.20.2/20.12.2/21+),
+ * spawnSync refuses to launch them directly and throws EINVAL. Routing through
+ * the shell fixes that, but `shell: true` re-parses the command line, so any
+ * argument containing whitespace or shell metacharacters must be quoted.
+ */
+function quoteForShell(value) {
+  return isWindows && /[\s&|<>^()"]/.test(value) ? `"${value}"` : value
+}
+
+function spawnViaShell(command, args, options) {
+  return spawnSync(quoteForShell(command), args.map(quoteForShell), {
+    ...options,
+    shell: isWindows,
+  })
+}
 const tsxBin = resolve(repoRoot, 'node_modules', '.bin', `tsx${binExtension}`)
 const installStamp = resolve(repoRoot, 'node_modules', '.package-lock.json')
 const npmInstallFlags = ['--no-fund', '--no-audit']
@@ -76,7 +95,7 @@ if (reasons.length > 0) {
     console.log(`[dev-preflight] - ${reason}`)
   }
 
-  const result = spawnSync(npmCommand, ['install', ...npmInstallFlags], {
+  const result = spawnViaShell(npmCommand, ['install', ...npmInstallFlags], {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: 'pipe',
@@ -120,7 +139,7 @@ if (reasons.length > 0) {
 
 // Delegate to the TypeScript preflight for all other checks
 console.log('[dev-preflight] Running startup maintenance, process cleanup, and port checks.')
-const result = spawnSync(tsxBin, [resolve(repoRoot, 'scripts', 'dev-preflight.ts')], {
+const result = spawnViaShell(tsxBin, [resolve(repoRoot, 'scripts', 'dev-preflight.ts')], {
   cwd: repoRoot,
   stdio: 'inherit',
 })

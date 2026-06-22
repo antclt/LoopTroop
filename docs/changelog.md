@@ -16,6 +16,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a compact contact section at the bottom of the marketing landing page.
 - Fixed the flash/split-second visibility of the floating "Back to top" button on landing page load by initializing it with hidden styles.
 - Added a "Show details" section to the full-app crash screen so the underlying error message, stack trace, and component stack are visible (and copyable) without opening the console.
+- Fixed `npm run dev` failing on native Windows with an `EINVAL` spawn error from the dev preflight when dependencies were already installed.
 
 ### Detailed Changes
 
@@ -40,6 +41,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Fixed an issue where the floating "Back to top" button briefly flashed on page load by explicitly applying `opacity-0` and `pointer-events-none` classes to the element in `web.html`, preventing transition-on-load issues before its scroll position is verified.
 - Recovered structured artifacts when short commentary is glued directly before a known root key such as `questions:`, `draft_scores:`, `status:`, or `beads:`, while preserving schema validation for the recovered content.
 - Canonicalized harmless escaped-quote differences in PRD and beads coverage gap references so coverage revision metadata can match the originally provided gap text without inventing content.
+- Fixed `npm run dev` aborting on native Windows with `spawnSync ... EINVAL` from the startup preflight. The preflight and dev-maintenance scripts now launch Windows `.cmd` shims (`npm.cmd`, `tsx.cmd`, `opencode.cmd`) through the shell, working around Node's BatBadBut hardening (18.20.2/20.12.2/21+) that refuses to spawn `.cmd`/`.bat` files directly. Arguments are quoted to stay safe under shell re-parsing, and the missing-`opencode` detection that previously relied on `ENOENT` now also recognizes cmd.exe's "not recognized" exit. WSL/Linux/macOS behavior is unchanged.
 
 #### Maintenance
 - Updated `hono` to 4.12.25 and `typescript-eslint` to 8.61.0.
