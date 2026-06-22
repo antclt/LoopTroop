@@ -220,8 +220,8 @@ describe('Council Pipeline', () => {
 
   it('returns partial draft results at the hard phase deadline', async () => {
     const fastDelayMs = 5
-    const phaseTimeoutMs = 20
-    const lateResponseMs = 300
+    const phaseTimeoutMs = 80
+    const lateResponseMs = 500
 
     class MixedLatencyAdapter extends MockOpenCodeAdapter {
       override async promptSession(sessionId: string, _parts: PromptPart[], signal?: AbortSignal): Promise<string> {

@@ -8,6 +8,17 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
+- No unreleased changes.
+
+### Detailed Changes
+#### Maintenance
+- No unreleased changes.
+
+---
+
+## 0.3.1 (2026-06-22)
+
+### Summary
 - Changed the documentation "Last updated" date format to a clear, non-ambiguous DD/MMM/YYYY, HH:MM UTC format (e.g., 02/Jun/2026, 14:15 UTC) and linked it directly to the specific file diff in the corresponding git commit.
 - Corrected documentation drift across the API, workflow, architecture, frontend, and operations docs to match the current code (SSE event payloads, pre-flight attribution, council module paths, prompt-template subsystem, YAML approval editor, and dev-script caveats).
 - Updated the README with a new walkthrough animation GIF and renamed the video demo section.
@@ -45,6 +56,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Maintenance
 - Updated `hono` to 4.12.25 and `typescript-eslint` to 8.61.0.
+- Stabilized the council pipeline hard-deadline unit test so full-suite timing variance no longer causes false failures while preserving the partial-result assertion.
 
 ---
 
