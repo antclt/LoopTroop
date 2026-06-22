@@ -8,7 +8,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- Changed the documentation "Last updated" date format to a clear, non-ambiguous DD/MMM/YYYY format (e.g., 02/Jun/2026).
+- Changed the documentation "Last updated" date format to a clear, non-ambiguous DD/MMM/YYYY, HH:MM UTC format (e.g., 02/Jun/2026, 14:15 UTC).
 - Corrected documentation drift across the API, workflow, architecture, frontend, and operations docs to match the current code (SSE event payloads, pre-flight attribution, council module paths, prompt-template subsystem, YAML approval editor, and dev-script caveats).
 - Updated the README with a new walkthrough animation GIF and renamed the video demo section.
 - Fixed the dark/light mode toggle on the marketing landing page by configuring Tailwind CSS v4 class-based dark mode.
@@ -24,7 +24,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added an expandable "Show details" panel to the top-level `App crashed` screen (`src/components/shared/AppCrashScreen.tsx`). The `ErrorBoundary` now forwards the caught `error` and `componentStack` to a render-prop fallback, surfacing the error name, message, full stack trace, and React component stack on screen with a copy-to-clipboard action and an explicit Refresh button.
 
 #### Changed
-- Modified the VitePress "Last updated" footer display format from the default localized style (e.g., 6/4/26, 6:26 PM) to a non-ambiguous "DD/MMM/YYYY" format by overriding the built-in VPDocFooterLastUpdated component via a Vite build alias.
+- Modified the VitePress "Last updated" footer display format from the default localized style (e.g., 6/4/26, 6:26 PM) to a non-ambiguous "DD/MMM/YYYY, HH:MM UTC" format (24-hour UTC clock) by overriding the built-in VPDocFooterLastUpdated component via a Vite build alias.
 - Updated `README.md` to display a 26-second animated walkthrough GIF showing LoopTroop's automated ticket lifecycle execution, and renamed the video demo section to highlight the 16-minute deep dive presentation and ticket demo.
 
 #### Documentation

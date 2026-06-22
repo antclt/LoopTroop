@@ -16,11 +16,13 @@ onMounted(() => {
   watchEffect(() => {
     if (!date.value) return
     const d = date.value
-    const day = String(d.getDate()).padStart(2, '0')
+    const day = String(d.getUTCDate()).padStart(2, '0')
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    const month = months[d.getMonth()]
-    const year = d.getFullYear()
-    datetime.value = `${day}/${month}/${year}`
+    const month = months[d.getUTCMonth()]
+    const year = d.getUTCFullYear()
+    const hours = String(d.getUTCHours()).padStart(2, '0')
+    const minutes = String(d.getUTCMinutes()).padStart(2, '0')
+    datetime.value = `${day}/${month}/${year}, ${hours}:${minutes} UTC`
   })
 })
 </script>
