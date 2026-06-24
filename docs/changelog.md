@@ -8,11 +8,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ## Unreleased
 
 ### Summary
-- No unreleased changes.
+- Expanded the Core Philosophy doc to cover all fourteen of LoopTroop's foundational ideas, each opening with a short summary and verified against the actual code.
 
 ### Detailed Changes
-#### Maintenance
-- No unreleased changes.
+#### Documentation
+- Rewrote `docs/core-philosophy.md` so every core idea is explicitly present and accurate to the implementation: local/open-source (MIT, local backend + SQLite), the modern GUI (React Kanban with phase/artifact/log/diff/council/bead views), end-to-end ticket orchestration (the `ticketMachine` lifecycle), the project/ticket orchestration model, context engineering, LLM Council planning (the `server/council` draft → quorum → anonymized vote → refine → coverage pipeline), interview-before-spec, PRD as source of truth, beads as small implementation units, Ralph Loop recovery (context-wipe note, `beadStartCommit` reset, fresh session, bounded `maxIterations`), the OpenCode execution engine (`opencode serve` via SDK, separate `main_implementer` vs `council_members`, permissive execution policy, inherited skills/MCPs), Git worktree isolation, slow planning to avoid AI slop, and human-in-the-loop approval gates. Each section now leads with a one-paragraph summary followed by detail, and the existing comparison table and durable-state/optimization sections were retained and folded in.
 
 ---
 
