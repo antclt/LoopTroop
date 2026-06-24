@@ -13,6 +13,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 #### Documentation
 - Rewrote `docs/core-philosophy.md` so every core idea is explicitly present and accurate to the implementation: local/open-source (MIT, local backend + SQLite), the modern GUI (React Kanban with phase/artifact/log/diff/council/bead views), end-to-end ticket orchestration (the `ticketMachine` lifecycle), the project/ticket orchestration model, context engineering, LLM Council planning (the `server/council` draft → quorum → anonymized vote → refine → coverage pipeline), interview-before-spec, PRD as source of truth, beads as small implementation units, Ralph Loop recovery (context-wipe note, `beadStartCommit` reset, fresh session, bounded `maxIterations`), the OpenCode execution engine (`opencode serve` via SDK, separate `main_implementer` vs `council_members`, permissive execution policy, inherited skills/MCPs), Git worktree isolation, slow planning to avoid AI slop, and human-in-the-loop approval gates. Each section now leads with a one-paragraph summary followed by detail, and the existing comparison table and durable-state/optimization sections were retained and folded in.
+- Replaced the "Persist important state outside the model" row in the Core Philosophy "Five Core Commitments" table with an LLM Council commitment (scoring anonymized drafts and refining the winner with the best ideas from the losing drafts to reduce single-model bias).
 
 ---
 

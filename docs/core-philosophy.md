@@ -10,7 +10,7 @@ LoopTroop is opinionated about how AI coding systems should behave. The app trad
 | Compete before you converge | Interview, PRD, and bead planning use multi-model draft, vote, and refine |
 | Keep humans at the irreversible boundaries | Interview, PRD, beads, and execution setup all have approval gates |
 | Retry with fresh state, not with stale chat memory | Bead execution uses bounded Ralph-style retry loops with fresh context + notes from failures |
-| Persist important state outside the model | Databases, logs, YAML, JSONL, and worktree artifacts outlive any single session |
+| Let a council decide, not a single model | An LLM Council scores anonymized drafts, then refines the winner with the best ideas from the losing drafts to reduce single-model bias |
 
 The fourteen sections below describe each idea behind LoopTroop in detail. Every section opens with a one-paragraph summary, then explains the idea and how it shows up in the real system.
 
