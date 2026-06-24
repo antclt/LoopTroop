@@ -59,6 +59,12 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 > Note
 > SQLite and the filesystem are complementary, not redundant. The database is optimized for querying, ownership, and workflow bookkeeping; `.ticket/**` keeps artifacts inspectable, editable, and recoverable without polluting the target repository branch.
 
+### Durable State Beats Conversational Memory
+
+The reason state is split across these layers is a deliberate design commitment: durable storage beats conversational memory. LoopTroop stores meaningful workflow state in places that can be inspected, queried, and rebuilt — SQLite, `.ticket/**` YAML and JSONL artifacts, durable execution logs, and worktree state tied to git snapshots. If the process restarts, the system recovers from storage, not from a model trying to remember what happened (see [Restart And Session Ownership](#_8-restart-and-session-ownership)).
+
+For the per-table breakdown of which database owns what, see the [Database Schema](database-schema.md).
+
 ## 4. End-to-End Ticket Lifecycle
 
 1. A ticket starts in `DRAFT` with editable title, description, and priority.

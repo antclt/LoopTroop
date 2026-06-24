@@ -6,9 +6,9 @@ LoopTroop is opinionated about how AI coding systems should behave. The app trad
 
 | Commitment | What it means in practice |
 | --- | --- |
-| Control context, do not accumulate it blindly | Every phase assembles only the artifacts it is allowed to see. It never inherits chat history or useless context from previous phases. |
-| Compete before you converge | Interview, PRD, and bead planning use multi-model draft, vote, and refine |
-| Keep humans at the irreversible boundaries | Interview, PRD, beads, and execution setup all have approval gates |
+| Engineer context, do not accumulate it blindly | Context engineering is applied at every phase: each one assembles only the artifacts it is allowed to see, and never inherits chat history or useless context from previous phases. |
+| Plan thoroughly before you build | Interview, PRD, and bead planning invest heavily in upfront planning using multi-model draft, vote, and refine, so execution starts from a rigorous spec rather than a guess. |
+| Keep a human in the loop at irreversible boundaries | Interview, PRD, beads, and execution setup all have human approval gates, so you stay in control before every expensive or hard-to-reverse transition. |
 | Retry with fresh state, not with stale chat memory | Bead execution uses bounded Ralph-style retry loops with fresh context + notes from failures |
 | Let a council decide, not a single model | An LLM Council scores anonymized drafts, then refines the winner with the best ideas from the losing drafts to reduce single-model bias |
 
@@ -214,30 +214,6 @@ Direct coding-agent loops are highly useful, but they degrade rapidly when task 
 | **Degenerate Retries** | When a command fails, the agent tries to fix it within the same polluted chat session, compounding previous errors. | **Ralph-Style Retries:** Discards the broken chat session entirely and retries the exact bead with a fresh context window plus notes from previous failures. |
 | **Risky Edits** | Code modifications are made directly in your active checkout, potentially leaving your main branch in an unstable state. | **Isolated Git Worktrees:** Executes all changes in dedicated, isolated worktrees away from your primary working branch. |
 | **Opaque Execution** | Internal states, planning notes, and test outputs are lost inside unstructured chat history. | **Structured Durability:** Maintains state locally inside SQLite, JSONL logs, and easily inspectable `.ticket/**` YAML artifacts. |
-
-## Durable State Beats Conversational Memory
-
-LoopTroop stores meaningful workflow state in places that can be inspected, queried, and rebuilt — SQLite, `.ticket/**` YAML and JSONL artifacts, durable execution logs, and worktree state tied to git snapshots. If the process restarts, the system recovers from storage, not from a model trying to remember what happened.
-
-For the full storage map — which database owns what, where each artifact lives, and how the layers complement each other — see [Authoritative Data Ownership](system-architecture.md#_3-authoritative-data-ownership) in System Architecture and the [Database Schema](database-schema.md).
-
-## What LoopTroop Optimizes For (And What It Is Not)
-
-LoopTroop is optimized for:
-
-- **Mid-size and large feature work** where planning and correctness are paramount.
-- **Overnight or multi-hour runs** designed to run unattended while you sleep.
-- **Traceable planning artifacts** stored as durable local specs.
-- **Recoverable execution** using isolated worktrees and fresh-session retry logic.
-- **Explicit delivery outcomes** with strict human approval gates.
-
-It is **not** a magic autopilot, nor is it optimized for:
-
-- **One-shot trivial edits** or quick fixes where the system overhead will feel slow.
-- **Chat-first exploratory coding** (traditional IDE-based chat assistants are better suited here).
-- **Unbounded autonomous runs** without explicit human checkpoints.
-- **Cost-sensitive budgets** — orchestrating multi-model councils and long retry loops uses a high volume of API tokens, though costs can be mitigated by leveraging subscription plans or free-tier providers in OpenCode.
-- **A secure sandbox** — it does not replace process isolation, filesystem policy, or host-level blast-radius reduction. Always run in a disposable VM or cloud container.
 
 ## Related Docs
 

@@ -145,3 +145,23 @@ For the full lifecycle, see [Ticket Flow](ticket-flow.md).
 - [Core Philosophy](core-philosophy.md) — context engineering, councils, retries, approvals
 - [Configuration](configuration.md) — all profile settings with defaults, ranges, and trade-offs
 - [Operations Guide](operations.md) — runtime storage, environment variables, startup maintenance, diagnostics, and troubleshooting
+
+## Is LoopTroop Right For Your Task?
+
+Before you start, it helps to know what LoopTroop is built for — and what it is not.
+
+LoopTroop is at its best for:
+
+- **Mid-size and large feature work** where planning and correctness are paramount.
+- **Overnight or multi-hour runs** designed to run unattended while you sleep.
+- **Traceable planning artifacts** stored as durable local specs.
+- **Recoverable execution** using isolated worktrees and fresh-session retry logic.
+- **Explicit delivery outcomes** with strict human approval gates.
+
+It is **not** a magic autopilot, and it is the wrong tool for:
+
+- **One-shot trivial edits** or quick fixes, where the planning overhead will feel slow.
+- **Chat-first exploratory coding** — traditional IDE-based chat assistants are better suited here.
+- **Unbounded autonomous runs** without explicit human checkpoints.
+- **Cost-sensitive budgets** — orchestrating multi-model councils and long retry loops uses a high volume of API tokens, though costs can be mitigated by leveraging subscription plans or free-tier providers in OpenCode (see [Free Model Options](#free-model-options) above).
+- **A secure sandbox** — it does not replace process isolation, filesystem policy, or host-level blast-radius reduction. Always run in a disposable VM or cloud container (see [Why a VM?](#why-a-vm) above).

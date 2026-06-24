@@ -101,7 +101,7 @@ flowchart TD
 ### Start Here
 
 - [Getting Started](getting-started.md): installation, startup, ports, and first project attach.
-- [Core Philosophy](core-philosophy.md): context engineering, councils, retries, approvals, durable state.
+- [Core Philosophy](core-philosophy.md): context engineering, councils, retries, and approvals.
 - [Context Engineering](context-engineering.md): why prompts are built from minimal per-status context and what each status receives.
 
 ### Workflow

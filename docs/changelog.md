@@ -7,14 +7,27 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ## Unreleased
 
+> Changes merged since the last versioned release that have not yet shipped in a tagged version. They are collapsed by default — expand to preview what will land in the next release.
+
+::: details Show unreleased changes
+
 ### Summary
 - Expanded the Core Philosophy doc to cover all fourteen of LoopTroop's foundational ideas, each opening with a short summary and verified against the actual code.
+- Reorganized the Core Philosophy doc: moved the durable-state rationale into System Architecture and the "what LoopTroop is (and is not) for" guidance into Getting Started, and sharpened the Five Core Commitments around context engineering, thorough planning, and human-in-the-loop.
+- Collapsed the changelog's Unreleased section by default behind a short explanatory note, so the page opens on the latest tagged release.
 
 ### Detailed Changes
 #### Documentation
+- Wrapped the changelog `## Unreleased` section in a collapsed-by-default VitePress `::: details` block, preceded by a one-line note explaining that it previews changes merged but not yet shipped in a tagged release.
 - Rewrote `docs/core-philosophy.md` so every core idea is explicitly present and accurate to the implementation: local/open-source (MIT, local backend + SQLite), the modern GUI (React Kanban with phase/artifact/log/diff/council/bead views), end-to-end ticket orchestration (the `ticketMachine` lifecycle), the project/ticket orchestration model, context engineering, LLM Council planning (the `server/council` draft → quorum → anonymized vote → refine → coverage pipeline), interview-before-spec, PRD as source of truth, beads as small implementation units, Ralph Loop recovery (context-wipe note, `beadStartCommit` reset, fresh session, bounded `maxIterations`), the OpenCode execution engine (`opencode serve` via SDK, separate `main_implementer` vs `council_members`, permissive execution policy, inherited skills/MCPs), Git worktree isolation, slow planning to avoid AI slop, and human-in-the-loop approval gates. Each section now leads with a one-paragraph summary followed by detail, and the existing comparison table and durable-state/optimization sections were retained and folded in.
+- Reworded the first three of the Core Philosophy "Five Core Commitments" to lead with context engineering, thorough upfront planning, and keeping a human in the loop at irreversible boundaries.
+- Moved the standalone "Durable State Beats Conversational Memory" section out of `docs/core-philosophy.md` and into System Architecture's Authoritative Data Ownership section (`docs/system-architecture.md` §3), where the full storage-layer map already lives.
+- Moved the "What LoopTroop Optimizes For (And What It Is Not)" section out of `docs/core-philosophy.md` and into a new "Is LoopTroop Right For Your Task?" section at the end of `docs/getting-started.md`, adapted to a user-facing framing with links to the VM and free-model guidance on that page.
+- Updated the Documentation Map hook in `docs/index.md` to drop the now-moved "durable state" mention from the Core Philosophy summary line.
 - Replaced the "Persist important state outside the model" row in the Core Philosophy "Five Core Commitments" table with an LLM Council commitment (scoring anonymized drafts and refining the winner with the best ideas from the losing drafts to reduce single-model bias).
 - Added a per-item "Read more" deep link at the end of each of the fourteen Core Philosophy ideas, pointing to the exact section of the relevant doc page (Getting Started, Frontend, Ticket Flow, System Architecture, Context Engineering, LLM Council, Interview, PRD, Beads & Execution, OpenCode Integration, Pre-/Post-Implementation). Removed the now-redundant standalone "Durable State" list (the full storage map already lives in System Architecture §3) and collapsed it to a short pointer.
+
+:::
 
 ---
 
