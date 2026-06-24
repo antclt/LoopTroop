@@ -22,6 +22,8 @@ LoopTroop is released under the MIT license and runs entirely on your machine: a
 
 It is designed for developers who want more control than a single cloud chat or a black-box coding agent can offer. You decide which models run, you can read every intermediate artifact, and you own the resulting diff before anything is merged.
 
+**Read more:** [Getting Started](getting-started.md).
+
 ## 2. A Modern GUI Interface
 
 **Summary:** LoopTroop is meant to be used through a modern GUI, not as an invisible background agent. It gives you a Kanban-style workflow for projects and tickets, with easy navigation between phases, artifacts, logs, diffs, configuration, model selection, council output, bead status, execution progress, errors, and final review.
@@ -29,6 +31,8 @@ It is designed for developers who want more control than a single cloud chat or 
 The primary product experience is the graphical interface. A Kanban board organizes projects and tickets across lifecycle columns, and dedicated views let you move between phase artifacts, structured logs, code diffs, council output, bead status and approval, execution progress, configuration, model selection, and final review. Nothing important happens off-screen; the workflow is built to be watched and steered.
 
 There is also a local backend API and a set of development scripts, so automation and integration are possible. But the GUI is the main way you are expected to drive and observe the system, precisely because the goal is transparency rather than hidden automation.
+
+**Read more:** [Frontend](frontend.md), and the [Kanban Board](frontend.md#_12-kanban-board) and [Key Workspace Views](frontend.md#_4-key-workspace-views) sections.
 
 ## 3. End-To-End Ticket Orchestration
 
@@ -48,6 +52,8 @@ A ticket is a state machine, not a chat thread. It progresses linearly through c
 
 Because the whole process is modeled explicitly, you can follow it from one place instead of losing state inside a long conversation, and the system can resume from storage rather than from a model's memory.
 
+**Read more:** [Ticket Flow](ticket-flow.md), especially the [State Machine Transition Model](ticket-flow.md#_3-state-machine-transition-model) and [Phase Inventory](ticket-flow.md#_5-phase-inventory).
+
 ## 4. An AI Orchestrator For Projects And Tickets
 
 **Summary:** LoopTroop is an orchestration layer around AI coding agents. You attach repositories, create tickets, configure models, review generated planning artifacts, approve execution, inspect logs, and follow implementation progress without leaving the app.
@@ -55,6 +61,8 @@ Because the whole process is modeled explicitly, you can follow it from one plac
 The value is not only "AI writes code." The value is that the whole coding workflow becomes structured, inspectable, restartable, and reviewable. Projects (attached repositories), tickets, phase artifacts, execution attempts, model sessions, and errors are all first-class records. Configuration — including which model is the main implementer and which models form the council — is attached to projects and tickets, so each piece of work runs under a known, auditable setup.
 
 This is the difference between a coding assistant and a coding *orchestrator*: LoopTroop manages the lifecycle, the artifacts, and the recovery, not just the next message.
+
+**Read more:** [System Architecture](system-architecture.md), especially [Runtime Actors](system-architecture.md#_2-runtime-actors) and [Authoritative Data Ownership](system-architecture.md#_3-authoritative-data-ownership).
 
 ## 5. Context Engineering
 
@@ -68,7 +76,9 @@ That leads to three hard rules:
 2. A phase only sees the context keys it is explicitly allowed to see.
 3. When a retry is needed, LoopTroop prefers a fresh session plus a compact post-mortem over continuing a polluted transcript.
 
-This keeps the agent focused and reduces drift during long-running tasks. See [Context Engineering](context-engineering.md) for the design model, status matrix, and implementation allowlists.
+This keeps the agent focused and reduces drift during long-running tasks.
+
+**Read more:** [Context Engineering](context-engineering.md) for the design model, status matrix, and implementation allowlists.
 
 ## 6. LLM Council Planning
 
@@ -85,7 +95,9 @@ The council runs as a constrained pipeline, not a free-form model group chat:
 
 Early planning quality dominates downstream execution quality, so the council is deliberately applied at the three planning phases — interview, PRD, and beads — where a single model's blind spots would be most costly.
 
-`LLM council` is a useful current label, not a universal standard term. In LoopTroop it specifically means this draft-vote-refine pipeline, not any arbitrary multi-agent conversation. See [LLM Council](llm-council.md).
+`LLM council` is a useful current label, not a universal standard term. In LoopTroop it specifically means this draft-vote-refine pipeline, not any arbitrary multi-agent conversation.
+
+**Read more:** [LLM Council](llm-council.md), and the per-phase pages it feeds — [Interview](interview.md), [PRD](prd.md), and [Beads & Execution](beads.md).
 
 ## 7. Interview Before Spec
 
@@ -95,6 +107,8 @@ The interview phase generates questions whose job is to remove meaningful ambigu
 
 You answer in the GUI, and only an approved interview proceeds to PRD generation. This is where the system buys down the risk of building the wrong thing.
 
+**Read more:** [Interview](interview.md), especially [How Questions Are Designed](interview.md#_3-how-questions-are-designed) and [Skips, Final Free-Form, And Coverage](interview.md#_6-skips-final-free-form-and-coverage).
+
 ## 8. PRD As Source Of Truth
 
 **Summary:** After the interview, LoopTroop turns the ticket and your answers into a structured PRD. The PRD captures scope, user stories, technical direction, edge cases, validation expectations, and implementation intent. It becomes the planning contract used to generate beads and guide execution.
@@ -102,6 +116,8 @@ You answer in the GUI, and only an approved interview proceeds to PRD generation
 The PRD is a structured document, not prose: it records what is in and out of scope, organizes work into epics and user stories, attaches acceptance criteria and verification to each story, and captures technical direction and constraints. It is produced through the council pipeline (draft → vote → refine → coverage check) so the contract itself is reviewed before it is trusted.
 
 Everything downstream — bead decomposition and execution — references this PRD. It is the single agreed statement of what the ticket means, which is why it gets its own approval gate.
+
+**Read more:** [PRD](prd.md), especially [What The PRD Contains](prd.md#_5-what-the-prd-contains) and [Approval, Editing, And Downstream Impact](prd.md#_7-approval-editing-and-downstream-impact).
 
 ## 9. Beads: Small Implementation Units
 
@@ -115,7 +131,9 @@ Beads are both the execution plan and the execution memory layer:
 - rich enough to encode acceptance criteria, tests, files, and dependencies
 - durable enough to survive retries, restarts, and review
 
-They define what gets worked on next, what blocks what, and exactly what context each coding attempt needs. See [Beads & Execution](beads.md).
+They define what gets worked on next, what blocks what, and exactly what context each coding attempt needs.
+
+**Read more:** [Beads & Execution](beads.md), especially [What An Approved Bead Contains](beads.md#_2-what-an-approved-bead-contains).
 
 ## 10. Ralph Loop Recovery
 
@@ -130,7 +148,9 @@ Execution work fails in two broad ways: the model produces the wrong code, or th
 
 This connects directly to the context-engineering philosophy: preserve the lesson, discard the context pollution. It keeps the learning signal while throwing away the poisoned conversational state.
 
-`Ralph-style retry` is a current community term rather than a formal standard. LoopTroop uses it narrowly: fresh-session retry with preserved failure context, not unlimited unattended looping. See [Beads & Execution](beads.md).
+`Ralph-style retry` is a current community term rather than a formal standard. LoopTroop uses it narrowly: fresh-session retry with preserved failure context, not unlimited unattended looping.
+
+**Read more:** [Beads & Execution](beads.md), especially [Retry, Reset, And Context-Wipe Notes](beads.md#_9-retry-reset-and-context-wipe-notes), and the [Recovery Flow](system-architecture.md#_7-recovery-flow) in System Architecture.
 
 ## 11. OpenCode Execution Engine
 
@@ -138,7 +158,9 @@ This connects directly to the context-engineering philosophy: preserve the lesso
 
 LoopTroop runs an OpenCode server (`opencode serve`) and talks to it through the OpenCode SDK adapter. Because it drives your own OpenCode installation, it can use the providers and models your OpenCode is configured with — and it also inherits the skills, MCP servers, and any other configuration you have set up in OpenCode. The main implementer and the council are configured separately (`main_implementer` versus `council_members`), so you can pair a strong implementer model with a diverse planning council.
 
-For long-running automation, OpenCode may run with permissive local execution permissions (an allow-all execution policy). That is powerful, but it also means you should run LoopTroop in a VM or a sandboxed development environment. See [System Architecture](system-architecture.md).
+For long-running automation, OpenCode may run with permissive local execution permissions (an allow-all execution policy). That is powerful, but it also means you should run LoopTroop in a VM or a sandboxed development environment.
+
+**Read more:** [OpenCode Integration](opencode-integration.md), especially [OpenCode Configuration Pass-Through](opencode-integration.md#_4-opencode-configuration-pass-through) and [Health And Model Discovery](opencode-integration.md#_10-health-and-model-discovery).
 
 ## 12. Git Worktree Isolation
 
@@ -151,13 +173,17 @@ LoopTroop treats isolation as a correctness boundary, not just a convenience. It
 - preserve inspectable ticket artifacts beside the isolated code changes
 - clean up temporary runtime state without confusing it with your normal working directory
 
-At the host layer, unattended AI execution is safer in a disposable VM, container, cloud dev machine, or similarly sandboxed environment. Worktrees protect the repo boundary; they do not replace process isolation, filesystem policy, or host-level blast-radius reduction. If an agent can run commands for hours, the safer default is to give it a safe host to operate in. See [System Architecture](system-architecture.md), [Beads & Execution](beads.md), and Git's official [`git worktree`](https://git-scm.com/docs/git-worktree.html) documentation.
+At the host layer, unattended AI execution is safer in a disposable VM, container, cloud dev machine, or similarly sandboxed environment. Worktrees protect the repo boundary; they do not replace process isolation, filesystem policy, or host-level blast-radius reduction. If an agent can run commands for hours, the safer default is to give it a safe host to operate in.
+
+**Read more:** [Authoritative Data Ownership](system-architecture.md#_3-authoritative-data-ownership) and [Execution Isolation](context-engineering.md#_11-execution-isolation), plus Git's official [`git worktree`](https://git-scm.com/docs/git-worktree.html) documentation.
 
 ## 13. Slow Planning To Avoid AI Slop
 
 **Summary:** LoopTroop is intentionally not optimized for instant answers. The planning phase can be slow because the goal is correctness, alignment, and traceability. It is built for complex, multi-file tasks where a rushed one-shot answer would likely miss details or produce low-quality code.
 
 The idea is simple: plan carefully, execute narrowly, recover cleanly, and review before shipping. Councils, coverage checks, and approval gates all cost time on purpose, because the failure mode LoopTroop is built to avoid is confidently wrong, half-finished, slop-filled output on a large task. For one-shot trivial edits this overhead will feel slow, and that is the expected trade-off (see §14 for what LoopTroop is *not* for).
+
+**Read more:** [What This Prevents](context-engineering.md#_12-what-this-prevents) in Context Engineering.
 
 ## 14. Human-In-The-Loop Delivery
 
@@ -172,6 +198,8 @@ Explicit approval gates sit before the most expensive and hardest-to-reverse tra
 - review the pull request before cleanup completes
 
 This keeps the system honest. The model is allowed to move quickly inside a phase, but you decide when the pipeline is good enough to cross into the next expensive stage, and the final result is always a reviewable diff and PR rather than a silent merge.
+
+**Read more:** [Pre-Implementation](pre-implementation.md) for the setup-plan approval gate and [Post-Implementation](post-implementation.md#_5-waiting-pr-review-human-merge-or-finish-gate) for the PR review gate.
 
 ## Why LoopTroop Over Direct Agent Loops?
 
@@ -189,14 +217,9 @@ Direct coding-agent loops are highly useful, but they degrade rapidly when task 
 
 ## Durable State Beats Conversational Memory
 
-LoopTroop stores meaningful workflow state in places that can be inspected, queried, and rebuilt:
+LoopTroop stores meaningful workflow state in places that can be inspected, queried, and rebuilt — SQLite, `.ticket/**` YAML and JSONL artifacts, durable execution logs, and worktree state tied to git snapshots. If the process restarts, the system recovers from storage, not from a model trying to remember what happened.
 
-- SQLite for ticket status, artifacts, attempts, sessions, and errors
-- YAML and JSONL artifacts in `.ticket/**`
-- execution logs in `.ticket/runtime/execution-log.jsonl`, `.ticket/runtime/execution-log.debug.jsonl`, and `.ticket/runtime/execution-log.ai.jsonl`
-- worktree state tied to git snapshots and PR outcomes
-
-If the process restarts, the system recovers from storage, not from a model trying to remember what happened.
+For the full storage map — which database owns what, where each artifact lives, and how the layers complement each other — see [Authoritative Data Ownership](system-architecture.md#_3-authoritative-data-ownership) in System Architecture and the [Database Schema](database-schema.md).
 
 ## What LoopTroop Optimizes For (And What It Is Not)
 
