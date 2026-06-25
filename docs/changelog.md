@@ -7,7 +7,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ## Unreleased
 
-> Changes merged since the last versioned release that have not yet shipped in a tagged version. They are collapsed by default — expand to preview what will land in the next release.
+> Changes merged since the last versioned release that have not yet shipped in a tagged version. Expand to preview what will land in the next release.
 
 ::: details Show unreleased changes
 
