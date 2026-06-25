@@ -250,3 +250,5 @@ Roadmap: [Roadmap](https://www.looptroop.ovh/docs/roadmap)
 ## Contributing
 
 Contributions, ideas, bug reports, and workflow feedback are welcome.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, issue, pull request, documentation, and changelog guidance. Please also follow the [Code of Conduct](CODE_OF_CONDUCT.md).

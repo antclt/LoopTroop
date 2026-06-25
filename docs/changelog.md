@@ -12,12 +12,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added standard contribution, code of conduct, issue, and pull request guidance so repository visitors have a clear path for reporting and contributing.
 - Expanded the Core Philosophy doc to cover all fourteen of LoopTroop's foundational ideas, each opening with a short summary and verified against the actual code.
 - Reorganized the Core Philosophy doc: moved the durable-state rationale into System Architecture and the "what LoopTroop is (and is not) for" guidance into Getting Started, and sharpened the Five Core Commitments around context engineering, thorough planning, and human-in-the-loop.
 - Collapsed the changelog's Unreleased section by default behind a short explanatory note, so the page opens on the latest tagged release.
 
 ### Detailed Changes
 #### Documentation
+- Added `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, GitHub issue templates, and a pull request template with practical guidance adapted to LoopTroop's local AI orchestration workflow, safety expectations, docs maintenance, and validation commands.
 - Wrapped the changelog `## Unreleased` section in a collapsed-by-default VitePress `::: details` block, preceded by a one-line note explaining that it previews changes merged but not yet shipped in a tagged release.
 - Rewrote `docs/core-philosophy.md` so every core idea is explicitly present and accurate to the implementation: local/open-source (MIT, local backend + SQLite), the modern GUI (React Kanban with phase/artifact/log/diff/council/bead views), end-to-end ticket orchestration (the `ticketMachine` lifecycle), the project/ticket orchestration model, context engineering, LLM Council planning (the `server/council` draft → quorum → anonymized vote → refine → coverage pipeline), interview-before-spec, PRD as source of truth, beads as small implementation units, Ralph Loop recovery (context-wipe note, `beadStartCommit` reset, fresh session, bounded `maxIterations`), the OpenCode execution engine (`opencode serve` via SDK, separate `main_implementer` vs `council_members`, permissive execution policy, inherited skills/MCPs), Git worktree isolation, slow planning to avoid AI slop, and human-in-the-loop approval gates. Each section now leads with a one-paragraph summary followed by detail, and the existing comparison table and durable-state/optimization sections were retained and folded in.
 - Reworded the first three of the Core Philosophy "Five Core Commitments" to lead with context engineering, thorough upfront planning, and keeping a human in the loop at irreversible boundaries.
