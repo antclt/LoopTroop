@@ -11,6 +11,7 @@ import { WorkspacePhaseSummary } from './WorkspacePhaseSummary'
 import { ResizeHandle } from './ResizeHandle'
 import { Menu, RefreshCw, X } from 'lucide-react'
 import { clearErrorTicketSeen, getErrorTicketSignature, markErrorTicketSeen } from '@/lib/errorTicketSeen'
+import { clearNeedsInputSeen, getNeedsInputSignature, markNeedsInputSeen } from '@/lib/needsInputSeen'
 import { MAX_RAW_OUTPUT_LENGTH } from '@/lib/constants'
 import { WORKFLOW_PHASE_IDS } from '@shared/workflowMeta'
 import { getActiveErrorOccurrence, getTicketErrorOccurrences } from '@/lib/errorOccurrences'
@@ -269,6 +270,7 @@ export function TicketDashboard() {
     [effectiveTicket],
   )
   const errorSignature = renderTicket ? getErrorTicketSignature(renderTicket) : null
+  const needsInputSignature = renderTicket ? getNeedsInputSignature(renderTicket) : null
   const ticketErrorOccurrences = useMemo(() => (renderTicket ? getTicketErrorOccurrences(renderTicket) : []), [renderTicket])
   const selectedErrorOccurrenceId = errorSelection.ticketId === ticketId ? errorSelection.occurrenceId : null
   const selectedErrorOccurrence = useMemo(
@@ -426,6 +428,32 @@ export function TicketDashboard() {
       })
     }
   }, [ticket, errorSignature, saveTicketUiState])
+
+  // Persist the needs-input "seen" acknowledgment so the yellow flashing stops
+  // once the user opens the ticket and stays stopped across reloads/tabs. Mirrors
+  // the error_attention effect above but uses the needs_input_attention scope.
+  useEffect(() => {
+    if (!ticket) return
+    if (needsInputSignature) {
+      markNeedsInputSeen(ticket.id, needsInputSignature)
+      if (ticket.needsInputSeenSignature !== needsInputSignature) {
+        saveTicketUiState({
+          ticketId: ticket.id,
+          scope: 'needs_input_attention',
+          data: { seenSignature: needsInputSignature },
+        })
+      }
+      return
+    }
+    clearNeedsInputSeen(ticket.id)
+    if (ticket.needsInputSeenSignature !== null) {
+      saveTicketUiState({
+        ticketId: ticket.id,
+        scope: 'needs_input_attention',
+        data: { seenSignature: null },
+      })
+    }
+  }, [ticket, needsInputSignature, saveTicketUiState])
 
   // Escape key closes dashboard
   useEffect(() => {

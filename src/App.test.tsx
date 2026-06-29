@@ -214,6 +214,7 @@ describe('App startup notices', () => {
     mockState.startupStatus = makeStartupStatus()
     mockState.startupStatus.runtime = {
       isWsl: true,
+      osLabel: 'Linux',
       appRoot: '/mnt/d/LoopTroop',
       appPathWarning:
         'LoopTroop is running from /mnt/d/LoopTroop inside WSL. Keeping the app on a Windows-mounted drive can significantly degrade file watching, Git, and overall app performance. If you want to use WSL, move or install LoopTroop under /home or another Linux filesystem path.',

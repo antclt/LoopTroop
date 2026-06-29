@@ -1391,7 +1391,6 @@ search: false
         *   if pre-review fails, show raw model output;
         *   log every auto-applied lesson in the diff report.
     *   Other losing ideas: user will hit a button and see rationale deltas from losing drafts (top accepted ideas integrated into winner + rejected ideas with reason), grouped by council member, and can select additional ideas to incorporate.
-*   **Smart "Needs Input" Visuals (Ack-aware):** When a ticket moves to the NEEDS_INPUT column, highlight it with a flashing yellow border in the dashboard view. If the user selects the ticket but returns to the dashboard without performing the required action (e.g., submitting answers or approving), stop the flashing and revert the border to the static project color (acknowledging the user has "seen" the request but chose to delay action).
 *   **Visual aid in dashboard:** Opening a ticket in the dashboard should give links to other parts that are related. Clicking a bead will tell what part of the PRD it is related to, and clicking a part of the PRD will show which beads are related to it. This will help users understand the connection between the PRD and the execution plan.
 *   **Per-agent `soul.md` personality contracts:**
     *   Each council member and main implementer gets a permanent `soul.md` defining role, tone, and strengths.

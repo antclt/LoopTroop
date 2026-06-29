@@ -21,6 +21,7 @@ const mockTicketQuery = vi.hoisted(() => ({
   override: null as null | { data: Ticket | undefined },
 }))
 const useRecoveryAutoReloadMock = vi.hoisted(() => vi.fn())
+const saveUiStateMutate = vi.hoisted(() => vi.fn())
 let latestSSEOptions: {
   ticketId: string | null
   onEvent?: (event: { type: string; data: Record<string, unknown> }) => void
@@ -66,7 +67,7 @@ vi.mock('@/hooks/useTickets', async () => {
       const result = actual.useTicket(id)
       return mockTicketQuery.override ?? result
     },
-    useSaveTicketUIState: () => ({ mutate: vi.fn() }),
+    useSaveTicketUIState: () => ({ mutate: saveUiStateMutate }),
   }
 })
 
@@ -197,6 +198,7 @@ beforeEach(() => {
   mockSSEState.connectionState = 'connected'
   mockTicketQuery.override = null
   useRecoveryAutoReloadMock.mockReset()
+  saveUiStateMutate.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -210,6 +212,46 @@ afterEach(() => {
 })
 
 describe('TicketDashboard', () => {
+  it('persists the needs-input "seen" acknowledgment via the needs_input_attention scope when a waiting ticket is opened', async () => {
+    const initialTicket = makeTicket({
+      status: 'WAITING_PRD_APPROVAL',
+      id: selectedTicketId,
+      needsInputSeenSignature: null,
+    })
+
+    queryClient.setQueryData(['ticket', selectedTicketId], initialTicket)
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${selectedTicketId}/logs`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      if (url.endsWith(`/api/tickets/${selectedTicketId}`)) {
+        return createJsonResponse(initialTicket)
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-header')).toHaveTextContent('WAITING_PRD_APPROVAL')
+    })
+
+    await waitFor(() => {
+      expect(saveUiStateMutate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ticketId: selectedTicketId,
+          scope: 'needs_input_attention',
+          data: { seenSignature: expect.stringContaining('WAITING_PRD_APPROVAL|') },
+        }),
+      )
+    })
+  })
+
   it('follows the next live status immediately on SSE transitions even if ticket refetch is still stale', async () => {
     const initialTicket = makeTicket({ status: 'DRAFTING_PRD', id: selectedTicketId })
 

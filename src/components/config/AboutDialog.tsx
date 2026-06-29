@@ -1,5 +1,5 @@
 import packageJson from '../../../package.json'
-import { AlertTriangle, Database, FolderOpen, Settings } from 'lucide-react'
+import { AlertTriangle, Database, Settings } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useProjects } from '@/hooks/useProjects'
 import { useStartupStatus } from '@/hooks/useStartupStatus'

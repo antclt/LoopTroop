@@ -93,6 +93,7 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
   activeErrorOccurrenceId: number | null
   hasPastErrors: boolean
   errorSeenSignature: string | null
+  needsInputSeenSignature: string | null
   completionDisposition: 'merged' | 'closed_unmerged' | null
   cleanup: {
     status: 'clean' | 'warning' | null
@@ -426,6 +427,22 @@ function readErrorSeenSignature(projectContext: NonNullable<ReturnType<typeof ge
   return typeof parsed?.data?.seenSignature === 'string' ? parsed.data.seenSignature : null
 }
 
+function readNeedsInputSeenSignature(projectContext: NonNullable<ReturnType<typeof getProjectContextById>>, localTicketId: number): string | null {
+  const artifact = projectContext.projectDb.select().from(phaseArtifacts)
+    .where(and(
+      eq(phaseArtifacts.ticketId, localTicketId),
+      eq(phaseArtifacts.phase, 'UI_STATE'),
+      eq(phaseArtifacts.artifactType, 'ui_state:needs_input_attention'),
+    ))
+    .orderBy(desc(phaseArtifacts.id))
+    .get()
+
+  if (!artifact) return null
+
+  const parsed = parseJsonObject<{ data?: { seenSignature?: unknown } }>(artifact.content)
+  return typeof parsed?.data?.seenSignature === 'string' ? parsed.data.seenSignature : null
+}
+
 /**
  * Determines the status a reviewer should scroll to when viewing a ticket’s
  * artifact history. For BLOCKED_ERROR it returns the phase that was active when
@@ -482,6 +499,7 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     ?? (ticket.status === 'BLOCKED_ERROR' ? errorOccurrences.at(-1)?.blockedFromStatus ?? null : null)
   const reviewCutoffStatus = readReviewCutoffStatus(ticket, previousStatus, errorOccurrences)
   const errorSeenSignature = projectContext ? readErrorSeenSignature(projectContext, ticket.id) : null
+  const needsInputSeenSignature = projectContext ? readNeedsInputSeenSignature(projectContext, ticket.id) : null
   const continuationCandidate = resolveTicketContinuationCandidateFromRows(
     projectContext,
     projectId,
@@ -538,6 +556,7 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     activeErrorOccurrenceId,
     hasPastErrors: errorOccurrences.some((occurrence) => occurrence.resolvedAt !== null),
     errorSeenSignature,
+    needsInputSeenSignature,
     completionDisposition,
     cleanup,
     runtime,

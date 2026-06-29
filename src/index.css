@@ -60,6 +60,25 @@
   animation-fill-mode: both;
 }
 
+/*
+ * Gentler pulse for the ack-aware yellow "Needs Input" border on dashboard cards.
+ * Slightly slower and softer than the red error `animate-pulse` (2s / opacity .5).
+ * Reduced-motion users get a steady amber border with no flashing.
+ */
+@keyframes lt-needs-input-pulse-keyframe {
+  50% { opacity: 0.65; }
+}
+
+.lt-needs-input-pulse {
+  animation: lt-needs-input-pulse-keyframe 2.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lt-needs-input-pulse {
+    animation: none;
+  }
+}
+
 body {
   font-family: system-ui, -apple-system, sans-serif;
 }

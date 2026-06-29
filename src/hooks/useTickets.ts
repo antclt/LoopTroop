@@ -71,6 +71,7 @@ export interface Ticket {
   percentComplete: number | null
   errorMessage: string | null
   errorSeenSignature?: string | null
+  needsInputSeenSignature?: string | null
   errorOccurrences?: TicketErrorOccurrence[]
   activeErrorOccurrenceId?: string | null
   hasPastErrors?: boolean

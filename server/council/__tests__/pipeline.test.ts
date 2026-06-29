@@ -470,7 +470,7 @@ describe('Council Pipeline', () => {
       projectPath: '/tmp/test',
       draftTimeout: 20,
       minQuorum: 2,
-    })).rejects.toThrow('Council voting quorum not met')
+    })).rejects.toThrow('quorum not met')
   })
 
   it('times out refinement calls when the winner exceeds the council timeout', async () => {

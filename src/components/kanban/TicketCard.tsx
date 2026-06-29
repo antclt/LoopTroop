@@ -13,6 +13,12 @@ import {
   markErrorTicketSeen,
   readErrorTicketSeen,
 } from '@/lib/errorTicketSeen'
+import {
+  clearNeedsInputSeen,
+  getNeedsInputSignature,
+  markNeedsInputSeen,
+  readNeedsInputSeen,
+} from '@/lib/needsInputSeen'
 import { getStatusColor, getRelativeTime, getStatusProgress, getStatusRingColor } from './ticketCardUtils'
 import { ProgressRing } from './ProgressRing'
 import { TicketExternalId } from '@/components/ticket/TicketExternalId'
@@ -33,6 +39,7 @@ interface TicketCardProps {
     totalBeads?: number | null
     errorMessage?: string | null
     errorSeenSignature?: string | null
+    needsInputSeenSignature?: string | null
     completionDisposition?: 'merged' | 'closed_unmerged' | null
   }
   projectColor?: string
@@ -127,6 +134,10 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
     errorMessage: ticket.errorMessage,
   })
   const errorSignature = getErrorTicketSignature(ticket)
+  const needsInputSignature = getNeedsInputSignature(ticket)
+  // Yellow needs-input flashing is suppressed while an unseen red error is showing.
+  const isNeedsInput = !isError && STATUS_TO_PHASE[ticket.status] === 'needs_input'
+  const needsInputFlashing = isNeedsInput && !!needsInputSignature
   const pendingAIQuestions = getPendingCount(ticket.id)
   const hasPendingAIQuestion = pendingAIQuestions > 0
   const attentionColor = projectColor ?? '#3b82f6'
@@ -136,6 +147,12 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
     readErrorTicketSeen(ticket.id, errorSignature, ticket.errorSeenSignature),
   )
 
+  // Track "seen" state for NEEDS_INPUT (yellow) — stop flashing after first open,
+  // revert to the static project color even if the required action was not performed.
+  const [needsInputSeen, setNeedsInputSeen] = useState(() =>
+    readNeedsInputSeen(ticket.id, needsInputSignature, ticket.needsInputSeenSignature),
+  )
+
   useEffect(() => {
     if (!isError && errorSeen) {
       clearErrorTicketSeen(ticket.id)
@@ -143,30 +160,53 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
     }
   }, [isError, ticket.id, errorSeen])
 
+  useEffect(() => {
+    if (!isNeedsInput && needsInputSeen) {
+      clearNeedsInputSeen(ticket.id)
+      setNeedsInputSeen(false)
+    }
+  }, [isNeedsInput, ticket.id, needsInputSeen])
+
   const handleClick = () => {
     if (isError && !errorSeen) {
       markErrorTicketSeen(ticket.id, errorSignature)
       setErrorSeen(true)
     }
+    if (isNeedsInput && !needsInputSeen && needsInputSignature) {
+      markNeedsInputSeen(ticket.id, needsInputSignature)
+      setNeedsInputSeen(true)
+    }
     dispatch({ type: 'SELECT_TICKET', ticketId: ticket.id, externalId: ticket.externalId })
   }
+
+  const errorFlashing = isError && !errorSeen
+  // Yellow supersedes the project-color pending-question pulse for needs_input tickets:
+  // unseen needs-input → yellow pulse; seen needs-input → static project color, no pulse.
+  const needsInputYellowFlashing = needsInputFlashing && !needsInputSeen && !errorFlashing
+  const showPendingQuestionPulse = hasPendingAIQuestion && !errorFlashing && !needsInputFlashing
 
   return (
     <Card
       className={cn(
         'min-w-0 max-w-full cursor-pointer overflow-hidden p-3 transition-all hover:shadow-md',
-        isError && !errorSeen && 'animate-pulse border-destructive border-2 ring-4 ring-red-500/70 bg-red-50/60 dark:bg-red-950/30 shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_20px_rgba(239,68,68,0.4),0_10px_30px_rgba(239,68,68,0.3)]',
-        hasPendingAIQuestion && !(isError && !errorSeen) && 'animate-pulse border-2 bg-primary/5',
+        errorFlashing && 'animate-pulse border-destructive border-2 ring-4 ring-red-500/70 bg-red-50/60 dark:bg-red-950/30 shadow-[0_0_0_2px_rgba(239,68,68,0.6),0_0_20px_rgba(239,68,68,0.4),0_10px_30px_rgba(239,68,68,0.3)]',
+        needsInputYellowFlashing && 'lt-needs-input-pulse border-2 border-amber-400/80 bg-amber-50/50 dark:border-amber-500/70 dark:bg-amber-950/20 shadow-[0_0_0_2px_rgba(251,191,36,0.45),0_0_14px_rgba(251,191,36,0.30)]',
+        showPendingQuestionPulse && 'animate-pulse border-2 bg-primary/5',
       )}
       style={{
         borderLeftWidth: '4px',
         borderLeftColor: attentionColor,
-        ...(hasPendingAIQuestion && !(isError && !errorSeen)
+        ...(needsInputYellowFlashing
           ? {
-              borderColor: attentionColor,
-              boxShadow: `0 0 0 2px ${attentionColor}55, 0 0 18px ${attentionColor}40`,
+              borderColor: '#f59e0b',
+              boxShadow: '0 0 0 2px rgba(251,191,36,0.45), 0 0 14px rgba(251,191,36,0.30)',
             }
-          : {}),
+          : showPendingQuestionPulse
+            ? {
+                borderColor: attentionColor,
+                boxShadow: `0 0 0 2px ${attentionColor}55, 0 0 18px ${attentionColor}40`,
+              }
+            : {}),
       }}
       onClick={handleClick}
       aria-label={`Open ticket ${getTicketExternalIdLabel(ticket.externalId, ticket.isDisplayOnlyMock)}`}

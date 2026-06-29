@@ -44,6 +44,7 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
     percentComplete: null,
     errorMessage: null,
     errorSeenSignature: null,
+    needsInputSeenSignature: null,
     errorOccurrences: [],
     activeErrorOccurrenceId: null,
     hasPastErrors: false,
