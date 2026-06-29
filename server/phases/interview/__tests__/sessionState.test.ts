@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { TEST } from '../../../test/factories'
 import {
   buildCanonicalInterviewYaml,

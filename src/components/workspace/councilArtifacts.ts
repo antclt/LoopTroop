@@ -3,7 +3,7 @@ import type { DBartifact } from '@/hooks/useTicketArtifacts'
 import type { StructuredIntervention } from '@shared/structuredInterventions'
 import type { StructuredRetryDiagnostic } from '@shared/structuredRetryDiagnostics'
 import { extractInterviewQuestionPreviews } from '@shared/interviewQuestions'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import {
   findLatestArtifact,
   findLatestCompanionArtifact,

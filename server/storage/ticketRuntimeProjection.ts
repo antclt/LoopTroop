@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { resolve } from 'node:path'
-import yaml from 'js-yaml'
+import * as yaml from 'js-yaml'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { getTicketByRef, getTicketPaths, listTickets, type PublicTicket } from './ticketQueries'
 

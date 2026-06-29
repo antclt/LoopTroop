@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import type { TicketContext, TicketEvent } from '../../machines/types'
 import {
   getLatestPhaseArtifact,

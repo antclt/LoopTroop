@@ -1,4 +1,4 @@
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlSequenceEntryIndent } from './yamlRepair'
 import { getErrorMessage, isRecord } from './typeGuards'
 

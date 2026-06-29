@@ -2,7 +2,7 @@
  * Shared pure test factories for server-side tests.
  * Keep this module free of DB, filesystem, git, or router helpers.
  */
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import type { InterviewDocument, InterviewDocumentQuestion } from '@shared/interviewArtifact'
 import type { PrdDocument } from '../structuredOutput/types'
 import type { TicketContext } from '../machines/types'

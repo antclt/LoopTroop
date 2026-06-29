@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import {
   mergeStructuredInterventions,
   normalizeStructuredInterventions,

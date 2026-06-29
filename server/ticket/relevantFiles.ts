@@ -1,4 +1,4 @@
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { MAX_RELEVANT_FILES_CHARS } from '../lib/constants'
 
 export interface RelevantFileEntry {

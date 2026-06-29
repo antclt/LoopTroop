@@ -1,4 +1,4 @@
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import type { RefinementChange, RefinementChangeItem } from '@shared/refinementChanges'
 import type { Bead, BeadSubset, BeadContextGuidance, BeadDependencies } from '../phases/beads/types'
 import { looksLikePromptEcho } from '../lib/promptEcho'

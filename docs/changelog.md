@@ -12,12 +12,19 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Fixed startup after the `js-yaml` v5 dependency update by aligning YAML imports and types with the package's ESM exports.
 - Added standard contribution, code of conduct, issue, and pull request guidance so repository visitors have a clear path for reporting and contributing.
 - Expanded the Core Philosophy doc to cover all fourteen of LoopTroop's foundational ideas, each opening with a short summary and verified against the actual code.
 - Reorganized the Core Philosophy doc: moved the durable-state rationale into System Architecture and the "what LoopTroop is (and is not) for" guidance into Getting Started, and sharpened the Five Core Commitments around context engineering, thorough planning, and human-in-the-loop.
 - Collapsed the changelog's Unreleased section by default behind a short explanatory note, so the page opens on the latest tagged release.
 
 ### Detailed Changes
+#### Fixed
+- Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
+
+#### Maintenance
+- Removed the stale `@types/js-yaml` dev dependency because `js-yaml` v5 ships bundled TypeScript declarations.
+
 #### Documentation
 - Added `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, GitHub issue templates, and a pull request template with practical guidance adapted to LoopTroop's local AI orchestration workflow, safety expectations, docs maintenance, and validation commands.
 - Wrapped the changelog `## Unreleased` section in a collapsed-by-default VitePress `::: details` block, preceded by a one-line note explaining that it previews changes merged but not yet shipped in a tagged release.

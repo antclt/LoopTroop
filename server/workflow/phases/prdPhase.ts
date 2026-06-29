@@ -16,7 +16,7 @@ import { getTicketPaths, insertPhaseArtifact } from '../../storage/tickets'
 import { safeAtomicWrite } from '../../io/atomicWrite'
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { normalizeInterviewDocumentOutput, normalizePrdYamlOutput, getPrdDraftMetrics } from '../../structuredOutput'
 import { buildPromptFromTemplate, PROM11, PROM12 } from '../../prompts/index'
 import {

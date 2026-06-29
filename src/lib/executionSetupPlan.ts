@@ -1,4 +1,4 @@
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 
 export const EXECUTION_SETUP_PLAN_APPROVAL_FOCUS_EVENT = 'looptroop:execution-setup-plan-focus'
 

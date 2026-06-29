@@ -1,4 +1,4 @@
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import type {
   CandidateFileAuditEntry,
   CandidateFileAuditReport,

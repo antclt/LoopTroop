@@ -1,4 +1,4 @@
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { isRecord } from '@shared/typeGuards'
 
 function toStringValue(value: unknown): string {

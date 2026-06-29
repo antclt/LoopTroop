@@ -23,7 +23,7 @@ import { buildPromptFromTemplate, PROM21, PROM22, PROM25 } from '../../prompts/i
 import { VOTING_RUBRIC_BEADS } from '../../council/types'
 import { existsSync, readFileSync } from 'fs'
 import { resolve } from 'path'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { withStructuredRetryDiagnosticAttempt } from '@shared/structuredRetryDiagnostics'
 import {
   buildBeadsUiRefinementDiffArtifact,

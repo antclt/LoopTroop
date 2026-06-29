@@ -21,7 +21,7 @@ import { buildStructuredRetryPrompt, normalizeInterviewDocumentOutput } from '..
 import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { validatePrdDraft, validateResolvedInterview } from './validation'
 import type { InterviewDocument } from '@shared/interviewArtifact'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
 import { normalizeStructuredRetryCount, shouldRetryStructuredOutput } from '../../lib/structuredRetryPolicy'
 import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'

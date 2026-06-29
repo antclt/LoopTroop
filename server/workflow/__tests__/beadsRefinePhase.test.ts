@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import jsYaml from 'js-yaml'
+import * as jsYaml from 'js-yaml'
 import { parseUiArtifactCompanionArtifact } from '@shared/artifactCompanions'
 import { getLatestPhaseArtifact, getTicketByRef, insertPhaseArtifact } from '../../storage/tickets'
 import { TEST } from '../../test/factories'
