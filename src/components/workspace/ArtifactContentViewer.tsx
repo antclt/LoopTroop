@@ -84,9 +84,9 @@ import {
 import { renderWordDiffSegments, renderUnifiedDiffLineText } from './diffWordHighlights'
 import { InterviewDocumentView } from './InterviewDocumentView'
 import {
-  getCouncilStatusEmoji,
   getCouncilStatusLabel,
 } from './councilArtifacts'
+import { CouncilStatusIcon } from './CouncilStatusIcon'
 import {
   buildArtifactProcessingNoticeCopy,
   getStructuredOutputInterventions,
@@ -3291,8 +3291,9 @@ function VotingResultsView({ data, showHeader = true }: { data: CouncilResultDat
                 >
                   <div className="min-w-0 text-left">
                     <div className="text-[10px] font-medium truncate">{getModelDisplayName(voterId)}</div>
-                    <div className="text-[10px] opacity-80 mt-0.5">
-                      {getCouncilStatusEmoji(outcome, 'scoring')} {getCouncilStatusLabel(outcome, 'scoring')}
+                    <div className="mt-0.5 flex items-center gap-1 text-[10px] opacity-80">
+                      <CouncilStatusIcon outcome={outcome} action="scoring" className="h-3 w-3" />
+                      <span>{getCouncilStatusLabel(outcome, 'scoring')}</span>
                     </div>
                   </div>
                 </ModelBadge>
@@ -3373,8 +3374,9 @@ function VotingResultsView({ data, showHeader = true }: { data: CouncilResultDat
               <div className="font-medium flex items-center gap-1">
                 <ModelIcon modelId={voterId} className="h-3.5 w-3.5" />
                 {getModelDisplayName(voterId)}
-                <span className="text-[10px] text-muted-foreground ml-1">
-                  {getCouncilStatusEmoji(getVoterOutcome(voterId), 'scoring')} {getCouncilStatusLabel(getVoterOutcome(voterId), 'scoring')}
+                <span className="ml-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                  <CouncilStatusIcon outcome={getVoterOutcome(voterId)} action="scoring" className="h-3 w-3" />
+                  <span>{getCouncilStatusLabel(getVoterOutcome(voterId), 'scoring')}</span>
                 </span>
               </div>
               {votes.filter(v => v.voterId === voterId).length === 0 ? (
@@ -6816,7 +6818,11 @@ export function ArtifactContent({
         >
           <div className="min-w-0 text-left">
             <div className="text-xs font-medium truncate">{getModelDisplayName(winnerDraft.memberId)}</div>
-            <div className="text-[10px] text-primary-foreground/90 font-bold mt-0.5 normal-case">🏆 Winner{winnerDraft.duration ? ` · ${(winnerDraft.duration / 1000).toFixed(1)}s` : ''}</div>
+            <div className="mt-0.5 flex items-center gap-1 text-[10px] font-bold text-primary-foreground/90 normal-case">
+              <Trophy className="h-3 w-3" />
+              <span>Winner</span>
+              {winnerDraft.duration ? <span>· {(winnerDraft.duration / 1000).toFixed(1)}s</span> : null}
+            </div>
           </div>
         </ModelBadge>
       ) : null
@@ -6880,20 +6886,16 @@ export function ArtifactContent({
         <div className="min-w-0 text-left">
           <div className="text-xs font-medium truncate">{getModelDisplayName(draft.memberId)}</div>
           <div className="text-[10px] mt-0.5 opacity-80 flex items-center gap-1 flex-wrap normal-case">
-            <span>
-              {draft.outcome === 'completed'
-                ? '✅ Completed'
-                : draft.outcome === 'timed_out'
-                  ? '⏰ Timed out'
-                  : draft.outcome === 'failed'
-                    ? '💥 Failed'
-                    : draft.outcome === 'pending'
-                      ? '⏳ In progress'
-                      : '❌ Invalid output'}
+            <span className="flex items-center gap-1">
+              <CouncilStatusIcon outcome={draft.outcome} action="drafting" className="h-3 w-3" />
+              <span>{draft.outcome === 'pending' ? 'In progress' : getCouncilStatusLabel(draft.outcome, 'drafting')}</span>
             </span>
             {draft.duration ? <span>· {(draft.duration / 1000).toFixed(1)}s</span> : null}
             {draft.memberId === councilResult.winnerId && !phase?.includes('DELIBERATING') && !phase?.includes('DRAFTING') && (
-              <span className="font-bold text-primary-foreground/90 ml-1">🏆 Winner</span>
+              <span className="ml-1 flex items-center gap-1 font-bold text-primary-foreground/90">
+                <Trophy className="h-3 w-3" />
+                <span>Winner</span>
+              </span>
             )}
           </div>
         </div>

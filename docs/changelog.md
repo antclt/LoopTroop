@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added animated status icons for AI council actions and throbbing warning indicators for blocked ticket error states.
 - Added an About window for app-level storage details and surfaced each project's local `.looptroop` state path in Project Details.
 - Added ack-aware yellow flashing for tickets waiting on user input, so the dashboard highlights what needs you and stops flashing once you've opened the ticket.
 - Fixed startup after the `js-yaml` v5 dependency update by aligning YAML imports and types with the package's ESM exports.
@@ -22,6 +23,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Detailed Changes
 #### Added
+- Added animated, context-specific status icons for AI council members and artifact status chips during drafting (writing pencil), scoring (flipping hourglass), refining (spinning arrows), and verifying (scanning magnifying glass) phases, with automatic prefers-reduced-motion overrides.
+- Added a pulsing/throbbing warning animation to active warning and error icons across the Kanban board cards, active ticket header summary, sidebar indicators, activity strip, and live error card views.
 - Added a read-only `About` window at the end of Configuration that opens in a separate modal and shows app-level storage/runtime details: app version, app database path, config directory, storage source, attached-project count, and a short explanation that project-local LoopTroop state lives inside each repository's `.looptroop/` folder.
 - Added the project-local LoopTroop state path to Project Details so users can immediately see where the selected repository keeps its `.looptroop/` folder.
 - Added ack-aware yellow flashing on dashboard cards for tickets in the Needs Input column (interview answers, approvals, PR review). When a ticket starts waiting on you, its card flashes a soft yellow border; the moment you open the ticket the flashing stops and the border reverts to the static project color, even if the required action was not performed. A new wait (different status or re-entry) flashes again. Red error flashing still takes precedence, the existing pending-question pulse is suppressed inside Needs Input, and reduced-motion users get a steady amber border with no flashing. The acknowledgment is persisted per-ticket via the existing UI-state channel (new `needs_input_attention` scope) so it survives reloads and syncs across tabs.

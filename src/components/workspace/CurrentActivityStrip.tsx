@@ -23,7 +23,7 @@ function ActivityIcon({ activity }: { activity: CurrentActivity }) {
     return <RefreshCw className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
   }
   if (activity.severity === 'error' || activity.severity === 'warning') {
-    return <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+    return <AlertTriangle className="h-3.5 w-3.5 shrink-0 animate-wobble-throb" aria-hidden="true" />
   }
   return <Clock3 className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
 }
@@ -132,8 +132,8 @@ export function CurrentActivityStrip({ entries, enabled = true, activeStatus, cl
   const headerIcon = (() => {
     const hasError = activities.some((a) => a.severity === 'error')
     const hasWarning = activities.some((a) => a.severity === 'warning')
-    if (hasError) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400" />
-    if (hasWarning) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+    if (hasError) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-rose-600 dark:text-rose-400 animate-wobble-throb" />
+    if (hasWarning) return <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600 dark:text-amber-400 animate-wobble-throb" />
     return <Clock3 className="h-3.5 w-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
   })()
 

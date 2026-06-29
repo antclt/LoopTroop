@@ -1,9 +1,9 @@
 import type React from 'react'
 import type { ArtifactDef, CouncilOutcome } from './phaseArtifactTypes'
 import {
-  getCouncilStatusEmoji,
   type CouncilAction,
 } from './councilArtifacts'
+import { CouncilStatusIcon } from './CouncilStatusIcon'
 
 export interface ArtifactTypeFilterProps {
   artifacts: ArtifactDef[]
@@ -21,9 +21,7 @@ export function ArtifactTypeFilter({ artifacts, getArtifactState, action, isComp
     <>
       {artifacts.map((artifact) => {
         const artifactState = getArtifactState(artifact)
-        const statusEmoji = artifactState.outcome
-          ? getCouncilStatusEmoji(artifactState.outcome, action)
-          : isCompleted ? '✅' : getCouncilStatusEmoji(undefined, action)
+        const statusOutcome = artifactState.outcome ?? (isCompleted ? 'completed' : undefined)
 
         if (variant === 'prominent') {
           return (
@@ -37,7 +35,7 @@ export function ArtifactTypeFilter({ artifacts, getArtifactState, action, isComp
                 <span className="font-medium">{artifact.label}</span>
                 {artifactState.detail && <div className="max-w-[28rem] whitespace-normal break-all text-[10px] text-blue-500">{artifactState.detail}</div>}
               </div>
-              <span className="ml-auto shrink-0">{statusEmoji}</span>
+              <CouncilStatusIcon outcome={statusOutcome} action={action} className="ml-auto h-3 w-3" />
             </button>
           )
         }
@@ -53,7 +51,7 @@ export function ArtifactTypeFilter({ artifacts, getArtifactState, action, isComp
               <span className="font-medium">{artifact.label}</span>
               {artifactState.detail && <div className="max-w-[28rem] whitespace-normal break-all text-[10px] text-blue-500">{artifactState.detail}</div>}
             </div>
-            <span className="ml-auto shrink-0">{statusEmoji}</span>
+            <CouncilStatusIcon outcome={statusOutcome} action={action} className="ml-auto h-3 w-3" />
           </button>
         )
       })}

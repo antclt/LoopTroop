@@ -219,7 +219,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
         <Card className={isLiveError ? 'border-destructive' : 'border-amber-300 dark:border-amber-800'}>
           <CardHeader className="py-3">
             <CardTitle className="text-sm flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-4 w-4" />
+              <AlertTriangle className={`h-4 w-4 ${isLiveError ? 'animate-wobble-throb' : ''}`} />
               {isLiveError ? 'Blocked — Error' : 'Error Review'}
             </CardTitle>
           </CardHeader>

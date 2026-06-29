@@ -128,7 +128,7 @@ export function ErrorOccurrencesPanel({
         className="flex w-full items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronRight className={cn('h-3 w-3 transition-transform', expanded && 'rotate-90')} />
-        <AlertTriangle className={cn('h-3.5 w-3.5', currentStatusIsBlocked ? 'text-red-500' : 'text-amber-500')} />
+        <AlertTriangle className={cn('h-3.5 w-3.5', currentStatusIsBlocked ? 'text-red-500 animate-wobble-throb' : 'text-amber-500')} />
         <span>Errors</span>
         <Badge variant="outline" className="text-[10px] shrink-0">
           {visibleOccurrences.length}

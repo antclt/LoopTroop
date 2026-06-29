@@ -1,10 +1,10 @@
 import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
 import { ModelBadge } from '@/components/shared/ModelBadge'
 import {
-  getCouncilStatusEmoji,
   getCouncilStatusLabel,
   type CouncilMemberArtifactChip,
 } from './councilArtifacts'
+import { CouncilStatusIcon } from './CouncilStatusIcon'
 
 export interface ArtifactListProps {
   memberArtifacts: CouncilMemberArtifactChip[]
@@ -43,8 +43,9 @@ export function ArtifactList({ memberArtifacts, compactInterviewArtifacts, compa
             <div className="min-w-0 text-left flex-1">
               <div className={nameClass}>{getModelDisplayName(artifact.modelId)}</div>
               {shouldShowStatus && (
-                <div className={subClass}>
-                  {getCouncilStatusEmoji(artifact.outcome, artifact.action)} {getCouncilStatusLabel(artifact.outcome, artifact.action)}
+                <div className={`${subClass} flex items-center gap-1`}>
+                  <CouncilStatusIcon outcome={artifact.outcome} action={artifact.action} className="h-3 w-3" />
+                  <span>{getCouncilStatusLabel(artifact.outcome, artifact.action)}</span>
                 </div>
               )}
               {artifact.detail && <div className={detailClass}>{artifact.detail}</div>}

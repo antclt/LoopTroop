@@ -1,5 +1,5 @@
 import { useId, useMemo, useState } from 'react'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLogs } from '@/context/useLogContext'
@@ -466,6 +466,9 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
           className="flex items-center gap-1 py-0 text-[13px] font-medium text-foreground transition-colors hover:text-foreground/80"
         >
           <ChevronRight className={cn('h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform', isExpanded && 'rotate-90')} />
+          {phase === 'BLOCKED_ERROR' && (
+            <AlertTriangle className="h-3.5 w-3.5 text-destructive animate-wobble-throb shrink-0" />
+          )}
           <span>{phaseLabel}</span>
           {showLiveCodingCountdown && runtime.activeBeadId && runtime.perIterationTimeoutMs ? (() => {
             const activeBead = runtime.beads?.find(b => b.id === runtime.activeBeadId)

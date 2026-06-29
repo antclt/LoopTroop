@@ -104,19 +104,6 @@ export function getCouncilAction(phase: string): CouncilAction {
   return 'working'
 }
 
-export function getCouncilStatusEmoji(outcome?: CouncilOutcome, action?: CouncilAction): string {
-  if (outcome === 'failed') return '💥'
-  if (outcome === 'timed_out') return '⏰'
-  if (outcome === 'invalid_output') return '❌'
-  if (outcome === 'completed') return '✅'
-  if (outcome === 'pending') return action === 'scoring' ? '⏳' : action === 'verifying' ? '🔍' : action === 'refining' ? '🔄' : '✏️'
-  if (action === 'drafting') return '✏️'
-  if (action === 'scoring') return '⏳'
-  if (action === 'refining') return '🔄'
-  if (action === 'verifying') return '🔍'
-  return '✏️'
-}
-
 export function getCouncilStatusLabel(outcome?: CouncilOutcome, action?: CouncilAction): string {
   if (outcome === 'failed') return 'Failed'
   if (outcome === 'timed_out') return 'Timed Out'

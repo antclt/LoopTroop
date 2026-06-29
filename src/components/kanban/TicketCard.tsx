@@ -221,7 +221,7 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
           <PriorityArrows priority={ticket.priority} />
           {isInProgress && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           {hasPendingAIQuestion && <HelpCircle className="h-3 w-3" style={{ color: attentionColor }} />}
-          {isError && <AlertTriangle className="h-3 w-3 text-destructive" />}
+          {isError && <AlertTriangle className="h-3 w-3 text-destructive animate-wobble-throb" />}
         </div>
       </div>
       <p className="mt-1 break-words text-sm font-medium leading-tight [overflow-wrap:anywhere]">{ticket.title}</p>

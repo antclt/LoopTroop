@@ -21,7 +21,7 @@ export function StatusIndicator({ status, className }: StatusIndicatorProps) {
     case 'canceled':
       return <Minus className={cn('h-3.5 w-3.5 text-muted-foreground', className)} />
     case 'error':
-      return <AlertTriangle className={cn('h-3.5 w-3.5 text-red-500', className)} />
+      return <AlertTriangle className={cn('h-3.5 w-3.5 text-red-500 animate-wobble-throb', className)} />
     case 'pending':
     default:
       return <Circle className={cn('h-3.5 w-3.5 text-muted-foreground/40', className)} />
