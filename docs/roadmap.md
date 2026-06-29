@@ -87,7 +87,6 @@ search: false
     *   Use scan output, repo-discovery/codebase-map artifacts, and planning context when available; preserve provenance back to source artifacts.
     *   Regeneration should update only factual claims and must not rewrite approved planning decisions.
     *   Make the concise summary available to Critique, Interview, Proposal, Options Synthesis, Design, and Beads.
-*   **Animate icons:** Update the icons for actions when models are doing different actions (e.g., when models create a draft, it shows drafting with a pencil icon — can this pencil be animated, or can a similar animation be used?).
 *   **Post-interview planning context refresh:** After interview approval, add a mandatory `REFRESHING_PLANNING_CONTEXT` phase before PRD drafting.
     * Transition: `WAITING_INTERVIEW_APPROVAL` -> approve -> `REFRESHING_PLANNING_CONTEXT` -> `DRAFTING_PRD`.
     * This phase runs for every ticket.
@@ -114,16 +113,6 @@ search: false
     * Add a future UI surface to show `planning_context`, pinned files, demoted files, ignored files, and "why selected" explanations.
     * Add a legacy migration alias so existing prompts/components that still request `relevant_files` receive `planning_context` until all phases are updated.
 *   **Optimize components:** Update each component to latest stable and optimize each component of the app, after creation, using ref.tools mcp that can read latest version of docs plus exa mcp that can search the internet and skill for each component.
-*   **Diff view:** Show git diff per finished bead in ticket view dashboard
-    *   Add one-click `rollback_to_bead` with preview and explicit confirmation.
-    *   Rollback must target a finished bead commit, write an audit receipt, and never execute directly on `main` / `master`.
-    *   Add deterministic `smart_checkpoint` creation policy before risky edits:
-        *   trigger on first edit of a file in the active run when complexity is high, path matches critical/security patterns, or step scope includes auth/security/payment;
-        *   enforce cooldown between automatic checkpoints (default `120s`) to avoid checkpoint spam;
-        *   retain only the latest N smart checkpoints (default `20`) and persist metadata (`trigger_reason`, `file_path`, `created_at`).
-    *   Replace destructive context wipes with checkpoint restore: `rollback_to_bead` must restore tracked + untracked files from a bead-start snapshot manifest, not raw `git reset --hard`/`git clean -fd` on user working copies.
-    *   MVP interim guard before full checkpoint-restore rollout: allow wipe/reset only inside the active ticket worktree path, require a pre-wipe recovery snapshot + receipt, and block wipe if snapshot creation fails.
-    *   If isolation guarantees are missing (no dedicated worktree/sandbox), block rollback and require explicit user decision (`create_safe_checkpoint` or `manual_recovery`) with a dry-run diff preview.
 *   **Prompts editor:** In configuration, allow users to edit the system and user prompts used for each phase of the workflow, with version history and ability to revert to defaults.
 *   **Other council members:** Implement other AI council members into the flow - at least at final test creation. If TDD is implemented, the test should be created before execution has started.
 *   **WYSIWYG editor:** A human-friendly editor for markdown files.
@@ -1283,8 +1272,6 @@ search: false
         *   Require always-available shortcut help (`?`) and command palette (`Ctrl+K`) during execution.
         *   State-changing keyboard actions must emit audit events (`action`, `ticket_id`, `run_id`, `actor`, `timestamp`, `result`).
         *   Block shortcut execution while text input is focused and require explicit confirmation for destructive actions (`stop`, `cancel_ticket`).
-*   **Revert Capability:** Option to revert changes inside a completed ticket if issues are discovered later.
-*   **Delete tickets:** Option to delete tickets that are in the done phase.
 *   **Parallel execution (deterministic orchestration):** MVP remains sequential; parallel mode is introduced after reliability gates.
     *   Use wrapper architecture: `ParallelExecutor` orchestrates multiple worker `ExecutionEngine` instances while the sequential engine path remains unchanged.
     *   Parallel mode policy supports `auto`, `always`, `never` (CLI override > project config > default).
