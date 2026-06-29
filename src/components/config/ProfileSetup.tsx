@@ -19,6 +19,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 
 interface ProfileSetupProps {
   onClose: () => void
+  onOpenAbout?: () => void
 }
 
 const descriptionDocs = {
@@ -26,7 +27,7 @@ const descriptionDocs = {
   councilMembers: '/configuration#council-members',
 } as const
 
-export function ProfileSetup({ onClose }: ProfileSetupProps) {
+export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: ProfileSetupProps) {
   const { data: profile } = useProfile()
   const createProfile = useCreateProfile()
   const updateProfile = useUpdateProfile()
@@ -467,11 +468,14 @@ export function ProfileSetup({ onClose }: ProfileSetupProps) {
         </CardContent>
       </Card>
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-        <Button type="submit" disabled={createProfile.isPending || updateProfile.isPending || hasErrors}>
-          {createProfile.isPending || updateProfile.isPending ? <LoadingText text="Saving" /> : 'Save'}
-        </Button>
+      <div className="flex items-center justify-between gap-2">
+        <Button type="button" variant="ghost" onClick={onOpenAbout}>About</Button>
+        <div className="flex gap-2">
+          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+          <Button type="submit" disabled={createProfile.isPending || updateProfile.isPending || hasErrors}>
+            {createProfile.isPending || updateProfile.isPending ? <LoadingText text="Saving" /> : 'Save'}
+          </Button>
+        </div>
       </div>
     </form>
   )

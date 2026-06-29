@@ -19,6 +19,7 @@ export interface StartupStatus {
   }
   runtime: {
     isWsl: boolean
+    osLabel: string
     appRoot: string
     appPathWarning: string | null
   }

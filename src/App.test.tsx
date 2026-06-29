@@ -37,7 +37,16 @@ vi.mock('@/components/shared/CenteredModal', () => ({
 }))
 
 vi.mock('@/components/config/ProfileSetup', () => ({
-  ProfileSetup: () => <div>Profile Setup</div>,
+  ProfileSetup: ({ onOpenAbout }: { onOpenAbout?: () => void }) => (
+    <div>
+      <div>Profile Setup</div>
+      <button type="button" onClick={onOpenAbout}>Open About</button>
+    </div>
+  ),
+}))
+
+vi.mock('@/components/config/AboutDialog', () => ({
+  AboutDialog: () => <div>About Dialog</div>,
 }))
 
 vi.mock('@/components/project/ProjectsPanel', () => ({
@@ -96,6 +105,7 @@ function makeStartupStatus(overrides: Partial<StartupStatus['storage']> = {}): S
     },
     runtime: {
       isWsl: false,
+      osLabel: 'Linux',
       appRoot: '/home/liviu/LoopTroop',
       appPathWarning: null,
     },
@@ -140,6 +150,21 @@ describe('App startup notices', () => {
     mockState.dismissMutation.mutate.mockReset()
     useRecoveryAutoReloadMock.mockReset()
     localStorage.clear()
+  })
+
+  it('opens the About modal from Configuration', async () => {
+    mockState.startupStatus = makeStartupStatus()
+    localStorage.setItem(WELCOME_DISCLAIMER_STORAGE_KEY, 'true')
+    window.history.pushState(null, '', '/config')
+
+    renderApp()
+
+    expect(await screen.findByText('Profile Setup')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Open About' }))
+
+    expect(await screen.findByText('About Dialog')).toBeInTheDocument()
+
+    window.history.pushState(null, '', '/')
   })
 
   it('does not show the restore popup for fresh startup state', () => {

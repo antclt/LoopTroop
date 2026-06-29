@@ -8,9 +8,19 @@ interface CenteredModalProps {
   title: string
   children: React.ReactNode
   maxWidth?: string
+  closeDisabled?: boolean
+  zIndexClass?: string
 }
 
-export function CenteredModal({ open, onClose, title, children, maxWidth = 'max-w-2xl' }: CenteredModalProps) {
+export function CenteredModal({
+  open,
+  onClose,
+  title,
+  children,
+  maxWidth = 'max-w-2xl',
+  closeDisabled = false,
+  zIndexClass = 'z-50',
+}: CenteredModalProps) {
   const [isSessionDirty, setIsSessionDirty] = useState(false)
 
   useEffect(() => {
@@ -22,6 +32,7 @@ export function CenteredModal({ open, onClose, title, children, maxWidth = 'max-
   useEffect(() => {
     if (!open) return
     const handler = (e: KeyboardEvent) => {
+      if (closeDisabled) return
       if (e.key === 'Escape') {
         if (isSessionDirty) {
           const shouldClose = window.confirm('You have unsaved changes. Close this window anyway?')
@@ -32,15 +43,16 @@ export function CenteredModal({ open, onClose, title, children, maxWidth = 'max-
     }
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
-  }, [open, onClose, isSessionDirty])
+  }, [closeDisabled, open, onClose, isSessionDirty])
 
   if (!open) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-[1px]"
+      className={`fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/50 backdrop-blur-[1px]`}
       onClick={(e) => {
         if (e.target !== e.currentTarget) return
+        if (closeDisabled) return
         if (isSessionDirty) return
         onClose()
       }}
@@ -66,6 +78,7 @@ export function CenteredModal({ open, onClose, title, children, maxWidth = 'max-
                   <button
                         type="button"
                         onClick={() => {
+                          if (closeDisabled) return
                           if (isSessionDirty) {
                             const shouldClose = window.confirm('You have unsaved changes. Close this window anyway?')
                             if (!shouldClose) return
@@ -73,7 +86,8 @@ export function CenteredModal({ open, onClose, title, children, maxWidth = 'max-
                           onClose()
                         }}
                         aria-label="Close"
-                        className="absolute top-3 right-3 z-10 flex items-center justify-center h-8 w-8 rounded-md border border-border bg-muted text-foreground hover:bg-destructive hover:text-white hover:border-destructive transition-colors"
+                        className="absolute top-3 right-3 z-10 flex items-center justify-center h-8 w-8 rounded-md border border-border bg-muted text-foreground hover:bg-destructive hover:text-white hover:border-destructive transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={closeDisabled}
                       >
                         <X className="h-4 w-4" strokeWidth={2.5} />
                       </button>

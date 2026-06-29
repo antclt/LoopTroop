@@ -9,11 +9,20 @@ export const isTestRuntime = process.env.NODE_ENV === 'test'
 
 export interface RuntimeStatus {
   isWsl: boolean
+  osLabel: string
   appRoot: string
   appPathWarning: string | null
 }
 
 const APP_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+function formatOsLabel(platform: NodeJS.Platform, isWsl: boolean): string {
+  if (isWsl) return 'Linux (WSL)'
+  if (platform === 'darwin') return 'macOS'
+  if (platform === 'win32') return 'Windows'
+  if (platform === 'linux') return 'Linux'
+  return platform
+}
 
 export function isWslRuntime(
   platform = process.platform,
@@ -32,14 +41,16 @@ export function buildRuntimeStatus(options: {
   kernelRelease?: string
 } = {}): RuntimeStatus {
   const appRoot = options.appRoot ?? APP_ROOT
+  const platform = options.platform ?? process.platform
   const isWsl = isWslRuntime(
-    options.platform,
+    platform,
     options.env,
     options.kernelRelease,
   )
 
   return {
     isWsl,
+    osLabel: formatOsLabel(platform, isWsl),
     appRoot,
     appPathWarning: isWsl && isWslWindowsMountPath(appRoot)
       ? buildWslAppMountedDriveWarning(appRoot)

@@ -64,6 +64,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
   const restoreMode = !isEditing && gitInfo.hasLoopTroopState === true && !!gitInfo.existingProject
   const gitStatus = gitInfo.status
   const gitMessage = gitInfo.message ?? ''
+  const projectStatePath = `${folder.replace(/[\\/]+$/, '')}/.looptroop`
 
   useEffect(() => {
     if (!folder.trim()) {
@@ -253,6 +254,26 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
               <div>
                 <label className="text-sm font-medium block mb-1">Project Folder</label>
                 <span className="text-sm text-muted-foreground font-mono">{folder}</span>
+              </div>
+              <div>
+                <div className="mb-1 flex items-center gap-1.5">
+                  <label className="text-sm font-medium">State Folder</label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label="State folder info"
+                        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-border text-[10px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        ?
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      LoopTroop keeps this project&apos;s local runtime state here.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <span className="text-sm text-muted-foreground font-mono">{projectStatePath}</span>
               </div>
               <div className="grid grid-cols-2 gap-4 border-t border-border pt-4">
                 <div>

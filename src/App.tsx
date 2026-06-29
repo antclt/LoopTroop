@@ -10,6 +10,7 @@ const ProjectsPanel = lazyWithChunkReload('ProjectsPanel', () => import('@/compo
 const TicketForm = lazyWithChunkReload('TicketForm', () => import('@/components/ticket/TicketForm').then(m => ({ default: m.TicketForm })))
 import { KeyboardShortcuts } from '@/components/shared/KeyboardShortcuts'
 import { StartupRestorePopup } from '@/components/shared/StartupRestorePopup'
+import { AboutDialog } from '@/components/config/AboutDialog'
 import { ToastProvider } from '@/components/shared/Toast'
 import { AIQuestionProvider } from '@/context/AIQuestionContext'
 import {
@@ -52,6 +53,7 @@ function App() {
   useRecoveryAutoReload('tickets-loading', isRecoverableTicketListLoading)
   const initialUrlProcessed = useRef(false)
   const [isProfileOpen, setIsProfileOpen] = useState(() => initialModal === 'profile')
+  const [isAboutOpen, setIsAboutOpen] = useState(false)
   const [isProjectOpen, setIsProjectOpen] = useState(() => initialModal === 'project')
   const [isTicketOpen, setIsTicketOpen] = useState(() => initialModal === 'ticket')
   const [isWelcomeOpen, setIsWelcomeOpen] = useState(() => {
@@ -65,7 +67,7 @@ function App() {
   const isRestorePopupOpen = !isWelcomeOpen
     && startupStatus?.storage.kind === 'restored'
     && startupStatus.ui.restoreNotice.shouldShow === true
-  const isModalOpen = isProfileOpen || isProjectOpen || isTicketOpen || isWelcomeOpen || isRestorePopupOpen
+  const isModalOpen = isProfileOpen || isAboutOpen || isProjectOpen || isTicketOpen || isWelcomeOpen || isRestorePopupOpen
 
   useEffect(() => {
     if (initialModal === 'profile') {
@@ -156,6 +158,12 @@ function App() {
     window.history.pushState(null, '', prevPathRef.current)
     setIsProfileOpen(false)
   }
+  const openAbout = () => {
+    setIsAboutOpen(true)
+  }
+  const closeAbout = () => {
+    setIsAboutOpen(false)
+  }
   const openProject = () => {
     prevPathRef.current = window.location.pathname
     window.history.pushState(null, '', ROUTE_PROJECT_NEW)
@@ -198,10 +206,14 @@ function App() {
           {state.activeView === 'ticket' && state.selectedTicketId ? <TicketDashboard /> : <KanbanBoard />}
         </AppShell>
 
-        <CenteredModal open={isProfileOpen} onClose={closeProfile} title="Configuration" maxWidth="max-w-2xl">
+        <CenteredModal open={isProfileOpen} onClose={closeProfile} title="Configuration" maxWidth="max-w-2xl" closeDisabled={isAboutOpen}>
           <Suspense fallback={<div className="p-4 text-center text-muted-foreground">Loading…</div>}>
-            <ProfileSetup onClose={closeProfile} />
+            <ProfileSetup onClose={closeProfile} onOpenAbout={openAbout} />
           </Suspense>
+        </CenteredModal>
+
+        <CenteredModal open={isAboutOpen} onClose={closeAbout} title="About" maxWidth="max-w-2xl" zIndexClass="z-[60]">
+          <AboutDialog />
         </CenteredModal>
 
         <CenteredModal open={isProjectOpen} onClose={closeProject} title="Projects" maxWidth="max-w-2xl">

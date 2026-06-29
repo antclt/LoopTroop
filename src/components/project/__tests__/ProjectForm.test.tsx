@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProjectForm } from '../ProjectForm'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 const mockProjectMutations = vi.hoisted(() => ({
   create: {
@@ -26,6 +27,15 @@ vi.mock('@/hooks/useProjects', () => ({
   useCreateProject: () => mockProjectMutations.create,
   useUpdateProject: () => mockProjectMutations.update,
   useDeleteProject: () => mockProjectMutations.remove,
+  useProjectWorktreesSize: () => ({
+    data: undefined,
+    isFetching: false,
+    refetch: vi.fn(),
+  }),
+  useDeleteProjectWorktrees: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
 }))
 
 vi.mock('@/components/shared/useToast', () => ({
@@ -51,7 +61,9 @@ function Wrapper({ children }: { children: ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      <TooltipProvider>
+        {children}
+      </TooltipProvider>
     </QueryClientProvider>
   )
 }
@@ -91,5 +103,39 @@ describe('ProjectForm', () => {
     })
 
     expect(screen.getByText(/resolves to \/mnt\/d\/work\/app while LoopTroop is running in WSL/i)).toBeInTheDocument()
+  })
+
+  it('shows the project-local .looptroop path in edit mode', async () => {
+    render(
+      <ProjectForm
+        onClose={vi.fn()}
+        project={{
+          id: 1,
+          name: 'LoopTroop',
+          shortname: 'LOOP',
+          icon: '📦',
+          color: '#3b82f6',
+          folderPath: '/home/liviu/LoopTroop',
+          profileId: null,
+          councilMembers: null,
+          maxIterations: null,
+          perIterationTimeout: null,
+          executionSetupTimeout: null,
+          councilResponseTimeout: null,
+          minCouncilQuorum: null,
+          interviewQuestions: null,
+          ticketCounter: 4,
+          createdAt: '2026-06-01T10:00:00.000Z',
+          updatedAt: '2026-06-29T10:00:00.000Z',
+        }}
+      />, 
+      { wrapper: Wrapper },
+    )
+
+    expect(screen.getByText('State Folder')).toBeInTheDocument()
+    expect(screen.getByText('/home/liviu/LoopTroop/.looptroop')).toBeInTheDocument()
+
+    fireEvent.focus(screen.getByRole('button', { name: 'State folder info' }))
+    expect(await screen.findByRole('tooltip')).toHaveTextContent("LoopTroop keeps this project's local runtime state here.")
   })
 })

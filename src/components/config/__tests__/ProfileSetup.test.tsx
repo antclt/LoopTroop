@@ -255,4 +255,29 @@ describe('ProfileSetup', () => {
       type: 'active',
     })
   })
+
+  it('renders an About button and calls the provided handler', async () => {
+    const onOpenAbout = vi.fn()
+
+    await act(async () => {
+      render(
+        <QueryClientProvider client={new QueryClient({
+          defaultOptions: {
+            queries: { retry: false, gcTime: Infinity },
+            mutations: { retry: false, gcTime: Infinity },
+          },
+        })}>
+          <TooltipProvider>
+            <ToastProvider>
+              <ProfileSetup onClose={() => undefined} onOpenAbout={onOpenAbout} />
+            </ToastProvider>
+          </TooltipProvider>
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: 'About' }))
+    expect(onOpenAbout).toHaveBeenCalledTimes(1)
+  })
 })

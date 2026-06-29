@@ -1403,7 +1403,6 @@ search: false
     *   Role assignment is phase-driven: draft generation -> `drafter`, adversarial critique -> `critic`, voting -> `voter`, refinement -> `synthesizer`.
     *   Store default role templates at `.looptroop/templates/roles/<role>.md` and allow per-project overrides.
     *   Prompt injection order: `soul.md` -> council deliberation protocol -> role template -> phase task prompt.
-*  **Storage config:** Add a small “Storage” section in Config. Show app DB path, config dir, number of attached projects, and a note that project runtime state also lives in <repo>/.looptroop/.
 *   **AI Gap-Fix Button on Coverage Warnings:** When a coverage warning is displayed during an approval status (`WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`) showing unresolved gaps, add an explicit “Fix Gaps” button that sends the remaining gaps to the main AI implementer for in-place resolution.
     *   The button appears inside the `CoverageApprovalWarning` component, visible only when `warning.gaps.length > 0`.
     *   Clicking it triggers a server-side coverage-revision pass scoped to the listed gaps, using the main implementer model (not the full council pipeline), and re-enters the same coverage verification loop with the revised artifact.
@@ -1677,6 +1676,7 @@ search: false
 *   **Subagent Work:** Delegate work like planning, documentation, etc. to subagents so the main loop only receives the absolutely necessary context.
 *   **System Info + About (GUI + CLI/API):**
     *   Add `info` command/API and GUI `About` panel with: app version, runtime, OS/arch, config paths/status, active agent/tracker/provider, and template status.
+    *   Show app-level storage details in the `About` panel: app DB path, config dir, storage source, and the current number of attached projects.
     *   Add `Copy for bug report` action that emits redacted copyable output.
     *   Support `info` output formats: `human`, `json`, `copyable`.
     *   Link About panel to latest `Doctor` report, latest preflight report, and diagnostics export bundle.

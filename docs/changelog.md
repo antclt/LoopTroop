@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added an About window for app-level storage details and surfaced each project's local `.looptroop` state path in Project Details.
 - Fixed startup after the `js-yaml` v5 dependency update by aligning YAML imports and types with the package's ESM exports.
 - Added standard contribution, code of conduct, issue, and pull request guidance so repository visitors have a clear path for reporting and contributing.
 - Expanded the Core Philosophy doc to cover all fourteen of LoopTroop's foundational ideas, each opening with a short summary and verified against the actual code.
@@ -19,6 +20,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Collapsed the changelog's Unreleased section by default behind a short explanatory note, so the page opens on the latest tagged release.
 
 ### Detailed Changes
+#### Added
+- Added a read-only `About` window at the end of Configuration that opens in a separate modal and shows app-level storage/runtime details: app version, app database path, config directory, storage source, attached-project count, and a short explanation that project-local LoopTroop state lives inside each repository's `.looptroop/` folder.
+- Added the project-local LoopTroop state path to Project Details so users can immediately see where the selected repository keeps its `.looptroop/` folder.
+
 #### Fixed
 - Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
 
@@ -26,6 +31,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Removed the stale `@types/js-yaml` dev dependency because `js-yaml` v5 ships bundled TypeScript declarations.
 
 #### Documentation
+- Removed the old mixed `Storage config` roadmap entry, folded the global app-storage portion into `System Info + About`, and added a separate roadmap item for project-local `.looptroop` visibility so the roadmap matches the split UI.
+- Documented the new Configuration `About` window and clarified that app-wide storage is shown there while project-local LoopTroop state remains discoverable in Project Details.
 - Added `CODE_OF_CONDUCT.md`, `CONTRIBUTING.md`, GitHub issue templates, and a pull request template with practical guidance adapted to LoopTroop's local AI orchestration workflow, safety expectations, docs maintenance, and validation commands.
 - Wrapped the changelog `## Unreleased` section in a collapsed-by-default VitePress `::: details` block, preceded by a one-line note explaining that it previews changes merged but not yet shipped in a tagged release.
 - Rewrote `docs/core-philosophy.md` so every core idea is explicitly present and accurate to the implementation: local/open-source (MIT, local backend + SQLite), the modern GUI (React Kanban with phase/artifact/log/diff/council/bead views), end-to-end ticket orchestration (the `ticketMachine` lifecycle), the project/ticket orchestration model, context engineering, LLM Council planning (the `server/council` draft → quorum → anonymized vote → refine → coverage pipeline), interview-before-spec, PRD as source of truth, beads as small implementation units, Ralph Loop recovery (context-wipe note, `beadStartCommit` reset, fresh session, bounded `maxIterations`), the OpenCode execution engine (`opencode serve` via SDK, separate `main_implementer` vs `council_members`, permissive execution policy, inherited skills/MCPs), Git worktree isolation, slow planning to avoid AI slop, and human-in-the-loop approval gates. Each section now leads with a one-paragraph summary followed by detail, and the existing comparison table and durable-state/optimization sections were retained and folded in.

@@ -18,6 +18,13 @@ describe('runtime WSL helpers', () => {
     }).appPathWarning).toContain('/mnt/d/LoopTroop')
 
     expect(buildRuntimeStatus({
+      appRoot: '/mnt/d/LoopTroop',
+      platform: 'linux',
+      env: { WSL_DISTRO_NAME: 'Ubuntu' },
+      kernelRelease: '6.6.87.2-microsoft-standard-WSL2',
+    }).osLabel).toBe('Linux (WSL)')
+
+    expect(buildRuntimeStatus({
       appRoot: '/home/liviu/LoopTroop',
       platform: 'linux',
       env: { WSL_DISTRO_NAME: 'Ubuntu' },
@@ -25,10 +32,24 @@ describe('runtime WSL helpers', () => {
     }).appPathWarning).toBeNull()
 
     expect(buildRuntimeStatus({
+      appRoot: '/home/liviu/LoopTroop',
+      platform: 'darwin',
+      env: {},
+      kernelRelease: '23.5.0',
+    }).osLabel).toBe('macOS')
+
+    expect(buildRuntimeStatus({
       appRoot: '/mnt/d/LoopTroop',
       platform: 'linux',
       env: {},
       kernelRelease: '6.8.0-generic',
     }).appPathWarning).toBeNull()
+
+    expect(buildRuntimeStatus({
+      appRoot: '/mnt/d/LoopTroop',
+      platform: 'win32',
+      env: {},
+      kernelRelease: '10.0.26100',
+    }).osLabel).toBe('Windows')
   })
 })

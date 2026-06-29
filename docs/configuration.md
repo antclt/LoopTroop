@@ -63,6 +63,26 @@ The docs links on each control point back to this page, but the UI itself also h
 - **Duplicate model selection is prevented.** The main implementer is auto-included in the council, and the picker disables models already chosen in another council slot.
 - **Effort controls are conditional.** The effort / thinking picker only appears when the selected model advertises variants, and the saved variant is stored per slot.
 - **Numeric validation is strict.** All numeric fields must be whole numbers. The UI shows timeout/delay inputs in seconds and coverage in percent, while the API stores timeout/delay values in milliseconds.
+- **The `About` button opens a separate window for application details.** It starts with the current runtime environment, then shows the application's storage locations and a short note explaining that each attached project also keeps local LoopTroop state inside `<repo>/.looptroop/`.
+
+### About Window
+
+The **About** window is a read-only summary of the current runtime environment and storage layout.
+
+It shows:
+
+- the app version;
+- the operating system / runtime environment;
+- the application location;
+- the app database path;
+- the global configuration directory;
+- the current number of attached projects;
+- a short note explaining that each attached project also keeps local LoopTroop state inside its own `.looptroop/` folder.
+
+This is meant to answer two quick questions without opening logs or artifacts:
+
+- "Where does the app keep its own data?"
+- "Where does each project keep its local LoopTroop state?"
 
 ## Quick Reference
 
