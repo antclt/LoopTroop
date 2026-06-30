@@ -13,6 +13,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, and error only) to the Kanban board, complete with project-scoped local presets and ticket description search.
+- Improved Kanban operator triage with active-filter visibility, preset hover details, active-ticket run-health chips, search match hints, and stale filtering that focuses only live workflow columns.
 - Added animated status icons for AI council actions and throbbing warning indicators for blocked ticket error states.
 - Added an About window for app-level storage details and surfaced each project's local `.looptroop` state path in Project Details.
 - Added ack-aware yellow flashing for tickets waiting on user input, so the dashboard highlights what needs you and stops flashing once you've opened the ticket.
@@ -30,6 +31,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added 8 bidirectional sorting modes to Kanban columns (`KanbanColumn.tsx`): Last Updated (Newest/Oldest), Date Created (Newest/Oldest), Priority (High to Low/Low to High), and Title (A-Z/Z-A).
 - Added `formatRelativeDateChip` to ticket cards to show clear calendar-relative date chips (`Today HH:MM`, `Yesterday`, or weekday name) with absolute timestamp tooltips.
 - Expanded the dashboard search component to index and search ticket descriptions in addition to external ID, title, and project metadata.
+- Added active-filter count badges and detailed hover text to the Kanban filter slider, so hidden project, priority, stale, error-only, and non-default sort settings remain visible from the header.
+- Added search match hints to Kanban cards (`ID match`, `Title match`, `Description match`, or `Project match`) so operators can see why a ticket matched the current dashboard search.
+- Added compact run-health chips to active Kanban tickets with phase, bead progress, ticket-update age as the available model-response freshness signal, retry count, and last-error hash details in the tooltip.
 - Added animated, context-specific status icons for AI council members and artifact status chips during drafting (writing pencil), scoring (flipping hourglass), refining (spinning arrows), and verifying (scanning magnifying glass) phases, with automatic prefers-reduced-motion overrides.
 - Added a pulsing/throbbing warning animation to active warning and error icons across the Kanban board cards, active ticket header summary, sidebar indicators, activity strip, and live error card views.
 - Added a read-only `About` window at the end of Configuration that opens in a separate modal and shows app-level storage/runtime details: app version, app database path, config directory, storage source, attached-project count, and a short explanation that project-local LoopTroop state lives inside each repository's `.looptroop/` folder.
@@ -39,11 +43,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `POST /api/tickets/:id/coverage/fix-gaps` for approval-screen PRD/beads extra fixes, including per-ticket/domain concurrency protection and no-op success when the latest coverage artifact is already clean.
 
 #### Changed
+- Kanban saved presets now show their full saved filter/sort details on hover instead of relying on expanded preview content in the dropdown.
+- Kanban stale/inactive filtering now clears To Do and Done and only evaluates Needs Input and In Progress tickets, making stale triage focus on live operator workflow columns.
 - Beads approval extra fixes now refresh the semantic blueprint and rerun expansion when the blueprint changes, so the execution-ready approval plan and reviewed content hash stay current before approval.
 - Coverage reports now include user-triggered approval attempts as `Extra Fix N` tabs alongside normal version transitions while keeping `Latest Check` last and selected by default.
 - PRD and beads approval actions now read `Approve with gaps` when unresolved coverage gaps remain, and approval is blocked while a matching extra fix is running.
 
 #### Fixed
+- Fixed Kanban preset saving so the dropdown form uses controlled input state, reports inline save/failure feedback, and avoids exposing collapsed filter controls to hidden hit targets.
 - Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
 
 #### Maintenance

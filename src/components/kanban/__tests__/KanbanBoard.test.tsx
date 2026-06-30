@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { fireEvent, screen, within } from '@testing-library/react'
 import { UIProvider } from '@/context/UIContext'
 import { UIContext, type UIContextValue } from '@/context/uiContextDef'
@@ -35,7 +35,11 @@ function makeFilters(search = ''): UIContextValue['state']['filters'] {
   }
 }
 
-function makeUIValue(search: string, dispatch = vi.fn()): UIContextValue {
+function makeUIValue(
+  search: string,
+  dispatch = vi.fn(),
+  filterOverrides: Partial<UIContextValue['state']['filters']> = {},
+): UIContextValue {
   return {
     state: {
       selectedTicketId: null,
@@ -43,7 +47,7 @@ function makeUIValue(search: string, dispatch = vi.fn()): UIContextValue {
       sidebarOpen: true,
       activeView: 'kanban',
       logPanelHeight: 300,
-      filters: makeFilters(search),
+      filters: { ...makeFilters(search), ...filterOverrides },
       theme: 'system',
       showTriageBar: false,
     },
@@ -54,6 +58,14 @@ function makeUIValue(search: string, dispatch = vi.fn()): UIContextValue {
 function renderWithSearch(search: string, dispatch = vi.fn()) {
   return sharedRenderWithProviders(
     <UIContext.Provider value={makeUIValue(search, dispatch)}>
+      <KanbanBoard />
+    </UIContext.Provider>,
+  )
+}
+
+function renderWithFilters(filterOverrides: Partial<UIContextValue['state']['filters']>, dispatch = vi.fn()) {
+  return sharedRenderWithProviders(
+    <UIContext.Provider value={makeUIValue(filterOverrides.search ?? '', dispatch, filterOverrides)}>
       <KanbanBoard />
     </UIContext.Provider>,
   )
@@ -89,7 +101,12 @@ function mockBoardData(tickets: Ticket[], projects: Project[]) {
 
 describe('KanbanBoard', () => {
   beforeEach(() => {
+    localStorage.clear()
     mockBoardData([], [])
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it('renders 4 columns', () => {
@@ -130,7 +147,7 @@ describe('KanbanBoard', () => {
         id: `1:${TEST.shortname}-15`,
         externalId: `${TEST.shortname}-15`,
         title: 'Visible ticket',
-        description: 'Description text is not used by dashboard search.',
+        description: 'Description text is also searchable.',
         status: 'DRAFT',
         projectId: primaryProject.id,
       }),
@@ -151,6 +168,140 @@ describe('KanbanBoard', () => {
     expect(within(screen.getByText('To Do').parentElement as HTMLElement).getByText('1')).toBeInTheDocument()
     expect(within(screen.getByText('In Progress').parentElement as HTMLElement).getByText('0')).toBeInTheDocument()
     expect(screen.getAllByText('No matching tickets')).toHaveLength(3)
+  })
+
+  it('shows the matched search field hint on cards', () => {
+    const primaryProject = makeProject({ id: 1, name: 'Search Project', shortname: TEST.shortname })
+    mockBoardData([
+      makeTicket({
+        id: `1:${TEST.shortname}-17`,
+        externalId: `${TEST.shortname}-17`,
+        title: 'Visible title',
+        description: 'Hidden implementation detail',
+        status: 'DRAFT',
+        projectId: primaryProject.id,
+      }),
+    ], [primaryProject])
+
+    renderWithSearch('hidden implementation')
+
+    expect(screen.getByLabelText(`Open ticket ${TEST.shortname}-17`)).toBeInTheDocument()
+    expect(screen.getByText('Description match')).toBeInTheDocument()
+  })
+
+  it('limits stale filtering to Needs Input and In Progress columns', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-06-30T12:00:00.000Z'))
+
+    mockBoardData([
+      makeTicket({
+        id: `1:${TEST.shortname}-20`,
+        externalId: `${TEST.shortname}-20`,
+        title: 'Stale needs input',
+        status: 'WAITING_PRD_APPROVAL',
+        updatedAt: '2026-06-25T12:00:00.000Z',
+      }),
+      makeTicket({
+        id: `1:${TEST.shortname}-21`,
+        externalId: `${TEST.shortname}-21`,
+        title: 'Stale in progress',
+        status: 'CODING',
+        updatedAt: '2026-06-25T12:00:00.000Z',
+      }),
+      makeTicket({
+        id: `1:${TEST.shortname}-22`,
+        externalId: `${TEST.shortname}-22`,
+        title: 'Old draft',
+        status: 'DRAFT',
+        updatedAt: '2026-06-25T12:00:00.000Z',
+      }),
+      makeTicket({
+        id: `1:${TEST.shortname}-23`,
+        externalId: `${TEST.shortname}-23`,
+        title: 'Old done',
+        status: 'COMPLETED',
+        updatedAt: '2026-06-25T12:00:00.000Z',
+      }),
+    ], [makeProject()])
+
+    renderWithFilters({ stuckDays: 1 })
+
+    expect(screen.getByLabelText(`Open ticket ${TEST.shortname}-20`)).toBeInTheDocument()
+    expect(screen.getByLabelText(`Open ticket ${TEST.shortname}-21`)).toBeInTheDocument()
+    expect(screen.queryByLabelText(`Open ticket ${TEST.shortname}-22`)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(`Open ticket ${TEST.shortname}-23`)).not.toBeInTheDocument()
+    expect(within(screen.getByText('To Do').parentElement as HTMLElement).getByText('0')).toBeInTheDocument()
+    expect(within(screen.getByText('Needs Input').parentElement as HTMLElement).getByText('1')).toBeInTheDocument()
+    expect(within(screen.getByText('In Progress').parentElement as HTMLElement).getByText('1')).toBeInTheDocument()
+    expect(within(screen.getByText('Done').parentElement as HTMLElement).getByText('0')).toBeInTheDocument()
+  })
+
+  it('shows saved preset details on hover', async () => {
+    localStorage.setItem('looptroop-presets-global', JSON.stringify({
+      'Night ops': {
+        priority: [1, 2],
+        stuckDays: 3,
+        onlyErrors: true,
+        sortBy: 'priority_asc',
+      },
+    }))
+
+    const uiValueWithTriageOpen = makeUIValue('')
+    uiValueWithTriageOpen.state.showTriageBar = true
+
+    sharedRenderWithProviders(
+      <UIContext.Provider value={uiValueWithTriageOpen}>
+        <KanbanBoard />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /presets/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.focus(await screen.findByRole('button', { name: 'Night ops' }))
+
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent('Priority: Very High, High')
+    expect(tooltip).toHaveTextContent('Stale: > 3 days inactive')
+    expect(tooltip).toHaveTextContent('Errors: Only blocked errors')
+    expect(tooltip).toHaveTextContent('Sort: Priority (High to Low)')
+  })
+
+  it('saves a preset from the dropdown form with visible feedback', () => {
+    const uiValueWithTriageOpen = makeUIValue('', vi.fn(), {
+      priority: [1],
+      stuckDays: 3,
+      onlyErrors: true,
+      sortBy: 'priority_asc',
+    })
+    uiValueWithTriageOpen.state.showTriageBar = true
+
+    sharedRenderWithProviders(
+      <UIContext.Provider value={uiValueWithTriageOpen}>
+        <KanbanBoard />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /presets/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.change(screen.getByPlaceholderText('New preset...'), {
+      target: { value: 'Night ops' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(screen.getByText('Saved "Night ops"')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Night ops' })).toBeInTheDocument()
+    expect(JSON.parse(localStorage.getItem('looptroop-presets-global') ?? '{}')).toMatchObject({
+      'Night ops': {
+        priority: [1],
+        stuckDays: 3,
+        onlyErrors: true,
+        sortBy: 'priority_asc',
+      },
+    })
   })
 
   it('shows a dashboard no-results state with a clear action', () => {

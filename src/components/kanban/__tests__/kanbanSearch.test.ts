@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { TEST, makeTicket } from '@/test/factories'
-import { ticketMatchesDashboardSearch } from '../kanbanSearch'
+import { getDashboardSearchMatch, ticketMatchesDashboardSearch } from '../kanbanSearch'
 
 const project = {
   name: 'LoopTroop Console',
@@ -13,6 +13,7 @@ describe('ticketMatchesDashboardSearch', () => {
 
     expect(ticketMatchesDashboardSearch(ticket, project, `${TEST.shortname}-15`.toLocaleLowerCase())).toBe(true)
     expect(ticketMatchesDashboardSearch(ticket, project, `${TEST.shortname}15`)).toBe(true)
+    expect(getDashboardSearchMatch(ticket, project, `${TEST.shortname}15`)?.label).toBe('ID match')
   })
 
   it('matches visible title and project metadata', () => {
@@ -21,6 +22,8 @@ describe('ticketMatchesDashboardSearch', () => {
     expect(ticketMatchesDashboardSearch(ticket, project, 'DASHBOARD')).toBe(true)
     expect(ticketMatchesDashboardSearch(ticket, project, 'looptroop')).toBe(true)
     expect(ticketMatchesDashboardSearch(ticket, project, TEST.shortname.toLocaleLowerCase())).toBe(true)
+    expect(getDashboardSearchMatch(ticket, project, 'DASHBOARD')?.label).toBe('Title match')
+    expect(getDashboardSearchMatch(ticket, project, 'looptroop')?.label).toBe('Project match')
   })
 
   it('matches ticket description content', () => {
@@ -31,6 +34,7 @@ describe('ticketMatchesDashboardSearch', () => {
     })
 
     expect(ticketMatchesDashboardSearch(ticket, project, 'hidden description')).toBe(true)
+    expect(getDashboardSearchMatch(ticket, project, 'hidden description')?.label).toBe('Description match')
   })
 
   it('does not match non-visible status or priority metadata', () => {
@@ -43,5 +47,6 @@ describe('ticketMatchesDashboardSearch', () => {
 
     expect(ticketMatchesDashboardSearch(ticket, project, 'completed')).toBe(false)
     expect(ticketMatchesDashboardSearch(ticket, project, 'very high')).toBe(false)
+    expect(getDashboardSearchMatch(ticket, project, 'completed')).toBeNull()
   })
 })

@@ -4,6 +4,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { useUI } from '@/context/useUI'
+import type { UIState } from '@/context/uiContextDef'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useBackendHealth } from '@/hooks/useBackendHealth'
@@ -19,6 +20,42 @@ interface AppShellProps {
   isModalOpen?: boolean
 }
 
+const DEFAULT_SORT = 'updatedAt_desc'
+
+const PRIORITY_FILTER_LABELS: Record<number, string> = {
+  1: 'Very High',
+  2: 'High',
+  3: 'Normal',
+  4: 'Low',
+  5: 'Very Low',
+}
+
+const SORT_FILTER_LABELS: Record<string, string> = {
+  updatedAt_asc: 'Last Updated (Oldest first)',
+  createdAt_desc: 'Date Created (Newest first)',
+  createdAt_asc: 'Date Created (Oldest first)',
+  priority_asc: 'Priority (High to Low)',
+  priority_desc: 'Priority (Low to High)',
+  title_asc: 'Title (A-Z)',
+  title_desc: 'Title (Z-A)',
+}
+
+function getActiveTriageFilterSummaries(filters: UIState['filters']): string[] {
+  const summaries: string[] = []
+
+  if (filters.projectId !== null) summaries.push('Project filter')
+  if (filters.priority?.length) {
+    summaries.push(`Priority: ${filters.priority.map((priority) => PRIORITY_FILTER_LABELS[priority] ?? `P${priority}`).join(', ')}`)
+  }
+  if (filters.stuckDays !== null) {
+    summaries.push(filters.stuckDays === 1 ? 'Stale: > 24h inactive' : `Stale: > ${filters.stuckDays} days inactive`)
+  }
+  if (filters.onlyErrors) summaries.push('Errors only')
+  if (filters.sortBy !== DEFAULT_SORT) summaries.push(`Sort: ${SORT_FILTER_LABELS[filters.sortBy] ?? filters.sortBy}`)
+
+  return summaries
+}
+
 export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket, isModalOpen = false }: AppShellProps) {
   const { state, dispatch } = useUI()
   const theme = state.theme
@@ -26,6 +63,8 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
   const [isRefreshing, setIsRefreshing] = useState(false)
   const docsOrigin = __LOOPTROOP_DOCS_ORIGIN__
   const { isOffline } = useBackendHealth()
+  const activeTriageFilterSummaries = getActiveTriageFilterSummaries(state.filters)
+  const activeTriageFilterCount = activeTriageFilterSummaries.length
   useRecoveryAutoReload('backend-reconnect', isOffline)
 
   const handleRefresh = async () => {
@@ -58,8 +97,9 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
                   variant={state.showTriageBar ? 'secondary' : 'ghost'}
                   size="icon"
                   onClick={() => dispatch({ type: 'TOGGLE_TRIAGE_BAR' })}
+                  aria-label={`${state.showTriageBar ? 'Hide filters' : 'Show filters'}${activeTriageFilterCount > 0 ? `, ${activeTriageFilterCount} active` : ''}`}
                   className={cn(
-                    "h-9 w-9 shrink-0 cursor-pointer transition-all border border-transparent",
+                    "relative h-9 w-9 shrink-0 cursor-pointer transition-all border border-transparent",
                     state.showTriageBar
                       ? "bg-accent/80 text-accent-foreground border-border/80 shadow-sm"
                       : "hover:bg-accent/55"
@@ -67,9 +107,18 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
                   disabled={isModalOpen}
                 >
                   <SlidersHorizontal className="h-4 w-4" />
+                  {activeTriageFilterCount > 0 && (
+                    <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold leading-none text-primary-foreground ring-2 ring-background">
+                      {activeTriageFilterCount}
+                    </span>
+                  )}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent className="text-xs">{state.showTriageBar ? 'Hide filters' : 'Show filters'}</TooltipContent>
+              <TooltipContent className="max-w-xs whitespace-pre-line text-xs">
+                {activeTriageFilterCount > 0
+                  ? `${state.showTriageBar ? 'Hide filters' : 'Show filters'}\n${activeTriageFilterCount} active: ${activeTriageFilterSummaries.join(', ')}`
+                  : state.showTriageBar ? 'Hide filters' : 'Show filters'}
+              </TooltipContent>
             </Tooltip>
           )}
           <Tooltip>

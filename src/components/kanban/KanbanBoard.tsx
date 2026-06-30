@@ -53,6 +53,56 @@ const columns: KanbanColumnConfig[] = [
   },
 ]
 
+type TriagePreset = {
+  priority: number[] | null
+  stuckDays: number | null
+  onlyErrors: boolean
+  sortBy: string
+}
+
+const PRIORITY_LABELS: Record<number, string> = {
+  1: 'Very High',
+  2: 'High',
+  3: 'Normal',
+  4: 'Low',
+  5: 'Very Low',
+}
+
+const SORT_LABELS: Record<string, string> = {
+  updatedAt_desc: 'Last Updated (Newest first)',
+  updatedAt_asc: 'Last Updated (Oldest first)',
+  createdAt_desc: 'Date Created (Newest first)',
+  createdAt_asc: 'Date Created (Oldest first)',
+  priority_asc: 'Priority (High to Low)',
+  priority_desc: 'Priority (Low to High)',
+  title_asc: 'Title (A-Z)',
+  title_desc: 'Title (Z-A)',
+}
+
+function formatStaleLabel(stuckDays: number): string {
+  if (stuckDays === 1) return '> 24h inactive'
+  return `> ${stuckDays} days inactive`
+}
+
+function formatPresetDetails(preset: TriagePreset): string {
+  const priority = Array.isArray(preset.priority) ? preset.priority : null
+  const stuckDays = typeof preset.stuckDays === 'number' ? preset.stuckDays : null
+  const onlyErrors = preset.onlyErrors === true
+  const sortBy = typeof preset.sortBy === 'string' ? preset.sortBy : 'updatedAt_desc'
+  const details = [
+    priority?.length
+      ? `Priority: ${priority.map((priorityValue) => PRIORITY_LABELS[priorityValue] ?? `P${priorityValue}`).join(', ')}`
+      : 'Priority: All',
+    stuckDays !== null
+      ? `Stale: ${formatStaleLabel(stuckDays)} (Needs Input + In Progress only)`
+      : 'Stale: Any time',
+    onlyErrors ? 'Errors: Only blocked errors' : 'Errors: All states',
+    `Sort: ${SORT_LABELS[sortBy] ?? sortBy}`,
+  ]
+
+  return details.join('\n')
+}
+
 function ProjectIcon({
   icon,
   imageClassName,
@@ -85,15 +135,12 @@ export function KanbanBoard() {
   const selectedStuckDays = state.filters?.stuckDays ?? null
   const onlyErrors = state.filters?.onlyErrors ?? false
   const sortBy = state.filters?.sortBy ?? 'updatedAt_desc'
+  const [presetName, setPresetName] = useState('')
+  const [presetSaveMessage, setPresetSaveMessage] = useState('')
 
   // Presets State Management
   const presetKey = selectedProjectId !== null ? `looptroop-presets-${selectedProjectId}` : 'looptroop-presets-global'
-  const [presets, setPresets] = useState<Record<string, {
-    priority: number[] | null
-    stuckDays: number | null
-    onlyErrors: boolean
-    sortBy: string
-  }>>(() => {
+  const [presets, setPresets] = useState<Record<string, TriagePreset>>(() => {
     try {
       const stored = localStorage.getItem(presetKey)
       return stored ? JSON.parse(stored) : {}
@@ -109,21 +156,32 @@ export function KanbanBoard() {
     } catch {
       setPresets({})
     }
+    setPresetName('')
+    setPresetSaveMessage('')
   }, [presetKey])
 
   const savePreset = (name: string) => {
-    if (!name.trim()) return
+    const trimmedName = name.trim()
+    if (!trimmedName) return false
     const newPresets = {
       ...presets,
-      [name]: {
+      [trimmedName]: {
         priority: selectedPriority,
         stuckDays: selectedStuckDays,
         onlyErrors,
         sortBy,
       }
     }
-    localStorage.setItem(presetKey, JSON.stringify(newPresets))
-    setPresets(newPresets)
+    try {
+      localStorage.setItem(presetKey, JSON.stringify(newPresets))
+      setPresets(newPresets)
+      setPresetName('')
+      setPresetSaveMessage(`Saved "${trimmedName}"`)
+      return true
+    } catch {
+      setPresetSaveMessage('Could not save preset')
+      return false
+    }
   }
 
   const deletePreset = (name: string) => {
@@ -137,10 +195,10 @@ export function KanbanBoard() {
     dispatch({
       type: 'SET_FILTER',
       filter: {
-        priority: presetValue.priority,
-        stuckDays: presetValue.stuckDays,
-        onlyErrors: presetValue.onlyErrors,
-        sortBy: presetValue.sortBy,
+        priority: Array.isArray(presetValue.priority) ? presetValue.priority : null,
+        stuckDays: typeof presetValue.stuckDays === 'number' ? presetValue.stuckDays : null,
+        onlyErrors: presetValue.onlyErrors === true,
+        sortBy: typeof presetValue.sortBy === 'string' ? presetValue.sortBy : 'updatedAt_desc',
       }
     })
   }
@@ -174,7 +232,7 @@ export function KanbanBoard() {
         if (phase === 'in_progress' || phase === 'needs_input') {
           return (now - new Date(t.updatedAt).getTime()) > threshold
         }
-        return true
+        return false
       })
     }
 
@@ -208,7 +266,10 @@ export function KanbanBoard() {
             ? "max-h-24 opacity-100 py-3 px-6"
             : "max-h-0 opacity-0 py-0 px-6 border-b-0 pointer-events-none"
         )}
+        aria-hidden={!state.showTriageBar}
       >
+        {state.showTriageBar && (
+          <>
         <div className="flex flex-wrap items-center gap-4">
           {/* Project Filter */}
           <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
@@ -357,13 +418,20 @@ export function KanbanBoard() {
               ) : (
                 Object.entries(presets).map(([name, val]) => (
                   <div key={name} className="flex items-center justify-between px-2 py-1 text-xs hover:bg-accent rounded-sm">
-                    <button
-                      type="button"
-                      onClick={() => applyPreset(val)}
-                      className="flex-1 text-left hover:text-foreground cursor-pointer text-xs font-medium"
-                    >
-                      {name}
-                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => applyPreset(val)}
+                          className="flex-1 text-left hover:text-foreground cursor-pointer text-xs font-medium"
+                        >
+                          {name}
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs whitespace-pre-line text-left text-xs">
+                        {formatPresetDetails(val)}
+                      </TooltipContent>
+                    </Tooltip>
                     <button
                       type="button"
                       onClick={() => deletePreset(name)}
@@ -379,12 +447,7 @@ export function KanbanBoard() {
                 <form
                   onSubmit={(e) => {
                     e.preventDefault()
-                    const formData = new FormData(e.currentTarget)
-                    const name = formData.get('name') as string
-                    if (name) {
-                      savePreset(name)
-                      e.currentTarget.reset()
-                    }
+                    savePreset(presetName)
                   }}
                   className="flex gap-1"
                 >
@@ -393,12 +456,31 @@ export function KanbanBoard() {
                     name="name"
                     placeholder="New preset..."
                     required
+                    value={presetName}
+                    onChange={(event) => {
+                      setPresetName(event.target.value)
+                      setPresetSaveMessage('')
+                    }}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onPointerDown={(event) => event.stopPropagation()}
                     className="flex-1 h-7 border border-border/80 rounded-md bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <Button type="submit" size="sm" className="h-7 px-2 text-xs rounded-md">
+                  <Button type="submit" size="sm" className="h-7 px-2 text-xs rounded-md" disabled={!presetName.trim()}>
                     Save
                   </Button>
                 </form>
+                {presetSaveMessage && (
+                  <div
+                    className={cn(
+                      "mt-1 text-[10px]",
+                      presetSaveMessage.startsWith('Could not') ? "text-destructive" : "text-muted-foreground"
+                    )}
+                    role="status"
+                    aria-live="polite"
+                  >
+                    {presetSaveMessage}
+                  </div>
+                )}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -450,6 +532,8 @@ export function KanbanBoard() {
             </Button>
           )}
         </div>
+          </>
+        )}
       </div>
 
       {isLoadingTickets && (
@@ -530,6 +614,7 @@ export function KanbanBoard() {
             emptyLabel={isSearchActive ? 'No matching tickets' : 'No tickets'}
             resetKey={resetFiltersKey}
             sortBy={sortBy}
+            searchQuery={searchQuery}
           />
         ))}
       </div>

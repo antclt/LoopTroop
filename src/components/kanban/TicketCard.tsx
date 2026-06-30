@@ -3,7 +3,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
-import { Loader2, AlertTriangle, ChevronUp, ChevronDown, Minus, HelpCircle } from 'lucide-react'
+import { Loader2, AlertTriangle, ChevronUp, ChevronDown, Minus, HelpCircle, Activity } from 'lucide-react'
 import { useUI } from '@/context/useUI'
 import { useAIQuestions } from '@/context/useAIQuestions'
 import { STATUS_DESCRIPTIONS, STATUS_TO_PHASE, getStatusUserLabel } from '@/lib/workflowMeta'
@@ -19,7 +19,14 @@ import {
   markNeedsInputSeen,
   readNeedsInputSeen,
 } from '@/lib/needsInputSeen'
-import { getStatusColor, formatRelativeDateChip, getStatusProgress, getStatusRingColor } from './ticketCardUtils'
+import {
+  getStatusColor,
+  formatRelativeDateChip,
+  formatRelativeAge,
+  getStatusProgress,
+  getStatusRingColor,
+  getTicketErrorHash,
+} from './ticketCardUtils'
 import { ProgressRing } from './ProgressRing'
 import { TicketExternalId } from '@/components/ticket/TicketExternalId'
 import { getTicketExternalIdLabel } from '@/lib/ticketDisplay'
@@ -41,10 +48,19 @@ interface TicketCardProps {
     errorSeenSignature?: string | null
     needsInputSeenSignature?: string | null
     completionDisposition?: 'merged' | 'closed_unmerged' | null
+    runtime?: {
+      currentBead?: number | null
+      totalBeads?: number | null
+      iterationCount?: number | null
+      maxIterations?: number | null
+      activeBeadIteration?: number | null
+      maxIterationsPerBead?: number | null
+    } | null
   }
   projectColor?: string
   projectIcon?: string
   projectName?: string
+  searchMatchLabel?: string | null
 }
 
 function PriorityArrows({ priority }: { priority: number }) {
@@ -120,12 +136,32 @@ function PriorityArrows({ priority }: { priority: number }) {
   }
 }
 
-export function TicketCard({ ticket, projectColor, projectIcon, projectName }: TicketCardProps) {
+function formatRunPhase(phase: string): string {
+  return phase.replace(/_/g, ' ')
+}
+
+function formatRunBead(current?: number | null, total?: number | null): string {
+  if (total && total > 0) {
+    return `${current && current > 0 ? current : '-'}/${total}`
+  }
+  return 'n/a'
+}
+
+function formatRunRetry(current?: number | null, max?: number | null): string {
+  if (current !== null && current !== undefined && max !== null && max !== undefined) return `${current}/${max}`
+  if (current !== null && current !== undefined) return `${current}/?`
+  if (max !== null && max !== undefined) return `-/${max}`
+  return 'n/a'
+}
+
+export function TicketCard({ ticket, projectColor, projectIcon, projectName, searchMatchLabel }: TicketCardProps) {
   const { dispatch } = useUI()
   const { getPendingCount } = useAIQuestions()
   const isError = ticket.status === 'BLOCKED_ERROR'
   const isTerminal = ticket.status === 'COMPLETED' || ticket.status === 'CANCELED'
-  const isInProgress = !isTerminal && STATUS_TO_PHASE[ticket.status] === 'in_progress'
+  const kanbanPhase = STATUS_TO_PHASE[ticket.status] ?? 'todo'
+  const isInProgress = !isTerminal && kanbanPhase === 'in_progress'
+  const showRunHealth = !isTerminal && (kanbanPhase === 'in_progress' || kanbanPhase === 'needs_input')
   const progress = getStatusProgress(ticket.status)
   const ringColor = getStatusRingColor(ticket.status)
   const statusLabel = getStatusUserLabel(ticket.status, {
@@ -141,6 +177,13 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
   const pendingAIQuestions = getPendingCount(ticket.id)
   const hasPendingAIQuestion = pendingAIQuestions > 0
   const attentionColor = projectColor ?? '#3b82f6'
+  const runBead = formatRunBead(ticket.runtime?.currentBead ?? ticket.currentBead, ticket.runtime?.totalBeads ?? ticket.totalBeads)
+  const runRetry = formatRunRetry(
+    ticket.runtime?.activeBeadIteration ?? ticket.runtime?.iterationCount,
+    ticket.runtime?.maxIterationsPerBead ?? ticket.runtime?.maxIterations,
+  )
+  const lastResponseAge = formatRelativeAge(ticket.updatedAt)
+  const lastErrorHash = getTicketErrorHash(ticket.errorMessage)
 
   // Track "seen" state for BLOCKED_ERROR — stop flashing after first open
   const [errorSeen, setErrorSeen] = useState(() =>
@@ -249,6 +292,20 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
               AI question {pendingAIQuestions}
             </Badge>
           )}
+          {searchMatchLabel && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  tabIndex={0}
+                  className="shrink-0 border-sky-300 bg-sky-50 text-[10px] text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300"
+                >
+                  {searchMatchLabel}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center text-balance">Dashboard search matched this field.</TooltipContent>
+            </Tooltip>
+          )}
           {progress !== null && (
             <Tooltip>
                         <TooltipTrigger asChild>
@@ -259,6 +316,27 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
                         </TooltipTrigger>
                         <TooltipContent className="max-w-xs text-center text-balance">Workflow progress</TooltipContent>
                       </Tooltip>
+          )}
+          {showRunHealth && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Badge
+                  variant="outline"
+                  tabIndex={0}
+                  className="shrink-0 gap-1 border-emerald-300 bg-emerald-50 text-[10px] text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                >
+                  <Activity className="h-3 w-3" />
+                  Run {runBead === 'n/a' ? 'active' : runBead}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-left text-xs">
+                <div>phase: {formatRunPhase(kanbanPhase)}</div>
+                <div>bead: {runBead}</div>
+                <div>last_model_response_age: {lastResponseAge} (ticket update age)</div>
+                <div>retry: {runRetry}</div>
+                <div>last_error_hash: {lastErrorHash ?? 'none'}</div>
+              </TooltipContent>
+            </Tooltip>
           )}
         </div>
         <Tooltip>

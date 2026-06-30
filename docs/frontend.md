@@ -343,7 +343,11 @@ The Kanban board is the default root view when no ticket is selected. Clicking t
 
 Dashboard ticket search is shell-level chrome for the root board. `AppShell` renders the search input beside **New Ticket** on desktop and moves the same control into a mobile search popover on small screens. The value is stored as `filters.search` in persisted `UIState`, so it survives refreshes and normal dashboard navigation.
 
-Kanban search filtering is client-side and intentionally narrow. It filters the already-loaded ticket list by external ticket ID, title, attached project name, and project shortname only; ticket descriptions, status labels, phase text, and other metadata are not part of the dashboard search index. External IDs use compact matching that strips separators and ignores case, so a search such as `LOO15` matches `LOO-15`.
+Kanban search filtering is client-side and intentionally narrow. It filters the already-loaded ticket list by external ticket ID, title, ticket description, attached project name, and project shortname only; status labels, phase text, priority labels, and other metadata are not part of the dashboard search index. External IDs use compact matching that strips separators and ignores case, so a search such as `LOO15` matches `LOO-15`. Matching cards show a compact field hint such as `ID match`, `Title match`, `Description match`, or `Project match`.
+
+The Kanban filter slider opens the Triage & Filter Control Bar for project, priority, stale/inactive, error-only, saved preset, and sort controls. The hidden slider button shows a count badge when any non-search triage filter or non-default sort is active. Saved presets remain project-scoped in local storage and expose their full saved details on hover instead of expanding the dropdown row. The default sort is `Last Updated (Newest first)`.
+
+The stale/inactive filter is intentionally scoped to live operator triage: when a stale age is selected, To Do and Done are cleared and only matching Needs Input and In Progress tickets remain visible. Active Needs Input and In Progress cards also show a compact run-health chip with phase, bead progress, ticket-update age as the available model-response freshness signal, retry count, and an error-message hash when an active error message is present.
 
 Project-name prefix suggestions are generated from all attached projects, not only projects that currently have visible matching tickets. Choosing a suggestion writes that project name into the search field and uses the same client-side filter path as typed input.
 

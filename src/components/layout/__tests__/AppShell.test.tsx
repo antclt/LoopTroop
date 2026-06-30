@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AppShell } from '../AppShell'
 import { UIContext, type UIContextValue } from '@/context/uiContextDef'
@@ -184,6 +184,22 @@ describe('AppShell', () => {
       type: 'SET_FILTER',
       filter: { search: '' },
     })
+  })
+
+  it('shows a count badge on the filter button when hidden triage filters are active', () => {
+    renderShell(makeUIValue({
+      filters: {
+        ...makeFilters('visible-search-does-not-count'),
+        priority: [1, 2],
+        stuckDays: 3,
+        onlyErrors: true,
+        sortBy: 'priority_asc',
+      },
+    }))
+
+    const filterButton = screen.getByRole('button', { name: /show filters, 4 active/i })
+
+    expect(within(filterButton).getByText('4')).toBeInTheDocument()
   })
 
   it('suggests only project names that start with the typed search', () => {

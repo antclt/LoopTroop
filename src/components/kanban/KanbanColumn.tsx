@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { TicketCard } from './TicketCard'
 import type { KanbanColumnConfig } from './KanbanBoard'
+import { getDashboardSearchMatch } from './kanbanSearch'
 import type { Ticket } from '@/hooks/useTickets'
 import type { Project } from '@/hooks/useProjects'
 
@@ -18,9 +19,18 @@ interface KanbanColumnProps {
   emptyLabel?: string
   resetKey?: string
   sortBy?: string
+  searchQuery?: string
 }
 
-export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tickets', resetKey = '', sortBy = 'updatedAt_desc' }: KanbanColumnProps) {
+export function KanbanColumn({
+  column,
+  tickets,
+  projectMap,
+  emptyLabel = 'No tickets',
+  resetKey = '',
+  sortBy = 'updatedAt_desc',
+  searchQuery = '',
+}: KanbanColumnProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageInput, setPageInput] = useState('1')
 
@@ -114,6 +124,7 @@ export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tic
             <div className="min-w-0 space-y-2">
               {paginatedTickets.map((ticket) => {
                 const project = projectMap.get(ticket.projectId)
+                const searchMatch = getDashboardSearchMatch(ticket, project, searchQuery)
                 return (
                   <TicketCard
                     key={ticket.id}
@@ -121,6 +132,7 @@ export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tic
                     projectColor={project?.color}
                     projectIcon={project?.icon}
                     projectName={project?.name}
+                    searchMatchLabel={searchMatch?.label}
                   />
                 )
               })}

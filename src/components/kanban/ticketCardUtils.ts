@@ -77,6 +77,34 @@ export function formatRelativeDateChip(dateStr: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
+export function formatRelativeAge(dateStr: string, nowMs = Date.now()): string {
+  const timestamp = new Date(dateStr).getTime()
+  if (Number.isNaN(timestamp)) return 'unknown'
+
+  const diffMs = Math.max(0, nowMs - timestamp)
+  const minuteMs = 60 * 1000
+  const hourMs = 60 * minuteMs
+  const dayMs = 24 * hourMs
+
+  if (diffMs < minuteMs) return '<1m'
+  if (diffMs < hourMs) return `${Math.floor(diffMs / minuteMs)}m`
+  if (diffMs < dayMs) return `${Math.floor(diffMs / hourMs)}h`
+  return `${Math.floor(diffMs / dayMs)}d`
+}
+
+export function getTicketErrorHash(errorMessage?: string | null): string | null {
+  const trimmed = errorMessage?.trim()
+  if (!trimmed) return null
+
+  let hash = 2166136261
+  for (let index = 0; index < trimmed.length; index += 1) {
+    hash ^= trimmed.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+
+  return (hash >>> 0).toString(16).padStart(8, '0')
+}
+
 export function getStatusProgress(status: string): number | null {
   if (status === 'BLOCKED_ERROR') return null
   if (STATUS_TO_PHASE[status] === 'todo' || STATUS_TO_PHASE[status] === 'done') return null
