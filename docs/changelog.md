@@ -51,6 +51,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Fixed
 - Fixed Kanban preset saving so the dropdown form uses controlled input state, reports inline save/failure feedback, and avoids exposing collapsed filter controls to hidden hit targets.
+- Fixed a React console warning on pulsing ticket cards by avoiding mixed border shorthand and side-specific border styles.
 - Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
 
 #### Maintenance

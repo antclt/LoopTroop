@@ -241,12 +241,18 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName, sea
         borderLeftColor: attentionColor,
         ...(needsInputYellowFlashing
           ? {
-              borderColor: '#f59e0b',
+              borderTopColor: '#f59e0b',
+              borderRightColor: '#f59e0b',
+              borderBottomColor: '#f59e0b',
+              borderLeftColor: '#f59e0b',
               boxShadow: '0 0 0 2px rgba(251,191,36,0.45), 0 0 14px rgba(251,191,36,0.30)',
             }
           : showPendingQuestionPulse
             ? {
-                borderColor: attentionColor,
+                borderTopColor: attentionColor,
+                borderRightColor: attentionColor,
+                borderBottomColor: attentionColor,
+                borderLeftColor: attentionColor,
                 boxShadow: `0 0 0 2px ${attentionColor}55, 0 0 18px ${attentionColor}40`,
               }
             : {}),
