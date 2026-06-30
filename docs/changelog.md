@@ -12,7 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
-- Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, error only, and needs input only) to the Kanban board, complete with project-scoped local presets and ticket description search.
+- Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, and error only) to the Kanban board, complete with project-scoped local presets and ticket description search.
 - Added animated status icons for AI council actions and throbbing warning indicators for blocked ticket error states.
 - Added an About window for app-level storage details and surfaced each project's local `.looptroop` state path in Project Details.
 - Added ack-aware yellow flashing for tickets waiting on user input, so the dashboard highlights what needs you and stops flashing once you've opened the ticket.

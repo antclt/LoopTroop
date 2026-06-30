@@ -83,6 +83,18 @@ const projects: Project[] = [
   },
 ]
 
+function makeFilters(search = ''): UIContextValue['state']['filters'] {
+  return {
+    projectId: null,
+    status: null,
+    search,
+    priority: null,
+    stuckDays: null,
+    onlyErrors: false,
+    sortBy: 'updatedAt_desc',
+  }
+}
+
 function makeUIValue(overrides: Partial<UIContextValue['state']> = {}, dispatch = vi.fn()): UIContextValue {
   return {
     state: {
@@ -91,12 +103,9 @@ function makeUIValue(overrides: Partial<UIContextValue['state']> = {}, dispatch 
       sidebarOpen: true,
       activeView: 'kanban',
       logPanelHeight: 300,
-      filters: {
-        projectId: null,
-        status: null,
-        search: '',
-      },
+      filters: makeFilters(),
       theme: 'system',
+      showTriageBar: false,
       ...overrides,
     },
     dispatch,
@@ -114,11 +123,7 @@ function renderShell(uiValue = makeUIValue()) {
 }
 
 const uiValue: UIContextValue = makeUIValue({
-  filters: {
-    projectId: null,
-    status: null,
-    search: '',
-  },
+  filters: makeFilters(),
 })
 
 describe('AppShell', () => {
@@ -155,11 +160,7 @@ describe('AppShell', () => {
     const dispatch = vi.fn()
 
     renderShell(makeUIValue({
-      filters: {
-        projectId: null,
-        status: null,
-        search: 'Loop',
-      },
+      filters: makeFilters('Loop'),
     }, dispatch))
 
     fireEvent.click(screen.getByRole('button', { name: /clear ticket search/i }))
@@ -174,11 +175,7 @@ describe('AppShell', () => {
     const dispatch = vi.fn()
 
     renderShell(makeUIValue({
-      filters: {
-        projectId: null,
-        status: null,
-        search: 'Loop',
-      },
+      filters: makeFilters('Loop'),
     }, dispatch))
 
     fireEvent.keyDown(screen.getByRole('searchbox', { name: /search tickets/i }), { key: 'Escape' })
@@ -193,11 +190,7 @@ describe('AppShell', () => {
     const dispatch = vi.fn()
 
     renderShell(makeUIValue({
-      filters: {
-        projectId: null,
-        status: null,
-        search: 'l',
-      },
+      filters: makeFilters('l'),
     }, dispatch))
 
     fireEvent.focus(screen.getByRole('searchbox', { name: /search tickets/i }))

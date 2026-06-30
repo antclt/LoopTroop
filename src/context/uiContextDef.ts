@@ -13,7 +13,6 @@ export interface UIState {
     priority: number[] | null
     stuckDays: number | null
     onlyErrors: boolean
-    onlyNeedsInput: boolean
     sortBy: string
   }
   theme: 'light' | 'dark' | 'system'

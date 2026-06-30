@@ -16,7 +16,6 @@ const defaultState: UIState = {
     priority: null,
     stuckDays: null,
     onlyErrors: false,
-    onlyNeedsInput: false,
     sortBy: 'updatedAt_desc',
   },
   theme: 'system',
@@ -24,6 +23,23 @@ const defaultState: UIState = {
 }
 
 const VALID_VIEWS: UIState['activeView'][] = ['kanban', 'ticket', 'project', 'config']
+
+function normalizeFilters(value: Partial<UIState['filters']> | undefined): UIState['filters'] {
+  const merged = {
+    ...defaultState.filters,
+    ...(value ?? {}),
+  } as UIState['filters'] & Record<string, unknown>
+
+  return {
+    projectId: merged.projectId,
+    status: merged.status,
+    search: merged.search,
+    priority: merged.priority,
+    stuckDays: merged.stuckDays,
+    onlyErrors: merged.onlyErrors,
+    sortBy: merged.sortBy,
+  }
+}
 
 function normalizeUIState(value: Partial<UIState>): UIState {
   const activeView = VALID_VIEWS.includes(value.activeView as UIState['activeView'])
@@ -34,10 +50,7 @@ function normalizeUIState(value: Partial<UIState>): UIState {
     ...defaultState,
     ...value,
     activeView: activeView ?? defaultState.activeView,
-    filters: {
-      ...defaultState.filters,
-      ...(value.filters ?? {}),
-    },
+    filters: normalizeFilters(value.filters),
   }
 }
 
@@ -58,7 +71,6 @@ function isValidUIState(value: unknown): value is Partial<UIState> {
     if (filters.priority !== undefined && filters.priority !== null && !Array.isArray(filters.priority)) return false
     if (filters.stuckDays !== undefined && filters.stuckDays !== null && typeof filters.stuckDays !== 'number') return false
     if (filters.onlyErrors !== undefined && typeof filters.onlyErrors !== 'boolean') return false
-    if (filters.onlyNeedsInput !== undefined && typeof filters.onlyNeedsInput !== 'boolean') return false
     if (filters.sortBy !== undefined && typeof filters.sortBy !== 'string') return false
   }
   return true
@@ -91,7 +103,7 @@ function uiReducer(state: UIState, action: UIAction): UIState {
     case 'SET_LOG_PANEL_HEIGHT':
       return { ...state, logPanelHeight: action.height }
     case 'SET_FILTER':
-      return { ...state, filters: { ...defaultState.filters, ...state.filters, ...action.filter } }
+      return { ...state, filters: normalizeFilters({ ...state.filters, ...action.filter }) }
     case 'SET_THEME':
       return { ...state, theme: action.theme }
     case 'CLOSE_TICKET':

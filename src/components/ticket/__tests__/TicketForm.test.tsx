@@ -21,6 +21,18 @@ vi.mock('@/hooks/useTickets', async () => {
   }
 })
 
+function makeFilters(): UIContextValue['state']['filters'] {
+  return {
+    projectId: null,
+    status: null,
+    search: '',
+    priority: null,
+    stuckDays: null,
+    onlyErrors: false,
+    sortBy: 'updatedAt_desc',
+  }
+}
+
 function makeUIValue(): UIContextValue {
   return {
     state: {
@@ -29,8 +41,9 @@ function makeUIValue(): UIContextValue {
       sidebarOpen: true,
       activeView: 'kanban',
       logPanelHeight: 320,
-      filters: { projectId: null, status: null, search: '' },
+      filters: makeFilters(),
       theme: 'system',
+      showTriageBar: false,
     },
     dispatch: vi.fn(),
   }

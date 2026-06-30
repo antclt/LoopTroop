@@ -84,7 +84,6 @@ export function KanbanBoard() {
   const selectedPriority = state.filters?.priority ?? null
   const selectedStuckDays = state.filters?.stuckDays ?? null
   const onlyErrors = state.filters?.onlyErrors ?? false
-  const onlyNeedsInput = state.filters?.onlyNeedsInput ?? false
   const sortBy = state.filters?.sortBy ?? 'updatedAt_desc'
 
   // Presets State Management
@@ -93,7 +92,6 @@ export function KanbanBoard() {
     priority: number[] | null
     stuckDays: number | null
     onlyErrors: boolean
-    onlyNeedsInput: boolean
     sortBy: string
   }>>(() => {
     try {
@@ -121,7 +119,6 @@ export function KanbanBoard() {
         priority: selectedPriority,
         stuckDays: selectedStuckDays,
         onlyErrors,
-        onlyNeedsInput,
         sortBy,
       }
     }
@@ -143,7 +140,6 @@ export function KanbanBoard() {
         priority: presetValue.priority,
         stuckDays: presetValue.stuckDays,
         onlyErrors: presetValue.onlyErrors,
-        onlyNeedsInput: presetValue.onlyNeedsInput,
         sortBy: presetValue.sortBy,
       }
     })
@@ -196,10 +192,10 @@ export function KanbanBoard() {
   })), [filteredTickets])
 
   const hasLoadedTickets = Array.isArray(tickets)
-  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStuckDays !== null || onlyErrors || onlyNeedsInput
+  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStuckDays !== null || onlyErrors
   const hasNoSearchResults = hasLoadedTickets && isAnyFilterActive && filteredTickets.length === 0
 
-  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStuckDays}-${onlyErrors}-${onlyNeedsInput}-${sortBy}`
+  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStuckDays}-${onlyErrors}-${sortBy}`
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
@@ -431,7 +427,6 @@ export function KanbanBoard() {
             selectedPriority !== null ||
             selectedStuckDays !== null ||
             onlyErrors ||
-            onlyNeedsInput ||
             sortBy !== 'updatedAt_desc') && (
             <Button
               type="button"
@@ -445,7 +440,6 @@ export function KanbanBoard() {
                     priority: null,
                     stuckDays: null,
                     onlyErrors: false,
-                    onlyNeedsInput: false,
                     sortBy: 'updatedAt_desc',
                   }
                 })
@@ -491,7 +485,7 @@ export function KanbanBoard() {
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors && !onlyNeedsInput
+              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors
                 ? 'No tickets match this search.'
                 : 'No tickets match active search or filters.'}
             </p>
@@ -500,7 +494,7 @@ export function KanbanBoard() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors && !onlyNeedsInput) {
+                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors) {
                   dispatch({ type: 'SET_FILTER', filter: { search: '' } })
                 } else {
                   dispatch({
@@ -511,7 +505,6 @@ export function KanbanBoard() {
                       priority: null,
                       stuckDays: null,
                       onlyErrors: false,
-                      onlyNeedsInput: false,
                       sortBy: 'updatedAt_desc',
                     }
                   })
@@ -520,7 +513,7 @@ export function KanbanBoard() {
               className="w-fit"
             >
               <X className="mr-1 h-4 w-4" />
-              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors && !onlyNeedsInput
+              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors
                 ? 'Clear search'
                 : 'Reset filters & search'}
             </Button>

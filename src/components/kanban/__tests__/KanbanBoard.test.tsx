@@ -23,6 +23,18 @@ function renderWithProviders(ui: React.ReactElement) {
   return sharedRenderWithProviders(<UIProvider>{ui}</UIProvider>)
 }
 
+function makeFilters(search = ''): UIContextValue['state']['filters'] {
+  return {
+    projectId: null,
+    status: null,
+    search,
+    priority: null,
+    stuckDays: null,
+    onlyErrors: false,
+    sortBy: 'updatedAt_desc',
+  }
+}
+
 function makeUIValue(search: string, dispatch = vi.fn()): UIContextValue {
   return {
     state: {
@@ -31,8 +43,9 @@ function makeUIValue(search: string, dispatch = vi.fn()): UIContextValue {
       sidebarOpen: true,
       activeView: 'kanban',
       logPanelHeight: 300,
-      filters: { projectId: null, status: null, search },
+      filters: makeFilters(search),
       theme: 'system',
+      showTriageBar: false,
     },
     dispatch,
   }
