@@ -5,7 +5,7 @@ import { useProjects } from '@/hooks/useProjects'
 import { useUI } from '@/context/useUI'
 import { STATUS_TO_PHASE } from '@/lib/workflowMeta'
 import { Badge } from '@/components/ui/badge'
-import { RefreshCw, X } from 'lucide-react'
+import { RefreshCw, X, ChevronDown, FolderOpen } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Button } from '@/components/ui/button'
 import { ticketMatchesDashboardSearch } from './kanbanSearch'
@@ -14,6 +14,7 @@ import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
+  DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'
@@ -52,14 +53,34 @@ const columns: KanbanColumnConfig[] = [
   },
 ]
 
+function ProjectIcon({
+  icon,
+  imageClassName,
+  emojiClassName,
+}: {
+  icon?: string | null
+  imageClassName: string
+  emojiClassName: string
+}) {
+  if (!icon) return null
+  return icon.startsWith('data:')
+    ? <img src={icon} className={`${imageClassName} rounded`} alt="" />
+    : <span className={emojiClassName} aria-hidden="true">{icon}</span>
+}
+
 export function KanbanBoard() {
   const { state, dispatch } = useUI()
   const { data: tickets, isLoading: isLoadingTickets } = useTickets()
   const { data: projects = [] } = useProjects()
+
+  const selectedProjectId = state.filters?.projectId ?? null
+  const selectedProject = useMemo(() => {
+    if (selectedProjectId === null) return null
+    return projects.find(p => p.id === selectedProjectId) || null
+  }, [projects, selectedProjectId])
   
   const searchQuery = state.filters?.search ?? ''
   const isSearchActive = searchQuery.trim().length > 0
-  const selectedProjectId = state.filters?.projectId ?? null
   const selectedPriority = state.filters?.priority ?? null
   const selectedStuckDays = state.filters?.stuckDays ?? null
   const onlyErrors = state.filters?.onlyErrors ?? false
@@ -148,11 +169,17 @@ export function KanbanBoard() {
       result = result.filter(t => selectedPriority.includes(t.priority))
     }
 
-    // 4. Stuck Days Filter
+    // 4. Stuck Days Filter (evaluates inactivity only for active columns: in_progress and needs_input)
     if (selectedStuckDays !== null) {
       const threshold = selectedStuckDays * 24 * 60 * 60 * 1000
       const now = Date.now()
-      result = result.filter(t => (now - new Date(t.updatedAt).getTime()) > threshold)
+      result = result.filter(t => {
+        const phase = STATUS_TO_PHASE[t.status] ?? 'todo'
+        if (phase === 'in_progress' || phase === 'needs_input') {
+          return (now - new Date(t.updatedAt).getTime()) > threshold
+        }
+        return true
+      })
     }
 
     // 5. Only Errors Filter
@@ -160,13 +187,8 @@ export function KanbanBoard() {
       result = result.filter(t => t.status === 'BLOCKED_ERROR')
     }
 
-    // 6. Only Needs Input Filter
-    if (onlyNeedsInput) {
-      result = result.filter(t => (STATUS_TO_PHASE[t.status] ?? 'todo') === 'needs_input')
-    }
-
     return result
-  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStuckDays, onlyErrors, onlyNeedsInput, projectMap])
+  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStuckDays, onlyErrors, projectMap])
 
   const ticketsByPhase = useMemo(() => columns.map(col => ({
     ...col,
@@ -193,27 +215,50 @@ export function KanbanBoard() {
       >
         <div className="flex flex-wrap items-center gap-4">
           {/* Project Filter */}
-          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-            Project
-            <select
-              className="h-8 rounded-lg border border-border/80 bg-background/40 hover:bg-background/80 px-2.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-ring cursor-pointer font-medium"
-              value={selectedProjectId !== null ? String(selectedProjectId) : 'all'}
-              onChange={(e) => {
-                const val = e.target.value
-                dispatch({
-                  type: 'SET_FILTER',
-                  filter: { projectId: val === 'all' ? null : Number(val) }
-                })
-              }}
-            >
-              <option value="all">All Projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            <span>Project</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border border-border/80 bg-background/40 hover:bg-background/80 text-xs rounded-lg transition-colors font-medium cursor-pointer px-2.5 flex items-center gap-1.5 text-foreground shadow-sm"
+                >
+                  {selectedProject ? (
+                    <>
+                      <ProjectIcon icon={selectedProject.icon} imageClassName="h-4 w-4" emojiClassName="text-xs" />
+                      <span className="max-w-[120px] truncate">{selectedProject.name}</span>
+                    </>
+                  ) : (
+                    <>
+                      <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span>All Projects</span>
+                    </>
+                  )}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0 ml-0.5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 rounded-lg bg-popover/95 backdrop-blur-md">
+                <DropdownMenuItem
+                  onClick={() => dispatch({ type: 'SET_FILTER', filter: { projectId: null } })}
+                  className="text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <FolderOpen className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <span>All Projects</span>
+                </DropdownMenuItem>
+                {projects.map((p) => (
+                  <DropdownMenuItem
+                    key={p.id}
+                    onClick={() => dispatch({ type: 'SET_FILTER', filter: { projectId: p.id } })}
+                    className="text-xs flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ProjectIcon icon={p.icon} imageClassName="h-3.5 w-3.5" emojiClassName="text-xs" />
+                    <span className="truncate">{p.name}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
           <div className="h-4 w-px bg-border/50 hidden sm:block" />
 
@@ -221,36 +266,40 @@ export function KanbanBoard() {
           <div className="flex items-center gap-1">
             <span className="text-xs font-semibold text-muted-foreground mr-1.5">Priority</span>
             {[
-              { label: 'VH', val: 1, activeColor: 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400 dark:bg-red-500/5 shadow-[0_0_8px_rgba(239,68,68,0.12)] border-red-500/70' },
-              { label: 'H', val: 2, activeColor: 'border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400 dark:bg-orange-500/5 shadow-[0_0_8px_rgba(249,115,22,0.12)] border-orange-500/70' },
-              { label: 'N', val: 3, activeColor: 'border-gray-500 bg-gray-500/10 text-gray-700 dark:text-gray-300 dark:bg-gray-500/5 border-gray-500/70' },
-              { label: 'L', val: 4, activeColor: 'border-blue-400 bg-blue-400/10 text-blue-600 dark:text-blue-400 dark:bg-blue-400/5 shadow-[0_0_8px_rgba(96,165,250,0.12)] border-blue-400/70' },
-              { label: 'VL', val: 5, activeColor: 'border-indigo-400 bg-indigo-400/10 text-indigo-600 dark:text-indigo-400 dark:bg-indigo-400/5 shadow-[0_0_8px_rgba(129,140,248,0.12)] border-indigo-400/70' },
-            ].map(({ label, val, activeColor }) => {
+              { label: 'VH', val: 1, text: 'Very High', activeColor: 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400 dark:bg-red-500/5 shadow-[0_0_8px_rgba(239,68,68,0.12)] border-red-500/70' },
+              { label: 'H', val: 2, text: 'High', activeColor: 'border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400 dark:bg-orange-500/5 shadow-[0_0_8px_rgba(249,115,22,0.12)] border-orange-500/70' },
+              { label: 'N', val: 3, text: 'Normal', activeColor: 'border-gray-500 bg-gray-500/10 text-gray-700 dark:text-gray-300 dark:bg-gray-500/5 border-gray-500/70' },
+              { label: 'L', val: 4, text: 'Low', activeColor: 'border-blue-400 bg-blue-400/10 text-blue-600 dark:text-blue-400 dark:bg-blue-400/5 shadow-[0_0_8px_rgba(96,165,250,0.12)] border-blue-400/70' },
+              { label: 'VL', val: 5, text: 'Very Low', activeColor: 'border-indigo-400 bg-indigo-400/10 text-indigo-600 dark:text-indigo-400 dark:bg-indigo-400/5 shadow-[0_0_8px_rgba(129,140,248,0.12)] border-indigo-400/70' },
+            ].map(({ label, val, text, activeColor }) => {
               const active = selectedPriority?.includes(val) ?? false
               return (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => {
-                    const current = selectedPriority ?? []
-                    const next = current.includes(val)
-                      ? current.filter(v => v !== val)
-                      : [...current, val]
-                    dispatch({
-                      type: 'SET_FILTER',
-                      filter: { priority: next.length === 0 ? null : next }
-                    })
-                  }}
-                  className={cn(
-                    "h-8 px-2.5 text-[10px] font-bold rounded-lg border transition-all cursor-pointer",
-                    active
-                      ? activeColor
-                      : "border-border bg-background/40 hover:bg-muted text-muted-foreground"
-                  )}
-                >
-                  {label}
-                </button>
+                <Tooltip key={val}>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = selectedPriority ?? []
+                        const next = current.includes(val)
+                          ? current.filter(v => v !== val)
+                          : [...current, val]
+                        dispatch({
+                          type: 'SET_FILTER',
+                          filter: { priority: next.length === 0 ? null : next }
+                        })
+                      }}
+                      className={cn(
+                        "h-8 px-2.5 text-[10px] font-bold rounded-lg border transition-all cursor-pointer",
+                        active
+                          ? activeColor
+                          : "border-border bg-background/40 hover:bg-muted text-muted-foreground"
+                      )}
+                    >
+                      {label}
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent className="text-xs">{text}</TooltipContent>
+                </Tooltip>
               )
             })}
           </div>
@@ -292,20 +341,6 @@ export function KanbanBoard() {
             )}
           >
             Errors Only
-          </Button>
-
-          {/* Needs Input toggle */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => dispatch({ type: 'SET_FILTER', filter: { onlyNeedsInput: !onlyNeedsInput } })}
-            className={cn(
-              "h-8 text-xs cursor-pointer rounded-lg border-border/80 bg-background/40 hover:bg-accent transition-all font-medium",
-              onlyNeedsInput && "border-amber-500/80 bg-amber-500/10 hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 dark:bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.12)]"
-            )}
-          >
-            Needs Input Only
           </Button>
         </div>
 

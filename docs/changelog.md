@@ -25,7 +25,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Detailed Changes
 #### Added
-- Added a Triage & Filter Control Bar to the Kanban board (`KanbanBoard.tsx`), enabling client-side filtering of tickets by Project, Priority (Very High to Very Low toggle badges), Inactivity age (Stale > 24h, > 3d, > 7d), Errors only, and Needs Input only. The bar is hidden by default and can be toggled via a premium filter control button next to the search bar.
+- Added a Triage & Filter Control Bar to the Kanban board (`KanbanBoard.tsx`), enabling client-side filtering of tickets by Project (dropdown with project icons and emojis), Priority (Very High to Very Low toggle badges with hover tooltips), Inactivity age (Stale > 24h, > 3d, > 7d affecting only the Needs Input and In Progress columns), and Errors only. The bar is hidden by default and can be toggled via a premium filter control button next to the search bar.
 - Added custom filter presets stored locally per project (`looptroop-presets-${projectId}`) in `localStorage`, letting users save, load, and delete custom filter configurations.
 - Added 8 bidirectional sorting modes to Kanban columns (`KanbanColumn.tsx`): Last Updated (Newest/Oldest), Date Created (Newest/Oldest), Priority (High to Low/Low to High), and Title (A-Z/Z-A).
 - Added `formatRelativeDateChip` to ticket cards to show clear calendar-relative date chips (`Today HH:MM`, `Yesterday`, or weekday name) with absolute timestamp tooltips.
