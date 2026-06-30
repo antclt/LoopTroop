@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, screen } from '@testing-library/react'
+import { cleanup, screen } from '@testing-library/react'
 import { UIProvider } from '@/context/UIContext'
 import { AIQuestionContext, type AIQuestionContextValue } from '@/context/aiQuestionContextDef'
 import { TicketCard } from '../TicketCard'
@@ -125,43 +125,6 @@ describe('TicketCard — ack-aware yellow Needs Input flashing', () => {
     expect(card.className).toContain('bg-primary/5')
   })
 
-  it('shows run-health details for active tickets', async () => {
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-06-30T12:00:00.000Z'))
-
-    const base = makeTicket()
-    const ticket = makeTicket({
-      id: '1:TEST-1',
-      externalId: TEST.externalId,
-      status: 'CODING',
-      currentBead: 2,
-      totalBeads: 5,
-      updatedAt: '2026-06-30T10:00:00.000Z',
-      errorMessage: 'provider unavailable',
-      runtime: {
-        ...base.runtime,
-        currentBead: 2,
-        totalBeads: 5,
-        activeBeadIteration: 1,
-        maxIterationsPerBead: 3,
-      },
-    })
-
-    renderCard(ticket)
-
-    const runHealthChip = screen.getByText('Run 2/5')
-    expect(runHealthChip).toBeInTheDocument()
-
-    fireEvent.focus(runHealthChip)
-    await vi.advanceTimersByTimeAsync(1000)
-
-    const tooltip = screen.getByRole('tooltip')
-    expect(tooltip).toHaveTextContent('phase: in progress')
-    expect(tooltip).toHaveTextContent('bead: 2/5')
-    expect(tooltip).toHaveTextContent('last_model_response_age: 2h (ticket update age)')
-    expect(tooltip).toHaveTextContent('retry: 1/3')
-    expect(tooltip).toHaveTextContent(/last_error_hash: [a-f0-9]{8}/)
-  })
 
   it('re-flashes when the wait reason changes after a prior acknowledgment', () => {
     const first = makeTicket({

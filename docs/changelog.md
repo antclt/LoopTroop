@@ -12,8 +12,10 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Fixed Kanban preset saving to gracefully fallback to in-memory storage when browser storage (localStorage) is disabled or sandboxed, avoiding "Could not save preset" errors.
+- Removed the redundant "Run active / Run 19/19" progress/health badge from Kanban board ticket cards.
 - Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, and error only) to the Kanban board, complete with project-scoped local presets and ticket description search.
-- Improved Kanban operator triage with active-filter visibility, preset hover details, active-ticket run-health chips, search match hints, and stale filtering that focuses only live workflow columns.
+- Improved Kanban operator triage with active-filter visibility, preset hover details, search match hints, and stale filtering that focuses only live workflow columns.
 - Added animated status icons for AI council actions and throbbing warning indicators for blocked ticket error states.
 - Added an About window for app-level storage details and surfaced each project's local `.looptroop` state path in Project Details.
 - Added ack-aware yellow flashing for tickets waiting on user input, so the dashboard highlights what needs you and stops flashing once you've opened the ticket.
@@ -50,9 +52,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - PRD and beads approval actions now read `Approve with gaps` when unresolved coverage gaps remain, and approval is blocked while a matching extra fix is running.
 
 #### Fixed
+- Fixed Kanban preset saving to gracefully handle `localStorage` security/quota exceptions by using an in-memory fallback.
 - Fixed Kanban preset saving so the dropdown form uses controlled input state, reports inline save/failure feedback, and avoids exposing collapsed filter controls to hidden hit targets.
 - Fixed a React console warning on pulsing ticket cards by avoiding mixed border shorthand and side-specific border styles.
 - Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
+
+#### Removed
+- Removed the "Run active / Run 19/19" progress/health badge from Kanban board ticket cards along with its unused helpers and imports.
 
 #### Maintenance
 - Removed the stale `@types/js-yaml` dev dependency because `js-yaml` v5 ships bundled TypeScript declarations.

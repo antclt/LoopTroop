@@ -142,6 +142,7 @@ export function KanbanBoard() {
   const presetKey = selectedProjectId !== null ? `looptroop-presets-${selectedProjectId}` : 'looptroop-presets-global'
   const [presets, setPresets] = useState<Record<string, TriagePreset>>(() => {
     try {
+      if (typeof window === 'undefined') return {}
       const stored = localStorage.getItem(presetKey)
       return stored ? JSON.parse(stored) : {}
     } catch {
@@ -151,8 +152,10 @@ export function KanbanBoard() {
 
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(presetKey)
-      setPresets(stored ? JSON.parse(stored) : {})
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem(presetKey)
+        setPresets(stored ? JSON.parse(stored) : {})
+      }
     } catch {
       setPresets({})
     }
@@ -174,20 +177,23 @@ export function KanbanBoard() {
     }
     try {
       localStorage.setItem(presetKey, JSON.stringify(newPresets))
-      setPresets(newPresets)
-      setPresetName('')
-      setPresetSaveMessage(`Saved "${trimmedName}"`)
-      return true
-    } catch {
-      setPresetSaveMessage('Could not save preset')
-      return false
+    } catch (e) {
+      console.warn('Failed to save preset to localStorage:', e)
     }
+    setPresets(newPresets)
+    setPresetName('')
+    setPresetSaveMessage(`Saved "${trimmedName}"`)
+    return true
   }
 
   const deletePreset = (name: string) => {
     const newPresets = { ...presets }
     delete newPresets[name]
-    localStorage.setItem(presetKey, JSON.stringify(newPresets))
+    try {
+      localStorage.setItem(presetKey, JSON.stringify(newPresets))
+    } catch (e) {
+      console.warn('Failed to delete preset from localStorage:', e)
+    }
     setPresets(newPresets)
   }
 
