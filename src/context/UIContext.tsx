@@ -20,6 +20,7 @@ const defaultState: UIState = {
     sortBy: 'updatedAt_desc',
   },
   theme: 'system',
+  showTriageBar: false,
 }
 
 const VALID_VIEWS: UIState['activeView'][] = ['kanban', 'ticket', 'project', 'config']
@@ -45,6 +46,7 @@ function isValidUIState(value: unknown): value is Partial<UIState> {
   const obj = value as Record<string, unknown>
   if (obj.logPanelHeight !== undefined && (typeof obj.logPanelHeight !== 'number' || obj.logPanelHeight < 100)) return false
   if (obj.sidebarOpen !== undefined && typeof obj.sidebarOpen !== 'boolean') return false
+  if (obj.showTriageBar !== undefined && typeof obj.showTriageBar !== 'boolean') return false
   if (obj.theme !== undefined && !['light', 'dark', 'system'].includes(obj.theme as string)) return false
   if (obj.activeView !== undefined && !VALID_VIEWS.includes(obj.activeView as UIState['activeView'])) return false
   if (obj.filters !== undefined) {
@@ -94,6 +96,8 @@ function uiReducer(state: UIState, action: UIAction): UIState {
       return { ...state, theme: action.theme }
     case 'CLOSE_TICKET':
       return { ...state, selectedTicketId: null, selectedTicketExternalId: null, activeView: 'kanban' }
+    case 'TOGGLE_TRIAGE_BAR':
+      return { ...state, showTriageBar: !state.showTriageBar }
     default:
       return state
   }

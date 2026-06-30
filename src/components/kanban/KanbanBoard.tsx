@@ -182,13 +182,21 @@ export function KanbanBoard() {
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
       {/* Triage & Filter Control Bar */}
-      <div className="border-b border-border bg-card px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
+      {/* Triage & Filter Control Bar */}
+      <div
+        className={cn(
+          "bg-card/45 backdrop-blur-md border-b border-border/40 transition-all duration-350 ease-in-out overflow-hidden flex flex-wrap items-center justify-between gap-3 shrink-0 shadow-[inset_0_-1px_0_0_rgba(0,0,0,0.03)]",
+          state.showTriageBar
+            ? "max-h-24 opacity-100 py-3 px-6"
+            : "max-h-0 opacity-0 py-0 px-6 border-b-0 pointer-events-none"
+        )}
+      >
         <div className="flex flex-wrap items-center gap-4">
           {/* Project Filter */}
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            Project:
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            Project
             <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              className="h-8 rounded-lg border border-border/80 bg-background/40 hover:bg-background/80 px-2.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-ring cursor-pointer font-medium"
               value={selectedProjectId !== null ? String(selectedProjectId) : 'all'}
               onChange={(e) => {
                 const val = e.target.value
@@ -201,22 +209,24 @@ export function KanbanBoard() {
               <option value="all">All Projects</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} ({p.shortname})
+                  {p.name}
                 </option>
               ))}
             </select>
           </label>
 
+          <div className="h-4 w-px bg-border/50 hidden sm:block" />
+
           {/* Priority Toggles */}
           <div className="flex items-center gap-1">
-            <span className="text-xs font-medium text-muted-foreground mr-1">Priority:</span>
+            <span className="text-xs font-semibold text-muted-foreground mr-1.5">Priority</span>
             {[
-              { label: 'VH', val: 1, color: 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400 dark:border-red-500/80' },
-              { label: 'H', val: 2, color: 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400 dark:border-orange-500/80' },
-              { label: 'N', val: 3, color: 'border-gray-400 bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600' },
-              { label: 'L', val: 4, color: 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-500/85' },
-              { label: 'VL', val: 5, color: 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-400/80' },
-            ].map(({ label, val, color }) => {
+              { label: 'VH', val: 1, activeColor: 'border-red-500 bg-red-500/10 text-red-600 dark:text-red-400 dark:bg-red-500/5 shadow-[0_0_8px_rgba(239,68,68,0.12)] border-red-500/70' },
+              { label: 'H', val: 2, activeColor: 'border-orange-500 bg-orange-500/10 text-orange-600 dark:text-orange-400 dark:bg-orange-500/5 shadow-[0_0_8px_rgba(249,115,22,0.12)] border-orange-500/70' },
+              { label: 'N', val: 3, activeColor: 'border-gray-500 bg-gray-500/10 text-gray-700 dark:text-gray-300 dark:bg-gray-500/5 border-gray-500/70' },
+              { label: 'L', val: 4, activeColor: 'border-blue-400 bg-blue-400/10 text-blue-600 dark:text-blue-400 dark:bg-blue-400/5 shadow-[0_0_8px_rgba(96,165,250,0.12)] border-blue-400/70' },
+              { label: 'VL', val: 5, activeColor: 'border-indigo-400 bg-indigo-400/10 text-indigo-600 dark:text-indigo-400 dark:bg-indigo-400/5 shadow-[0_0_8px_rgba(129,140,248,0.12)] border-indigo-400/70' },
+            ].map(({ label, val, activeColor }) => {
               const active = selectedPriority?.includes(val) ?? false
               return (
                 <button
@@ -233,10 +243,10 @@ export function KanbanBoard() {
                     })
                   }}
                   className={cn(
-                    "h-8 px-2.5 text-[10px] font-bold rounded border transition-colors cursor-pointer",
+                    "h-8 px-2.5 text-[10px] font-bold rounded-lg border transition-all cursor-pointer",
                     active
-                      ? color
-                      : "border-input bg-background hover:bg-muted text-muted-foreground"
+                      ? activeColor
+                      : "border-border bg-background/40 hover:bg-muted text-muted-foreground"
                   )}
                 >
                   {label}
@@ -245,11 +255,13 @@ export function KanbanBoard() {
             })}
           </div>
 
+          <div className="h-4 w-px bg-border/50 hidden sm:block" />
+
           {/* Stuck / Stale days filter */}
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            Stale:
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            Stale
             <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              className="h-8 rounded-lg border border-border/80 bg-background/40 hover:bg-background/80 px-2.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-ring cursor-pointer font-medium"
               value={selectedStuckDays !== null ? String(selectedStuckDays) : 'all'}
               onChange={(e) => {
                 const val = e.target.value
@@ -266,6 +278,8 @@ export function KanbanBoard() {
             </select>
           </label>
 
+          <div className="h-4 w-px bg-border/50 hidden sm:block" />
+
           {/* Errors toggle */}
           <Button
             type="button"
@@ -273,8 +287,8 @@ export function KanbanBoard() {
             size="sm"
             onClick={() => dispatch({ type: 'SET_FILTER', filter: { onlyErrors: !onlyErrors } })}
             className={cn(
-              "h-8 text-xs cursor-pointer",
-              onlyErrors && "border-red-500 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/20 dark:text-red-400 dark:border-red-500/80"
+              "h-8 text-xs cursor-pointer rounded-lg border-border/80 bg-background/40 hover:bg-accent transition-all font-medium",
+              onlyErrors && "border-red-500/80 bg-red-500/10 hover:bg-red-500/15 text-red-600 dark:text-red-400 dark:bg-red-500/5 shadow-[0_0_8px_rgba(239,68,68,0.12)]"
             )}
           >
             Errors Only
@@ -287,8 +301,8 @@ export function KanbanBoard() {
             size="sm"
             onClick={() => dispatch({ type: 'SET_FILTER', filter: { onlyNeedsInput: !onlyNeedsInput } })}
             className={cn(
-              "h-8 text-xs cursor-pointer",
-              onlyNeedsInput && "border-amber-500 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-500/80"
+              "h-8 text-xs cursor-pointer rounded-lg border-border/80 bg-background/40 hover:bg-accent transition-all font-medium",
+              onlyNeedsInput && "border-amber-500/80 bg-amber-500/10 hover:bg-amber-500/15 text-amber-600 dark:text-amber-400 dark:bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.12)]"
             )}
           >
             Needs Input Only
@@ -299,30 +313,30 @@ export function KanbanBoard() {
           {/* Presets manager dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 text-xs cursor-pointer">
+              <Button variant="outline" size="sm" className="h-8 text-xs cursor-pointer rounded-lg border-border/80 bg-background/40 hover:bg-accent font-medium">
                 Presets
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56" align="end">
-              <div className="p-2 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+            <DropdownMenuContent className="w-56 rounded-lg" align="end">
+              <div className="p-2 border-b border-border text-[9px] font-bold text-muted-foreground uppercase tracking-widest">
                 Load Preset
               </div>
               {Object.keys(presets).length === 0 ? (
-                <div className="p-2.5 text-xs text-muted-foreground italic">No presets saved</div>
+                <div className="p-3 text-xs text-muted-foreground italic text-center">No presets saved</div>
               ) : (
                 Object.entries(presets).map(([name, val]) => (
                   <div key={name} className="flex items-center justify-between px-2 py-1 text-xs hover:bg-accent rounded-sm">
                     <button
                       type="button"
                       onClick={() => applyPreset(val)}
-                      className="flex-1 text-left hover:text-foreground cursor-pointer text-xs"
+                      className="flex-1 text-left hover:text-foreground cursor-pointer text-xs font-medium"
                     >
                       {name}
                     </button>
                     <button
                       type="button"
                       onClick={() => deletePreset(name)}
-                      className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer text-sm"
+                      className="text-muted-foreground hover:text-destructive font-semibold ml-2 cursor-pointer text-sm px-1.5 py-0.5 rounded hover:bg-muted"
                       title="Delete preset"
                     >
                       ×
@@ -348,9 +362,9 @@ export function KanbanBoard() {
                     name="name"
                     placeholder="New preset..."
                     required
-                    className="flex-1 h-7 border border-input rounded bg-background px-1.5 text-xs text-foreground outline-none"
+                    className="flex-1 h-7 border border-border/80 rounded-md bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
                   />
-                  <Button type="submit" size="sm" className="h-7 px-2 text-xs">
+                  <Button type="submit" size="sm" className="h-7 px-2 text-xs rounded-md">
                     Save
                   </Button>
                 </form>
@@ -359,10 +373,10 @@ export function KanbanBoard() {
           </DropdownMenu>
 
           {/* Sort Selector */}
-          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
-            Sort:
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            Sort
             <select
-              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              className="h-8 rounded-lg border border-border/80 bg-background/40 hover:bg-background/80 px-2.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-ring cursor-pointer font-medium"
               value={sortBy}
               onChange={(e) => dispatch({ type: 'SET_FILTER', filter: { sortBy: e.target.value } })}
             >
@@ -401,7 +415,7 @@ export function KanbanBoard() {
                   }
                 })
               }}
-              className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+              className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground font-semibold cursor-pointer rounded-lg hover:bg-accent/40"
             >
               Reset
             </Button>

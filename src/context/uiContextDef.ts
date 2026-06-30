@@ -17,6 +17,7 @@ export interface UIState {
     sortBy: string
   }
   theme: 'light' | 'dark' | 'system'
+  showTriageBar: boolean
 }
 
 export type UIAction =
@@ -27,6 +28,7 @@ export type UIAction =
   | { type: 'SET_FILTER'; filter: Partial<UIState['filters']> }
   | { type: 'SET_THEME'; theme: UIState['theme'] }
   | { type: 'CLOSE_TICKET' }
+  | { type: 'TOGGLE_TRIAGE_BAR' }
 
 export interface UIContextValue {
   state: UIState

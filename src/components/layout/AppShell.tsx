@@ -1,4 +1,4 @@
-import { SunMoon, Moon, Sun, Settings, FolderOpen, Plus, RefreshCw, BookOpen } from 'lucide-react'
+import { SunMoon, Moon, Sun, Settings, FolderOpen, Plus, RefreshCw, BookOpen, SlidersHorizontal } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -9,6 +9,7 @@ import { useState } from 'react'
 import { useBackendHealth } from '@/hooks/useBackendHealth'
 import { useRecoveryAutoReload } from '@/hooks/useRecoveryAutoReload'
 import { DashboardSearch } from './DashboardSearch'
+import { cn } from '@/lib/utils'
 
 interface AppShellProps {
   children: React.ReactNode
@@ -50,6 +51,27 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
         </button>
         <div className="flex min-w-0 items-center gap-2">
           <DashboardSearch isModalOpen={isModalOpen} />
+          {state.activeView === 'kanban' && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={state.showTriageBar ? 'secondary' : 'ghost'}
+                  size="icon"
+                  onClick={() => dispatch({ type: 'TOGGLE_TRIAGE_BAR' })}
+                  className={cn(
+                    "h-9 w-9 shrink-0 cursor-pointer transition-all border border-transparent",
+                    state.showTriageBar
+                      ? "bg-accent/80 text-accent-foreground border-border/80 shadow-sm"
+                      : "hover:bg-accent/55"
+                  )}
+                  disabled={isModalOpen}
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="text-xs">{state.showTriageBar ? 'Hide filters' : 'Show filters'}</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <button
