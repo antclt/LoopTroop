@@ -1104,16 +1104,6 @@ search: false
         *   Heartbeat recovery actions must not consume bead iteration budget until the active bead command is retried and fails under normal loop rules.
         *   after `stuck_auto_recoveries_max` recoveries on the same bead, stop auto-recovery and escalate to `BLOCKED_ERROR` with remediation guidance.
     *   Persist inactivity/stagnation events and selected actions in execution logs for audit/recovery.
-*   **Runnable Bead Scheduler (risk-first deterministic ordering):**
-    *   Add separate scheduler inputs per bead:
-        *   `technical_risk` (1 = highest uncertainty/integration risk, 5 = lowest risk),
-        *   `business_priority` (1 = highest user value, 5 = lowest value).
-    *   Among runnable beads (`pending` + dependencies satisfied), select deterministically by:
-        *   `technical_risk` ascending,
-        *   `business_priority` ascending,
-        *   `created_at` ascending (tie-break).
-    *   If one or both fields are missing, fallback to current priority ordering and emit `scheduler_metadata_missing` warning in runtime logs.
-    *   Persist scheduler decision trail per pick: `selected_bead_id`, `technical_risk`, `business_priority`, `tie_breaker`, `picked_at`.
 *   **Deterministic Bead Loop Control Artifact (Ralph-style, bead-scoped):**
     *   At bead start, create `.looptroop/tickets/<ticket-id>/loops/<flow-id>/<bead-id>.loop.md` with frontmatter: `active`, `ticket_id`, `flow_id`, `bead_id`, `iteration`, `max_iterations`, `loop_mode`, `completion_intent`, `started_at`, `updated_at`.
     *   Keep the markdown body as the canonical bead instruction; retries must reuse this instruction body unchanged to prevent prompt drift.
