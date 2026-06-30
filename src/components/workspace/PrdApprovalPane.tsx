@@ -182,6 +182,8 @@ export function PrdApprovalPane({
   const [yamlDraft, setYamlDraft] = useState('')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
+  const [coverageFixError, setCoverageFixError] = useState<string | null>(null)
+  const [isFixingCoverageGaps, setIsFixingCoverageGaps] = useState(false)
   const [isCascadeWarningOpen, setIsCascadeWarningOpen] = useState(false)
   const [isFullAnswersOpen, setIsFullAnswersOpen] = useState(false)
   const restoredDraftRef = useRef(false)
@@ -346,6 +348,35 @@ export function PrdApprovalPane({
     }
   }
 
+  async function handleFixCoverageGaps() {
+    setIsFixingCoverageGaps(true)
+    setCoverageFixError(null)
+
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}/coverage/fix-gaps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'prd' }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; details?: string }
+      if (!response.ok) {
+        throw new Error(payload.details || payload.error || 'Failed to fix coverage gaps')
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+      queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'prd', 'approval'] })
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'prd'] })
+      clearTicketArtifactsCache(ticket.id)
+      setIsEditMode(false)
+      setEditTab('structured')
+    } catch (error) {
+      setCoverageFixError(error instanceof Error ? error.message : 'Failed to fix coverage gaps')
+    } finally {
+      setIsFixingCoverageGaps(false)
+    }
+  }
+
   function requestTabChange(nextTab: EditTab) {
     if (nextTab === editTab) return
     if (hasUnsavedChanges) {
@@ -489,10 +520,10 @@ export function PrdApprovalPane({
           <Button
             size="sm"
             onClick={handleApprove}
-            disabled={isApproving || isSaving || (isEditMode && (hasUnsavedChanges || structuredEditorUnavailable)) || !prdDocument || !currentContentSha256 || ticket.status !== phase}
+            disabled={isApproving || isSaving || isFixingCoverageGaps || (isEditMode && (hasUnsavedChanges || structuredEditorUnavailable)) || !prdDocument || !currentContentSha256 || ticket.status !== phase}
             className="text-xs shrink-0"
           >
-            {isApproving ? 'Approving…' : 'Approve'}
+            {isApproving ? 'Approving...' : coverageWarning?.gaps.length ? 'Approve with gaps' : 'Approve'}
           </Button>
         </div>
 
@@ -538,7 +569,14 @@ export function PrdApprovalPane({
 
       <div className="flex-1 min-h-0 px-4 pb-2 overflow-auto">
         <div className="space-y-3">
-          {coverageWarning ? <CoverageApprovalWarning warning={coverageWarning} /> : null}
+          {coverageWarning ? (
+            <CoverageApprovalWarning
+              warning={coverageWarning}
+              onFixGaps={handleFixCoverageGaps}
+              isFixing={isFixingCoverageGaps}
+              fixError={coverageFixError}
+            />
+          ) : null}
           {isLoading || isPreparingStructuredPrd ? (
             <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
               <div className="text-center space-y-2">

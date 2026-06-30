@@ -342,7 +342,7 @@ export function ContextTree({ selectedPhase }: ContextTreeProps) {
                 ))
               ) : (
                 <div className="px-2 py-1 text-xs text-muted-foreground">
-                  No AI context is passed in this phase.
+                  No default AI context is listed for this phase.
                 </div>
               )}
             </div>

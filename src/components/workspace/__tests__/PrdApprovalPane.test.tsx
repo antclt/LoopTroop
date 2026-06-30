@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildPrdDocumentYaml, type PrdApprovalDraft } from '@/lib/prdDocument'
 import { makeTicket, makePrdDocument, TEST } from '@/test/factories'
 import { renderWithProviders } from '@/test/renderHelpers'
+import type { DBartifact } from '@/hooks/useTicketArtifacts'
 import { PrdApprovalPane } from '../PrdApprovalPane'
 
 const mockSaveUiState = vi.fn()
@@ -10,6 +11,21 @@ const mockClearTicketArtifactsCache = vi.fn()
 const mockUseTicketArtifacts = vi.fn()
 const INITIAL_CONTENT_HASH = 'a'.repeat(64)
 const SAVED_CONTENT_HASH = 'b'.repeat(64)
+let coverageFixRequestHandler: (() => Promise<Response>) | null = null
+
+function buildPrdCoverageArtifact(content: Record<string, unknown>): DBartifact {
+  return {
+    id: 901,
+    ticketId: TEST.ticketId,
+    phase: 'WAITING_PRD_APPROVAL',
+    phaseAttempt: 1,
+    artifactType: 'prd_coverage',
+    filePath: null,
+    createdAt: '2026-04-03T14:22:00.000Z',
+    updatedAt: '2026-04-03T14:22:00.000Z',
+    content: JSON.stringify(content),
+  }
+}
 
 vi.mock('@/hooks/useTickets', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTickets')>('@/hooks/useTickets')
@@ -87,6 +103,7 @@ describe('PrdApprovalPane', () => {
     mockClearTicketArtifactsCache.mockReset()
     mockUseTicketArtifacts.mockReset()
     mockUseTicketArtifacts.mockReturnValue({ artifacts: [], isLoading: false })
+    coverageFixRequestHandler = null
 
     vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
@@ -115,6 +132,16 @@ describe('PrdApprovalPane', () => {
       if (url === `/api/tickets/${TEST.ticketId}/approve-prd` && init?.method === 'POST') {
         return Promise.resolve(
           new Response(JSON.stringify({ success: true }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
+
+      if (url === `/api/tickets/${TEST.ticketId}/coverage/fix-gaps` && init?.method === 'POST') {
+        if (coverageFixRequestHandler) return coverageFixRequestHandler()
+        return Promise.resolve(
+          new Response(JSON.stringify({ result: { status: 'gaps', remainingGaps: [] } }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           }),
@@ -354,24 +381,16 @@ describe('PrdApprovalPane', () => {
   it('shows unresolved PRD coverage gaps as a collapsible warning during approval', async () => {
     mockUseTicketArtifacts.mockReturnValue({
       artifacts: [
-        {
-          id: 901,
-          ticketId: TEST.ticketId,
-          phase: 'WAITING_PRD_APPROVAL',
-          artifactType: 'prd_coverage',
-          filePath: null,
-          createdAt: '2026-04-03T14:22:00.000Z',
-          content: JSON.stringify({
-            status: 'gaps',
-            summary: 'Coverage gaps remain after the final PRD audit.',
-            finalCandidateVersion: 3,
-            hasRemainingGaps: true,
-            remainingGaps: [
-              'Missing explicit approval guidance when coverage reaches the retry cap.',
-            ],
-            auditNotes: 'status: gaps\ngaps:\n  - Missing explicit approval guidance when coverage reaches the retry cap.',
-          }),
-        },
+        buildPrdCoverageArtifact({
+          status: 'gaps',
+          summary: 'Coverage gaps remain after the final PRD audit.',
+          finalCandidateVersion: 3,
+          hasRemainingGaps: true,
+          remainingGaps: [
+            'Missing explicit approval guidance when coverage reaches the retry cap.',
+          ],
+          auditNotes: 'status: gaps\ngaps:\n  - Missing explicit approval guidance when coverage reaches the retry cap.',
+        }),
       ],
       isLoading: false,
     })
@@ -392,6 +411,133 @@ describe('PrdApprovalPane', () => {
     expect(screen.getByText('Coverage gaps remain after the final PRD audit.')).toBeInTheDocument()
     expect(screen.getByText('PRD Candidate v3')).toBeInTheDocument()
     expect(screen.getByText('Missing explicit approval guidance when coverage reaches the retry cap.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fix gaps with AI' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve with gaps' })).not.toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fix gaps with AI' }))
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenCalledWith(
+        `/api/tickets/${TEST.ticketId}/coverage/fix-gaps`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ domain: 'prd' }),
+        }),
+      )
+    })
+  })
+
+  it('disables approval during extra fixes, refreshes gaps, and removes the warning when clean', async () => {
+    let coverageArtifacts: DBartifact[] = [
+      buildPrdCoverageArtifact({
+        status: 'gaps',
+        summary: 'Coverage gaps remain after the final PRD audit.',
+        finalCandidateVersion: 3,
+        hasRemainingGaps: true,
+        remainingGaps: ['Initial approval gap.'],
+      }),
+    ]
+    mockUseTicketArtifacts.mockImplementation(() => ({ artifacts: coverageArtifacts, isLoading: false }))
+
+    let resolveFirstFix!: (response: Response) => void
+    let fixCalls = 0
+    coverageFixRequestHandler = () => {
+      fixCalls += 1
+      if (fixCalls === 1) {
+        return new Promise<Response>((resolve) => {
+          resolveFirstFix = resolve
+        })
+      }
+
+      coverageArtifacts = [
+        buildPrdCoverageArtifact({
+          status: 'clean',
+          summary: 'No remaining coverage gaps found in PRD Candidate v4.',
+          finalCandidateVersion: 4,
+          hasRemainingGaps: false,
+          remainingGaps: [],
+          transitions: [
+            {
+              source: 'ai_fix_button',
+              extraFixNumber: 1,
+              summary: 'Extra Fix 1 revised PRD Candidate v3 into PRD Candidate v4; 1 gap remains.',
+            },
+            {
+              source: 'ai_fix_button',
+              extraFixNumber: 2,
+              summary: 'Extra Fix 2 revised PRD Candidate v4 into PRD Candidate v4 and cleared all coverage gaps.',
+              noChange: true,
+            },
+          ],
+        }),
+      ]
+      return Promise.resolve(
+        new Response(JSON.stringify({ result: { status: 'clean', remainingGaps: [] } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
+
+    renderWithProviders(<PrdApprovalPane ticket={makeTicket({ status: 'WAITING_PRD_APPROVAL' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Test problem statement.')).toBeInTheDocument()
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Coverage Warning/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Fix gaps with AI' }))
+
+    expect(screen.getByRole('button', { name: 'Fixing gaps...' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve with gaps' })).toBeDisabled()
+
+    coverageArtifacts = [
+      buildPrdCoverageArtifact({
+        status: 'gaps',
+        summary: 'PRD Candidate v4 still has 1 gap.',
+        finalCandidateVersion: 4,
+        hasRemainingGaps: true,
+        remainingGaps: ['Remaining approval gap after Extra Fix 1.'],
+        latestExtraFixSummary: 'Extra Fix 1 revised PRD Candidate v3 into PRD Candidate v4; 1 gap remains.',
+        transitions: [
+          {
+            fromVersion: 3,
+            toVersion: 4,
+            source: 'ai_fix_button',
+            extraFixNumber: 1,
+            summary: 'Extra Fix 1 revised PRD Candidate v3 into PRD Candidate v4; 1 gap remains.',
+            gaps: ['Initial approval gap.'],
+            auditNotes: 'status: gaps',
+            fromContent: currentContent,
+            toContent: currentContent,
+            gapResolutions: [],
+            resolutionNotes: [],
+          },
+        ],
+      }),
+    ]
+    resolveFirstFix(
+      new Response(JSON.stringify({ result: { status: 'gaps', remainingGaps: ['Remaining approval gap after Extra Fix 1.'] } }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Remaining approval gap after Extra Fix 1.')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Extra Fix 1 revised PRD Candidate v3 into PRD Candidate v4; 1 gap remains.')).toBeInTheDocument()
+    expect(screen.getByText('1 extra fix attempted')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fix remaining gaps with AI' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Approve with gaps' })).not.toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fix remaining gaps with AI' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /Coverage Warning/i })).not.toBeInTheDocument()
+    })
     expect(screen.getByRole('button', { name: 'Approve' })).not.toBeDisabled()
+    expect(fixCalls).toBe(2)
+    expect(mockClearTicketArtifactsCache).toHaveBeenCalledWith(TEST.ticketId)
   })
 })

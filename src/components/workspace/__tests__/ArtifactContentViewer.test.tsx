@@ -699,7 +699,7 @@ describe('ArtifactContentViewer', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Diagnostics' })).toBeInTheDocument()
-    expect(screen.getByText('Invalid Output')).toBeInTheDocument()
+    expect(screen.getAllByText('Invalid Output').length).toBeGreaterThan(0)
     expect(screen.getByText('epics[0].user_stories is required')).toBeInTheDocument()
     expect(screen.queryByText('Do not render invalid draft body')).not.toBeInTheDocument()
     expect(screen.queryByText('Hidden invalid story')).not.toBeInTheDocument()
@@ -1529,6 +1529,73 @@ describe('ArtifactContentViewer', () => {
     expect(screen.getByText('GUI verification needs a concrete repo-standard test path before approval.')).toBeInTheDocument()
     expect(screen.queryByText('Stale attempt gap that should not win over remainingGaps.')).not.toBeInTheDocument()
     expect(screen.queryByText('Historical transition gap that should not win over remainingGaps.')).not.toBeInTheDocument()
+  })
+
+  it('labels user-triggered coverage fixes as Extra Fix tabs and keeps Latest Check last', () => {
+    render(
+      <ArtifactContent
+        artifactId="coverage-report"
+        phase="WAITING_PRD_APPROVAL"
+        content={JSON.stringify({
+          winnerId: 'openai/gpt-5.2',
+          status: 'gaps',
+          summary: 'PRD Candidate v4 still has 1 gap.',
+          finalCandidateVersion: 4,
+          hasRemainingGaps: true,
+          remainingGaps: ['Remaining approval gap.'],
+          transitions: [
+            {
+              fromVersion: 1,
+              toVersion: 2,
+              summary: 'Coverage found 1 gap in PRD Candidate v1 and created PRD Candidate v2.',
+              gaps: ['Initial gap.'],
+              auditNotes: 'status: gaps',
+              fromContent: buildPrdDocumentContent({ epicTitle: 'Initial PRD' }),
+              toContent: buildPrdDocumentContent({ epicTitle: 'Revised PRD' }),
+              gapResolutions: [],
+              resolutionNotes: [],
+            },
+            {
+              fromVersion: 2,
+              toVersion: 3,
+              summary: 'Extra Fix 1 revised PRD Candidate v2 into PRD Candidate v3; 1 gap remains.',
+              gaps: ['Manual extra gap.'],
+              auditNotes: 'status: gaps',
+              fromContent: buildPrdDocumentContent({ epicTitle: 'Revised PRD' }),
+              toContent: buildPrdDocumentContent({ epicTitle: 'Extra fixed PRD' }),
+              gapResolutions: [],
+              resolutionNotes: [],
+              source: 'ai_fix_button',
+              extraFixNumber: 1,
+              label: 'Extra Fix 1: v2 > v3',
+            },
+            {
+              fromVersion: 3,
+              toVersion: 3,
+              summary: 'Extra Fix 2 made no artifact changes; 1 gap remains in PRD Candidate v3.',
+              gaps: ['Remaining approval gap.'],
+              auditNotes: 'status: gaps',
+              fromContent: buildPrdDocumentContent({ epicTitle: 'Extra fixed PRD' }),
+              toContent: buildPrdDocumentContent({ epicTitle: 'Extra fixed PRD' }),
+              gapResolutions: [],
+              resolutionNotes: [],
+              source: 'ai_fix_button',
+              extraFixNumber: 2,
+              noChange: true,
+              label: 'Extra Fix 2: no change',
+            },
+          ],
+        })}
+      />,
+    )
+
+    expect(
+      screen
+        .getAllByRole('button')
+        .map((button) => button.textContent?.trim() ?? '')
+        .filter((label) => /^v\d+ > v\d+$/.test(label) || /^Extra Fix \d+/.test(label) || label === 'Latest Check'),
+    ).toEqual(['v1 > v2', 'Extra Fix 1: v2 > v3', 'Extra Fix 2: no change', 'Latest Check'])
+    expect(screen.getByText('PRD Candidate v4 still has 1 gap.')).toBeInTheDocument()
   })
 
   it('uses implementation plan wording for versioned beads coverage reports', () => {

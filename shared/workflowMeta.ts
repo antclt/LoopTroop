@@ -473,13 +473,14 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   WAITING_PRD_APPROVAL: {
-    overview: 'The latest PRD candidate is ready for human review and approval before architecture planning starts. This is a user-input gate — no AI work proceeds until you explicitly approve. You can review the specification in structured or raw form, edit any section, inspect the winning model\'s read-only Full Answers artifact from Part 1 of PRD drafting, and check whether coverage warnings exist from the coverage loop. The approved PRD becomes the authoritative input that drives beads (implementation task) planning.',
+    overview: 'The latest PRD candidate is ready for human review and approval before architecture planning starts. This is a user-input gate: the workflow will not proceed to beads planning until you explicitly approve. You can review the specification in structured or raw form, edit any section, inspect the winning model\'s read-only Full Answers artifact from Part 1 of PRD drafting, and check whether coverage warnings exist from the coverage loop. When unresolved gaps remain, you can optionally ask AI for one targeted extra fix at a time before deciding whether to approve. The approved PRD becomes the authoritative input that drives beads (implementation task) planning.',
     steps: [
       'Review Interface: LoopTroop renders the PRD in two modes — a structured view showing requirements, acceptance criteria, edge cases, and test intent in a readable format, and a raw YAML editing view for direct manipulation. You can switch freely between views.',
       'Full Answers Context: If the winning PRD model produced a Full Answers artifact during Part 1 of PRD drafting, the approval header shows a compact Full Answers chip. Opening it displays the complete read-only interview answer set that the winning PRD draft used, including user answers and any AI-filled skipped answers. This artifact is supporting context only; edits are made to the PRD itself.',
-      'Coverage Warnings: If the latest PRD candidate reached approval after exhausting the coverage loop cap (rather than achieving a fully clean status), coverage warnings are displayed prominently. These warnings describe unresolved gaps, including unresolved source-artifact contradictions when present, so you can decide whether to address them manually before approving.',
+      'Coverage Warnings And Extra Fixes: If the latest PRD candidate reached approval after exhausting the coverage loop cap (rather than achieving a fully clean status), coverage warnings are displayed prominently. These warnings describe unresolved gaps, including unresolved source-artifact contradictions when present. You can edit manually, approve with gaps, or click Fix gaps with AI to run one fresh targeted PRD revision followed by one fresh coverage check.',
       'Editing: You can edit any section of the PRD — add requirements, refine acceptance criteria, adjust edge cases, or rewrite test intent. The UI preserves temporary draft state between view switches. Saving writes the updated PRD artifact back to the ticket workspace and records a user-edit receipt with old/new content hashes. If this is a post-approval edit while the ticket is still before PRE_FLIGHT_CHECK, saving archives the current approved PRD version plus downstream beads planning attempts, intentionally cancels active downstream planning sessions, saves and approves the edited PRD as the new active version, clears stale downstream artifacts and UI state, and starts DRAFTING_BEADS.',
-      'Approval Decision: Approving confirms the current PRD as the authoritative specification for beads drafting. The request includes the SHA-256 hash of the reviewed PRD bytes; stale hashes return 409 and leave approval paused. The beads council will decompose this approved PRD into implementable tasks.',
+      'Approval Decision: Approving confirms the current PRD as the authoritative specification for beads drafting. If unresolved coverage warnings remain, the button text makes that explicit as Approve with gaps. The request includes the SHA-256 hash of the reviewed PRD bytes; stale hashes return 409 and leave approval paused. The beads council will decompose this approved PRD into implementable tasks.',
+      'Extra-Fix Refresh: Each Fix gaps with AI click reloads the latest PRD candidate, latest coverage warning, and winning Full Answers artifact on the server before prompting the model. If the PRD changes, the artifact and coverage history are updated; if no gaps remain afterward, the warning disappears without auto-approving.',
       'Post-Approval Editing Window: After approval, PRD edits remain allowed only while the ticket is still before PRE_FLIGHT_CHECK. Once the ticket reaches pre-flight or later, PRD edits are rejected because the implementation plan has already been accepted for execution.',
     ],
     outputs: [
@@ -487,6 +488,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'User-edited replacement (if edits were made before approval).',
       'Optional UI draft state for in-progress structured and raw edits.',
       'Read-only winning Full Answers artifact available as approval context when PRD drafting produced one.',
+      'Optional extra-fix coverage history entries labeled `Extra Fix N` when unresolved coverage gaps were addressed from the approval warning.',
       'Approval snapshot and approval receipt with `content_sha256`; PRD receipts also record `stored_content_sha256` when approval metadata changes the stored YAML.',
       'Append-only `user_edit_receipt:prd` artifacts for manual saves.',
       'A locked PRD baseline that the beads council uses as its primary input.',
@@ -499,7 +501,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This is the review artifact gate for the PRD phase — it ensures a human has signed off on the specification before expensive architecture planning begins.',
       'The approval UI and API compare content hashes so stale tabs cannot approve a PRD version that is no longer current.',
-      'No AI context is passed in this phase — it is entirely user-driven. The AI does not see or process anything during approval.',
+      'No automatic AI work runs just because this approval gate is open. AI sees approval-phase context only when you explicitly click Fix gaps with AI, and that prompt is scoped to the current PRD, the winning Full Answers artifact, the remaining coverage gaps, and previous extra-fix history.',
       'The Full Answers chip does not create another editable approval artifact. It shows the winning model\'s Part 1 context so you can understand which completed interview answers shaped the PRD.',
       'Tip: Pay special attention to acceptance criteria — they directly determine how the AI will verify its own implementation during the coding phase.',
       'Tip: If coverage warnings exist, read the unresolved gaps carefully. Minor gaps may be acceptable, but gaps in core requirements could lead to an incomplete implementation.',
@@ -656,18 +658,20 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   WAITING_BEADS_APPROVAL: {
-    overview: 'The final expanded beads plan is ready for human review before any coding begins. This is the last user-input gate before execution starts — once you approve, the coding agent will begin implementing beads one by one. You can review the full execution plan including task descriptions, dependencies, acceptance criteria, and test commands, and edit the plan if needed.',
+    overview: 'The final expanded beads plan is ready for human review before any coding begins. This is the last user-input gate before execution starts; once you approve, the coding agent will begin implementing beads one by one. You can review the full execution plan including task descriptions, dependencies, acceptance criteria, and test commands, edit the plan if needed, and optionally ask AI for one targeted extra fix at a time when coverage warnings still show unresolved PRD-to-beads gaps.',
     steps: [
       'Execution Plan Review: LoopTroop shows the execution-ready beads breakdown, including each bead\'s description, acceptance criteria, dependency chain, file targets, test commands, and execution ordering. You can see exactly what the coding agent will do and in what order.',
       'Dependency Visualization: The beads are shown with their dependency relationships, so you can verify that the execution order makes sense — beads that depend on other beads will not run until their dependencies complete.',
       'Editing: You can review the plan in structured form or edit the raw representation before approving. Changes are saved back to the current beads artifact only while this approval gate is active, record a user-edit receipt with old/new content hashes, and invalidate the execution setup plan.',
-      'Coverage Warnings: If the beads plan reached approval after exhausting the coverage loop cap (rather than achieving a fully clean status), coverage warnings are displayed. These describe unresolved gaps, including PRD requirements that may not have corresponding beads and unresolved source-artifact contradictions when present.',
-      'Approval Decision: Approval confirms the execution plan that the coding loop will consume bead-by-bead. The request includes the SHA-256 hash of the reviewed JSONL bytes; stale hashes return 409 and leave approval paused. After approval, the coding agent receives individual bead specifications — it does not see the full plan, only the bead it is currently implementing.',
+      'Coverage Warnings And Extra Fixes: If the beads plan reached approval after exhausting the coverage loop cap (rather than achieving a fully clean status), coverage warnings are displayed. These describe unresolved gaps, including PRD requirements that may not have corresponding beads and unresolved source-artifact contradictions when present. You can edit manually, approve with gaps, or click Fix gaps with AI to revise the semantic blueprint and re-check coverage.',
+      'Approval Decision: Approval confirms the execution plan that the coding loop will consume bead-by-bead. If unresolved coverage warnings remain, the button text makes that explicit as Approve with gaps. The request includes the SHA-256 hash of the reviewed JSONL bytes; stale hashes return 409 and leave approval paused. After approval, the coding agent receives individual bead specifications — it does not see the full plan, only the bead it is currently implementing.',
+      'Extra-Fix Refresh: Each Fix gaps with AI click reloads the latest semantic beads blueprint, approved PRD, coverage warning, and approval artifact state on the server. If the semantic blueprint changes, LoopTroop reruns expansion before refreshing the approval plan and content hash.',
     ],
     outputs: [
       'Approved execution-ready beads plan — the authoritative task breakdown the coding agent will follow.',
       'User-edited replacement (if edits were made before approval).',
       'Saved approval editor state for in-progress reviews.',
+      'Optional extra-fix coverage history entries labeled `Extra Fix N` when unresolved PRD-to-beads gaps were addressed from the approval warning.',
       'Approval snapshot and approval receipt with `content_sha256` for the reviewed JSONL plan.',
       'Append-only `user_edit_receipt:beads` artifacts for manual saves.',
       'The authoritative bead set consumed by pre-flight checks and the coding loop.',
@@ -679,7 +683,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This is the review artifact gate for the beads phase and the last approval step before automated code execution begins.',
       'Bead reads expose the reviewed content hash in the `X-Content-Sha256` header, and approval compares that hash against the current server artifact before advancing.',
-      'No AI context is passed in this phase — it is entirely user-driven.',
+      'No automatic AI work runs just because this approval gate is open. AI sees approval-phase context only when you explicitly click Fix gaps with AI, and that prompt is scoped to the current semantic blueprint, approved PRD, remaining coverage gaps, and previous extra-fix history.',
       'Tip: Review the dependency chain carefully. Incorrect dependencies could cause beads to run before their prerequisites are ready, leading to implementation errors.',
       'Tip: Check that acceptance criteria are specific and testable. The coding agent uses acceptance criteria to verify its own work — vague criteria may lead to incomplete implementations.',
     ],
@@ -1259,7 +1263,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_PRD_APPROVAL',
     label: 'Approving Specs',
-    description: 'Review and approve the PRD candidate before architecture planning starts. Approval requires the reviewed content hash; stale hashes return 409. The winning Full Answers artifact is reference context, and edits write user-edit receipts before any downstream restart.',
+    description: 'Review and approve the PRD candidate before architecture planning starts. Approval requires the reviewed content hash; stale hashes return 409. The winning Full Answers artifact is reference context, edits write user-edit receipts, and unresolved coverage gaps can be sent through optional one-click extra fixes before approval.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_PRD_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'prd',
@@ -1334,7 +1338,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_BEADS_APPROVAL',
     label: 'Approving Blueprint',
-    description: 'Review and approve the full execution-ready beads plan with content-hash protection. Bead edits are limited to this gate, write user-edit receipts, and approval records the reviewed JSONL hash before coding begins.',
+    description: 'Review and approve the full execution-ready beads plan with content-hash protection. Bead edits are limited to this gate, unresolved coverage gaps can be sent through optional one-click extra fixes, and approval records the reviewed JSONL hash before coding begins.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_BEADS_APPROVAL,
     kanbanPhase: 'needs_input',
     groupId: 'beads',

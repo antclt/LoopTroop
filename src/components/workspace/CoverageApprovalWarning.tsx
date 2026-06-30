@@ -1,10 +1,17 @@
 import { CollapsibleSection } from './ArtifactContentViewer'
 import type { CoverageApprovalWarningData } from './coverageApprovalWarningUtils'
+import { Button } from '@/components/ui/button'
 
 export function CoverageApprovalWarning({
   warning,
+  onFixGaps,
+  isFixing = false,
+  fixError = null,
 }: {
   warning: CoverageApprovalWarningData
+  onFixGaps?: () => void
+  isFixing?: boolean
+  fixError?: string | null
 }) {
   return (
     <CollapsibleSection
@@ -18,6 +25,12 @@ export function CoverageApprovalWarning({
         <div className="rounded-md border border-amber-300/80 bg-background/80 px-3 py-2 text-xs dark:border-amber-800/80 dark:bg-background/30">
           {warning.summary}
         </div>
+
+        {warning.latestExtraFixSummary ? (
+          <div className="rounded-md border border-amber-300/80 bg-background/80 px-3 py-2 text-xs dark:border-amber-800/80 dark:bg-background/30">
+            {warning.latestExtraFixSummary}
+          </div>
+        ) : null}
 
         <div className="space-y-2">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">
@@ -45,6 +58,32 @@ export function CoverageApprovalWarning({
             </div>
           </div>
         )}
+
+        {warning.gaps.length > 0 && onFixGaps ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={onFixGaps}
+              disabled={isFixing}
+              className="text-xs"
+            >
+              {isFixing ? 'Fixing gaps...' : warning.extraFixCount > 0 ? 'Fix remaining gaps with AI' : 'Fix gaps with AI'}
+            </Button>
+            {warning.extraFixCount > 0 ? (
+              <span className="text-[11px] text-amber-800 dark:text-amber-300">
+                {warning.extraFixCount === 1 ? '1 extra fix attempted' : `${warning.extraFixCount} extra fixes attempted`}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {fixError ? (
+          <div className="rounded-md border border-red-300 bg-red-50/80 px-3 py-2 text-xs text-red-800 dark:border-red-900/60 dark:bg-red-950/20 dark:text-red-200">
+            {fixError}
+          </div>
+        ) : null}
       </div>
     </CollapsibleSection>
   )

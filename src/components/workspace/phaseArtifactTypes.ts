@@ -106,6 +106,8 @@ export interface CoverageAttemptData {
   maxCoveragePasses?: number
   limitReached?: boolean
   terminationReason?: string | null
+  source?: string
+  extraFixNumber?: number
 }
 
 export interface CoverageTransitionData {
@@ -121,6 +123,10 @@ export interface CoverageTransitionData {
   uiRefinementDiff?: UiRefinementDiffArtifact | null
   structuredOutput?: ArtifactStructuredOutputData
   rawAttempts?: ArtifactRawAttemptData[]
+  source?: string
+  extraFixNumber?: number
+  noChange?: boolean
+  label?: string
 }
 
 export interface CoverageFollowUpArtifactQuestion {
@@ -154,6 +160,7 @@ export interface CoverageArtifactData {
   transitions?: CoverageTransitionData[]
   hasRemainingGaps?: boolean
   remainingGaps?: string[]
+  latestExtraFixSummary?: string | null
   parsed?: {
     status?: string
     gaps?: string[]
@@ -1367,6 +1374,7 @@ function buildRefinementCoveragePayload(
     transitions: coverageArtifact.transitions,
     hasRemainingGaps: coverageArtifact.hasRemainingGaps,
     remainingGaps: coverageArtifact.remainingGaps,
+    latestExtraFixSummary: coverageArtifact.latestExtraFixSummary,
     parsed: coverageArtifact.parsed,
   }
 }
@@ -1811,6 +1819,8 @@ export function parseCoverageArtifact(content: string): CoverageArtifactData | n
             maxCoveragePasses: typeof attempt.maxCoveragePasses === 'number' ? attempt.maxCoveragePasses : undefined,
             limitReached: typeof attempt.limitReached === 'boolean' ? attempt.limitReached : undefined,
             terminationReason: typeof attempt.terminationReason === 'string' ? attempt.terminationReason : null,
+            source: typeof attempt.source === 'string' ? attempt.source : undefined,
+            extraFixNumber: typeof attempt.extraFixNumber === 'number' ? attempt.extraFixNumber : undefined,
           } satisfies CoverageAttemptData]
         })
       : undefined,
@@ -1841,6 +1851,10 @@ export function parseCoverageArtifact(content: string): CoverageArtifactData | n
             uiRefinementDiff: normalizeUiRefinementDiff(transition.uiRefinementDiff) ?? undefined,
             structuredOutput: normalizeArtifactStructuredOutput(transition.structuredOutput),
             rawAttempts: normalizeRawAttempts(getValueByAliases(transition, ['rawAttempts', 'raw_attempts'])),
+            source: typeof transition.source === 'string' ? transition.source : undefined,
+            extraFixNumber: typeof transition.extraFixNumber === 'number' ? transition.extraFixNumber : undefined,
+            noChange: typeof transition.noChange === 'boolean' ? transition.noChange : undefined,
+            label: typeof transition.label === 'string' ? transition.label : undefined,
           } satisfies CoverageTransitionData]
         })
       : undefined,
@@ -1848,6 +1862,7 @@ export function parseCoverageArtifact(content: string): CoverageArtifactData | n
     remainingGaps: Array.isArray(result.remainingGaps)
       ? result.remainingGaps.filter((gap): gap is string => typeof gap === 'string' && gap.trim().length > 0)
       : undefined,
+    latestExtraFixSummary: typeof result.latestExtraFixSummary === 'string' ? result.latestExtraFixSummary : null,
     parsed: parsedCoverage,
     structuredOutput: normalizeArtifactStructuredOutput(result.structuredOutput),
     rawAttempts: normalizeRawAttempts(getValueByAliases(result, ['rawAttempts', 'raw_attempts'])),

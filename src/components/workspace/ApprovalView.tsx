@@ -188,6 +188,8 @@ function BeadsApprovalPane({
   const [isApproving, setIsApproving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [approveError, setApproveError] = useState<string | null>(null)
+  const [coverageFixError, setCoverageFixError] = useState<string | null>(null)
+  const [isFixingCoverageGaps, setIsFixingCoverageGaps] = useState(false)
   const [discardTarget, setDiscardTarget] = useState<DiscardTarget>(null)
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
@@ -350,6 +352,35 @@ function BeadsApprovalPane({
     }
   }, [currentContentSha256, ticket.id, queryClient])
 
+  const handleFixCoverageGaps = useCallback(async () => {
+    setIsFixingCoverageGaps(true)
+    setCoverageFixError(null)
+
+    try {
+      const response = await fetch(`/api/tickets/${ticket.id}/coverage/fix-gaps`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ domain: 'beads' }),
+      })
+      const payload = await response.json().catch(() => ({})) as { error?: string; details?: string }
+      if (!response.ok) {
+        throw new Error(payload.details || payload.error || 'Failed to fix coverage gaps')
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['tickets'] })
+      queryClient.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'beads', 'approval'] })
+      queryClient.invalidateQueries({ queryKey: ['artifact', ticket.id, 'beads'] })
+      clearTicketArtifactsCache(ticket.id)
+      setIsEditMode(false)
+      setEditTab('structured')
+    } catch (error) {
+      setCoverageFixError(error instanceof Error ? error.message : 'Failed to fix coverage gaps')
+    } finally {
+      setIsFixingCoverageGaps(false)
+    }
+  }, [ticket.id, queryClient])
+
   function requestTabChange(nextTab: EditTab) {
     if (nextTab === editTab) return
     if (hasUnsavedChanges) {
@@ -422,10 +453,10 @@ function BeadsApprovalPane({
           <Button
             size="sm"
             onClick={handleApprove}
-            disabled={isApproving || isSaving || (isEditMode && hasUnsavedChanges) || beadsArray.length === 0 || !currentContentSha256 || ticket.status !== 'WAITING_BEADS_APPROVAL'}
+            disabled={isApproving || isSaving || isFixingCoverageGaps || (isEditMode && hasUnsavedChanges) || beadsArray.length === 0 || !currentContentSha256 || ticket.status !== 'WAITING_BEADS_APPROVAL'}
             className="text-xs shrink-0"
           >
-            {isApproving ? 'Approving…' : 'Approve'}
+            {isApproving ? 'Approving...' : coverageWarning?.gaps.length ? 'Approve with gaps' : 'Approve'}
           </Button>
         </div>
 
@@ -480,7 +511,14 @@ function BeadsApprovalPane({
       {/* Artifact content */}
       <div className="flex-1 min-h-0 px-4 pb-2 overflow-auto">
         <div className="space-y-3">
-          {coverageWarning ? <CoverageApprovalWarning warning={coverageWarning} /> : null}
+          {coverageWarning ? (
+            <CoverageApprovalWarning
+              warning={coverageWarning}
+              onFixGaps={handleFixCoverageGaps}
+              isFixing={isFixingCoverageGaps}
+              fixError={coverageFixError}
+            />
+          ) : null}
           {isLoading ? (
             <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">Loading beads…</div>
           ) : isEditMode ? (

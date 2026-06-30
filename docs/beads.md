@@ -139,6 +139,7 @@ That invalidation is important. If the execution blueprint changes, any previous
 `WAITING_BEADS_APPROVAL` is the last human gate before execution-band work begins.
 
 - Approval is hash-guarded against the exact reviewed content.
+- If unresolved coverage gaps remain, `Fix gaps with AI` runs one fresh semantic-blueprint revision and coverage check; when the blueprint changes, expansion reruns so the approval plan and content hash are refreshed.
 - The approved bead set becomes the authoritative execution plan consumed by pre-flight and coding.
 - After approval, the coding agent does **not** receive the full plan every time. It receives the active bead plus narrow runtime context for that bead iteration.
 
@@ -425,6 +426,7 @@ Beads and execution are highly artifact-driven. The most important pieces are:
 | `.ticket/beads/<flow>/.beads/issues.jsonl` | Canonical persisted bead plan |
 | `GET /api/tickets/:id/beads` | Returns the plan and `X-Content-Sha256` |
 | `PUT /api/tickets/:id/beads` | Rewrites the plan during `WAITING_BEADS_APPROVAL` |
+| `POST /api/tickets/:id/coverage/fix-gaps` | Runs one approval-screen extra fix for unresolved beads coverage gaps when called with `{ "domain": "beads" }` |
 | `GET /api/tickets/:id/beads/:beadId/diff` | Returns the captured diff for a completed bead when available |
 | `approval_receipt` for beads | Hash-guarded proof that the reviewed bead plan was approved |
 | `user_edit_receipt:beads` | Append-only audit trail for manual bead edits |

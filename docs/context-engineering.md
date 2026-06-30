@@ -215,13 +215,13 @@ The table below describes what the model receives during each status. "No model 
 | `COUNCIL_VOTING_PRD` | `relevant_files`, `ticket_details`, `interview`, `drafts`. The vote evaluates PRD drafts without inheriting Full Answers attempts or earlier chat history. |
 | `REFINING_PRD` | `relevant_files`, `ticket_details`, labeled `full_answers`, and labeled `drafts` containing the winner and alternatives. |
 | `VERIFYING_PRD_COVERAGE` | Winning `full_answers` and current `prd`. Revision prompts append the specific coverage gaps they are fixing, not unrelated planning history. |
-| `WAITING_PRD_APPROVAL` | No model prompt while waiting for approval. The user reviews the PRD and optional Full Answers reference. |
+| `WAITING_PRD_APPROVAL` | No automatic model prompt while waiting for approval. If the user clicks `Fix gaps with AI`, one fresh targeted revision prompt receives the current PRD, winning Full Answers artifact, current remaining gaps, and previous extra-fix history, followed by one fresh PRD coverage check. |
 | `DRAFTING_BEADS` | `relevant_files`, `ticket_details`, `prd`. Council members independently decompose the approved spec. |
 | `COUNCIL_VOTING_BEADS` | `relevant_files`, `ticket_details`, `prd`, `drafts`, plus the voting rubric appended by the beads vote phase. |
 | `REFINING_BEADS` | `relevant_files`, `ticket_details`, `prd`, `drafts`. The winner is strengthened with selected alternatives. |
 | `VERIFYING_BEADS_COVERAGE` | Current `prd` and `beads`. Revision prompts append the specific coverage findings for the current pass. |
 | `EXPANDING_BEADS` | `relevant_files`, `ticket_details`, `prd`, `beads_draft`. The model turns the refined blueprint into execution-ready bead records. |
-| `WAITING_BEADS_APPROVAL` | No model prompt while waiting for approval. The user reviews the expanded bead plan. |
+| `WAITING_BEADS_APPROVAL` | No automatic model prompt while waiting for approval. If the user clicks `Fix gaps with AI`, one fresh targeted revision prompt receives the current semantic beads blueprint, approved PRD, current remaining gaps, and previous extra-fix history, followed by one fresh beads coverage check and expansion refresh when the blueprint changes. |
 | `PRE_FLIGHT_CHECK` | No planning context is sent. The status performs deterministic readiness checks and a minimal connectivity probe rather than asking a model to reason over ticket artifacts. |
 | `WAITING_EXECUTION_SETUP_APPROVAL` | Setup-plan generation receives `ticket_details`, `relevant_files`, `prd`, `beads`, optional `execution_setup_profile`, and `execution_setup_plan_notes`. Regeneration receives the same context plus the current `execution_setup_plan` and the user's regeneration note. Once the plan is ready, no model prompt runs while approval is pending. |
 | `PREPARING_EXECUTION_ENV` | `ticket_details`, `beads`, `execution_setup_plan`, `execution_setup_notes`. Setup retries get compact setup notes, not a replay of earlier setup sessions. |

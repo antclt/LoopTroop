@@ -456,7 +456,7 @@ Each pass reads the current PRD candidate, identifies gaps relative to that winn
 
 **What you see at approval:**
 
-If the cap was reached before coverage was clean, unresolved gap warnings appear on the PRD approval screen. You can still approve as-is or edit the PRD manually.
+If the cap was reached before coverage was clean, unresolved gap warnings appear on the PRD approval screen. You can still approve with gaps, edit the PRD manually, or click `Fix gaps with AI` to run one fresh targeted extra fix and one fresh coverage check. These approval-screen extra fixes are manual and unlimited; this pass setting only controls the automatic coverage loop before approval.
 
 **Trade-offs:**
 
@@ -477,7 +477,7 @@ If the cap was reached before coverage was clean, unresolved gap warnings appear
 
 Caps how many revision cycles `VERIFYING_BEADS_COVERAGE` may run while reconciling the semantic bead blueprint against the PRD.
 
-Once coverage is clean or this cap is reached, LoopTroop advances to `EXPANDING_BEADS`, which is a separate step that converts the blueprint into execution-ready bead records.
+Once coverage is clean or this cap is reached, LoopTroop advances to `EXPANDING_BEADS`, which is a separate step that converts the blueprint into execution-ready bead records. If unresolved gaps are still visible on the later beads approval screen, you can click `Fix gaps with AI` to run one fresh targeted extra fix and one fresh coverage check; if the semantic blueprint changes, expansion is rerun so the approval plan stays current. These approval-screen extra fixes are manual and unlimited; this pass setting only controls the automatic coverage loop before approval.
 
 ::: tip
 `EXPANDING_BEADS` runs independently after `VERIFYING_BEADS_COVERAGE` finishes. Increasing this setting does not affect the expansion step — it only controls the semantic blueprint revision loop.

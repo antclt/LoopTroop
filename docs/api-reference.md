@@ -311,6 +311,7 @@ UI-state `scope` must match `^[a-zA-Z0-9:_-]+$` and be at most 80 characters. St
 | `POST` | `/api/tickets/:id/approve-prd` | Approve PRD artifact |
 | `POST` | `/api/tickets/:id/approve-beads` | Approve bead plan artifact |
 | `POST` | `/api/tickets/:id/approve-execution-setup-plan` | Approve execution setup plan |
+| `POST` | `/api/tickets/:id/coverage/fix-gaps` | Run one approval-screen extra fix for unresolved PRD or beads coverage gaps |
 | `POST` | `/api/tickets/:id/merge` | Merge delivered PR |
 | `POST` | `/api/tickets/:id/close-unmerged` | Close without merge |
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
@@ -340,6 +341,8 @@ Malformed or missing hashes return `400`. If the current server artifact no long
 ```
 
 Successful approvals write durable `approval_receipt` phase artifacts. Approval snapshots and receipts include `content_sha256`; interview and PRD receipts also include `stored_content_sha256` when approval stamping changes the persisted YAML.
+
+`POST /api/tickets/:id/coverage/fix-gaps` accepts `{ "domain": "prd" }` only while the ticket is in `WAITING_PRD_APPROVAL`, or `{ "domain": "beads" }` only while the ticket is in `WAITING_BEADS_APPROVAL`. The server reloads the latest coverage artifact and source artifacts before prompting, ignores stale browser gap text, runs exactly one fresh targeted fix attempt followed by one fresh coverage check, and returns the updated result. Concurrent fix attempts for the same ticket/domain return `409`, and approval routes also return `409` while a matching fix is in progress. If no gaps remain, the route returns a no-op success.
 
 Most action routes in this section respond with the latest machine snapshot so callers can refresh local state without making an immediate follow-up read:
 

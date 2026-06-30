@@ -1389,15 +1389,6 @@ search: false
     *   Role assignment is phase-driven: draft generation -> `drafter`, adversarial critique -> `critic`, voting -> `voter`, refinement -> `synthesizer`.
     *   Store default role templates at `.looptroop/templates/roles/<role>.md` and allow per-project overrides.
     *   Prompt injection order: `soul.md` -> council deliberation protocol -> role template -> phase task prompt.
-*   **AI Gap-Fix Button on Coverage Warnings:** When a coverage warning is displayed during an approval status (`WAITING_PRD_APPROVAL`, `WAITING_BEADS_APPROVAL`) showing unresolved gaps, add an explicit “Fix Gaps” button that sends the remaining gaps to the main AI implementer for in-place resolution.
-    *   The button appears inside the `CoverageApprovalWarning` component, visible only when `warning.gaps.length > 0`.
-    *   Clicking it triggers a server-side coverage-revision pass scoped to the listed gaps, using the main implementer model (not the full council pipeline), and re-enters the same coverage verification loop with the revised artifact.
-    *   While the fix is in progress, the button is disabled and shows a loading state; the approval action is also disabled until the fix attempt completes.
-    *   If the fix resolves all gaps, the coverage warning is removed automatically and the approval screen shows a clean status.
-    *   If the fix only partially resolves gaps, the coverage warning is updated with the reduced gap list and the button remains available for another attempt, subject to a configurable per-approval fix budget (default: 3 attempts).
-    *   If the fix budget is exhausted with remaining gaps, the button is replaced with a “Gaps remain — edit manually or approve as-is” message.
-    *   Each fix attempt is persisted as a coverage history entry with `source: ai_fix_button` so the audit trail distinguishes automatic loop revisions from user-initiated AI gap fixes.
-    *   Persist the fix budget and attempt count in the coverage artifact and show remaining attempts in the warning UI.
 
 
 

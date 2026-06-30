@@ -247,7 +247,7 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`COUNCIL_VOTING_PRD`:** Anonymized votes are cast on rival PRD drafts based on completeness, risk, and feasibility metrics.
 - **`REFINING_PRD`:** The winner incorporates the strongest elements from competing drafts into PRD Candidate v1.
 - **`VERIFYING_PRD_COVERAGE`:** The candidate PRD is audited against the approved Full Answers context, revising in-phase until clean or capped.
-- **`WAITING_PRD_APPROVAL`:** Gatekeeper review of the PRD requirements spec with content-hash matching, supported by the winning Full Answers reference context.
+- **`WAITING_PRD_APPROVAL`:** Gatekeeper review of the PRD requirements spec with content-hash matching, supported by the winning Full Answers reference context. If unresolved coverage gaps remain, the user can run one manual extra fix at a time before approving or approving with gaps.
 
 ### Blueprint Loop (Beads)
 - **`DRAFTING_BEADS`:** Council members draft blueprints decomposing the approved spec into semantic dependency graphs of beads.
@@ -255,7 +255,7 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`REFINING_BEADS`:** Winning blueprint merges strong verification steps from alternative drafts.
 - **`VERIFYING_BEADS_COVERAGE`:** Blueprint is verified against the PRD, revising in-phase when missing criteria are found.
 - **`EXPANDING_BEADS`:** LoopTroop expands the blueprint into live execution bead lists, specifying exact file scopes and test suites.
-- **`WAITING_BEADS_APPROVAL`:** Gatekeeper review of the dependency graph and executable plan before coding starts.
+- **`WAITING_BEADS_APPROVAL`:** Gatekeeper review of the dependency graph and executable plan before coding starts. If unresolved coverage gaps remain, the user can run one manual extra fix at a time; changed semantic blueprints are expanded again before approval.
 
 ### Pre-Implementation
 - **`PRE_FLIGHT_CHECK`:** Verifies workspace sanitation, Git worktree hygiene, OpenCode reachability, and execution locks. Committable changes outside LoopTroop fail the checks.

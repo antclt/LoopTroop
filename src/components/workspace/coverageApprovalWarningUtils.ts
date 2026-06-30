@@ -6,6 +6,8 @@ export interface CoverageApprovalWarningData {
   candidateLabel: string
   summary: string
   gaps: string[]
+  latestExtraFixSummary?: string | null
+  extraFixCount: number
 }
 
 function getCoverageCandidateLabel(domain: 'prd' | 'beads', version?: number): string {
@@ -40,10 +42,14 @@ export function resolveCoverageApprovalWarning(
 
   const finalCandidateVersion = parsed.finalCandidateVersion ?? parsed.attempts?.[parsed.attempts.length - 1]?.candidateVersion
   const candidateLabel = getCoverageCandidateLabel(domain, finalCandidateVersion)
+  const extraFixTransitions = parsed.transitions?.filter((transition) => transition.source === 'ai_fix_button') ?? []
+  const latestExtraFix = [...extraFixTransitions].reverse()[0]
 
   return {
     candidateLabel,
     summary: parsed.summary?.trim() || `Coverage carried ${candidateLabel} forward with unresolved gaps.`,
     gaps,
+    latestExtraFixSummary: parsed.latestExtraFixSummary ?? latestExtraFix?.summary ?? null,
+    extraFixCount: extraFixTransitions.length,
   }
 }

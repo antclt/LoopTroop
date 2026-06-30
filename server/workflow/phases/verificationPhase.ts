@@ -282,18 +282,8 @@ function loadRecoveredBeadsCoverageContent(ticketId: string) {
 }
 
 function loadBeadsExpansionInput(ticketId: string): { candidateContent: string; candidateVersion: number } | null {
-  const revisionArtifact = getLatestPhaseArtifact(ticketId, 'beads_coverage_revision', 'VERIFYING_BEADS_COVERAGE')
-  if (revisionArtifact) {
-    try {
-      const parsed = JSON.parse(revisionArtifact.content) as { refinedContent?: string; candidateVersion?: number }
-      if (typeof parsed.refinedContent === 'string' && parsed.refinedContent) {
-        return {
-          candidateContent: parsed.refinedContent,
-          candidateVersion: typeof parsed.candidateVersion === 'number' ? parsed.candidateVersion : 1,
-        }
-      }
-    } catch { /* ignore */ }
-  }
+  const latestCoverageInput = getLatestBeadsSemanticCoverageInput(ticketId)
+  if (latestCoverageInput) return latestCoverageInput
 
   const refinedArtifact = getLatestPhaseArtifact(ticketId, 'beads_refined', 'REFINING_BEADS')
   if (refinedArtifact) {
@@ -322,6 +312,8 @@ type CoverageAttemptHistoryEntry = {
   maxCoveragePasses: number
   limitReached: boolean
   terminationReason: string | null
+  source?: 'ai_fix_button'
+  extraFixNumber?: number
 }
 
 type CoverageTransitionHistoryEntry = {
@@ -342,12 +334,28 @@ type CoverageTransitionHistoryEntry = {
   uiRefinementDiff: UiRefinementDiffArtifact | null
   structuredOutput: ReturnType<typeof buildStructuredMetadata>
   rawAttempts?: RawAttempt[]
+  source?: 'ai_fix_button'
+  extraFixNumber?: number
+  noChange?: boolean
+  label?: string
 }
 
 type CoverageHistorySnapshot = {
   attempts: CoverageAttemptHistoryEntry[]
   transitions: CoverageTransitionHistoryEntry[]
   finalCandidateVersion?: number
+}
+
+type LatestCoverageSnapshot = CoverageHistorySnapshot & {
+  winnerId?: string
+  status: 'clean' | 'gaps'
+  summary: string
+  remainingGaps: string[]
+  normalizedContent: string
+  response: string
+  coverageRunNumber: number
+  maxCoveragePasses: number
+  sourcePhase: string
 }
 
 function persistVersionedCoverageArtifact(params: {
@@ -369,6 +377,7 @@ function persistVersionedCoverageArtifact(params: {
   finalCandidateVersion: number
   hasRemainingGaps: boolean
   remainingGaps: string[]
+  latestExtraFixSummary?: string | null
 }) {
   insertPhaseArtifact(params.ticketId, {
     phase: params.stateLabel,
@@ -386,6 +395,7 @@ function persistVersionedCoverageArtifact(params: {
       finalCandidateVersion: params.finalCandidateVersion,
       hasRemainingGaps: params.hasRemainingGaps,
       remainingGaps: params.remainingGaps,
+      latestExtraFixSummary: params.latestExtraFixSummary ?? null,
       rawAttempts: params.attemptEntry.rawAttempts,
     }),
   })
@@ -403,6 +413,7 @@ function persistVersionedCoverageArtifact(params: {
     transitions: params.transitions,
     hasRemainingGaps: params.hasRemainingGaps,
     remainingGaps: params.remainingGaps,
+    latestExtraFixSummary: params.latestExtraFixSummary ?? null,
     auditNotes: params.attemptEntry.auditNotes,
     rawAttempts: params.attemptEntry.rawAttempts,
   })
@@ -466,6 +477,172 @@ function loadCoverageHistorySnapshot(
     transitions: Array.isArray(parsed.transitions) ? parsed.transitions as CoverageTransitionHistoryEntry[] : [],
     finalCandidateVersion: typeof parsed.finalCandidateVersion === 'number' ? parsed.finalCandidateVersion : undefined,
   }
+}
+
+function getCoverageStateLabels(phase: 'prd' | 'beads'): string[] {
+  return phase === 'prd'
+    ? ['WAITING_PRD_APPROVAL', 'VERIFYING_PRD_COVERAGE']
+    : ['WAITING_BEADS_APPROVAL', 'VERIFYING_BEADS_COVERAGE']
+}
+
+function getLatestCoverageArtifactRow(
+  ticketId: string,
+  phase: 'prd' | 'beads',
+  artifactType: string,
+) {
+  return getCoverageStateLabels(phase)
+    .map((stateLabel) => getLatestPhaseArtifact(ticketId, artifactType, stateLabel))
+    .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact))
+    .sort((left, right) => right.id - left.id)[0]
+}
+
+function parseRecordContent(content: string | null | undefined): Record<string, unknown> {
+  if (!content?.trim()) return {}
+  try {
+    const parsed = JSON.parse(content) as unknown
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {}
+  } catch {
+    return {}
+  }
+}
+
+function normalizeCoverageStatus(value: unknown, gaps: string[]): 'clean' | 'gaps' {
+  return value === 'clean' ? 'clean' : value === 'gaps' || gaps.length > 0 ? 'gaps' : 'clean'
+}
+
+function normalizeCoverageGapsFromRecord(record: Record<string, unknown>): string[] {
+  const raw = Array.isArray(record.remainingGaps) && record.remainingGaps.length > 0
+    ? record.remainingGaps
+    : Array.isArray(record.gaps)
+      ? record.gaps
+      : []
+  return raw
+    .filter((gap): gap is string => typeof gap === 'string')
+    .map((gap) => gap.trim())
+    .filter(Boolean)
+}
+
+function loadLatestCoverageSnapshot(
+  ticketId: string,
+  phase: 'prd' | 'beads',
+): LatestCoverageSnapshot | null {
+  const coverageArtifactType = `${phase}_coverage`
+  const companionArtifactType = `ui_artifact_companion:${coverageArtifactType}`
+  const coverageArtifact = getLatestCoverageArtifactRow(ticketId, phase, coverageArtifactType)
+  const companionArtifact = getLatestCoverageArtifactRow(ticketId, phase, companionArtifactType)
+  if (!coverageArtifact && !companionArtifact) return null
+
+  const coreRecord = parseRecordContent(coverageArtifact?.content)
+  const companionRecord = parseUiArtifactCompanionArtifact(companionArtifact?.content ?? '')?.payload as Record<string, unknown> | undefined
+  const merged = { ...coreRecord, ...(companionRecord ?? {}) }
+  const remainingGaps = normalizeCoverageGapsFromRecord(merged)
+  const status = normalizeCoverageStatus(merged.status, remainingGaps)
+
+  return {
+    winnerId: typeof merged.winnerId === 'string' ? merged.winnerId : undefined,
+    status,
+    summary: typeof merged.summary === 'string' ? merged.summary : '',
+    remainingGaps,
+    normalizedContent: typeof merged.normalizedContent === 'string' ? merged.normalizedContent : '',
+    response: typeof merged.response === 'string' ? merged.response : '',
+    coverageRunNumber: typeof merged.coverageRunNumber === 'number' ? merged.coverageRunNumber : 0,
+    maxCoveragePasses: typeof merged.maxCoveragePasses === 'number' ? merged.maxCoveragePasses : 0,
+    attempts: Array.isArray(merged.attempts) ? merged.attempts as CoverageAttemptHistoryEntry[] : [],
+    transitions: Array.isArray(merged.transitions) ? merged.transitions as CoverageTransitionHistoryEntry[] : [],
+    finalCandidateVersion: typeof merged.finalCandidateVersion === 'number' ? merged.finalCandidateVersion : undefined,
+    sourcePhase: companionArtifact?.phase ?? coverageArtifact?.phase ?? getCoverageStateLabel(phase),
+  }
+}
+
+function getPlanningWinnerId(ticketId: string, phase: 'prd' | 'beads'): string {
+  const winnerArtifact = phase === 'prd'
+    ? getLatestPhaseArtifact(ticketId, 'prd_winner') ?? getLatestPhaseArtifact(ticketId, 'prd_votes')
+    : getLatestPhaseArtifact(ticketId, 'beads_winner') ?? getLatestPhaseArtifact(ticketId, 'beads_votes')
+  if (!winnerArtifact) {
+    throw new Error(`No persisted council winner found for ${phase} coverage extra fix`)
+  }
+
+  try {
+    const parsed = JSON.parse(winnerArtifact.content) as { winnerId?: string }
+    const winnerId = parsed.winnerId?.trim()
+    if (winnerId) return winnerId
+  } catch {
+    // Fall through to the common error below.
+  }
+
+  throw new Error(`No winnerId found for ${phase} coverage extra fix`)
+}
+
+function countExtraFixTransitions(transitions: CoverageTransitionHistoryEntry[]): number {
+  return transitions.filter((transition) => transition.source === 'ai_fix_button').length
+}
+
+function buildPreviousExtraFixHistory(transitions: CoverageTransitionHistoryEntry[]) {
+  return transitions
+    .filter((transition) => transition.source === 'ai_fix_button')
+    .map((transition) => ({
+      attempt: transition.extraFixNumber ?? 0,
+      label: transition.label ?? `Extra Fix ${transition.extraFixNumber ?? '?'}`,
+      fromVersion: transition.fromVersion,
+      toVersion: transition.toVersion,
+      noChange: transition.noChange === true,
+      summary: transition.summary,
+      gaps: transition.gaps,
+      resolutionNotes: transition.resolutionNotes,
+    }))
+}
+
+function buildExtraFixTransitionSummary(params: {
+  phase: 'prd' | 'beads'
+  extraFixNumber: number
+  fromVersion: number
+  toVersion: number
+  changed: boolean
+  remainingGaps: string[]
+}) {
+  const candidateLabel = params.phase === 'prd' ? 'PRD Candidate' : 'Implementation Plan'
+  const prefix = `Extra Fix ${params.extraFixNumber}`
+  if (!params.changed) {
+    return params.remainingGaps.length > 0
+      ? `${prefix} made no artifact changes; ${params.remainingGaps.length === 1 ? '1 gap remains' : `${params.remainingGaps.length} gaps remain`} in ${candidateLabel} v${params.fromVersion}.`
+      : `${prefix} made no artifact changes; no open coverage gaps remain for ${candidateLabel} v${params.fromVersion}.`
+  }
+  return params.remainingGaps.length > 0
+    ? `${prefix} revised ${candidateLabel} v${params.fromVersion} into ${candidateLabel} v${params.toVersion}; ${params.remainingGaps.length === 1 ? '1 gap remains' : `${params.remainingGaps.length} gaps remain`}.`
+    : `${prefix} revised ${candidateLabel} v${params.fromVersion} into ${candidateLabel} v${params.toVersion} and cleared all coverage gaps.`
+}
+
+function getLatestBeadsSemanticCoverageInput(ticketId: string): { candidateContent: string; candidateVersion: number } | null {
+  const revisionArtifact = getCoverageStateLabels('beads')
+    .map((stateLabel) => getLatestPhaseArtifact(ticketId, 'beads_coverage_revision', stateLabel))
+    .filter((artifact): artifact is NonNullable<typeof artifact> => Boolean(artifact))
+    .sort((left, right) => right.id - left.id)[0]
+
+  if (revisionArtifact) {
+    try {
+      const parsed = JSON.parse(revisionArtifact.content) as { refinedContent?: string; candidateVersion?: number }
+      if (typeof parsed.refinedContent === 'string' && parsed.refinedContent.trim()) {
+        return {
+          candidateContent: parsed.refinedContent,
+          candidateVersion: typeof parsed.candidateVersion === 'number' ? parsed.candidateVersion : 1,
+        }
+      }
+    } catch { /* ignore */ }
+  }
+
+  const refinedArtifact = getLatestPhaseArtifact(ticketId, 'beads_refined', 'REFINING_BEADS')
+  if (refinedArtifact) {
+    try {
+      const parsed = JSON.parse(refinedArtifact.content) as { refinedContent?: string }
+      if (typeof parsed.refinedContent === 'string' && parsed.refinedContent.trim()) {
+        return { candidateContent: parsed.refinedContent, candidateVersion: 1 }
+      }
+    } catch { /* ignore */ }
+  }
+
+  return null
 }
 
 function normalizeGaps(gaps: string[]): string[] {
@@ -2266,6 +2443,570 @@ async function handleBeadsCoverageVerificationLoop(params: {
     currentCandidateContent = revisionArtifact.refinedContent
     currentCandidateVersion = nextCandidateVersion
   }
+}
+
+export type CoverageExtraFixDomain = 'prd' | 'beads'
+
+export interface CoverageExtraFixResult {
+  domain: CoverageExtraFixDomain
+  status: 'clean' | 'gaps'
+  remainingGaps: string[]
+  extraFixNumber: number | null
+  changed: boolean
+  summary: string
+  noOp?: boolean
+}
+
+async function runPrdCoverageExtraFix(params: {
+  ticketId: string
+  context: TicketContext
+  signal: AbortSignal
+  worktreePath: string
+  ticketDir: string
+  ticketState: TicketState
+  fixerId: string
+  auditorId: string
+  currentCandidateContent: string
+  currentCandidateVersion: number
+  remainingGaps: string[]
+  history: LatestCoverageSnapshot
+  councilSettings: ReturnType<typeof resolveCouncilRuntimeSettings>
+  coverageSettings: ReturnType<typeof resolveCoverageRuntimeSettings>
+  fullAnswersContent: string
+}): Promise<CoverageExtraFixResult> {
+  const stateLabel = 'WAITING_PRD_APPROVAL'
+  const extraFixNumber = countExtraFixTransitions(params.history.transitions) + 1
+  const previousExtraFixes = buildPreviousExtraFixHistory(params.history.transitions)
+
+  params.ticketState.prd = params.currentCandidateContent
+  clearContextCache(params.context.externalId)
+  const revisionContext = buildMinimalContext('prd_coverage', params.ticketState)
+  const revisionPromptContent = buildPromptFromTemplate(PROM13b, [
+    ...revisionContext,
+    {
+      type: 'text',
+      source: 'coverage_gaps',
+      content: buildYamlDocument({ gaps: params.remainingGaps }),
+    },
+    {
+      type: 'text',
+      source: 'previous_extra_fixes',
+      content: buildYamlDocument({ attempts: previousExtraFixes }),
+    },
+  ])
+
+  const revisionRun = await runPrdCoverageResolutionPrompt({
+    ticketId: params.ticketId,
+    externalId: params.context.externalId,
+    stateLabel,
+    winnerId: params.fixerId,
+    worktreePath: params.worktreePath,
+    promptContent: revisionPromptContent,
+    councilSettings: params.councilSettings,
+    signal: params.signal,
+    fullAnswersContent: params.fullAnswersContent,
+    currentCandidateContent: params.currentCandidateContent,
+    coverageGaps: params.remainingGaps,
+    structuredRetryCount: resolveStructuredRetryRuntimeSettings(params.context).structuredRetryCount,
+  })
+
+  const changed = revisionRun.revision.refinedContent.trim() !== params.currentCandidateContent.trim()
+  const nextCandidateVersion = changed ? params.currentCandidateVersion + 1 : params.currentCandidateVersion
+  const revisionArtifact = buildPrdCoverageRevisionArtifact(
+    params.fixerId,
+    nextCandidateVersion,
+    revisionRun.revision,
+    revisionRun.structuredMeta,
+  )
+  const uiDiffArtifact = buildPrdCoverageRevisionUiDiff(revisionArtifact)
+
+  if (changed) {
+    insertPhaseArtifact(params.ticketId, {
+      phase: stateLabel,
+      artifactType: 'prd_coverage_revision',
+      content: JSON.stringify({
+        winnerId: revisionArtifact.winnerId,
+        refinedContent: revisionArtifact.refinedContent,
+        candidateVersion: revisionArtifact.candidateVersion,
+        rawAttempts: revisionRun.rawAttempts,
+        source: 'ai_fix_button',
+        extraFixNumber,
+      }),
+    })
+    persistUiArtifactCompanionArtifact(params.ticketId, stateLabel, 'prd_coverage_revision', {
+      winnerId: revisionArtifact.winnerId,
+      candidateVersion: revisionArtifact.candidateVersion,
+      beforeContent: revisionArtifact.winnerDraftContent,
+      afterContent: revisionArtifact.refinedContent,
+      winnerDraftContent: revisionArtifact.winnerDraftContent,
+      refinedContent: revisionArtifact.refinedContent,
+      changes: revisionArtifact.changes,
+      gapResolutions: revisionArtifact.gapResolutions,
+      draftMetrics: revisionArtifact.draftMetrics,
+      structuredOutput: revisionArtifact.structuredOutput ?? null,
+      uiRefinementDiff: uiDiffArtifact,
+      coverageBaselineContent: revisionArtifact.winnerDraftContent,
+      coverageBaselineVersion: params.currentCandidateVersion,
+      coverageUiRefinementDiff: uiDiffArtifact,
+      rawAttempts: revisionRun.rawAttempts,
+      source: 'ai_fix_button',
+      extraFixNumber,
+    })
+    safeAtomicWrite(resolve(params.ticketDir, 'prd.yaml'), revisionArtifact.refinedContent)
+  }
+
+  params.ticketState.prd = revisionArtifact.refinedContent
+  clearContextCache(params.context.externalId)
+  const auditCoverageRunNumber = params.history.attempts.length + 1
+  const auditMaxCoveragePasses = Math.max(
+    params.history.maxCoveragePasses || params.coverageSettings.maxPrdCoveragePasses,
+    auditCoverageRunNumber + 1,
+  )
+  const auditPromptContent = buildPromptFromTemplate(
+    getCoveragePromptTemplate('prd'),
+    [
+      ...buildMinimalContext('prd_coverage', params.ticketState),
+      buildCoveragePromptConfiguration({
+        phase: 'prd',
+        coverageRunNumber: auditCoverageRunNumber,
+        maxCoveragePasses: auditMaxCoveragePasses,
+        isFinalAllowedRun: false,
+      }),
+    ],
+  )
+  const auditResult = await runPrdCoverageAuditPrompt({
+    ticketId: params.ticketId,
+    externalId: params.context.externalId,
+    stateLabel,
+    winnerId: params.auditorId,
+    worktreePath: params.worktreePath,
+    promptContent: auditPromptContent,
+    councilSettings: params.councilSettings,
+    coverageRunNumber: auditCoverageRunNumber,
+    maxCoveragePasses: auditMaxCoveragePasses,
+    structuredRetryCount: resolveStructuredRetryRuntimeSettings(params.context).structuredRetryCount,
+    signal: params.signal,
+  })
+
+  const hasRemainingGaps = auditResult.envelope.status === 'gaps'
+  const latestExtraFixSummary = buildExtraFixTransitionSummary({
+    phase: 'prd',
+    extraFixNumber,
+    fromVersion: params.currentCandidateVersion,
+    toVersion: nextCandidateVersion,
+    changed,
+    remainingGaps: auditResult.envelope.gaps,
+  })
+  const attemptEntry: CoverageAttemptHistoryEntry = {
+    candidateVersion: nextCandidateVersion,
+    status: auditResult.envelope.status,
+    summary: latestExtraFixSummary,
+    gaps: [...auditResult.envelope.gaps],
+    auditNotes: auditResult.normalizedContent,
+    response: auditResult.response,
+    normalizedContent: auditResult.normalizedContent,
+    structuredOutput: auditResult.structuredMeta,
+    rawAttempts: auditResult.rawAttempts,
+    coverageRunNumber: auditCoverageRunNumber,
+    maxCoveragePasses: auditMaxCoveragePasses,
+    limitReached: false,
+    terminationReason: hasRemainingGaps ? 'gaps' : 'clean',
+    source: 'ai_fix_button',
+    extraFixNumber,
+  }
+  const transitionEntry: CoverageTransitionHistoryEntry = {
+    fromVersion: params.currentCandidateVersion,
+    toVersion: nextCandidateVersion,
+    summary: latestExtraFixSummary,
+    gaps: [...params.remainingGaps],
+    auditNotes: params.history.normalizedContent,
+    fromContent: params.currentCandidateContent,
+    toContent: revisionArtifact.refinedContent,
+    gapResolutions: revisionArtifact.gapResolutions,
+    resolutionNotes: revisionArtifact.gapResolutions.map((resolution) => resolution.rationale),
+    uiRefinementDiff: uiDiffArtifact,
+    structuredOutput: revisionRun.structuredMeta,
+    rawAttempts: revisionRun.rawAttempts,
+    source: 'ai_fix_button',
+    extraFixNumber,
+    noChange: !changed,
+    label: changed
+      ? `Extra Fix ${extraFixNumber}: v${params.currentCandidateVersion} > v${nextCandidateVersion}`
+      : `Extra Fix ${extraFixNumber}: no change`,
+  }
+
+  persistVersionedCoverageArtifact({
+    ticketId: params.ticketId,
+    stateLabel,
+    phase: 'prd',
+    winnerId: params.auditorId,
+    response: auditResult.response,
+    normalizedContent: auditResult.normalizedContent,
+    parsed: auditResult.envelope,
+    structuredOutput: auditResult.structuredMeta,
+    attemptEntry,
+    attempts: [...params.history.attempts, attemptEntry],
+    transitions: [...params.history.transitions, transitionEntry],
+    coverageRunNumber: auditCoverageRunNumber,
+    maxCoveragePasses: auditMaxCoveragePasses,
+    limitReached: false,
+    terminationReason: attemptEntry.terminationReason,
+    finalCandidateVersion: nextCandidateVersion,
+    hasRemainingGaps,
+    remainingGaps: auditResult.envelope.gaps,
+    latestExtraFixSummary,
+  })
+
+  emitModelSystemLog(
+    params.ticketId,
+    params.context.externalId,
+    stateLabel,
+    'info',
+    latestExtraFixSummary,
+    params.fixerId,
+    { source: 'ai_fix_button', extraFixNumber },
+  )
+
+  return {
+    domain: 'prd',
+    status: auditResult.envelope.status,
+    remainingGaps: auditResult.envelope.gaps,
+    extraFixNumber,
+    changed,
+    summary: latestExtraFixSummary,
+  }
+}
+
+async function runBeadsCoverageExtraFix(params: {
+  ticketId: string
+  context: TicketContext
+  signal: AbortSignal
+  worktreePath: string
+  ticketState: TicketState
+  fixerId: string
+  auditorId: string
+  currentCandidateContent: string
+  currentCandidateVersion: number
+  effectivePrdContent: string
+  remainingGaps: string[]
+  history: LatestCoverageSnapshot
+  councilSettings: ReturnType<typeof resolveCouncilRuntimeSettings>
+  coverageSettings: ReturnType<typeof resolveCoverageRuntimeSettings>
+}) {
+  const stateLabel = 'WAITING_BEADS_APPROVAL'
+  const extraFixNumber = countExtraFixTransitions(params.history.transitions) + 1
+  const previousExtraFixes = buildPreviousExtraFixHistory(params.history.transitions)
+
+  params.ticketState.prd = params.effectivePrdContent
+  params.ticketState.beads = params.currentCandidateContent
+  clearContextCache(params.context.externalId)
+  const revisionPromptContent = buildPromptFromTemplate(PROM24, [
+    ...buildMinimalContext('beads_coverage', params.ticketState),
+    {
+      type: 'text',
+      source: 'coverage_gaps',
+      content: buildYamlDocument({ gaps: params.remainingGaps }),
+    },
+    {
+      type: 'text',
+      source: 'previous_extra_fixes',
+      content: buildYamlDocument({ attempts: previousExtraFixes }),
+    },
+  ])
+
+  const revisionRun = await runBeadsCoverageResolutionPrompt({
+    ticketId: params.ticketId,
+    externalId: params.context.externalId,
+    stateLabel,
+    winnerId: params.fixerId,
+    worktreePath: params.worktreePath,
+    promptContent: revisionPromptContent,
+    councilSettings: params.councilSettings,
+    signal: params.signal,
+    currentCandidateContent: params.currentCandidateContent,
+    coverageGaps: params.remainingGaps,
+    structuredRetryCount: resolveStructuredRetryRuntimeSettings(params.context).structuredRetryCount,
+  })
+
+  const changed = revisionRun.revision.refinedContent.trim() !== params.currentCandidateContent.trim()
+  const nextCandidateVersion = changed ? params.currentCandidateVersion + 1 : params.currentCandidateVersion
+  const revisionArtifact = buildBeadsCoverageRevisionArtifact(
+    params.fixerId,
+    nextCandidateVersion,
+    revisionRun.revision,
+    revisionRun.structuredMeta,
+    params.effectivePrdContent,
+  )
+
+  if (changed) {
+    insertPhaseArtifact(params.ticketId, {
+      phase: stateLabel,
+      artifactType: 'beads_coverage_revision',
+      content: JSON.stringify({
+        winnerId: revisionArtifact.winnerId,
+        refinedContent: revisionArtifact.refinedContent,
+        candidateVersion: revisionArtifact.candidateVersion,
+        rawAttempts: revisionRun.rawAttempts,
+        source: 'ai_fix_button',
+        extraFixNumber,
+      }),
+    })
+    persistUiArtifactCompanionArtifact(params.ticketId, stateLabel, 'beads_coverage_revision', {
+      winnerId: revisionArtifact.winnerId,
+      candidateVersion: revisionArtifact.candidateVersion,
+      beforeContent: revisionArtifact.winnerDraftContent,
+      afterContent: revisionArtifact.refinedContent,
+      winnerDraftContent: revisionArtifact.winnerDraftContent,
+      refinedContent: revisionArtifact.refinedContent,
+      changes: revisionArtifact.changes,
+      gapResolutions: revisionArtifact.gapResolutions,
+      draftMetrics: revisionArtifact.draftMetrics,
+      structuredOutput: revisionArtifact.structuredOutput ?? null,
+      uiRefinementDiff: revisionArtifact.uiRefinementDiff,
+      coverageBaselineContent: revisionArtifact.winnerDraftContent,
+      coverageBaselineVersion: params.currentCandidateVersion,
+      coverageUiRefinementDiff: revisionArtifact.uiRefinementDiff,
+      rawAttempts: revisionRun.rawAttempts,
+      source: 'ai_fix_button',
+      extraFixNumber,
+    })
+  }
+
+  params.ticketState.prd = params.effectivePrdContent
+  params.ticketState.beads = revisionArtifact.refinedContent
+  clearContextCache(params.context.externalId)
+  const auditCoverageRunNumber = params.history.attempts.length + 1
+  const auditMaxCoveragePasses = Math.max(
+    params.history.maxCoveragePasses || params.coverageSettings.maxBeadsCoveragePasses,
+    auditCoverageRunNumber + 1,
+  )
+  const auditPromptContent = buildPromptFromTemplate(
+    getCoveragePromptTemplate('beads'),
+    [
+      ...buildMinimalContext('beads_coverage', params.ticketState),
+      buildCoveragePromptConfiguration({
+        phase: 'beads',
+        coverageRunNumber: auditCoverageRunNumber,
+        maxCoveragePasses: auditMaxCoveragePasses,
+        isFinalAllowedRun: false,
+      }),
+    ],
+  )
+  const auditResult = await runBeadsCoverageAuditPrompt({
+    ticketId: params.ticketId,
+    externalId: params.context.externalId,
+    stateLabel,
+    winnerId: params.auditorId,
+    worktreePath: params.worktreePath,
+    promptContent: auditPromptContent,
+    councilSettings: params.councilSettings,
+    structuredRetryCount: resolveStructuredRetryRuntimeSettings(params.context).structuredRetryCount,
+    signal: params.signal,
+  })
+
+  if (changed) {
+    await finalizeBeadsCoverageExpansion({
+      ticketId: params.ticketId,
+      externalId: params.context.externalId,
+      stateLabel,
+      winnerId: params.fixerId,
+      worktreePath: params.worktreePath,
+      signal: params.signal,
+      councilSettings: params.councilSettings,
+      ticketState: {
+        ...params.ticketState,
+        beads: revisionArtifact.refinedContent,
+      },
+      candidateContent: revisionArtifact.refinedContent,
+      candidateVersion: nextCandidateVersion,
+      structuredRetryCount: resolveStructuredRetryRuntimeSettings(params.context).structuredRetryCount,
+    })
+  }
+
+  const hasRemainingGaps = auditResult.envelope.status === 'gaps'
+  const latestExtraFixSummary = buildExtraFixTransitionSummary({
+    phase: 'beads',
+    extraFixNumber,
+    fromVersion: params.currentCandidateVersion,
+    toVersion: nextCandidateVersion,
+    changed,
+    remainingGaps: auditResult.envelope.gaps,
+  })
+  const attemptEntry: CoverageAttemptHistoryEntry = {
+    candidateVersion: nextCandidateVersion,
+    status: auditResult.envelope.status,
+    summary: latestExtraFixSummary,
+    gaps: [...auditResult.envelope.gaps],
+    auditNotes: auditResult.normalizedContent,
+    response: auditResult.response,
+    normalizedContent: auditResult.normalizedContent,
+    structuredOutput: auditResult.structuredMeta,
+    rawAttempts: auditResult.rawAttempts,
+    coverageRunNumber: auditCoverageRunNumber,
+    maxCoveragePasses: auditMaxCoveragePasses,
+    limitReached: false,
+    terminationReason: hasRemainingGaps ? 'gaps' : 'clean',
+    source: 'ai_fix_button',
+    extraFixNumber,
+  }
+  const transitionEntry: CoverageTransitionHistoryEntry = {
+    fromVersion: params.currentCandidateVersion,
+    toVersion: nextCandidateVersion,
+    summary: latestExtraFixSummary,
+    gaps: [...params.remainingGaps],
+    auditNotes: params.history.normalizedContent,
+    fromContent: params.currentCandidateContent,
+    toContent: revisionArtifact.refinedContent,
+    gapResolutions: revisionArtifact.gapResolutions,
+    resolutionNotes: revisionArtifact.gapResolutions.map((resolution) => resolution.rationale),
+    uiRefinementDiff: revisionArtifact.uiRefinementDiff,
+    structuredOutput: revisionRun.structuredMeta,
+    rawAttempts: revisionRun.rawAttempts,
+    source: 'ai_fix_button',
+    extraFixNumber,
+    noChange: !changed,
+    label: changed
+      ? `Extra Fix ${extraFixNumber}: v${params.currentCandidateVersion} > v${nextCandidateVersion}`
+      : `Extra Fix ${extraFixNumber}: no change`,
+  }
+
+  persistVersionedCoverageArtifact({
+    ticketId: params.ticketId,
+    stateLabel,
+    phase: 'beads',
+    winnerId: params.auditorId,
+    response: auditResult.response,
+    normalizedContent: auditResult.normalizedContent,
+    parsed: auditResult.envelope,
+    structuredOutput: auditResult.structuredMeta,
+    attemptEntry,
+    attempts: [...params.history.attempts, attemptEntry],
+    transitions: [...params.history.transitions, transitionEntry],
+    coverageRunNumber: auditCoverageRunNumber,
+    maxCoveragePasses: auditMaxCoveragePasses,
+    limitReached: false,
+    terminationReason: attemptEntry.terminationReason,
+    finalCandidateVersion: nextCandidateVersion,
+    hasRemainingGaps,
+    remainingGaps: auditResult.envelope.gaps,
+    latestExtraFixSummary,
+  })
+
+  emitModelSystemLog(
+    params.ticketId,
+    params.context.externalId,
+    stateLabel,
+    'info',
+    latestExtraFixSummary,
+    params.fixerId,
+    { source: 'ai_fix_button', extraFixNumber },
+  )
+
+  return {
+    domain: 'beads',
+    status: auditResult.envelope.status,
+    remainingGaps: auditResult.envelope.gaps,
+    extraFixNumber,
+    changed,
+    summary: latestExtraFixSummary,
+  } satisfies CoverageExtraFixResult
+}
+
+export async function performCoverageExtraFix(params: {
+  ticketId: string
+  context: TicketContext
+  domain: CoverageExtraFixDomain
+  signal: AbortSignal
+}): Promise<CoverageExtraFixResult> {
+  const history = loadLatestCoverageSnapshot(params.ticketId, params.domain)
+  if (!history || history.status === 'clean' || history.remainingGaps.length === 0) {
+    return {
+      domain: params.domain,
+      status: 'clean',
+      remainingGaps: [],
+      extraFixNumber: null,
+      changed: false,
+      summary: 'No open coverage gaps remain.',
+      noOp: true,
+    }
+  }
+
+  const { worktreePath, ticket, ticketDir, relevantFiles } = loadTicketDirContext(params.context)
+  const councilSettings = resolveCouncilRuntimeSettings(params.context)
+  const coverageSettings = resolveCoverageRuntimeSettings(params.context)
+  const auditorId = getPlanningWinnerId(params.ticketId, params.domain)
+  const fixerId = params.context.lockedMainImplementer?.trim() || auditorId
+  const ticketState: TicketState = {
+    ticketId: params.context.externalId,
+    title: params.context.title,
+    description: ticket?.description ?? '',
+    relevantFiles,
+  }
+
+  if (params.domain === 'prd') {
+    const fullAnswersContent = loadWinnerPrdFullAnswers(params.ticketId, auditorId)
+    if (!fullAnswersContent) {
+      throw new Error(`PRD extra fix requires the winning model's Full Answers artifact for ${auditorId}, but it was not available.`)
+    }
+    const prdPath = resolve(ticketDir, 'prd.yaml')
+    const currentCandidateContent = existsSync(prdPath) ? readFileSync(prdPath, 'utf-8').trim() : ''
+    if (!currentCandidateContent) {
+      throw new Error('PRD extra fix requires a current prd.yaml artifact.')
+    }
+
+    return runPrdCoverageExtraFix({
+      ticketId: params.ticketId,
+      context: params.context,
+      signal: params.signal,
+      worktreePath,
+      ticketDir,
+      ticketState: {
+        ...ticketState,
+        fullAnswers: [fullAnswersContent],
+        prd: currentCandidateContent,
+      },
+      fixerId,
+      auditorId,
+      currentCandidateContent,
+      currentCandidateVersion: history.finalCandidateVersion ?? 1,
+      remainingGaps: history.remainingGaps,
+      history,
+      councilSettings,
+      coverageSettings,
+      fullAnswersContent,
+    })
+  }
+
+  const prdPath = resolve(ticketDir, 'prd.yaml')
+  const effectivePrdContent = existsSync(prdPath) ? readFileSync(prdPath, 'utf-8').trim() : ''
+  if (!effectivePrdContent) {
+    throw new Error('Beads extra fix requires an approved PRD artifact.')
+  }
+  const semanticInput = getLatestBeadsSemanticCoverageInput(params.ticketId)
+  if (!semanticInput) {
+    throw new Error('Beads extra fix requires a semantic beads blueprint from coverage or refinement history.')
+  }
+
+  return runBeadsCoverageExtraFix({
+    ticketId: params.ticketId,
+    context: params.context,
+    signal: params.signal,
+    worktreePath,
+    ticketState: {
+      ...ticketState,
+      prd: effectivePrdContent,
+      beads: semanticInput.candidateContent,
+    },
+    fixerId,
+    auditorId,
+    currentCandidateContent: semanticInput.candidateContent,
+    currentCandidateVersion: history.finalCandidateVersion ?? semanticInput.candidateVersion,
+    effectivePrdContent,
+    remainingGaps: history.remainingGaps,
+    history,
+    councilSettings,
+    coverageSettings,
+  })
 }
 
 export async function handleRelevantFilesScan(

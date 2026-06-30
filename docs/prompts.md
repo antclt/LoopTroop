@@ -89,7 +89,7 @@ All built-in prompts in this section are exported from `server/prompts/index.ts`
 | `PROM11` | `COUNCIL_VOTING_PRD` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `interview`, `drafts` | Scores PRD drafts with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom11) |
 | `PROM12` | `REFINING_PRD` | Fresh refinement / `disabled` | `relevant_files`, `ticket_details`, `full_answers`, `drafts` | Refines the winning PRD draft and records machine-readable change metadata. | [Full content here](#full-prompt-prom12) |
 | `PROM13` | `VERIFYING_PRD_COVERAGE` | Fresh coverage audit / `disabled` | `full_answers`, `prd` | Compares the PRD against the adopted Full Answers artifact and reports concrete gaps. | [Full content here](#full-prompt-prom13) |
-| `PROM13b` | `VERIFYING_PRD_COVERAGE` revision sub-step | Fresh revision / `disabled` | `full_answers`, `prd`, `coverage_gaps` | Revises the PRD to resolve specific coverage gaps and records gap-resolution metadata. | [Full content here](#full-prompt-prom13b) |
+| `PROM13b` | `VERIFYING_PRD_COVERAGE` revision sub-step and PRD approval extra fix | Fresh revision / `disabled` | `full_answers`, `prd`, `coverage_gaps`, optional previous extra-fix history | Revises the PRD to resolve specific coverage gaps and records gap-resolution metadata. | [Full content here](#full-prompt-prom13b) |
 
 ### Beads
 
@@ -99,7 +99,7 @@ All built-in prompts in this section are exported from `server/prompts/index.ts`
 | `PROM21` | `COUNCIL_VOTING_BEADS` | Fresh council vote / `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts` | Scores bead blueprints with the strict `draft_scores` YAML schema. | [Full content here](#full-prompt-prom21) |
 | `PROM22` | `REFINING_BEADS` | Fresh refinement / `disabled` | `relevant_files`, `ticket_details`, `prd`, `drafts`, `votes` | Refines the winning semantic bead blueprint using selected alternative-draft improvements. | [Full content here](#full-prompt-prom22) |
 | `PROM23` | `VERIFYING_BEADS_COVERAGE` | Fresh coverage audit / `disabled` | `prd`, `beads` | Checks whether the bead blueprint fully covers the PRD. | [Full content here](#full-prompt-prom23) |
-| `PROM24` | `VERIFYING_BEADS_COVERAGE` revision sub-step | Fresh revision / `disabled` | `prd`, `beads`, `coverage_gaps` | Revises the bead blueprint to address specific coverage gaps. | [Full content here](#full-prompt-prom24) |
+| `PROM24` | `VERIFYING_BEADS_COVERAGE` revision sub-step and beads approval extra fix | Fresh revision / `disabled` | `prd`, `beads`, `coverage_gaps`, optional previous extra-fix history | Revises the bead blueprint to address specific coverage gaps. | [Full content here](#full-prompt-prom24) |
 | `PROM25` | `EXPANDING_BEADS` | Fresh / `default` | `relevant_files`, `ticket_details`, `prd`, `beads_draft` | Expands the semantic blueprint into execution-ready bead records. | [Full content here](#full-prompt-prom25) |
 
 ### Execution Setup

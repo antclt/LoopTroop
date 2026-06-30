@@ -35,6 +35,7 @@ import {
   respondWithState,
 } from './routeUtils'
 import { approvalRequestSchema, rawPrdSaveSchema, structuredPrdSaveSchema } from './schemas'
+import { isCoverageFixInProgress } from './coverageFixHandlers'
 
 function countPrdItems(document: PrdDocument): number {
   return document.epics.reduce((count, epic) => count + 1 + epic.user_stories.length, 0)
@@ -331,6 +332,9 @@ function approvePrdForRoute(c: Context, ticketId: string, expectedContentSha256:
   if (ticket.status !== 'WAITING_PRD_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for PRD approval' }, 409)
   }
+  if (isCoverageFixInProgress(ticketId, 'prd')) {
+    return c.json({ error: 'Coverage gap fix is in progress' }, 409)
+  }
 
   try {
     approvePrdDocument(ticketId, expectedContentSha256)
@@ -368,6 +372,9 @@ function approveBeadsForRoute(c: Context, ticketId: string, expectedContentSha25
   if (mockResponse) return mockResponse
   if (ticket.status !== 'WAITING_BEADS_APPROVAL') {
     return c.json({ error: 'Ticket is not waiting for beads approval' }, 409)
+  }
+  if (isCoverageFixInProgress(ticketId, 'beads')) {
+    return c.json({ error: 'Coverage gap fix is in progress' }, 409)
   }
 
   const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)

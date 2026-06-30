@@ -670,7 +670,7 @@ describe('Interview approval UI', () => {
       isLoading: false,
     })
 
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
       const url = String(input)
       if (url === `/api/tickets/${TEST.ticketId}/beads`) {
         return Promise.resolve(
@@ -691,6 +691,9 @@ describe('Interview approval UI', () => {
       if (url === `/api/tickets/${TEST.ticketId}/artifacts`) {
         return createJsonResponse([])
       }
+      if (url === `/api/tickets/${TEST.ticketId}/coverage/fix-gaps` && init?.method === 'POST') {
+        return createJsonResponse({ result: { status: 'gaps', remainingGaps: ['Still missing beads coverage.'] } })
+      }
       throw new Error(`Unexpected fetch: ${url}`)
     })
 
@@ -706,8 +709,22 @@ describe('Interview approval UI', () => {
     expect(screen.getByText('Coverage gaps remain after the final implementation-plan audit.')).toBeInTheDocument()
     expect(screen.getByText('Implementation Plan v3')).toBeInTheDocument()
     expect(screen.getByText('Missing a bead that verifies the approval warning behavior when gaps remain.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Fix gaps with AI' })).toBeInTheDocument()
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /Approve/i })).not.toBeDisabled()
+      expect(screen.getByRole('button', { name: /Approve with gaps/i })).not.toBeDisabled()
     })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fix gaps with AI' }))
+
+    await waitFor(() => {
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `/api/tickets/${TEST.ticketId}/coverage/fix-gaps`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ domain: 'beads' }),
+        }),
+      )
+    })
+    expect(screen.getByRole('button', { name: /Approve with gaps/i })).not.toBeDisabled()
   }, 30_000)
 })

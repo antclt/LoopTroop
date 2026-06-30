@@ -2095,7 +2095,12 @@ function VersionedCoverageReportView({
   const primaryTabs = [
     ...transitions.map((transition, index) => ({
       key: `transition:${index}`,
-      label: `v${transition.fromVersion} > v${transition.toVersion}`,
+      label: transition.label
+        ?? (transition.source === 'ai_fix_button'
+          ? transition.noChange
+            ? `Extra Fix ${transition.extraFixNumber ?? index + 1}: no change`
+            : `Extra Fix ${transition.extraFixNumber ?? index + 1}: v${transition.fromVersion} > v${transition.toVersion}`
+          : `v${transition.fromVersion} > v${transition.toVersion}`),
       transition,
     })),
     {
