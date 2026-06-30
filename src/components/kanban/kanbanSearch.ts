@@ -1,7 +1,7 @@
 import type { Ticket } from '@/hooks/useTickets'
 import type { Project } from '@/hooks/useProjects'
 
-type SearchableTicket = Pick<Ticket, 'externalId' | 'title'>
+type SearchableTicket = Pick<Ticket, 'externalId' | 'title' | 'description'>
 type SearchableProject = Pick<Project, 'name' | 'shortname'>
 
 function normalizeSearchText(value: string): string {
@@ -24,6 +24,7 @@ export function ticketMatchesDashboardSearch(
   const fields = [
     ticket.externalId,
     ticket.title,
+    ticket.description ?? '',
     project?.name ?? '',
     project?.shortname ?? '',
   ]

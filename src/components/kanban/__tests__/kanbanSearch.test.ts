@@ -23,16 +23,24 @@ describe('ticketMatchesDashboardSearch', () => {
     expect(ticketMatchesDashboardSearch(ticket, project, TEST.shortname.toLocaleLowerCase())).toBe(true)
   })
 
-  it('does not match ticket content or non-visible metadata', () => {
+  it('matches ticket description content', () => {
     const ticket = makeTicket({
       externalId: `${TEST.shortname}-17`,
       title: 'Visible title',
       description: 'Hidden description phrase',
+    })
+
+    expect(ticketMatchesDashboardSearch(ticket, project, 'hidden description')).toBe(true)
+  })
+
+  it('does not match non-visible status or priority metadata', () => {
+    const ticket = makeTicket({
+      externalId: `${TEST.shortname}-18`,
+      title: 'Visible title',
       priority: 1,
       status: 'COMPLETED',
     })
 
-    expect(ticketMatchesDashboardSearch(ticket, project, 'hidden description')).toBe(false)
     expect(ticketMatchesDashboardSearch(ticket, project, 'completed')).toBe(false)
     expect(ticketMatchesDashboardSearch(ticket, project, 'very high')).toBe(false)
   })

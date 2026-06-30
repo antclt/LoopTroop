@@ -49,17 +49,32 @@ export function getStatusColor(status: string): string {
   }
 }
 
-export function getRelativeTime(dateStr: string): string {
-  const now = Date.now()
-  const then = new Date(dateStr).getTime()
-  const diff = now - then
-  const minutes = Math.floor(diff / 60000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes}m ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h ago`
-  const days = Math.floor(hours / 24)
-  return `${days}d ago`
+export function formatRelativeDateChip(dateStr: string): string {
+  const d = new Date(dateStr)
+  if (Number.isNaN(d.getTime())) return ''
+
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const yesterday = new Date(today)
+  yesterday.setDate(yesterday.getDate() - 1)
+
+  const targetDate = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const diffTime = today.getTime() - targetDate.getTime()
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
+
+  const hours = String(d.getHours()).padStart(2, '0')
+  const minutes = String(d.getMinutes()).padStart(2, '0')
+
+  if (diffDays === 0) {
+    return `Today ${hours}:${minutes}`
+  }
+  if (diffDays === 1) {
+    return 'Yesterday'
+  }
+  if (diffDays > 1 && diffDays < 7) {
+    return d.toLocaleDateString(undefined, { weekday: 'long' })
+  }
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 export function getStatusProgress(status: string): number | null {

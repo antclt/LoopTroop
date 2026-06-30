@@ -13,6 +13,11 @@ const defaultState: UIState = {
     projectId: null,
     status: null,
     search: '',
+    priority: null,
+    stuckDays: null,
+    onlyErrors: false,
+    onlyNeedsInput: false,
+    sortBy: 'updatedAt_desc',
   },
   theme: 'system',
 }
@@ -48,6 +53,11 @@ function isValidUIState(value: unknown): value is Partial<UIState> {
     if (filters.projectId !== undefined && filters.projectId !== null && typeof filters.projectId !== 'number') return false
     if (filters.status !== undefined && filters.status !== null && typeof filters.status !== 'string') return false
     if (filters.search !== undefined && typeof filters.search !== 'string') return false
+    if (filters.priority !== undefined && filters.priority !== null && !Array.isArray(filters.priority)) return false
+    if (filters.stuckDays !== undefined && filters.stuckDays !== null && typeof filters.stuckDays !== 'number') return false
+    if (filters.onlyErrors !== undefined && typeof filters.onlyErrors !== 'boolean') return false
+    if (filters.onlyNeedsInput !== undefined && typeof filters.onlyNeedsInput !== 'boolean') return false
+    if (filters.sortBy !== undefined && typeof filters.sortBy !== 'string') return false
   }
   return true
 }

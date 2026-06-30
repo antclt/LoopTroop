@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect } from 'react'
 import { KanbanColumn } from './KanbanColumn'
 import { useTickets } from '@/hooks/useTickets'
 import { useProjects } from '@/hooks/useProjects'
@@ -9,6 +9,12 @@ import { RefreshCw, X } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Button } from '@/components/ui/button'
 import { ticketMatchesDashboardSearch } from './kanbanSearch'
+import { cn } from '@/lib/utils'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+} from '@/components/ui/dropdown-menu'
 
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'
 
@@ -50,14 +56,117 @@ export function KanbanBoard() {
   const { state, dispatch } = useUI()
   const { data: tickets, isLoading: isLoadingTickets } = useTickets()
   const { data: projects = [] } = useProjects()
+  
   const searchQuery = state.filters?.search ?? ''
   const isSearchActive = searchQuery.trim().length > 0
+  const selectedProjectId = state.filters?.projectId ?? null
+  const selectedPriority = state.filters?.priority ?? null
+  const selectedStuckDays = state.filters?.stuckDays ?? null
+  const onlyErrors = state.filters?.onlyErrors ?? false
+  const onlyNeedsInput = state.filters?.onlyNeedsInput ?? false
+  const sortBy = state.filters?.sortBy ?? 'updatedAt_desc'
+
+  // Presets State Management
+  const presetKey = selectedProjectId !== null ? `looptroop-presets-${selectedProjectId}` : 'looptroop-presets-global'
+  const [presets, setPresets] = useState<Record<string, {
+    priority: number[] | null
+    stuckDays: number | null
+    onlyErrors: boolean
+    onlyNeedsInput: boolean
+    sortBy: string
+  }>>(() => {
+    try {
+      const stored = localStorage.getItem(presetKey)
+      return stored ? JSON.parse(stored) : {}
+    } catch {
+      return {}
+    }
+  })
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(presetKey)
+      setPresets(stored ? JSON.parse(stored) : {})
+    } catch {
+      setPresets({})
+    }
+  }, [presetKey])
+
+  const savePreset = (name: string) => {
+    if (!name.trim()) return
+    const newPresets = {
+      ...presets,
+      [name]: {
+        priority: selectedPriority,
+        stuckDays: selectedStuckDays,
+        onlyErrors,
+        onlyNeedsInput,
+        sortBy,
+      }
+    }
+    localStorage.setItem(presetKey, JSON.stringify(newPresets))
+    setPresets(newPresets)
+  }
+
+  const deletePreset = (name: string) => {
+    const newPresets = { ...presets }
+    delete newPresets[name]
+    localStorage.setItem(presetKey, JSON.stringify(newPresets))
+    setPresets(newPresets)
+  }
+
+  const applyPreset = (presetValue: typeof presets[string]) => {
+    dispatch({
+      type: 'SET_FILTER',
+      filter: {
+        priority: presetValue.priority,
+        stuckDays: presetValue.stuckDays,
+        onlyErrors: presetValue.onlyErrors,
+        onlyNeedsInput: presetValue.onlyNeedsInput,
+        sortBy: presetValue.sortBy,
+      }
+    })
+  }
 
   const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
 
-  const filteredTickets = useMemo(() => (
-    (tickets ?? []).filter((ticket) => ticketMatchesDashboardSearch(ticket, projectMap.get(ticket.projectId), searchQuery))
-  ), [projectMap, searchQuery, tickets])
+  const filteredTickets = useMemo(() => {
+    let result = tickets ?? []
+
+    // 1. Project Filter
+    if (selectedProjectId !== null) {
+      result = result.filter(t => t.projectId === selectedProjectId)
+    }
+
+    // 2. Search Query (matching external ID, title, description, project name, or project shortname)
+    if (searchQuery.trim().length > 0) {
+      result = result.filter(t => ticketMatchesDashboardSearch(t, projectMap.get(t.projectId), searchQuery))
+    }
+
+    // 3. Priority Filter
+    if (selectedPriority !== null && selectedPriority.length > 0) {
+      result = result.filter(t => selectedPriority.includes(t.priority))
+    }
+
+    // 4. Stuck Days Filter
+    if (selectedStuckDays !== null) {
+      const threshold = selectedStuckDays * 24 * 60 * 60 * 1000
+      const now = Date.now()
+      result = result.filter(t => (now - new Date(t.updatedAt).getTime()) > threshold)
+    }
+
+    // 5. Only Errors Filter
+    if (onlyErrors) {
+      result = result.filter(t => t.status === 'BLOCKED_ERROR')
+    }
+
+    // 6. Only Needs Input Filter
+    if (onlyNeedsInput) {
+      result = result.filter(t => (STATUS_TO_PHASE[t.status] ?? 'todo') === 'needs_input')
+    }
+
+    return result
+  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStuckDays, onlyErrors, onlyNeedsInput, projectMap])
 
   const ticketsByPhase = useMemo(() => columns.map(col => ({
     ...col,
@@ -65,10 +174,241 @@ export function KanbanBoard() {
   })), [filteredTickets])
 
   const hasLoadedTickets = Array.isArray(tickets)
-  const hasNoSearchResults = hasLoadedTickets && isSearchActive && filteredTickets.length === 0
+  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStuckDays !== null || onlyErrors || onlyNeedsInput
+  const hasNoSearchResults = hasLoadedTickets && isAnyFilterActive && filteredTickets.length === 0
+
+  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStuckDays}-${onlyErrors}-${onlyNeedsInput}-${sortBy}`
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
+      {/* Triage & Filter Control Bar */}
+      <div className="border-b border-border bg-card px-4 py-2 flex flex-wrap items-center justify-between gap-3 shrink-0">
+        <div className="flex flex-wrap items-center gap-4">
+          {/* Project Filter */}
+          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            Project:
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              value={selectedProjectId !== null ? String(selectedProjectId) : 'all'}
+              onChange={(e) => {
+                const val = e.target.value
+                dispatch({
+                  type: 'SET_FILTER',
+                  filter: { projectId: val === 'all' ? null : Number(val) }
+                })
+              }}
+            >
+              <option value="all">All Projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name} ({p.shortname})
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {/* Priority Toggles */}
+          <div className="flex items-center gap-1">
+            <span className="text-xs font-medium text-muted-foreground mr-1">Priority:</span>
+            {[
+              { label: 'VH', val: 1, color: 'border-red-500 bg-red-50 text-red-700 dark:bg-red-950/20 dark:text-red-400 dark:border-red-500/80' },
+              { label: 'H', val: 2, color: 'border-orange-500 bg-orange-50 text-orange-700 dark:bg-orange-950/20 dark:text-orange-400 dark:border-orange-500/80' },
+              { label: 'N', val: 3, color: 'border-gray-400 bg-gray-50 text-gray-700 dark:bg-gray-800 dark:text-gray-300 dark:border-gray-600' },
+              { label: 'L', val: 4, color: 'border-blue-400 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-500/85' },
+              { label: 'VL', val: 5, color: 'border-blue-300 bg-blue-50 text-blue-700 dark:bg-blue-950/20 dark:text-blue-400 dark:border-blue-400/80' },
+            ].map(({ label, val, color }) => {
+              const active = selectedPriority?.includes(val) ?? false
+              return (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => {
+                    const current = selectedPriority ?? []
+                    const next = current.includes(val)
+                      ? current.filter(v => v !== val)
+                      : [...current, val]
+                    dispatch({
+                      type: 'SET_FILTER',
+                      filter: { priority: next.length === 0 ? null : next }
+                    })
+                  }}
+                  className={cn(
+                    "h-8 px-2.5 text-[10px] font-bold rounded border transition-colors cursor-pointer",
+                    active
+                      ? color
+                      : "border-input bg-background hover:bg-muted text-muted-foreground"
+                  )}
+                >
+                  {label}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Stuck / Stale days filter */}
+          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            Stale:
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              value={selectedStuckDays !== null ? String(selectedStuckDays) : 'all'}
+              onChange={(e) => {
+                const val = e.target.value
+                dispatch({
+                  type: 'SET_FILTER',
+                  filter: { stuckDays: val === 'all' ? null : Number(val) }
+                })
+              }}
+            >
+              <option value="all">Any time</option>
+              <option value="1">&gt; 24h inactive</option>
+              <option value="3">&gt; 3 days inactive</option>
+              <option value="7">&gt; 7 days inactive</option>
+            </select>
+          </label>
+
+          {/* Errors toggle */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => dispatch({ type: 'SET_FILTER', filter: { onlyErrors: !onlyErrors } })}
+            className={cn(
+              "h-8 text-xs cursor-pointer",
+              onlyErrors && "border-red-500 bg-red-50 hover:bg-red-100 text-red-700 dark:bg-red-950/20 dark:text-red-400 dark:border-red-500/80"
+            )}
+          >
+            Errors Only
+          </Button>
+
+          {/* Needs Input toggle */}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => dispatch({ type: 'SET_FILTER', filter: { onlyNeedsInput: !onlyNeedsInput } })}
+            className={cn(
+              "h-8 text-xs cursor-pointer",
+              onlyNeedsInput && "border-amber-500 bg-amber-50 hover:bg-amber-100 text-amber-700 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-500/80"
+            )}
+          >
+            Needs Input Only
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-3">
+          {/* Presets manager dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 text-xs cursor-pointer">
+                Presets
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56" align="end">
+              <div className="p-2 border-b border-border text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Load Preset
+              </div>
+              {Object.keys(presets).length === 0 ? (
+                <div className="p-2.5 text-xs text-muted-foreground italic">No presets saved</div>
+              ) : (
+                Object.entries(presets).map(([name, val]) => (
+                  <div key={name} className="flex items-center justify-between px-2 py-1 text-xs hover:bg-accent rounded-sm">
+                    <button
+                      type="button"
+                      onClick={() => applyPreset(val)}
+                      className="flex-1 text-left hover:text-foreground cursor-pointer text-xs"
+                    >
+                      {name}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deletePreset(name)}
+                      className="text-red-500 hover:text-red-700 font-bold ml-2 cursor-pointer text-sm"
+                      title="Delete preset"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))
+              )}
+              <div className="p-2 border-t border-border mt-1">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    const formData = new FormData(e.currentTarget)
+                    const name = formData.get('name') as string
+                    if (name) {
+                      savePreset(name)
+                      e.currentTarget.reset()
+                    }
+                  }}
+                  className="flex gap-1"
+                >
+                  <input
+                    type="text"
+                    name="name"
+                    placeholder="New preset..."
+                    required
+                    className="flex-1 h-7 border border-input rounded bg-background px-1.5 text-xs text-foreground outline-none"
+                  />
+                  <Button type="submit" size="sm" className="h-7 px-2 text-xs">
+                    Save
+                  </Button>
+                </form>
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          {/* Sort Selector */}
+          <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+            Sort:
+            <select
+              className="h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground outline-none focus:ring-1 focus:ring-ring"
+              value={sortBy}
+              onChange={(e) => dispatch({ type: 'SET_FILTER', filter: { sortBy: e.target.value } })}
+            >
+              <option value="updatedAt_desc">Last Updated (Newest first)</option>
+              <option value="updatedAt_asc">Last Updated (Oldest first)</option>
+              <option value="createdAt_desc">Date Created (Newest first)</option>
+              <option value="createdAt_asc">Date Created (Oldest first)</option>
+              <option value="priority_asc">Priority (High to Low)</option>
+              <option value="priority_desc">Priority (Low to High)</option>
+              <option value="title_asc">Title (A-Z)</option>
+              <option value="title_desc">Title (Z-A)</option>
+            </select>
+          </label>
+
+          {/* Reset Filters button */}
+          {(selectedProjectId !== null ||
+            selectedPriority !== null ||
+            selectedStuckDays !== null ||
+            onlyErrors ||
+            onlyNeedsInput ||
+            sortBy !== 'updatedAt_desc') && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                dispatch({
+                  type: 'SET_FILTER',
+                  filter: {
+                    projectId: null,
+                    priority: null,
+                    stuckDays: null,
+                    onlyErrors: false,
+                    onlyNeedsInput: false,
+                    sortBy: 'updatedAt_desc',
+                  }
+                })
+              }}
+              className="h-8 text-xs px-2 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              Reset
+            </Button>
+          )}
+        </div>
+      </div>
+
       {isLoadingTickets && (
         <div
           className="border-b border-amber-200 bg-amber-50/90 px-4 py-2 dark:border-amber-900/60 dark:bg-amber-950/40 shrink-0"
@@ -101,16 +441,39 @@ export function KanbanBoard() {
           aria-live="polite"
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">No tickets match this search.</p>
+            <p className="text-sm text-muted-foreground">
+              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors && !onlyNeedsInput
+                ? 'No tickets match this search.'
+                : 'No tickets match active search or filters.'}
+            </p>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => dispatch({ type: 'SET_FILTER', filter: { search: '' } })}
+              onClick={() => {
+                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors && !onlyNeedsInput) {
+                  dispatch({ type: 'SET_FILTER', filter: { search: '' } })
+                } else {
+                  dispatch({
+                    type: 'SET_FILTER',
+                    filter: {
+                      search: '',
+                      projectId: null,
+                      priority: null,
+                      stuckDays: null,
+                      onlyErrors: false,
+                      onlyNeedsInput: false,
+                      sortBy: 'updatedAt_desc',
+                    }
+                  })
+                }
+              }}
               className="w-fit"
             >
               <X className="mr-1 h-4 w-4" />
-              Clear search
+              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors && !onlyNeedsInput
+                ? 'Clear search'
+                : 'Reset filters & search'}
             </Button>
           </div>
         </div>
@@ -123,7 +486,8 @@ export function KanbanBoard() {
             tickets={col.tickets}
             projectMap={projectMap}
             emptyLabel={isSearchActive ? 'No matching tickets' : 'No tickets'}
-            resetKey={searchQuery}
+            resetKey={resetFiltersKey}
+            sortBy={sortBy}
           />
         ))}
       </div>

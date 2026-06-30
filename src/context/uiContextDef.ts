@@ -10,6 +10,11 @@ export interface UIState {
     projectId: number | null
     status: string | null
     search: string
+    priority: number[] | null
+    stuckDays: number | null
+    onlyErrors: boolean
+    onlyNeedsInput: boolean
+    sortBy: string
   }
   theme: 'light' | 'dark' | 'system'
 }

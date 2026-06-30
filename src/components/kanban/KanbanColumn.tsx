@@ -17,9 +17,10 @@ interface KanbanColumnProps {
   projectMap: Map<number, Project>
   emptyLabel?: string
   resetKey?: string
+  sortBy?: string
 }
 
-export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tickets', resetKey = '' }: KanbanColumnProps) {
+export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tickets', resetKey = '', sortBy = 'updatedAt_desc' }: KanbanColumnProps) {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageInput, setPageInput] = useState('1')
 
@@ -33,7 +34,38 @@ export function KanbanColumn({ column, tickets, projectMap, emptyLabel = 'No tic
   }, [currentPage])
 
   const totalPages = Math.max(1, Math.ceil(tickets.length / PAGE_SIZE))
-  const sortedTickets = useMemo(() => [...tickets].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()), [tickets])
+  const sortedTickets = useMemo(() => {
+    const list = [...tickets]
+    switch (sortBy) {
+      case 'updatedAt_asc':
+        return list.sort((a, b) => new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime())
+      case 'createdAt_desc':
+        return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      case 'createdAt_asc':
+        return list.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+      case 'priority_asc':
+        return list.sort((a, b) => {
+          if (a.priority !== b.priority) {
+            return a.priority - b.priority
+          }
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        })
+      case 'priority_desc':
+        return list.sort((a, b) => {
+          if (a.priority !== b.priority) {
+            return b.priority - a.priority
+          }
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+        })
+      case 'title_asc':
+        return list.sort((a, b) => a.title.localeCompare(b.title))
+      case 'title_desc':
+        return list.sort((a, b) => b.title.localeCompare(a.title))
+      case 'updatedAt_desc':
+      default:
+        return list.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    }
+  }, [tickets, sortBy])
   const paginatedTickets = sortedTickets.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
 
   const setPage = (nextPage: number) => {

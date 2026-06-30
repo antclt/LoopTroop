@@ -19,7 +19,7 @@ import {
   markNeedsInputSeen,
   readNeedsInputSeen,
 } from '@/lib/needsInputSeen'
-import { getStatusColor, getRelativeTime, getStatusProgress, getStatusRingColor } from './ticketCardUtils'
+import { getStatusColor, formatRelativeDateChip, getStatusProgress, getStatusRingColor } from './ticketCardUtils'
 import { ProgressRing } from './ProgressRing'
 import { TicketExternalId } from '@/components/ticket/TicketExternalId'
 import { getTicketExternalIdLabel } from '@/lib/ticketDisplay'
@@ -264,7 +264,7 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName }: T
         <Tooltip>
                 <TooltipTrigger asChild>
                   <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-                        {getRelativeTime(ticket.updatedAt)}
+                        {formatRelativeDateChip(ticket.updatedAt)}
                       </span>
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs text-center text-balance">{new Date(ticket.updatedAt).toLocaleString()}</TooltipContent>

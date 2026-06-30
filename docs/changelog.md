@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, error only, and needs input only) to the Kanban board, complete with project-scoped local presets and ticket description search.
 - Added animated status icons for AI council actions and throbbing warning indicators for blocked ticket error states.
 - Added an About window for app-level storage details and surfaced each project's local `.looptroop` state path in Project Details.
 - Added ack-aware yellow flashing for tickets waiting on user input, so the dashboard highlights what needs you and stops flashing once you've opened the ticket.
@@ -24,6 +25,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Detailed Changes
 #### Added
+- Added a Triage & Filter Control Bar to the Kanban board (`KanbanBoard.tsx`), enabling client-side filtering of tickets by Project, Priority (Very High to Very Low toggle badges), Inactivity age (Stale > 24h, > 3d, > 7d), Errors only, and Needs Input only.
+- Added custom filter presets stored locally per project (`looptroop-presets-${projectId}`) in `localStorage`, letting users save, load, and delete custom filter configurations.
+- Added 8 bidirectional sorting modes to Kanban columns (`KanbanColumn.tsx`): Last Updated (Newest/Oldest), Date Created (Newest/Oldest), Priority (High to Low/Low to High), and Title (A-Z/Z-A).
+- Added `formatRelativeDateChip` to ticket cards to show clear calendar-relative date chips (`Today HH:MM`, `Yesterday`, or weekday name) with absolute timestamp tooltips.
+- Expanded the dashboard search component to index and search ticket descriptions in addition to external ID, title, and project metadata.
 - Added animated, context-specific status icons for AI council members and artifact status chips during drafting (writing pencil), scoring (flipping hourglass), refining (spinning arrows), and verifying (scanning magnifying glass) phases, with automatic prefers-reduced-motion overrides.
 - Added a pulsing/throbbing warning animation to active warning and error icons across the Kanban board cards, active ticket header summary, sidebar indicators, activity strip, and live error card views.
 - Added a read-only `About` window at the end of Configuration that opens in a separate modal and shows app-level storage/runtime details: app version, app database path, config directory, storage source, attached-project count, and a short explanation that project-local LoopTroop state lives inside each repository's `.looptroop/` folder.

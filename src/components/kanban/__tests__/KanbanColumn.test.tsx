@@ -112,4 +112,103 @@ describe('KanbanColumn', () => {
     expect(screen.getByLabelText('Open ticket TEST-99 mock demo ticket')).toBeInTheDocument()
     expect(screen.getByLabelText('TEST-99 mock demo ticket')).toHaveTextContent('TEST-99(M)')
   })
+
+  it('sorts tickets by different criteria correctly', () => {
+    const ticketA = makeTicket({
+      id: '1:A',
+      externalId: 'A',
+      title: 'Zeta ticket',
+      priority: 3,
+      createdAt: '2026-06-01T12:00:00.000Z',
+      updatedAt: '2026-06-01T13:00:00.000Z',
+    })
+    const ticketB = makeTicket({
+      id: '1:B',
+      externalId: 'B',
+      title: 'Alpha ticket',
+      priority: 1,
+      createdAt: '2026-06-02T12:00:00.000Z',
+      updatedAt: '2026-06-02T13:00:00.000Z',
+    })
+    const ticketC = makeTicket({
+      id: '1:C',
+      externalId: 'C',
+      title: 'Beta ticket',
+      priority: 2,
+      createdAt: '2026-06-03T12:00:00.000Z',
+      updatedAt: '2026-06-03T13:00:00.000Z',
+    })
+
+    const ticketsList = [ticketA, ticketB, ticketC]
+
+    const { rerender } = render(
+      <TooltipProvider>
+        <UIProvider>
+          <KanbanColumn
+            column={{
+              id: 'todo',
+              title: 'To Do',
+              description: 'Backlog',
+              tooltip: 'Tooltip text',
+            }}
+            tickets={ticketsList}
+            projectMap={new Map<number, Project>()}
+            sortBy="updatedAt_desc"
+          />
+        </UIProvider>
+      </TooltipProvider>,
+    )
+
+    // Default updatedAt_desc sorting: C (June 3), B (June 2), A (June 1)
+    let renderedCardTitles = screen.getAllByRole('paragraph')
+      .map(el => el.textContent)
+      .filter(txt => txt !== 'Backlog')
+    expect(renderedCardTitles).toEqual(['Beta ticket', 'Alpha ticket', 'Zeta ticket'])
+
+    // Sort by Title A-Z
+    rerender(
+      <TooltipProvider>
+        <UIProvider>
+          <KanbanColumn
+            column={{
+              id: 'todo',
+              title: 'To Do',
+              description: 'Backlog',
+              tooltip: 'Tooltip text',
+            }}
+            tickets={ticketsList}
+            projectMap={new Map<number, Project>()}
+            sortBy="title_asc"
+          />
+        </UIProvider>
+      </TooltipProvider>,
+    )
+    renderedCardTitles = screen.getAllByRole('paragraph')
+      .map(el => el.textContent)
+      .filter(txt => txt !== 'Backlog')
+    expect(renderedCardTitles).toEqual(['Alpha ticket', 'Beta ticket', 'Zeta ticket'])
+
+    // Sort by Priority High to Low: B (priority 1), C (priority 2), A (priority 3)
+    rerender(
+      <TooltipProvider>
+        <UIProvider>
+          <KanbanColumn
+            column={{
+              id: 'todo',
+              title: 'To Do',
+              description: 'Backlog',
+              tooltip: 'Tooltip text',
+            }}
+            tickets={ticketsList}
+            projectMap={new Map<number, Project>()}
+            sortBy="priority_asc"
+          />
+        </UIProvider>
+      </TooltipProvider>,
+    )
+    renderedCardTitles = screen.getAllByRole('paragraph')
+      .map(el => el.textContent)
+      .filter(txt => txt !== 'Backlog')
+    expect(renderedCardTitles).toEqual(['Alpha ticket', 'Beta ticket', 'Zeta ticket'])
+  })
 })

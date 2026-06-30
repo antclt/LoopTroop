@@ -125,7 +125,7 @@ describe('KanbanBoard', () => {
         id: `1:${TEST.shortname}-16`,
         externalId: `${TEST.shortname}-16`,
         title: 'Other ticket',
-        description: `${TEST.shortname}15 should not match from hidden ticket content.`,
+        description: `This other ticket description does not contain the query.`,
         status: 'CODING',
         projectId: secondaryProject.id,
       }),
