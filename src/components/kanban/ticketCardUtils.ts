@@ -86,6 +86,22 @@ export function getStatusProgress(status: string): number | null {
   return Math.round(((idx + 1) / STATUS_ORDER.length) * 100)
 }
 
+export function getWorkflowRingProgress(status: string): { percent: number; label: string } | null {
+  const phase = getStatusProgress(status)
+  if (phase === null) return null
+  return { percent: phase, label: 'Workflow progress' }
+}
+
+export function getBeadCompletionProgress(
+  status: string,
+  beadProgress: { totalBeads: number; percentComplete: number },
+): { percent: number; label: string } | null {
+  if (status === 'CODING' && beadProgress.totalBeads > 0) {
+    return { percent: Math.round(beadProgress.percentComplete), label: 'Bead completion' }
+  }
+  return null
+}
+
 export function getStatusRingColor(status: string): string {
   switch (status) {
     case 'COUNCIL_DELIBERATING':

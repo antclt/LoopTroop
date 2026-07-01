@@ -74,6 +74,33 @@ describe('PhaseTimeline', () => {
     expect(screen.queryByText(/Implementing \(Bead \?\/\?\)/)).not.toBeInTheDocument()
   })
 
+  it('shows the ETA range on the active CODING phase', () => {
+    const base = makeTicket()
+    const ticket = makeTicket({
+      status: 'CODING',
+      runtime: {
+        ...base.runtime,
+        currentBead: 4,
+        completedBeads: 3,
+        totalBeads: 10,
+        percentComplete: 30,
+        eta: { bestMs: 600000, likelyMs: 900000, worstMs: 1500000, basis: 'current' },
+      },
+    })
+
+    renderWithProviders(<PhaseTimeline currentStatus="CODING" ticket={ticket} />)
+
+    // Implementation group auto-expands for the active CODING phase; the bead count stays visible
+    // beside the compact ETA chip.
+    expect(screen.getByText('(4/10, 30%)')).toBeInTheDocument()
+    expect(screen.getByText('~15m')).toBeInTheDocument()
+  })
+
+  it('does not render an ETA when the ticket has no estimate', () => {
+    renderWithProviders(<PhaseTimeline currentStatus="CODING" />)
+    expect(screen.queryByText('~15m')).not.toBeInTheDocument()
+  })
+
   it('hides the error phase once a ticket is no longer actively blocked', () => {
     const onSelect = vi.fn()
     renderWithProviders(

@@ -23,6 +23,13 @@ async function parseErrorBody(res: Response, fallback: string): Promise<string> 
   return message
 }
 
+export interface TicketEta {
+  bestMs: number
+  likelyMs: number
+  worstMs: number
+  basis: 'history' | 'current' | 'default'
+}
+
 interface TicketRuntime {
   baseBranch: string
   currentBead: number
@@ -53,6 +60,7 @@ interface TicketRuntime {
   prUrl?: string | null
   prState?: 'draft' | 'open' | 'merged' | 'closed' | null
   prHeadSha?: string | null
+  eta?: TicketEta | null
 }
 
 export interface Ticket {

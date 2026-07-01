@@ -12,6 +12,7 @@ import { adapter } from './state'
 import { emitPhaseLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStreamEvent, emitOpenCodePromptLog, createOpenCodeStreamState, resolveExecutionRuntimeSettings, resolveStructuredRetryRuntimeSettings } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { readTicketBeads, recoverCodingBeadWithReset, writeTicketBeads, updateTicketProgressFromBeads } from './beadsPhase'
+import { recordBeadMetric } from '../../storage/executionTelemetry'
 import { hasPendingSessionContinuationForTicketPhase } from '../../opencode/sessionContinuation'
 import { ensureLocalGitExclude } from '../../git/repository'
 import { writeFileSync, rmSync } from 'fs'
@@ -664,6 +665,7 @@ export async function handleCoding(
     : bead)
   writeTicketBeads(ticketId, completedBeads)
   updateTicketProgressFromBeads(ticketId, completedBeads)
+  recordBeadMetric(ticketId, completedBeads.find(bead => bead.id === finalizingBead.id) ?? finalizingBead, completedBeads)
 
   // Capture code-only diff for this bead (excludes .ticket/** metadata)
   if (beadStartCommit) {

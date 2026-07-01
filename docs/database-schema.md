@@ -98,6 +98,7 @@ The project database is the operational store for one attached repository. LoopT
 | `opencode_sessions` | Exact OpenCode session ownership records |
 | `ticket_status_history` | Append-only status transition log |
 | `ticket_error_occurrences` | Append-only blocked-error history plus resolution state |
+| `bead_execution_metrics` | One row per completed bead; powers throughput/ETA forecasting |
 
 ### `projects`
 
@@ -239,6 +240,30 @@ Operational notes:
 - `diagnostic_details` stores normalized diagnostic payloads used for recovery decisions and UI detail
 - resolution is modeled explicitly with `resolved_at`, `resolution_status`, and `resumed_to_status`
 
+### `bead_execution_metrics`
+
+One row is written per completed bead (best-effort; a failure here can never break an execution run). It is the deterministic throughput store behind the execution **percent-done + ETA forecast**.
+
+Columns:
+
+- `ticket_id`
+- `bead_id`
+- `size_bucket` — ticket size class by total bead count (`S` 1-5, `M` 6-12, `L` 13+)
+- `effort_tier` — the ticket's locked main-implementer reasoning variant (e.g. `medium`)
+- `iterations` — attempts including retries
+- `active_duration_ms` — bead completion time, excluding windows where the ticket was outside `CODING`
+- `wall_clock_ms` — `completed_at - started_at` (diagnostic only)
+- `completed_at`
+- `schema_version`
+- `input_tokens`, `output_tokens`, `cost_usd` — **reserved** for the future Cost Management feature; nullable and intentionally left unset by the ETA feature
+
+Operational notes:
+
+- `active_duration_ms` is measured from bead start to bead completion, minus any window the ticket spent outside `CODING`; this keeps local finalization in the ETA because the forecast represents time until the bead is actually complete
+- rows with no usable timing (`active_duration_ms <= 0`) are skipped so they cannot poison future medians
+- ETA is computed **read-time** in `buildRuntime` from these rows (rich bucketed history with a `(size+effort) -> effort -> any` fallback, current-run samples while the ticket is building its own signal, sparse history before the hardcoded default); nothing about the forecast itself is persisted
+- the reserved token/cost columns let Cost Management extend the same per-bead record later without changing existing readers
+
 ## 5. Relationship Overview
 
 Within a project DB, the relational shape is:
@@ -251,11 +276,12 @@ erDiagram
     tickets ||--o{ opencode_sessions : owns
     tickets ||--o{ ticket_status_history : transitions
     tickets ||--o{ ticket_error_occurrences : records
+    tickets ||--o{ bead_execution_metrics : measures
 ```
 
 Deletion behavior:
 
-- deleting a ticket cascades through `phase_artifacts`, `ticket_phase_attempts`, `ticket_status_history`, and `ticket_error_occurrences`
+- deleting a ticket cascades through `phase_artifacts`, `ticket_phase_attempts`, `ticket_status_history`, `ticket_error_occurrences`, and `bead_execution_metrics`
 - `opencode_sessions.ticket_id` uses `ON DELETE SET NULL`
 - app DB rows and project DB rows are linked **logically** by project root path, not by SQL foreign key
 
@@ -297,8 +323,9 @@ LoopTroop creates a small set of runtime-focused indexes rather than a large gen
 - phase-attempt lookup: `ticket_phase_attempts(ticket_id, phase, state, attempt_number)` plus a uniqueness index on `(ticket_id, phase, attempt_number)`
 - OpenCode session lookup: `opencode_sessions(session_id)`, `opencode_sessions(ticket_id, phase, state)`, `opencode_sessions(ticket_id, phase, phase_attempt, member_id, bead_id, iteration, step, state)`
 - blocked-error lookup: unique `(ticket_id, occurrence_number)` plus `(ticket_id, resolved_at, occurrence_number)`
+- throughput/ETA lookup: `bead_execution_metrics(size_bucket, effort_tier, completed_at)` and `bead_execution_metrics(ticket_id)`
 
-These match the hot runtime paths: ticket board/status queries, phase-attempt version browsing, session reconnect, and blocked-error recovery.
+These match the hot runtime paths: ticket board/status queries, phase-attempt version browsing, session reconnect, blocked-error recovery, and read-time ETA throughput sampling.
 
 ## 8. Changing The Schema Safely
 

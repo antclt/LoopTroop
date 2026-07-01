@@ -97,6 +97,57 @@ describe('DashboardHeader', () => {
     mockUseUpdateTicket.mockReturnValue({ mutateAsync: vi.fn() })
   })
 
+  it('shows deterministic bead completion and the ETA range during execution', () => {
+    const base = makeTicket()
+    const ticket = makeTicket({
+      status: 'CODING',
+      availableActions: ['cancel'],
+      runtime: {
+        ...base.runtime,
+        currentBead: 4,
+        completedBeads: 3,
+        totalBeads: 10,
+        percentComplete: 30,
+        eta: { bestMs: 600000, likelyMs: 900000, worstMs: 1500000, basis: 'current' },
+      },
+    })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    expect(screen.getByText('3/10 (30%)')).toBeInTheDocument()
+    // EtaRange renders the "likely" duration with a "~" prefix (900000ms -> 15m).
+    expect(screen.getByText('~15m')).toBeInTheDocument()
+  })
+
+  it('omits the ETA chip when no estimate is available yet', () => {
+    const base = makeTicket()
+    const ticket = makeTicket({
+      status: 'CODING',
+      availableActions: ['cancel'],
+      runtime: {
+        ...base.runtime,
+        currentBead: 4,
+        completedBeads: 3,
+        totalBeads: 10,
+        percentComplete: 30,
+        eta: null,
+      },
+    })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    expect(screen.getByText('3/10 (30%)')).toBeInTheDocument()
+    expect(screen.queryByText('~15m')).not.toBeInTheDocument()
+  })
+
   it('shows the project as its own details field above priority', async () => {
     const ticket = makeTicket({
       status: 'DRAFTING_PRD',

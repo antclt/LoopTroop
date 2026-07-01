@@ -42,6 +42,7 @@ function buildRuntimeProjection(ticket: PublicTicket) {
       prUrl: ticket.runtime.prUrl,
       prState: ticket.runtime.prState,
       prHeadSha: ticket.runtime.prHeadSha,
+      eta: ticket.runtime.eta,
     },
     availableActions: ticket.availableActions,
     beads: (ticket.runtime.beads ?? []).map((bead) => ({

@@ -149,6 +149,22 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       resumed_to_status TEXT
     );
 
+    CREATE TABLE IF NOT EXISTS bead_execution_metrics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      bead_id TEXT NOT NULL,
+      size_bucket TEXT NOT NULL,
+      effort_tier TEXT NOT NULL,
+      iterations INTEGER NOT NULL DEFAULT 1,
+      active_duration_ms INTEGER NOT NULL,
+      wall_clock_ms INTEGER,
+      completed_at TEXT NOT NULL,
+      schema_version INTEGER NOT NULL DEFAULT 1,
+      input_tokens INTEGER,
+      output_tokens INTEGER,
+      cost_usd REAL
+    );
+
     CREATE INDEX IF NOT EXISTS idx_project_tickets_status ON tickets(status);
     CREATE INDEX IF NOT EXISTS idx_project_tickets_external_id ON tickets(external_id);
     CREATE INDEX IF NOT EXISTS idx_phase_artifacts_ticket ON phase_artifacts(ticket_id);
@@ -158,6 +174,10 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       ON ticket_error_occurrences(ticket_id, occurrence_number);
     CREATE INDEX IF NOT EXISTS idx_ticket_error_occurrences_open
       ON ticket_error_occurrences(ticket_id, resolved_at, occurrence_number);
+    CREATE INDEX IF NOT EXISTS idx_bead_metrics_bucket
+      ON bead_execution_metrics(size_bucket, effort_tier, completed_at);
+    CREATE INDEX IF NOT EXISTS idx_bead_metrics_ticket
+      ON bead_execution_metrics(ticket_id);
   `)
 
   ensureColumn(sqlite, 'tickets', 'locked_interview_questions', 'INTEGER')
@@ -220,6 +240,10 @@ function cleanupProjectForeignKeyOrphans(sqlite: Database.Database) {
       OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
 
     DELETE FROM ticket_error_occurrences
+    WHERE ticket_id NOT IN (SELECT id FROM tickets)
+      OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
+
+    DELETE FROM bead_execution_metrics
     WHERE ticket_id NOT IN (SELECT id FROM tickets)
       OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
 

@@ -10,8 +10,10 @@ import { useProfile } from '@/hooks/useProfile'
 import { useProjects } from '@/hooks/useProjects'
 import { getStatusUserLabel } from '@/lib/workflowMeta'
 import { getTicketAvailableActions, getTicketCouncilMembers, getTicketRuntime } from '@/lib/ticketNormalization'
-import { getStatusProgress, getStatusRingColor } from '@/components/kanban/ticketCardUtils'
+import { getWorkflowRingProgress, getStatusRingColor } from '@/components/kanban/ticketCardUtils'
 import { ProgressRing } from '@/components/kanban/ProgressRing'
+import { BeadCompletionChip } from '@/components/kanban/BeadCompletionChip'
+import { EtaRange } from '@/components/navigator/EtaRange'
 import { EffortBadge } from '@/components/shared/EffortBadge'
 import { TicketActions } from './TicketActions'
 import { ErrorBanner } from './ErrorBanner'
@@ -331,7 +333,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
     totalBeads: runtime.totalBeads,
     errorMessage: ticket.errorMessage,
   })
-  const progress = getStatusProgress(ticket.status)
+  const workflowRingProgress = getWorkflowRingProgress(ticket.status)
   const ringColor = getStatusRingColor(ticket.status)
   return (
     <div className="border-b border-border bg-background">
@@ -383,6 +385,17 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs text-center text-balance">Current workflow phase</TooltipContent>
                   </Tooltip>
+          {ticket.status === 'CODING' && runtime.totalBeads > 0 && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+              <BeadCompletionChip
+                completedBeads={runtime.completedBeads}
+                totalBeads={runtime.totalBeads}
+                percent={runtime.percentComplete}
+                showCount
+              />
+              {runtime.eta && <EtaRange eta={runtime.eta} />}
+            </span>
+          )}
         </div>
         <TicketActions
           ticket={ticket}
@@ -482,15 +495,15 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                 <span className={ticket.status !== 'DRAFT' ? getStatusBadgeClasses(ticket.status).replace('bg-', 'text-').split(' ').filter(c => c.startsWith('text-')).join(' ') : ''}>
                   {statusLabel}
                 </span>
-                {ticket.status !== 'DRAFT' && progress !== null && (
+                {ticket.status !== 'DRAFT' && workflowRingProgress !== null && (
                   <Tooltip>
                                         <TooltipTrigger asChild>
                                           <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                                                          <ProgressRing percent={progress} colorClass={ringColor} />
-                                                          <span className={ringColor}>{progress}%</span>
+                                                          <ProgressRing percent={workflowRingProgress.percent} colorClass={ringColor} />
+                                                          <span className={ringColor}>{workflowRingProgress.percent}%</span>
                                                         </span>
                                         </TooltipTrigger>
-                                        <TooltipContent className="max-w-xs text-center text-balance">Workflow progress</TooltipContent>
+                                        <TooltipContent className="max-w-xs text-center text-balance">{workflowRingProgress.label}</TooltipContent>
                                       </Tooltip>
                 )}
               </div>
@@ -565,6 +578,12 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Completion</span>
                 <p className="mt-0.5">{Math.round(runtime.percentComplete)}%</p>
+              </div>
+            )}
+            {runtime.eta && (
+              <div>
+                <span className="text-xs font-medium text-muted-foreground">Est. Remaining</span>
+                <div className="mt-0.5"><EtaRange eta={runtime.eta} /></div>
               </div>
             )}
             {runtime.activeBeadIteration && runtime.activeBeadIteration > 0 && (

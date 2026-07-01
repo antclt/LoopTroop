@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, type ReactNode } from 'react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { StatusIndicator } from './StatusIndicator'
+import { EtaRange } from './EtaRange'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { STATUS_DESCRIPTIONS, STATUS_TO_PHASE, getStatusUserLabel } from '@/lib/workflowMeta'
@@ -120,11 +121,25 @@ function resolvePositiveNumber(...values: Array<number | null | undefined>): num
   return values.find((value): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0) ?? null
 }
 
+function resolveFiniteNumber(...values: Array<number | null | undefined>): number | null {
+  return values.find((value): value is number => typeof value === 'number' && Number.isFinite(value)) ?? null
+}
+
+function getCodingBeadProgress(ticket?: Ticket): { current: number; total: number; percent: number } | null {
+  const current = resolvePositiveNumber(ticket?.runtime?.currentBead, ticket?.currentBead)
+  const total = resolvePositiveNumber(ticket?.runtime?.totalBeads, ticket?.totalBeads)
+  if (current === null || total === null) return null
+  const percent = resolveFiniteNumber(ticket?.runtime?.percentComplete, ticket?.percentComplete)
+    ?? Math.round((Math.max(0, current - 1) / total) * 100)
+  return { current, total, percent: Math.max(0, Math.min(100, Math.round(percent))) }
+}
+
 function getPhaseLabel(phaseId: string, ticket?: Ticket): string {
   if (phaseId === 'CODING') {
+    const beadProgress = getCodingBeadProgress(ticket)
     return getStatusUserLabel(phaseId, {
-      currentBead: resolvePositiveNumber(ticket?.runtime?.currentBead, ticket?.currentBead),
-      totalBeads: resolvePositiveNumber(ticket?.runtime?.totalBeads, ticket?.totalBeads),
+      currentBead: beadProgress?.current ?? null,
+      totalBeads: beadProgress?.total ?? null,
     })
   }
 
@@ -230,6 +245,9 @@ export function PhaseTimeline({
                     const isSelectable = !isFuture || isCurrent
 
                     const phaseLabel = getPhaseLabel(phase.id, ticket)
+                    const codingBeadProgress = phase.id === 'CODING' && isCurrent
+                      ? getCodingBeadProgress(ticket)
+                      : null
 
                     return (
                       <Tooltip key={phase.id}>
@@ -246,10 +264,25 @@ export function PhaseTimeline({
                             )}
                           >
                             <StatusIndicator status={indicatorStatus} />
-                            <span className="truncate flex-1">{phaseLabel}</span>
+                            {codingBeadProgress ? (
+                              <>
+                                <span className="min-w-0 truncate">Implementing</span>
+                                <span className="shrink-0 text-muted-foreground">({codingBeadProgress.current}/{codingBeadProgress.total}, {codingBeadProgress.percent}%)</span>
+                                <span className="min-w-0 flex-1" />
+                              </>
+                            ) : (
+                              <span className="truncate flex-1">{phaseLabel}</span>
+                            )}
+                            {phase.id === 'CODING' && isCurrent && ticket?.runtime?.eta && (
+                              <EtaRange eta={ticket.runtime.eta} showTooltip={false} className="ml-auto" />
+                            )}
                           </button>
                         </TooltipTrigger>
-                        <TooltipContent side="right" className="max-w-xs text-center text-balance">{getPhaseTooltip(phase.id)}</TooltipContent>
+                        <TooltipContent side="right" className="max-w-xs text-center text-balance">
+                          {codingBeadProgress
+                            ? `Bead completion: ${codingBeadProgress.current}/${codingBeadProgress.total} (${codingBeadProgress.percent}%). Remaining time is approximate.`
+                            : getPhaseTooltip(phase.id)}
+                        </TooltipContent>
                       </Tooltip>
                     )
                   })}

@@ -24,6 +24,7 @@ const DEFAULT_TICKET_RUNTIME: TicketRuntime = {
   prUrl: null,
   prState: null,
   prHeadSha: null,
+  eta: null,
 }
 
 const DEFAULT_CLEANUP_SUMMARY: NonNullable<Ticket['cleanup']> = {
@@ -68,6 +69,17 @@ function normalizeRuntimeBeads(value: unknown): TicketRuntime['beads'] {
     .filter((bead) => bead.id.length > 0)
 }
 
+function normalizeRuntimeEta(value: unknown): TicketRuntime['eta'] {
+  if (!isRecord(value)) return null
+  const bestMs = nullableNumber(value.bestMs)
+  const likelyMs = nullableNumber(value.likelyMs)
+  const worstMs = nullableNumber(value.worstMs)
+  const basis = value.basis
+  if (bestMs === null || likelyMs === null || worstMs === null) return null
+  if (basis !== 'history' && basis !== 'current' && basis !== 'default') return null
+  return { bestMs, likelyMs, worstMs, basis }
+}
+
 export function getTicketRuntime(ticket: Ticket): TicketRuntime {
   const rawTicket = ticket as unknown as Record<string, unknown>
   const rawRuntime: Record<string, unknown> = isRecord(rawTicket.runtime)
@@ -109,6 +121,7 @@ export function getTicketRuntime(ticket: Ticket): TicketRuntime {
       ? rawRuntime.prState
       : null,
     prHeadSha: nullableString(rawRuntime.prHeadSha),
+    eta: normalizeRuntimeEta(rawRuntime.eta),
   }
 }
 

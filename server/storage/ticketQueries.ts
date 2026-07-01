@@ -25,6 +25,8 @@ import type { ArtifactSnapshot } from '../sse/eventTypes'
 import { EXECUTION_BAND_STATUSES } from '../workflow/executionBand'
 import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 import { isContinuableBlockedError } from '../opencode/sessionContinuation'
+import { computeEtaRange, type EtaRange } from '../workflow/eta/computeEta'
+import { bucketForBeadCount, getThroughputSamples, getTicketBeadSamples } from './executionTelemetry'
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
@@ -130,6 +132,7 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
     prUrl: string | null
     prState: 'draft' | 'open' | 'merged' | 'closed' | null
     prHeadSha: string | null
+    eta: EtaRange | null
   }
 }
 
@@ -530,6 +533,7 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     prUrl: null,
     prState: null,
     prHeadSha: null,
+    eta: null,
   }
   const completionDisposition = readCompletionDisposition(projectContext, ticket.id)
   const cleanup = readCleanupSummary(projectContext, ticket.id)
@@ -694,6 +698,19 @@ function buildRuntime(
       ? totalBeads
       : Math.max(0, currentBead - 1)
 
+  // ETA is only meaningful while beads are actively executing; skip it elsewhere to keep
+  // list/kanban fetches cheap. Computed read-time from persisted throughput metrics.
+  let eta: EtaRange | null = null
+  if (ticket.status === 'CODING' && projectContext && totalBeads > 0) {
+    const effortTier = ticket.lockedMainImplementerVariant || 'medium'
+    const sizeBucket = bucketForBeadCount(totalBeads)
+    eta = computeEtaRange({
+      remaining: Math.max(0, totalBeads - completedBeads),
+      historySamples: getThroughputSamples(projectContext.projectDb, { effortTier, sizeBucket, excludeTicketId: ticket.id }),
+      currentRunSamples: getTicketBeadSamples(projectContext.projectDb, ticket.id),
+    })
+  }
+
   return {
     baseBranch,
     currentBead,
@@ -723,6 +740,7 @@ function buildRuntime(
     prUrl: typeof pullRequestReport?.prUrl === 'string' ? pullRequestReport.prUrl : null,
     prState: pullRequestReport?.prState ?? null,
     prHeadSha: typeof pullRequestReport?.prHeadSha === 'string' ? pullRequestReport.prHeadSha : null,
+    eta,
   }
 }
 

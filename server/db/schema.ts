@@ -152,3 +152,23 @@ export const ticketErrorOccurrences = sqliteTable('ticket_error_occurrences', {
   resolutionStatus: text('resolution_status'),
   resumedToStatus: text('resumed_to_status'),
 })
+
+// One row per completed bead. Powers deterministic throughput/ETA forecasting and is the
+// forward-compatible foundation for the future Cost Management feature (token/cost columns are
+// reserved but intentionally left unset by the ETA feature).
+export const beadExecutionMetrics = sqliteTable('bead_execution_metrics', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  beadId: text('bead_id').notNull(),
+  sizeBucket: text('size_bucket').notNull(), // 'S' | 'M' | 'L' by total bead count
+  effortTier: text('effort_tier').notNull(), // implementer reasoning variant (e.g. 'medium')
+  iterations: integer('iterations').notNull().default(1), // attempts including retries
+  activeDurationMs: integer('active_duration_ms').notNull(), // bead completion time, excluding non-CODING waits
+  wallClockMs: integer('wall_clock_ms'), // completedAt - startedAt (diagnostic)
+  completedAt: text('completed_at').notNull(),
+  schemaVersion: integer('schema_version').notNull().default(1),
+  // Reserved for Cost Management (not populated by the ETA feature):
+  inputTokens: integer('input_tokens'),
+  outputTokens: integer('output_tokens'),
+  costUsd: real('cost_usd'),
+})

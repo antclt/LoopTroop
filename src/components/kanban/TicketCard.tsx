@@ -22,12 +22,16 @@ import {
 import {
   getStatusColor,
   formatRelativeDateChip,
-  getStatusProgress,
+  getBeadCompletionProgress,
+  getWorkflowRingProgress,
   getStatusRingColor,
 } from './ticketCardUtils'
 import { ProgressRing } from './ProgressRing'
+import { BeadCompletionChip } from './BeadCompletionChip'
+import { EtaRange } from '@/components/navigator/EtaRange'
 import { TicketExternalId } from '@/components/ticket/TicketExternalId'
 import { getTicketExternalIdLabel } from '@/lib/ticketDisplay'
+import type { TicketEta } from '@/hooks/useTickets'
 
 
 interface TicketCardProps {
@@ -42,17 +46,21 @@ interface TicketCardProps {
     projectId: number
     currentBead?: number | null
     totalBeads?: number | null
+    percentComplete?: number | null
     errorMessage?: string | null
     errorSeenSignature?: string | null
     needsInputSeenSignature?: string | null
     completionDisposition?: 'merged' | 'closed_unmerged' | null
     runtime?: {
       currentBead?: number | null
+      completedBeads?: number | null
       totalBeads?: number | null
+      percentComplete?: number | null
       iterationCount?: number | null
       maxIterations?: number | null
       activeBeadIteration?: number | null
       maxIterationsPerBead?: number | null
+      eta?: TicketEta | null
     } | null
   }
   projectColor?: string
@@ -141,11 +149,18 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName, sea
   const isTerminal = ticket.status === 'COMPLETED' || ticket.status === 'CANCELED'
   const kanbanPhase = STATUS_TO_PHASE[ticket.status] ?? 'todo'
   const isInProgress = !isTerminal && kanbanPhase === 'in_progress'
-  const progress = getStatusProgress(ticket.status)
+  const workflowRingProgress = getWorkflowRingProgress(ticket.status)
+  const beadCompletionProgress = getBeadCompletionProgress(ticket.status, {
+    totalBeads: ticket.totalBeads ?? ticket.runtime?.totalBeads ?? 0,
+    percentComplete: ticket.percentComplete ?? ticket.runtime?.percentComplete ?? 0,
+  })
   const ringColor = getStatusRingColor(ticket.status)
+  const currentBead = ticket.currentBead ?? ticket.runtime?.currentBead ?? null
+  const totalBeads = ticket.totalBeads ?? ticket.runtime?.totalBeads ?? null
+  const completedBeads = ticket.runtime?.completedBeads ?? null
   const statusLabel = getStatusUserLabel(ticket.status, {
-    currentBead: ticket.currentBead,
-    totalBeads: ticket.totalBeads,
+    currentBead,
+    totalBeads,
     errorMessage: ticket.errorMessage,
   })
   const errorSignature = getErrorTicketSignature(ticket)
@@ -284,16 +299,26 @@ export function TicketCard({ ticket, projectColor, projectIcon, projectName, sea
               <TooltipContent className="max-w-xs text-center text-balance">Dashboard search matched this field.</TooltipContent>
             </Tooltip>
           )}
-          {progress !== null && (
+          {workflowRingProgress !== null && (
             <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
-                                    <ProgressRing percent={progress} colorClass={ringColor} />
-                                    <span className={ringColor}>{progress}%</span>
+                                    <ProgressRing percent={workflowRingProgress.percent} colorClass={ringColor} />
+                                    <span className={ringColor}>{workflowRingProgress.percent}%</span>
                                   </span>
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-xs text-center text-balance">Workflow progress</TooltipContent>
+                        <TooltipContent className="max-w-xs text-center text-balance">{workflowRingProgress.label}</TooltipContent>
                       </Tooltip>
+          )}
+          {beadCompletionProgress !== null && totalBeads !== null && (
+            <BeadCompletionChip
+              completedBeads={completedBeads}
+              totalBeads={totalBeads}
+              percent={beadCompletionProgress.percent}
+            />
+          )}
+          {ticket.status === 'CODING' && ticket.runtime?.eta && (
+            <EtaRange eta={ticket.runtime.eta} />
           )}
 
         </div>
