@@ -118,15 +118,6 @@ search: false
 *   **WYSIWYG editor:** A human-friendly editor for markdown files.
 *   **Comments section:** Per phase users can add comments and discuss changes, without affecting the agent's behavior.
 *   **Extra safety:** Secrets and sensitive data should not be added to any file in the `.looptroop` folder.
-*   **Deterministic command safety guard (pre-execution):**
-    *   Every agent-issued shell command must pass a command-safety guard before execution.
-    *   The guard must parse command chaining (`&&`, `||`, `;`, pipes) and validate each segment independently.
-    *   The guard must detect dangerous commands hidden in command substitution (`$(...)` and backticks) and block them.
-    *   Decision contract must be machine-readable: `allow | confirm_required | block`, with reason codes.
-    *   Safety-critical parsing/validation failures must be `fail_closed` (block), not silent allow.
-    *   The guard must hard-block known destructive signatures (`rm -rf /`, raw-disk `dd`, fork-bomb patterns) even when runtime permission mode is `--yolo`/allow-all.
-    *   Enforce path confinement before execution: command targets must resolve inside the active project/worktree root; out-of-bound paths are blocked with deterministic reason codes.
-    *   Persist guard decisions to `.looptroop/tickets/<ticket-id>/safety/command-guard.jsonl`.
 *   **Knowledge Harvest Pipeline (Documentation + Agents memory):** [I1](https://github.com/mj-meyer/choo-choo-ralph/blob/main/docs/workflow.md#step-5-harvest-learnings)
     *   After each ticket reaches `COMPLETED`, run a deterministic harvest pass that scans bead notes, execution logs, and commit receipts for structured `LEARNING` and `GAP` entries.
     *   Generate `.looptroop/tickets/<ticket-id>/harvest-plan.md` containing proposed docs updates, proposed `agents.md` updates, and proposed follow-up beads for unresolved gaps.
@@ -824,6 +815,15 @@ search: false
     *   `Doctor` validates script availability and timeout bounds; blocking failures prevent execution with explicit remediation.
     *   Persist per-run script receipts (`script_name`, `exit_code`, `duration_ms`, `started_at`, `ended_at`, `result`) for diagnostics.
 *   **Sandboxing & Guardrails (policy profiles + permission-denial remediation):**
+    *   **Pre-execution command safety guard:**
+        *   Every agent-issued shell command must pass a command-safety guard before execution.
+        *   The guard must parse command chaining (`&&`, `||`, `;`, pipes) and validate each segment independently.
+        *   The guard must detect dangerous commands hidden in command substitution (`$(...)` and backticks) and block them.
+        *   Decision contract must be machine-readable: `allow | confirm_required | block`, with reason codes.
+        *   Safety-critical parsing/validation failures must be `fail_closed` (block), not silent allow.
+        *   The guard must hard-block known destructive signatures (`rm -rf /`, raw-disk `dd`, fork-bomb patterns) even when runtime permission mode is `--yolo`/allow-all.
+        *   Enforce path confinement before execution: command targets must resolve inside the active project/worktree root; out-of-bound paths are blocked with deterministic reason codes.
+        *   Persist guard decisions to `.looptroop/tickets/<ticket-id>/safety/command-guard.jsonl`.
     *   Research a sandbox isolation solution (Docker / namespaces / VM).
     *   Add explicit sandbox config contract:
         *   `sandbox.enabled`,
@@ -1343,7 +1343,6 @@ search: false
     *   Generate merge commit summaries deterministically from landed-branch commit history (bounded subject length + ticket/run suffix) so merge history remains readable and consistent.
     *   Cleanup order must be crash-safe: mark land result first, then delete integration branch/worktree; reruns must skip already-landed merge work and continue cleanup only.
     *   If merge/test/push fails, preserve both sides and transition queue item to `needs_review` (and emit `needs_manual_resolution` at ticket level when applicable) with conflict artifacts and exact paths; never auto-discard either side.
-*   **Changelog in documentation:** Version, test coverage, what's working, recent improvements (per version). ([I1](https://github.com/frankbria/ralph-claude-code))
 *   **User Feedback + HITL Learning Loop:** After every refinement (when user is presented the winning draft of each council vote), user can still modify the file directly and can also provide chat feedback (e.g., "Add more details on error handling").
     *   Add optional `learn_from_feedback` mode:
         *   distill reusable lessons from `{draft_output + user_feedback}` into short rules;

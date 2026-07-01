@@ -13,6 +13,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added live execution progress: during coding the ticket header, Kanban cards, and phase navigator show deterministic bead completion (done/total) as a distinct metric plus an approximate remaining-time (ETA) range that sharpens as work proceeds.
+- Folded the Deterministic Command Safety Guard roadmap item into the larger Sandboxing & Guardrails roadmap item.
 
 ### Detailed Changes
 
@@ -20,6 +21,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Bead-completion progress during execution: while a ticket is coding, the header and Kanban card show a distinct bead-completion chip so workflow progress and bead progress do not share the same visual scale.
 - ETA forecast for active execution: a best/likely/worst remaining-time range shown in the ticket header, Kanban cards, and phase navigator, recomputed on each bead completion. Estimates use historical throughput bucketed by ticket size and effort tier when enough history exists, fall back to the current run while a ticket is building its own sample set, use sparse history before the hardcoded default, and are always flagged as approximate on hover.
 - Per-bead throughput telemetry: a new project-database table (`bead_execution_metrics`) records completion time and retry count for each completed bead, measured from bead start to bead completion while excluding time spent outside `CODING`. Recording is best-effort and can never interrupt an execution run. Token/cost columns are reserved for a future Cost Management feature.
+
+#### Changed
+- Consolidated the standalone Deterministic Command Safety Guard roadmap item into the Sandboxing & Guardrails roadmap item, merging pre-execution command checking, subshell detection, and path confinement rules with runtime container/VM safety profiles.
 
 :::
 
