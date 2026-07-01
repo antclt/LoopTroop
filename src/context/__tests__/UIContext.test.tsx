@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, beforeEach } from 'vitest'
 import { UIProvider } from '../UIContext'
 import { useUI } from '../useUI'
@@ -130,24 +130,28 @@ describe('UIProvider', () => {
     expect(screen.getByTestId('preset-scopes')).toHaveTextContent('looptroop-presets-global')
   })
 
-  it('migrates legacy preset keys even before durable UI state exists', async () => {
+  it('recovers legacy preset keys on every load, even without a durable UI-state record', () => {
     localStorage.setItem('looptroop-presets-global', JSON.stringify({
       'Night ops': { priority: [1], stuckDays: 3, onlyErrors: true, sortBy: 'priority_asc' },
     }))
 
-    render(
+    const { unmount } = render(
       <UIProvider>
         <UIStateProbe />
       </UIProvider>,
     )
 
     expect(screen.getByTestId('preset-scopes')).toHaveTextContent('looptroop-presets-global')
-    await waitFor(() => {
-      const stored = JSON.parse(localStorage.getItem('looptroop-ui-state') ?? '{}') as {
-        presetsByProject?: Record<string, unknown>
-      }
-      expect(stored.presetsByProject).toHaveProperty('looptroop-presets-global')
-    })
+
+    // A refresh with no user action re-runs the init-time recovery, so the preset
+    // survives purely on the standalone key even if the durable blob is never written.
+    unmount()
+    render(
+      <UIProvider>
+        <UIStateProbe />
+      </UIProvider>,
+    )
+    expect(screen.getByTestId('preset-scopes')).toHaveTextContent('looptroop-presets-global')
   })
 
   it('merges legacy preset keys into an existing persisted preset scope', () => {
@@ -195,12 +199,7 @@ describe('UIProvider', () => {
     expect(screen.getByTestId('search')).toHaveTextContent('')
   })
 
-  it('does not overwrite stored presets from a stale provider state during unrelated UI updates', () => {
-    render(
-      <UIProvider>
-        <ThemeDispatchProbe />
-      </UIProvider>,
-    )
+  it('persists the whole committed state (presets included) on an unrelated UI update', () => {
     localStorage.setItem('looptroop-ui-state', JSON.stringify({
       filters: {},
       presetsByProject: {
@@ -210,15 +209,24 @@ describe('UIProvider', () => {
       },
     }))
 
+    render(
+      <UIProvider>
+        <ThemeDispatchProbe />
+      </UIProvider>,
+    )
+
+    // An unrelated dispatch persists React state, which already carries the loaded presets.
     fireEvent.click(screen.getByRole('button', { name: 'Set dark' }))
 
     const stored = JSON.parse(localStorage.getItem('looptroop-ui-state') ?? '{}') as {
+      theme?: string
       presetsByProject?: Record<string, Record<string, unknown>>
     }
+    expect(stored.theme).toBe('dark')
     expect(stored.presetsByProject?.['looptroop-presets-global']).toHaveProperty('Night ops')
   })
 
-  it('persists saved presets through a fresh provider boot', async () => {
+  it('persists saved presets through a fresh provider boot', () => {
     const { unmount } = render(
       <UIProvider>
         <PresetDispatchProbe />
@@ -231,8 +239,6 @@ describe('UIProvider', () => {
       presetsByProject?: Record<string, Record<string, unknown>>
     }
     expect(stored.presetsByProject?.['looptroop-presets-global']).toHaveProperty('Night ops')
-    const mirrored = JSON.parse(localStorage.getItem('looptroop-presets-global') ?? '{}') as Record<string, unknown>
-    expect(mirrored).toHaveProperty('Night ops')
 
     unmount()
     render(

@@ -1,63 +1,21 @@
-import { useCallback, useReducer, useEffect, useLayoutEffect, useRef, type Dispatch, type ReactNode } from 'react'
+import { useReducer, useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import { UIContext, type UIState, type UIAction, type TriagePreset, type ErrorStateFilter } from './uiContextDef'
 import type { WorkflowGroupId } from '@shared/workflowMeta'
 
 const STORAGE_KEY = 'looptroop-ui-state'
 const useBrowserLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-function mergePresetsByProject(
-  stored: Record<string, Record<string, TriagePreset>>,
-  current: Record<string, Record<string, TriagePreset>>,
-  replaceKeys: string[] = [],
-): Record<string, Record<string, TriagePreset>> {
-  const replace = new Set(replaceKeys)
-  const merged: Record<string, Record<string, TriagePreset>> = { ...stored }
-
-  for (const [scopeKey, presets] of Object.entries(current)) {
-    merged[scopeKey] = replace.has(scopeKey)
-      ? presets
-      : { ...(stored[scopeKey] ?? {}), ...presets }
-  }
-
-  return merged
-}
-
-function readStoredPresetsByProject(): Record<string, Record<string, TriagePreset>> {
-  if (typeof window === 'undefined') return {}
-  try {
-    const stored = window.localStorage.getItem(STORAGE_KEY)
-    if (!stored) return migrateLegacyPresets({})
-    const parsed = JSON.parse(stored) as unknown
-    if (typeof parsed !== 'object' || parsed === null) return migrateLegacyPresets({})
-    return migrateLegacyPresets(normalizePresetsByProject((parsed as Record<string, unknown>).presetsByProject))
-  } catch {
-    return migrateLegacyPresets({})
-  }
-}
-
-function persistUIState(state: UIState, replacePresetKeys: string[] = []) {
-  if (typeof window === 'undefined') return
-  const stateToPersist: UIState = {
-    ...state,
-    presetsByProject: mergePresetsByProject(
-      readStoredPresetsByProject(),
-      state.presetsByProject,
-      replacePresetKeys,
-    ),
-  }
-  try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToPersist))
-  } catch {
-    // ignore storage errors
-  }
-}
-
-function persistPresetScope(presetKey: string, presets: Record<string, TriagePreset>) {
+/**
+ * Persist the whole UI state (filters, theme, sidebar, and `presetsByProject`) to a
+ * single durable localStorage record. React state is the single source of truth, so
+ * this is a plain write — no read-back, no per-scope mirror keys, no merge.
+ */
+function persistUIState(state: UIState) {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(presetKey, JSON.stringify(presets))
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {
-    // ignore storage errors
+    // ignore storage errors (private mode, quota, disabled storage)
   }
 }
 
@@ -159,9 +117,11 @@ function normalizePresetsByProject(value: unknown): Record<string, Record<string
 }
 
 /**
- * One-time migration of legacy per-project `looptroop-presets-*` localStorage keys into
- * `UIState.presetsByProject`. Legacy keys are left in place (harmless, read-only) so older
- * app builds in other tabs keep working; the migrated presets become the durable source.
+ * One-time, init-only recovery of legacy per-scope `looptroop-presets-*` localStorage keys
+ * into `UIState.presetsByProject`. Runs once per page load from `getInitialState` (never on
+ * write), so presets that only survived in these standalone keys — e.g. because an earlier
+ * build wiped the durable blob — are pulled back in. The blob wins on conflict; legacy keys
+ * are left untouched (inert) and are no longer written by the app.
  */
 function migrateLegacyPresets(existing: Record<string, Record<string, TriagePreset>>): Record<string, Record<string, TriagePreset>> {
   if (typeof window === 'undefined') return existing
@@ -259,20 +219,18 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 
 
 export function UIProvider({ children }: { children: ReactNode }) {
-  const [state, baseDispatch] = useReducer(uiReducer, undefined, getInitialState)
-  const stateRef = useRef(state)
-  const dispatch = useCallback<Dispatch<UIAction>>((action) => {
-    const nextState = uiReducer(stateRef.current, action)
-    stateRef.current = nextState
-    if (action.type === 'SET_PRESETS') persistPresetScope(action.presetKey, action.presets)
-    persistUIState(nextState, action.type === 'SET_PRESETS' ? [action.presetKey] : [])
-    baseDispatch(action)
-  }, [])
+  const [state, dispatch] = useReducer(uiReducer, undefined, getInitialState)
 
-  // Keep storage in sync with committed state as a backstop for initialization and StrictMode
-  // remounts. Event dispatches also write synchronously before React paints.
+  // Persist committed UI state just before the browser paints, so a saved preset (or any
+  // change) survives an immediate refresh. The first render is skipped on purpose: the
+  // rehydrated state is already in storage, and unconditionally writing it back on mount was
+  // the self-destruct bug that wiped saved presets whenever rehydration produced empty state.
+  const hydrated = useRef(false)
   useBrowserLayoutEffect(() => {
-    stateRef.current = state
+    if (!hydrated.current) {
+      hydrated.current = true
+      return
+    }
     persistUIState(state)
   }, [state])
 

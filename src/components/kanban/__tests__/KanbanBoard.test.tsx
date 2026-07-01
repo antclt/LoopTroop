@@ -409,8 +409,6 @@ describe('KanbanBoard', () => {
       presetsByProject?: Record<string, Record<string, unknown>>
     }
     expect(stored.presetsByProject?.['looptroop-presets-global']).toHaveProperty('Night ops')
-    const mirrored = JSON.parse(localStorage.getItem('looptroop-presets-global') ?? '{}') as Record<string, unknown>
-    expect(mirrored).toHaveProperty('Night ops')
 
     unmount()
     renderWithProviders(<KanbanBoard />)
@@ -459,8 +457,6 @@ describe('KanbanBoard', () => {
       presetsByProject?: Record<string, Record<string, unknown>>
     }
     expect(stored.presetsByProject?.[projectPresetKey]).toHaveProperty('Project ops')
-    const mirrored = JSON.parse(localStorage.getItem(projectPresetKey) ?? '{}') as Record<string, unknown>
-    expect(mirrored).toHaveProperty('Project ops')
 
     unmount()
     renderWithProviders(<KanbanBoard />)

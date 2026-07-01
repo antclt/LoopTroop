@@ -13,7 +13,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added Status (every workflow step) and Phase (all workflow groups) multi-select filters plus a tri-state Errors filter (No errors / Has errored before / Currently blocked) to the Kanban triage bar.
-- Fixed saved Kanban presets disappearing after a browser refresh by synchronously writing UI state, mirroring preset scopes, and preserving presets during stale or malformed UI-state recovery.
+- Fixed saved Kanban filter presets disappearing after a browser refresh by keeping them in the single durable UI-state record and no longer overwriting stored state with an empty read on load.
 - Fixed Kanban preset saving to gracefully fallback to in-memory storage when browser storage (localStorage) is disabled or sandboxed, avoiding "Could not save preset" errors.
 - Removed the redundant "Run active / Run 19/19" progress/health badge from Kanban board ticket cards.
 - Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, and error only) to the Kanban board, complete with project-scoped local presets and ticket description search.
@@ -31,7 +31,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 #### Added
 - Added a Triage & Filter Control Bar to the Kanban board (`KanbanBoard.tsx`), enabling client-side filtering of tickets by Project (dropdown with project icons and emojis), Priority (Very High to Very Low toggle badges with hover tooltips), Inactivity age (Stale > 24h, > 3d, > 7d affecting only the Needs Input and In Progress columns), and Errors only. The bar is hidden by default and can be toggled via a premium filter control button next to the search bar.
-- Added custom filter presets stored locally per project (`looptroop-presets-${projectId}`) in `localStorage`, letting users save, load, and delete custom filter configurations.
+- Added custom filter presets that let users save, load, and delete named filter/sort configurations, scoped per project and persisted in the durable `looptroop-ui-state` record (`UIState.presetsByProject`).
 - Added 8 bidirectional sorting modes to Kanban columns (`KanbanColumn.tsx`): Last Updated (Newest/Oldest), Date Created (Newest/Oldest), Priority (High to Low/Low to High), and Title (A-Z/Z-A).
 - Added `formatRelativeDateChip` to ticket cards to show clear calendar-relative date chips (`Today HH:MM`, `Yesterday`, or weekday name) with absolute timestamp tooltips.
 - Expanded the dashboard search component to index and search ticket descriptions in addition to external ID, title, and project metadata.
@@ -54,14 +54,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Coverage reports now include user-triggered approval attempts as `Extra Fix N` tabs alongside normal version transitions while keeping `Latest Check` last and selected by default.
 - PRD and beads approval actions now read `Approve with gaps` when unresolved coverage gaps remain, and approval is blocked while a matching extra fix is running.
 - Replaced the binary Kanban `Errors Only` toggle with a tri-state Errors filter: `All states`, `Has errored before` (tickets with `hasPastErrors`, including currently blocked), and `Currently blocked` (only `BLOCKED_ERROR`). The legacy persisted `onlyErrors: true` value migrates to `Currently blocked` on load.
-- Moved Kanban triage presets from per-project `looptroop-presets-${projectId}` localStorage keys into `UIState.presetsByProject`, persisted through the same `looptroop-ui-state` channel as filters and theme. Preset saves also mirror each scope back to its `looptroop-presets-*` key for refresh recovery, startup merges those keys into UI state (including first loads before `looptroop-ui-state` exists), and unrelated UI-state writes preserve stored preset scopes instead of overwriting them from stale state.
+- Kanban triage presets live in `UIState.presetsByProject`, persisted through the same durable `looptroop-ui-state` record as filters and theme. The app no longer writes standalone `looptroop-presets-*` localStorage keys; any left by older builds are recovered once at startup so previously saved presets are not lost.
 
 #### Fixed
 - Fixed Kanban preset saving to gracefully handle `localStorage` security/quota exceptions by using an in-memory fallback.
 - Fixed Kanban preset saving so the dropdown form uses controlled input state, reports inline save/failure feedback, and avoids exposing collapsed filter controls to hidden hit targets.
 - Fixed a React console warning on pulsing ticket cards by avoiding mixed border shorthand and side-specific border styles.
 - Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
-- Fixed saved Kanban presets disappearing after a browser refresh. The UI-state provider now writes the next `looptroop-ui-state` synchronously during dispatch, mirrors `SET_PRESETS` updates to the relevant `looptroop-presets-*` key, merges those per-scope mirrors back on startup if the primary UI-state record is missing preset entries, normalizes malformed UI-state fields without discarding valid presets, preserves stored preset scopes during unrelated stale UI-state writes, and processes each legacy key in an isolated try-catch block to prevent a single malformed JSON entry from aborting the entire loading sequence.
+- Fixed saved Kanban presets disappearing after a browser refresh. Presets are stored only in the durable `looptroop-ui-state` record, and the UI-state provider no longer writes state back to storage on its initial render — so a failed or empty rehydrate can no longer overwrite good data (the previous self-destruct on load). Committed React state is now the single source of truth, written before paint so changes survive an immediate refresh. The fragile dual-storage machinery this replaced — per-scope mirror keys, read-back-and-merge on every write, and migrate-on-every-read — was removed; legacy `looptroop-presets-*` keys are still recovered once at startup so nothing saved by older builds is lost. Trade-off: cross-tab preset merging is gone, so with two tabs open the last writer wins.
 
 #### Removed
 - Removed the "Run active / Run 19/19" progress/health badge from Kanban board ticket cards along with its unused helpers and imports.
