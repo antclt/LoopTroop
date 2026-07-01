@@ -1,8 +1,9 @@
-import { useReducer, useEffect, type ReactNode } from 'react'
+import { useReducer, useEffect, useLayoutEffect, type ReactNode } from 'react'
 import { UIContext, type UIState, type UIAction, type TriagePreset, type ErrorStateFilter } from './uiContextDef'
 import type { WorkflowGroupId } from '@shared/workflowMeta'
 
 const STORAGE_KEY = 'looptroop-ui-state'
+const useBrowserLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
 const defaultState: UIState = {
   selectedTicketId: null,
@@ -170,20 +171,21 @@ function isValidUIState(value: unknown): value is Partial<UIState> {
 }
 
 function getInitialState(): UIState {
+  let initialState = defaultState
   if (typeof window !== 'undefined') {
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored) as unknown
-        if (!isValidUIState(parsed)) return defaultState
+        if (!isValidUIState(parsed)) return { ...defaultState, presetsByProject: migrateLegacyPresets({}) }
         const normalized = normalizeUIState(parsed)
-        return { ...normalized, presetsByProject: migrateLegacyPresets(normalized.presetsByProject) }
+        initialState = normalized
       }
     } catch {
       // ignore parse errors
     }
   }
-  return defaultState
+  return { ...initialState, presetsByProject: migrateLegacyPresets(initialState.presetsByProject) }
 }
 
 function uiReducer(state: UIState, action: UIAction): UIState {
@@ -215,8 +217,9 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 export function UIProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(uiReducer, undefined, getInitialState)
 
-  // Persist to localStorage
-  useEffect(() => {
+  // Persist to localStorage before the browser can paint the updated UI, so quick refreshes
+  // after actions like saving a preset cannot outrun the durable write.
+  useBrowserLayoutEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
     } catch {

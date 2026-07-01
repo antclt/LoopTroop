@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, beforeEach } from 'vitest'
 import { UIProvider } from '../UIContext'
 import { useUI } from '../useUI'
@@ -15,6 +15,36 @@ function UIStateProbe() {
       <span data-testid="status-filter">{state.filters.status?.join(',') ?? 'none'}</span>
       <span data-testid="phase-filter">{state.filters.phase?.join(',') ?? 'none'}</span>
       <span data-testid="preset-scopes">{presetScopes.join('|')}</span>
+    </div>
+  )
+}
+
+function PresetDispatchProbe() {
+  const { state, dispatch } = useUI()
+  const presetNames = Object.keys(state.presetsByProject['looptroop-presets-global'] ?? {})
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => dispatch({
+          type: 'SET_PRESETS',
+          presetKey: 'looptroop-presets-global',
+          presets: {
+            'Night ops': {
+              priority: [1],
+              stuckDays: 3,
+              status: ['CODING'],
+              phase: null,
+              errorState: 'blocked',
+              sortBy: 'priority_asc',
+            },
+          },
+        })}
+      >
+        Save preset
+      </button>
+      <span data-testid="preset-names">{presetNames.join('|')}</span>
     </div>
   )
 }
@@ -87,5 +117,51 @@ describe('UIProvider', () => {
     )
 
     expect(screen.getByTestId('preset-scopes')).toHaveTextContent('looptroop-presets-global')
+  })
+
+  it('migrates legacy preset keys even before durable UI state exists', async () => {
+    localStorage.setItem('looptroop-presets-global', JSON.stringify({
+      'Night ops': { priority: [1], stuckDays: 3, onlyErrors: true, sortBy: 'priority_asc' },
+    }))
+
+    render(
+      <UIProvider>
+        <UIStateProbe />
+      </UIProvider>,
+    )
+
+    expect(screen.getByTestId('preset-scopes')).toHaveTextContent('looptroop-presets-global')
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('looptroop-ui-state') ?? '{}') as {
+        presetsByProject?: Record<string, unknown>
+      }
+      expect(stored.presetsByProject).toHaveProperty('looptroop-presets-global')
+    })
+  })
+
+  it('persists saved presets through a fresh provider boot', async () => {
+    const { unmount } = render(
+      <UIProvider>
+        <PresetDispatchProbe />
+      </UIProvider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Save preset' }))
+
+    await waitFor(() => {
+      const stored = JSON.parse(localStorage.getItem('looptroop-ui-state') ?? '{}') as {
+        presetsByProject?: Record<string, Record<string, unknown>>
+      }
+      expect(stored.presetsByProject?.['looptroop-presets-global']).toHaveProperty('Night ops')
+    })
+
+    unmount()
+    render(
+      <UIProvider>
+        <PresetDispatchProbe />
+      </UIProvider>,
+    )
+
+    expect(screen.getByTestId('preset-names')).toHaveTextContent('Night ops')
   })
 })
