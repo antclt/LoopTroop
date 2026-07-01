@@ -243,4 +243,19 @@ describe('UIProvider', () => {
 
     expect(screen.getByTestId('preset-names')).toHaveTextContent('Night ops')
   })
+
+  it('handles malformed preset keys without aborting migration of valid ones', () => {
+    localStorage.setItem('looptroop-presets-malformed', 'not-json')
+    localStorage.setItem('looptroop-presets-global', JSON.stringify({
+      'Night ops': { priority: [1], stuckDays: 3, onlyErrors: true, sortBy: 'priority_asc' },
+    }))
+
+    render(
+      <UIProvider>
+        <UIStateProbe />
+      </UIProvider>,
+    )
+
+    expect(screen.getByTestId('preset-scopes')).toHaveTextContent('looptroop-presets-global')
+  })
 })

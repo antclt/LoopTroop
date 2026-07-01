@@ -166,8 +166,8 @@ function normalizePresetsByProject(value: unknown): Record<string, Record<string
 function migrateLegacyPresets(existing: Record<string, Record<string, TriagePreset>>): Record<string, Record<string, TriagePreset>> {
   if (typeof window === 'undefined') return existing
   const merged: Record<string, Record<string, TriagePreset>> = { ...existing }
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
+  for (let i = 0; i < localStorage.length; i++) {
+    try {
       const key = localStorage.key(i)
       if (!key || !key.startsWith(LEGACY_PRESET_KEY_PREFIX)) continue
       const stored = localStorage.getItem(key)
@@ -183,9 +183,9 @@ function migrateLegacyPresets(existing: Record<string, Record<string, TriagePres
       if (Object.keys(normalized).length) {
         merged[key] = { ...normalized, ...(merged[key] ?? {}) }
       }
+    } catch {
+      // ignore migration errors for individual keys; legacy presets that are malformed simply won't be carried over
     }
-  } catch {
-    // ignore migration errors; legacy presets simply won't be carried over
   }
   return merged
 }
