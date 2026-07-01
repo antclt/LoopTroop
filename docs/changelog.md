@@ -12,6 +12,18 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- No unreleased changes yet.
+
+### Detailed Changes
+- No unreleased changes yet.
+
+:::
+
+---
+
+## 0.3.2 (2026-07-01)
+
+### Summary
 - Added Status (every workflow step) and Phase (all workflow groups) multi-select filters plus a tri-state Errors filter (No errors / Has errored before / Currently blocked) to the Kanban triage bar.
 - Fixed saved Kanban filter presets disappearing after a browser refresh by keeping them in the single durable UI-state record and no longer overwriting stored state with an empty read on load.
 - Fixed Kanban preset saving to gracefully fallback to in-memory storage when browser storage (localStorage) is disabled or sandboxed, avoiding "Could not save preset" errors.
@@ -82,8 +94,6 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Updated the Documentation Map hook in `docs/index.md` to drop the now-moved "durable state" mention from the Core Philosophy summary line.
 - Replaced the "Persist important state outside the model" row in the Core Philosophy "Five Core Commitments" table with an LLM Council commitment (scoring anonymized drafts and refining the winner with the best ideas from the losing drafts to reduce single-model bias).
 - Added a per-item "Read more" deep link at the end of each of the fourteen Core Philosophy ideas, pointing to the exact section of the relevant doc page (Getting Started, Frontend, Ticket Flow, System Architecture, Context Engineering, LLM Council, Interview, PRD, Beads & Execution, OpenCode Integration, Pre-/Post-Implementation). Removed the now-redundant standalone "Durable State" list (the full storage map already lives in System Architecture §3) and collapsed it to a short pointer.
-
-:::
 
 ---
 
