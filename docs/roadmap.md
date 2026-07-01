@@ -326,6 +326,10 @@ search: false
     *   Show effective flags in ticket creation/start UI, phase headers, and diagnostic receipts.
     *   Migrate `execution_profile` into `phase_flags.execution_profile` when this contract lands.
     *   If an upstream approved artifact tied to a flag is edited, downstream invalidation must be deterministic and visible.
+    *   *Historical Note (Pre-Consolidation):* This consolidated and replaced several standalone optional phase concepts from earlier roadmap versions:
+        *   *Argue the opposite:* An optional step where the main implementer suggests a completely opposite approach to each question's ticket description and interview results to stress-test assumptions.
+        *   *Winner model discussion:* An interactive post-winner dialog where the model prompts the user with interesting findings (e.g., suggesting a different framework) and lets the user choose the preferred version.
+        *   *Exhaustive Interrogation Mode for Interviews:* An optional mode that ruthlessly interrogates app ideas with endless questions on details, edges, and constraints until zero assumptions remain.
 *   **Action-Required Notifications + Escalation Lifecycle (severity-routed, acknowledgment-aware):**
     *   Keep severity bands (`critical`, `warning`, `info`) but map each band to deterministic action routes (`in_app`, `email`, `sms`, `webhook`, `escalation_record`).
     *   Add visibility-aware delivery policy: if the user is currently focused on the affected ticket/pane, suppress external alerts and show in-app only; if not focused, escalate normally.

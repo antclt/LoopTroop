@@ -14,6 +14,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Summary
 - Added live execution progress: during coding the ticket header, Kanban cards, and phase navigator show deterministic bead completion (done/total) as a distinct metric plus an approximate remaining-time (ETA) range that sharpens as work proceeds.
 - Folded the Deterministic Command Safety Guard roadmap item into the larger Sandboxing & Guardrails roadmap item.
+- Added historical notes to the Ticket-Scoped Phase Flags roadmap item detailing the pre-consolidation features.
 
 ### Detailed Changes
 
@@ -24,6 +25,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Changed
 - Consolidated the standalone Deterministic Command Safety Guard roadmap item into the Sandboxing & Guardrails roadmap item, merging pre-execution command checking, subshell detection, and path confinement rules with runtime container/VM safety profiles.
+- Updated the Ticket-Scoped Phase Flags roadmap item with historical details of the features it consolidated and replaced, including Argue the opposite, Winner model discussion, and Exhaustive Interrogation Mode for Interviews.
 
 :::
 
