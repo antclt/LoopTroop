@@ -87,10 +87,11 @@ function makeFilters(search = ''): UIContextValue['state']['filters'] {
   return {
     projectId: null,
     status: null,
+    phase: null,
     search,
     priority: null,
     stuckDays: null,
-    onlyErrors: false,
+    errorState: 'none',
     sortBy: 'updatedAt_desc',
   }
 }
@@ -104,6 +105,7 @@ function makeUIValue(overrides: Partial<UIContextValue['state']> = {}, dispatch 
       activeView: 'kanban',
       logPanelHeight: 300,
       filters: makeFilters(),
+      presetsByProject: {},
       theme: 'system',
       showTriageBar: false,
       ...overrides,
@@ -192,7 +194,7 @@ describe('AppShell', () => {
         ...makeFilters('visible-search-does-not-count'),
         priority: [1, 2],
         stuckDays: 3,
-        onlyErrors: true,
+        errorState: 'blocked',
         sortBy: 'priority_asc',
       },
     }))

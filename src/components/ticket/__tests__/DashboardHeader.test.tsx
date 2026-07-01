@@ -33,10 +33,11 @@ function makeFilters(): UIContextValue['state']['filters'] {
   return {
     projectId: null,
     status: null,
+    phase: null,
     search: '',
     priority: null,
     stuckDays: null,
-    onlyErrors: false,
+    errorState: 'none',
     sortBy: 'updatedAt_desc',
   }
 }
@@ -50,6 +51,7 @@ function makeUIValue(ticketId: string, externalId: string): UIContextValue {
       activeView: 'ticket',
       logPanelHeight: 320,
       filters: makeFilters(),
+      presetsByProject: {},
       theme: 'system',
       showTriageBar: false,
     },

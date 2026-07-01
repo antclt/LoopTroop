@@ -12,6 +12,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added Status (every workflow step) and Phase (all workflow groups) multi-select filters plus a tri-state Errors filter (No errors / Has errored before / Currently blocked) to the Kanban triage bar.
+- Fixed saved Kanban presets disappearing after a browser refresh by persisting them through the durable UI-state channel.
 - Fixed Kanban preset saving to gracefully fallback to in-memory storage when browser storage (localStorage) is disabled or sandboxed, avoiding "Could not save preset" errors.
 - Removed the redundant "Run active / Run 19/19" progress/health badge from Kanban board ticket cards.
 - Added advanced sorting (bidirectional updated date, created date, priority, and title) and custom triage filtering (priority, stale/inactive, and error only) to the Kanban board, complete with project-scoped local presets and ticket description search.
@@ -43,6 +45,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added ack-aware yellow flashing on dashboard cards for tickets in the Needs Input column (interview answers, approvals, PR review). When a ticket starts waiting on you, its card flashes a soft yellow border; the moment you open the ticket the flashing stops and the border reverts to the static project color, even if the required action was not performed. A new wait (different status or re-entry) flashes again. Red error flashing still takes precedence, the existing pending-question pulse is suppressed inside Needs Input, and reduced-motion users get a steady amber border with no flashing. The acknowledgment is persisted per-ticket via the existing UI-state channel (new `needs_input_attention` scope) so it survives reloads and syncs across tabs.
 - Added `Fix gaps with AI` on PRD and beads approval warnings. Each click runs one fresh targeted fix session plus one fresh coverage check from the latest server artifacts, records the attempt as `source: ai_fix_button`, and keeps the warning actionable until gaps are cleared or the user chooses to approve with gaps.
 - Added `POST /api/tickets/:id/coverage/fix-gaps` for approval-screen PRD/beads extra fixes, including per-ticket/domain concurrency protection and no-op success when the latest coverage artifact is already clean.
+- Added Status and Phase multi-select filters to the Kanban triage bar (`KanbanBoard.tsx`). Status lists every workflow step grouped by phase (Backlog, Scanning, Council Drafting, …, Done, Canceled, Blocked Error); Phase offers all ten workflow groups (To Do, Discovery, Interview, Specs (PRD), Blueprint (Beads), Pre-Implementation, Implementation, Post-Implementation, Done, Errors). Both narrow tickets within their existing Kanban columns and are included in saved presets and the header active-filter summary.
 
 #### Changed
 - Kanban saved presets now show their full saved filter/sort details on hover instead of relying on expanded preview content in the dropdown.
@@ -50,12 +53,15 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Beads approval extra fixes now refresh the semantic blueprint and rerun expansion when the blueprint changes, so the execution-ready approval plan and reviewed content hash stay current before approval.
 - Coverage reports now include user-triggered approval attempts as `Extra Fix N` tabs alongside normal version transitions while keeping `Latest Check` last and selected by default.
 - PRD and beads approval actions now read `Approve with gaps` when unresolved coverage gaps remain, and approval is blocked while a matching extra fix is running.
+- Replaced the binary Kanban `Errors Only` toggle with a tri-state Errors filter: `All states`, `Has errored before` (tickets with `hasPastErrors`, including currently blocked), and `Currently blocked` (only `BLOCKED_ERROR`). The legacy persisted `onlyErrors: true` value migrates to `Currently blocked` on load.
+- Moved Kanban triage presets from per-project `looptroop-presets-${projectId}` localStorage keys into `UIState.presetsByProject`, persisted through the same `looptroop-ui-state` channel as filters and theme. Existing legacy preset keys are migrated once on startup and left in place for older app builds.
 
 #### Fixed
 - Fixed Kanban preset saving to gracefully handle `localStorage` security/quota exceptions by using an in-memory fallback.
 - Fixed Kanban preset saving so the dropdown form uses controlled input state, reports inline save/failure feedback, and avoids exposing collapsed filter controls to hidden hit targets.
 - Fixed a React console warning on pulsing ticket cards by avoiding mixed border shorthand and side-specific border styles.
 - Fixed backend startup with `js-yaml` v5 by switching all default `js-yaml` imports to namespace imports that match the package's named ESM exports, preserving existing `load` and `dump` call sites.
+- Fixed saved Kanban presets disappearing after a browser refresh. Presets are now persisted via the durable UI-state channel (`looptroop-ui-state`) instead of a separate `localStorage` key whose read timing could miss the restored project scope.
 
 #### Removed
 - Removed the "Run active / Run 19/19" progress/health badge from Kanban board ticket cards along with its unused helpers and imports.

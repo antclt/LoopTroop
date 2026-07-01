@@ -5,6 +5,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from '@/components/ui/badge'
 import { useUI } from '@/context/useUI'
 import type { UIState } from '@/context/uiContextDef'
+import { WORKFLOW_GROUPS, WORKFLOW_PHASE_MAP } from '@/lib/workflowMeta'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useBackendHealth } from '@/hooks/useBackendHealth'
@@ -47,10 +48,19 @@ function getActiveTriageFilterSummaries(filters: UIState['filters']): string[] {
   if (filters.priority?.length) {
     summaries.push(`Priority: ${filters.priority.map((priority) => PRIORITY_FILTER_LABELS[priority] ?? `P${priority}`).join(', ')}`)
   }
+  if (filters.status?.length) {
+    const labels = filters.status.map((s) => WORKFLOW_PHASE_MAP[s]?.label ?? s.replace(/_/g, ' '))
+    summaries.push(`Status: ${labels.length <= 3 ? labels.join(', ') : `${labels.length} selected`}`)
+  }
+  if (filters.phase?.length) {
+    const labels = filters.phase.map((p) => WORKFLOW_GROUPS.find((g) => g.id === p)?.label ?? p)
+    summaries.push(`Phase: ${labels.join(', ')}`)
+  }
   if (filters.stuckDays !== null) {
     summaries.push(filters.stuckDays === 1 ? 'Stale: > 24h inactive' : `Stale: > ${filters.stuckDays} days inactive`)
   }
-  if (filters.onlyErrors) summaries.push('Errors only')
+  if (filters.errorState === 'blocked') summaries.push('Errors: Currently blocked')
+  else if (filters.errorState === 'past') summaries.push('Errors: Has errored before')
   if (filters.sortBy !== DEFAULT_SORT) summaries.push(`Sort: ${SORT_FILTER_LABELS[filters.sortBy] ?? filters.sortBy}`)
 
   return summaries

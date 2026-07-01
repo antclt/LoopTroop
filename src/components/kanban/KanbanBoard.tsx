@@ -1,9 +1,11 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
 import { KanbanColumn } from './KanbanColumn'
 import { useTickets } from '@/hooks/useTickets'
 import { useProjects } from '@/hooks/useProjects'
 import { useUI } from '@/context/useUI'
-import { STATUS_TO_PHASE } from '@/lib/workflowMeta'
+import { STATUS_TO_PHASE, WORKFLOW_GROUPS, WORKFLOW_PHASES, WORKFLOW_PHASE_MAP } from '@/lib/workflowMeta'
+import type { WorkflowGroupMeta, WorkflowPhaseMeta } from '@shared/workflowMeta'
+import type { TriagePreset, ErrorStateFilter } from '@/context/uiContextDef'
 import { Badge } from '@/components/ui/badge'
 import { RefreshCw, X, ChevronDown, FolderOpen } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
@@ -53,13 +55,6 @@ const columns: KanbanColumnConfig[] = [
   },
 ]
 
-type TriagePreset = {
-  priority: number[] | null
-  stuckDays: number | null
-  onlyErrors: boolean
-  sortBy: string
-}
-
 const PRIORITY_LABELS: Record<number, string> = {
   1: 'Very High',
   2: 'High',
@@ -87,16 +82,31 @@ function formatStaleLabel(stuckDays: number): string {
 function formatPresetDetails(preset: TriagePreset): string {
   const priority = Array.isArray(preset.priority) ? preset.priority : null
   const stuckDays = typeof preset.stuckDays === 'number' ? preset.stuckDays : null
-  const onlyErrors = preset.onlyErrors === true
+  const status = Array.isArray(preset.status) ? preset.status : null
+  const phase = Array.isArray(preset.phase) ? preset.phase : null
+  const errorState: ErrorStateFilter =
+    preset.errorState === 'past' || preset.errorState === 'blocked' ? preset.errorState : 'none'
   const sortBy = typeof preset.sortBy === 'string' ? preset.sortBy : 'updatedAt_desc'
+  const groupLabel = (id: string) => WORKFLOW_GROUPS.find((g) => g.id === id)?.label ?? id
+  const statusLabel = (id: string) => WORKFLOW_PHASE_MAP[id]?.label ?? id.replace(/_/g, ' ')
   const details = [
     priority?.length
       ? `Priority: ${priority.map((priorityValue) => PRIORITY_LABELS[priorityValue] ?? `P${priorityValue}`).join(', ')}`
       : 'Priority: All',
+    status?.length
+      ? `Status: ${status.map((s) => statusLabel(s)).join(', ')}`
+      : 'Status: All',
+    phase?.length
+      ? `Phase: ${phase.map((p) => groupLabel(p)).join(', ')}`
+      : 'Phase: All',
     stuckDays !== null
       ? `Stale: ${formatStaleLabel(stuckDays)} (Needs Input + In Progress only)`
       : 'Stale: Any time',
-    onlyErrors ? 'Errors: Only blocked errors' : 'Errors: All states',
+    errorState === 'blocked'
+      ? 'Errors: Currently blocked'
+      : errorState === 'past'
+        ? 'Errors: Has errored before'
+        : 'Errors: All states',
     `Sort: ${SORT_LABELS[sortBy] ?? sortBy}`,
   ]
 
@@ -132,55 +142,33 @@ export function KanbanBoard() {
   const searchQuery = state.filters?.search ?? ''
   const isSearchActive = searchQuery.trim().length > 0
   const selectedPriority = state.filters?.priority ?? null
+  const selectedStatus = state.filters?.status ?? null
+  const selectedPhase = state.filters?.phase ?? null
   const selectedStuckDays = state.filters?.stuckDays ?? null
-  const onlyErrors = state.filters?.onlyErrors ?? false
+  const errorState: ErrorStateFilter = state.filters?.errorState ?? 'none'
   const sortBy = state.filters?.sortBy ?? 'updatedAt_desc'
   const [presetName, setPresetName] = useState('')
   const [presetSaveMessage, setPresetSaveMessage] = useState('')
 
-  // Presets State Management
+  // Presets are persisted via UI state (looptroop-ui-state), scoped per project.
   const presetKey = selectedProjectId !== null ? `looptroop-presets-${selectedProjectId}` : 'looptroop-presets-global'
-  const [presets, setPresets] = useState<Record<string, TriagePreset>>(() => {
-    try {
-      if (typeof window === 'undefined') return {}
-      const stored = localStorage.getItem(presetKey)
-      return stored ? JSON.parse(stored) : {}
-    } catch {
-      return {}
-    }
-  })
-
-  useEffect(() => {
-    try {
-      if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem(presetKey)
-        setPresets(stored ? JSON.parse(stored) : {})
-      }
-    } catch {
-      setPresets({})
-    }
-    setPresetName('')
-    setPresetSaveMessage('')
-  }, [presetKey])
+  const presets = state.presetsByProject?.[presetKey] ?? {}
 
   const savePreset = (name: string) => {
     const trimmedName = name.trim()
     if (!trimmedName) return false
-    const newPresets = {
+    const newPresets: Record<string, TriagePreset> = {
       ...presets,
       [trimmedName]: {
         priority: selectedPriority,
         stuckDays: selectedStuckDays,
-        onlyErrors,
+        status: selectedStatus,
+        phase: selectedPhase,
+        errorState,
         sortBy,
       }
     }
-    try {
-      localStorage.setItem(presetKey, JSON.stringify(newPresets))
-    } catch (e) {
-      console.warn('Failed to save preset to localStorage:', e)
-    }
-    setPresets(newPresets)
+    dispatch({ type: 'SET_PRESETS', presetKey, presets: newPresets })
     setPresetName('')
     setPresetSaveMessage(`Saved "${trimmedName}"`)
     return true
@@ -189,27 +177,35 @@ export function KanbanBoard() {
   const deletePreset = (name: string) => {
     const newPresets = { ...presets }
     delete newPresets[name]
-    try {
-      localStorage.setItem(presetKey, JSON.stringify(newPresets))
-    } catch (e) {
-      console.warn('Failed to delete preset from localStorage:', e)
-    }
-    setPresets(newPresets)
+    dispatch({ type: 'SET_PRESETS', presetKey, presets: newPresets })
   }
 
-  const applyPreset = (presetValue: typeof presets[string]) => {
+  const applyPreset = (presetValue: TriagePreset) => {
     dispatch({
       type: 'SET_FILTER',
       filter: {
         priority: Array.isArray(presetValue.priority) ? presetValue.priority : null,
+        status: Array.isArray(presetValue.status) ? presetValue.status : null,
+        phase: Array.isArray(presetValue.phase) ? presetValue.phase : null,
         stuckDays: typeof presetValue.stuckDays === 'number' ? presetValue.stuckDays : null,
-        onlyErrors: presetValue.onlyErrors === true,
+        errorState:
+          presetValue.errorState === 'past' || presetValue.errorState === 'blocked'
+            ? presetValue.errorState
+            : 'none',
         sortBy: typeof presetValue.sortBy === 'string' ? presetValue.sortBy : 'updatedAt_desc',
       }
     })
   }
 
   const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p])), [projects])
+
+  // Workflow statuses grouped by their phase/group, for the Status multi-select dropdown.
+  const statusGroups = useMemo<{ group: WorkflowGroupMeta; statuses: WorkflowPhaseMeta[] }[]>(() => {
+    return WORKFLOW_GROUPS.map((group) => ({
+      group,
+      statuses: WORKFLOW_PHASES.filter((phase) => phase.groupId === group.id),
+    })).filter((entry) => entry.statuses.length > 0)
+  }, [])
 
   const filteredTickets = useMemo(() => {
     let result = tickets ?? []
@@ -229,7 +225,20 @@ export function KanbanBoard() {
       result = result.filter(t => selectedPriority.includes(t.priority))
     }
 
-    // 4. Stuck Days Filter (evaluates inactivity only for active columns: in_progress and needs_input)
+    // 4. Status Filter (multi-select of exact workflow status IDs)
+    if (selectedStatus !== null && selectedStatus.length > 0) {
+      result = result.filter(t => selectedStatus.includes(t.status))
+    }
+
+    // 5. Phase Filter (multi-select of workflow group IDs)
+    if (selectedPhase !== null && selectedPhase.length > 0) {
+      result = result.filter((t) => {
+        const groupId = WORKFLOW_PHASE_MAP[t.status]?.groupId
+        return groupId ? selectedPhase.includes(groupId) : false
+      })
+    }
+
+    // 6. Stuck Days Filter (evaluates inactivity only for active columns: in_progress and needs_input)
     if (selectedStuckDays !== null) {
       const threshold = selectedStuckDays * 24 * 60 * 60 * 1000
       const now = Date.now()
@@ -242,13 +251,16 @@ export function KanbanBoard() {
       })
     }
 
-    // 5. Only Errors Filter
-    if (onlyErrors) {
+    // 7. Error State Filter (tri-state: none | past | blocked)
+    if (errorState === 'blocked') {
       result = result.filter(t => t.status === 'BLOCKED_ERROR')
+    } else if (errorState === 'past') {
+      // Includes currently-blocked tickets, since blocked implies past errors.
+      result = result.filter(t => t.status === 'BLOCKED_ERROR' || t.hasPastErrors === true)
     }
 
     return result
-  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStuckDays, onlyErrors, projectMap])
+  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStatus, selectedPhase, selectedStuckDays, errorState, projectMap])
 
   const ticketsByPhase = useMemo(() => columns.map(col => ({
     ...col,
@@ -256,10 +268,10 @@ export function KanbanBoard() {
   })), [filteredTickets])
 
   const hasLoadedTickets = Array.isArray(tickets)
-  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStuckDays !== null || onlyErrors
+  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStatus !== null || selectedPhase !== null || selectedStuckDays !== null || errorState !== 'none'
   const hasNoSearchResults = hasLoadedTickets && isAnyFilterActive && filteredTickets.length === 0
 
-  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStuckDays}-${onlyErrors}-${sortBy}`
+  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStatus?.join(',')}-${selectedPhase?.join(',')}-${selectedStuckDays}-${errorState}-${sortBy}`
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
@@ -319,6 +331,89 @@ export function KanbanBoard() {
                     <span className="truncate">{p.name}</span>
                   </DropdownMenuItem>
                 ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="h-4 w-px bg-border/50 hidden sm:block" />
+
+          {/* Status multi-select (grouped by workflow phase) */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            <span>Status</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border border-border/80 bg-background/40 hover:bg-background/80 text-xs rounded-lg transition-colors font-medium cursor-pointer px-2.5 flex items-center gap-1.5 text-foreground shadow-sm"
+                >
+                  <span>{selectedStatus?.length ? `${selectedStatus.length} selected` : 'All steps'}</span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-64 max-h-80 overflow-y-auto rounded-lg bg-popover/95 backdrop-blur-md">
+                {statusGroups.map(({ group, statuses }) => (
+                  <div key={group.id}>
+                    <div className="px-2 py-1 text-[9px] font-bold text-muted-foreground uppercase tracking-widest">
+                      {group.label}
+                    </div>
+                    {statuses.map((phase) => {
+                      const checked = selectedStatus?.includes(phase.id) ?? false
+                      return (
+                        <DropdownMenuItem
+                          key={phase.id}
+                          onClick={() => {
+                            const current = selectedStatus ?? []
+                            const next = checked ? current.filter((s) => s !== phase.id) : [...current, phase.id]
+                            dispatch({ type: 'SET_FILTER', filter: { status: next.length ? next : null } })
+                          }}
+                          className="text-xs flex items-center gap-2 cursor-pointer"
+                        >
+                          <span className="w-3 text-foreground">{checked ? '✓' : ''}</span>
+                          <span>{phase.label}</span>
+                        </DropdownMenuItem>
+                      )
+                    })}
+                  </div>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          <div className="h-4 w-px bg-border/50 hidden sm:block" />
+
+          {/* Phase multi-select (workflow groups) */}
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            <span>Phase</span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 border border-border/80 bg-background/40 hover:bg-background/80 text-xs rounded-lg transition-colors font-medium cursor-pointer px-2.5 flex items-center gap-1.5 text-foreground shadow-sm"
+                >
+                  <span>{selectedPhase?.length ? `${selectedPhase.length} selected` : 'All phases'}</span>
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/80 shrink-0" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56 rounded-lg bg-popover/95 backdrop-blur-md">
+                {WORKFLOW_GROUPS.map((group) => {
+                  const checked = selectedPhase?.includes(group.id) ?? false
+                  return (
+                    <DropdownMenuItem
+                      key={group.id}
+                      onClick={() => {
+                        const current = selectedPhase ?? []
+                        const next = checked ? current.filter((p) => p !== group.id) : [...current, group.id]
+                        dispatch({ type: 'SET_FILTER', filter: { phase: next.length ? next : null } })
+                      }}
+                      className="text-xs flex items-center gap-2 cursor-pointer"
+                    >
+                      <span className="w-3 text-foreground">{checked ? '✓' : ''}</span>
+                      <span>{group.label}</span>
+                    </DropdownMenuItem>
+                  )
+                })}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -392,19 +487,23 @@ export function KanbanBoard() {
 
           <div className="h-4 w-px bg-border/50 hidden sm:block" />
 
-          {/* Errors toggle */}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => dispatch({ type: 'SET_FILTER', filter: { onlyErrors: !onlyErrors } })}
-            className={cn(
-              "h-8 text-xs cursor-pointer rounded-lg border-border/80 bg-background/40 hover:bg-accent transition-all font-medium",
-              onlyErrors && "border-red-500/80 bg-red-500/10 hover:bg-red-500/15 text-red-600 dark:text-red-400 dark:bg-red-500/5 shadow-[0_0_8px_rgba(239,68,68,0.12)]"
-            )}
-          >
-            Errors Only
-          </Button>
+          {/* Errors tri-state filter */}
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            <span>Errors</span>
+            <select
+              value={errorState}
+              onChange={(e) => dispatch({ type: 'SET_FILTER', filter: { errorState: e.target.value as ErrorStateFilter } })}
+              className={cn(
+                "h-8 rounded-lg border border-border/80 bg-background/40 hover:bg-background/80 px-2.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-ring cursor-pointer font-medium",
+                errorState === 'blocked' && "border-red-500/80 bg-red-500/10 text-red-600 dark:text-red-400 dark:bg-red-500/5 shadow-[0_0_8px_rgba(239,68,68,0.12)]",
+                errorState === 'past' && "border-amber-500/80 bg-amber-500/10 text-amber-600 dark:text-amber-400 dark:bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.12)]"
+              )}
+            >
+              <option value="none">All states</option>
+              <option value="past">Has errored before</option>
+              <option value="blocked">Currently blocked</option>
+            </select>
+          </label>
         </div>
 
         <div className="flex items-center gap-3">
@@ -513,8 +612,10 @@ export function KanbanBoard() {
           {/* Reset Filters button */}
           {(selectedProjectId !== null ||
             selectedPriority !== null ||
+            selectedStatus !== null ||
+            selectedPhase !== null ||
             selectedStuckDays !== null ||
-            onlyErrors ||
+            errorState !== 'none' ||
             sortBy !== 'updatedAt_desc') && (
             <Button
               type="button"
@@ -526,8 +627,10 @@ export function KanbanBoard() {
                   filter: {
                     projectId: null,
                     priority: null,
+                    status: null,
+                    phase: null,
                     stuckDays: null,
-                    onlyErrors: false,
+                    errorState: 'none',
                     sortBy: 'updatedAt_desc',
                   }
                 })
@@ -575,7 +678,7 @@ export function KanbanBoard() {
         >
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-muted-foreground">
-              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors
+              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStatus && !selectedPhase && !selectedStuckDays && errorState === 'none'
                 ? 'No tickets match this search.'
                 : 'No tickets match active search or filters.'}
             </p>
@@ -584,7 +687,7 @@ export function KanbanBoard() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors) {
+                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStatus && !selectedPhase && !selectedStuckDays && errorState === 'none') {
                   dispatch({ type: 'SET_FILTER', filter: { search: '' } })
                 } else {
                   dispatch({
@@ -593,8 +696,10 @@ export function KanbanBoard() {
                       search: '',
                       projectId: null,
                       priority: null,
+                      status: null,
+                      phase: null,
                       stuckDays: null,
-                      onlyErrors: false,
+                      errorState: 'none',
                       sortBy: 'updatedAt_desc',
                     }
                   })
@@ -603,7 +708,7 @@ export function KanbanBoard() {
               className="w-fit"
             >
               <X className="mr-1 h-4 w-4" />
-              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStuckDays && !onlyErrors
+              {isSearchActive && !selectedProjectId && !selectedPriority && !selectedStatus && !selectedPhase && !selectedStuckDays && errorState === 'none'
                 ? 'Clear search'
                 : 'Reset filters & search'}
             </Button>

@@ -5,7 +5,7 @@ import {
 
 /** Kanban column a workflow phase maps to — drives the kanban board layout. */
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'
-type WorkflowGroupId =
+export type WorkflowGroupId =
   | 'todo'
   | 'discovery'
   | 'interview'
