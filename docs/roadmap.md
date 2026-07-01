@@ -1304,12 +1304,6 @@ search: false
     *   Add `im_feeling_lucky` action to pick a random valid council composition from configured models.
     *   Add optional `wildcard_seat` that reserves one council slot for randomized selection from a curated high-performing pool to reduce echo-chamber behavior.
     *   Persist preset registry at `.looptroop/config/presets.yaml`.
-*   **Percent done + ETA forecast:** When hovering over % done in execution, warn that this is only bead completion percentage and remaining time is approximate.
-    *   Show ETA as a range (`best_case`, `likely`, `worst_case`) based on recent bead throughput and current retry rate; recompute on each bead completion.
-    *   Always show deterministic bead completion percentage (`completed_beads / total_beads`) in ticket header + navigator, with hover tooltip explaining scope.
-    *   ETA must use historical throughput when available (project-level + ticket-size bucket), then fall back to current-run throughput when history is insufficient.
-    *   Add milestone notifications at `25%`, `50%`, `75%`, and `100%` completion plus phase-change notifications for long unattended runs.
-    *   In bead navigator, add hover preview with bead description + acceptance criteria summary so users can inspect future/past beads without opening them.
 *   **PR Workflow (deterministic + failure-safe):** option to create a PR when creating a ticket.
     *   Create/push ticket branch only after execution + review gates pass.
     *   Exclude operational/generated files from commit by default (`PROMPT.md`, screenshots, temporary review artifacts), unless ticket explicitly allowlists them.
