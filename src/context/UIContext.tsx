@@ -1,9 +1,65 @@
-import { useReducer, useEffect, useLayoutEffect, type ReactNode } from 'react'
+import { useCallback, useReducer, useEffect, useLayoutEffect, useRef, type Dispatch, type ReactNode } from 'react'
 import { UIContext, type UIState, type UIAction, type TriagePreset, type ErrorStateFilter } from './uiContextDef'
 import type { WorkflowGroupId } from '@shared/workflowMeta'
 
 const STORAGE_KEY = 'looptroop-ui-state'
 const useBrowserLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
+
+function mergePresetsByProject(
+  stored: Record<string, Record<string, TriagePreset>>,
+  current: Record<string, Record<string, TriagePreset>>,
+  replaceKeys: string[] = [],
+): Record<string, Record<string, TriagePreset>> {
+  const replace = new Set(replaceKeys)
+  const merged: Record<string, Record<string, TriagePreset>> = { ...stored }
+
+  for (const [scopeKey, presets] of Object.entries(current)) {
+    merged[scopeKey] = replace.has(scopeKey)
+      ? presets
+      : { ...(stored[scopeKey] ?? {}), ...presets }
+  }
+
+  return merged
+}
+
+function readStoredPresetsByProject(): Record<string, Record<string, TriagePreset>> {
+  if (typeof window === 'undefined') return {}
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+    if (!stored) return migrateLegacyPresets({})
+    const parsed = JSON.parse(stored) as unknown
+    if (typeof parsed !== 'object' || parsed === null) return migrateLegacyPresets({})
+    return migrateLegacyPresets(normalizePresetsByProject((parsed as Record<string, unknown>).presetsByProject))
+  } catch {
+    return migrateLegacyPresets({})
+  }
+}
+
+function persistUIState(state: UIState, replacePresetKeys: string[] = []) {
+  if (typeof window === 'undefined') return
+  const stateToPersist: UIState = {
+    ...state,
+    presetsByProject: mergePresetsByProject(
+      readStoredPresetsByProject(),
+      state.presetsByProject,
+      replacePresetKeys,
+    ),
+  }
+  try {
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToPersist))
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function persistPresetScope(presetKey: string, presets: Record<string, TriagePreset>) {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.setItem(presetKey, JSON.stringify(presets))
+  } catch {
+    // ignore storage errors
+  }
+}
 
 const defaultState: UIState = {
   selectedTicketId: null,
@@ -51,14 +107,16 @@ function normalizeFilters(value: Record<string, unknown> | undefined): UIState['
     : null
 
   return {
-    projectId: merged.projectId,
+    projectId: typeof merged.projectId === 'number' ? merged.projectId : null,
     status,
     phase,
-    search: merged.search,
-    priority: merged.priority,
-    stuckDays: merged.stuckDays,
+    search: typeof merged.search === 'string' ? merged.search : defaultState.filters.search,
+    priority: Array.isArray(merged.priority)
+      ? merged.priority.filter((v): v is number => typeof v === 'number')
+      : null,
+    stuckDays: typeof merged.stuckDays === 'number' ? merged.stuckDays : null,
     errorState,
-    sortBy: merged.sortBy,
+    sortBy: typeof merged.sortBy === 'string' ? merged.sortBy : defaultState.filters.sortBy,
   }
 }
 
@@ -112,7 +170,6 @@ function migrateLegacyPresets(existing: Record<string, Record<string, TriagePres
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)
       if (!key || !key.startsWith(LEGACY_PRESET_KEY_PREFIX)) continue
-      if (merged[key]) continue
       const stored = localStorage.getItem(key)
       if (!stored) continue
       const parsed = JSON.parse(stored) as unknown
@@ -123,7 +180,9 @@ function migrateLegacyPresets(existing: Record<string, Record<string, TriagePres
           if (n) normalized[name] = n
         }
       }
-      if (Object.keys(normalized).length) merged[key] = normalized
+      if (Object.keys(normalized).length) {
+        merged[key] = { ...normalized, ...(merged[key] ?? {}) }
+      }
     }
   } catch {
     // ignore migration errors; legacy presets simply won't be carried over
@@ -131,43 +190,30 @@ function migrateLegacyPresets(existing: Record<string, Record<string, TriagePres
   return merged
 }
 
-function normalizeUIState(value: Partial<UIState>): UIState {
-  const activeView = VALID_VIEWS.includes(value.activeView as UIState['activeView'])
-    ? value.activeView
+function normalizeUIState(value: unknown): UIState {
+  const obj = typeof value === 'object' && value !== null ? value as Partial<UIState> : {}
+  const activeView = VALID_VIEWS.includes(obj.activeView as UIState['activeView'])
+    ? obj.activeView
     : defaultState.activeView
+  const theme = obj.theme === 'light' || obj.theme === 'dark' || obj.theme === 'system'
+    ? obj.theme
+    : defaultState.theme
 
   return {
     ...defaultState,
-    ...value,
+    selectedTicketId: typeof obj.selectedTicketId === 'string' ? obj.selectedTicketId : defaultState.selectedTicketId,
+    selectedTicketExternalId: typeof obj.selectedTicketExternalId === 'string' ? obj.selectedTicketExternalId : defaultState.selectedTicketExternalId,
+    sidebarOpen: typeof obj.sidebarOpen === 'boolean' ? obj.sidebarOpen : defaultState.sidebarOpen,
     activeView: activeView ?? defaultState.activeView,
-    filters: normalizeFilters(value.filters as Record<string, unknown> | undefined),
-    presetsByProject: normalizePresetsByProject(value.presetsByProject),
+    logPanelHeight:
+      typeof obj.logPanelHeight === 'number' && obj.logPanelHeight >= 100
+        ? obj.logPanelHeight
+        : defaultState.logPanelHeight,
+    filters: normalizeFilters(obj.filters as Record<string, unknown> | undefined),
+    presetsByProject: normalizePresetsByProject(obj.presetsByProject),
+    theme,
+    showTriageBar: typeof obj.showTriageBar === 'boolean' ? obj.showTriageBar : defaultState.showTriageBar,
   }
-}
-
-function isValidUIState(value: unknown): value is Partial<UIState> {
-  if (typeof value !== 'object' || value === null) return false
-  const obj = value as Record<string, unknown>
-  if (obj.logPanelHeight !== undefined && (typeof obj.logPanelHeight !== 'number' || obj.logPanelHeight < 100)) return false
-  if (obj.sidebarOpen !== undefined && typeof obj.sidebarOpen !== 'boolean') return false
-  if (obj.showTriageBar !== undefined && typeof obj.showTriageBar !== 'boolean') return false
-  if (obj.theme !== undefined && !['light', 'dark', 'system'].includes(obj.theme as string)) return false
-  if (obj.activeView !== undefined && !VALID_VIEWS.includes(obj.activeView as UIState['activeView'])) return false
-  if (obj.filters !== undefined) {
-    const filters = obj.filters as Record<string, unknown>
-    if (typeof filters !== 'object' || filters === null) return false
-    if (filters.projectId !== undefined && filters.projectId !== null && typeof filters.projectId !== 'number') return false
-    if (filters.status !== undefined && filters.status !== null && typeof filters.status !== 'string' && !Array.isArray(filters.status)) return false
-    if (filters.phase !== undefined && filters.phase !== null && !Array.isArray(filters.phase)) return false
-    if (filters.search !== undefined && typeof filters.search !== 'string') return false
-    if (filters.priority !== undefined && filters.priority !== null && !Array.isArray(filters.priority)) return false
-    if (filters.stuckDays !== undefined && filters.stuckDays !== null && typeof filters.stuckDays !== 'number') return false
-    if (filters.errorState !== undefined && !['none', 'past', 'blocked'].includes(filters.errorState as string)) return false
-    if (filters.onlyErrors !== undefined && typeof filters.onlyErrors !== 'boolean') return false // legacy
-    if (filters.sortBy !== undefined && typeof filters.sortBy !== 'string') return false
-  }
-  if (obj.presetsByProject !== undefined && (typeof obj.presetsByProject !== 'object' || obj.presetsByProject === null)) return false
-  return true
 }
 
 function getInitialState(): UIState {
@@ -177,9 +223,7 @@ function getInitialState(): UIState {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored) {
         const parsed = JSON.parse(stored) as unknown
-        if (!isValidUIState(parsed)) return { ...defaultState, presetsByProject: migrateLegacyPresets({}) }
-        const normalized = normalizeUIState(parsed)
-        initialState = normalized
+        initialState = normalizeUIState(parsed)
       }
     } catch {
       // ignore parse errors
@@ -215,16 +259,21 @@ function uiReducer(state: UIState, action: UIAction): UIState {
 
 
 export function UIProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(uiReducer, undefined, getInitialState)
+  const [state, baseDispatch] = useReducer(uiReducer, undefined, getInitialState)
+  const stateRef = useRef(state)
+  const dispatch = useCallback<Dispatch<UIAction>>((action) => {
+    const nextState = uiReducer(stateRef.current, action)
+    stateRef.current = nextState
+    if (action.type === 'SET_PRESETS') persistPresetScope(action.presetKey, action.presets)
+    persistUIState(nextState, action.type === 'SET_PRESETS' ? [action.presetKey] : [])
+    baseDispatch(action)
+  }, [])
 
-  // Persist to localStorage before the browser can paint the updated UI, so quick refreshes
-  // after actions like saving a preset cannot outrun the durable write.
+  // Keep storage in sync with committed state as a backstop for initialization and StrictMode
+  // remounts. Event dispatches also write synchronously before React paints.
   useBrowserLayoutEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
-    } catch {
-      // ignore storage errors
-    }
+    stateRef.current = state
+    persistUIState(state)
   }, [state])
 
   // Sync URL with state

@@ -371,7 +371,7 @@ describe('KanbanBoard', () => {
     expect(tooltip).toHaveTextContent('Sort: Priority (High to Low)')
   })
 
-  it('saves a preset from the dropdown form with visible feedback', () => {
+  it('saves a preset from the dropdown form and restores it after remount', () => {
     localStorage.setItem('looptroop-ui-state', JSON.stringify({
       activeView: 'kanban',
       sidebarOpen: true,
@@ -391,7 +391,7 @@ describe('KanbanBoard', () => {
       theme: 'system',
     }))
 
-    renderWithProviders(<KanbanBoard />)
+    const { unmount } = renderWithProviders(<KanbanBoard />)
 
     fireEvent.pointerDown(screen.getByRole('button', { name: /presets/i }), {
       button: 0,
@@ -404,6 +404,72 @@ describe('KanbanBoard', () => {
 
     expect(screen.getByText('Saved "Night ops"')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Night ops' })).toBeInTheDocument()
+
+    const stored = JSON.parse(localStorage.getItem('looptroop-ui-state') ?? '{}') as {
+      presetsByProject?: Record<string, Record<string, unknown>>
+    }
+    expect(stored.presetsByProject?.['looptroop-presets-global']).toHaveProperty('Night ops')
+    const mirrored = JSON.parse(localStorage.getItem('looptroop-presets-global') ?? '{}') as Record<string, unknown>
+    expect(mirrored).toHaveProperty('Night ops')
+
+    unmount()
+    renderWithProviders(<KanbanBoard />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /presets/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    expect(screen.getByRole('button', { name: 'Night ops' })).toBeInTheDocument()
+  })
+
+  it('restores project-scoped presets after remount', () => {
+    mockBoardData([], [makeProject()])
+    localStorage.setItem('looptroop-ui-state', JSON.stringify({
+      activeView: 'kanban',
+      sidebarOpen: true,
+      logPanelHeight: 300,
+      showTriageBar: true,
+      filters: {
+        projectId: TEST.projectId,
+        status: null,
+        phase: null,
+        search: '',
+        priority: [1],
+        stuckDays: 3,
+        errorState: 'blocked',
+        sortBy: 'priority_asc',
+      },
+      presetsByProject: {},
+      theme: 'system',
+    }))
+
+    const { unmount } = renderWithProviders(<KanbanBoard />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /presets/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    fireEvent.change(screen.getByPlaceholderText('New preset...'), {
+      target: { value: 'Project ops' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    const projectPresetKey = `looptroop-presets-${TEST.projectId}`
+    const stored = JSON.parse(localStorage.getItem('looptroop-ui-state') ?? '{}') as {
+      presetsByProject?: Record<string, Record<string, unknown>>
+    }
+    expect(stored.presetsByProject?.[projectPresetKey]).toHaveProperty('Project ops')
+    const mirrored = JSON.parse(localStorage.getItem(projectPresetKey) ?? '{}') as Record<string, unknown>
+    expect(mirrored).toHaveProperty('Project ops')
+
+    unmount()
+    renderWithProviders(<KanbanBoard />)
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /presets/i }), {
+      button: 0,
+      ctrlKey: false,
+    })
+    expect(screen.getByRole('button', { name: 'Project ops' })).toBeInTheDocument()
   })
 
   it('shows a dashboard no-results state with a clear action', () => {
