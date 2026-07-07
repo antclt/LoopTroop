@@ -293,7 +293,7 @@ describe('Council Pipeline', () => {
       override async promptSession(sessionId: string, parts: PromptPart[], signal?: AbortSignal): Promise<string> {
         if (sessionId === 'mock-session-3') {
           return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => resolve('late response'), 80)
+            const timer = setTimeout(() => resolve('late response'), 200)
             signal?.addEventListener('abort', () => {
               clearTimeout(timer)
               const abortError = new Error('Aborted')
@@ -326,7 +326,7 @@ describe('Council Pipeline', () => {
       members,
       [{ type: 'text', source: 'ticket_details', content: '# Ticket: Test\nNeed a change' }],
       '/tmp/test',
-      { draftTimeoutMs: 20, minQuorum: 2, maxInitialQuestions: 10 },
+      { draftTimeoutMs: 100, minQuorum: 2, maxInitialQuestions: 10 },
     )
 
     expect(result.deadlineReached).toBe(true)
