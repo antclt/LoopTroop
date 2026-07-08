@@ -87,6 +87,7 @@ function formatPresetDetails(preset: TriagePreset): string {
   const errorState: ErrorStateFilter =
     preset.errorState === 'past' || preset.errorState === 'blocked' ? preset.errorState : 'none'
   const sortBy = typeof preset.sortBy === 'string' ? preset.sortBy : 'updatedAt_desc'
+  const showMocks = preset.showMocks ?? true
   const groupLabel = (id: string) => WORKFLOW_GROUPS.find((g) => g.id === id)?.label ?? id
   const statusLabel = (id: string) => WORKFLOW_PHASE_MAP[id]?.label ?? id.replace(/_/g, ' ')
   const details = [
@@ -107,6 +108,7 @@ function formatPresetDetails(preset: TriagePreset): string {
       : errorState === 'past'
         ? 'Errors: Has errored before'
         : 'Errors: All states',
+    `Mocks: ${showMocks ? 'Shown' : 'Hidden'}`,
     `Sort: ${SORT_LABELS[sortBy] ?? sortBy}`,
   ]
 
@@ -147,6 +149,7 @@ export function KanbanBoard() {
   const selectedStuckDays = state.filters?.stuckDays ?? null
   const errorState: ErrorStateFilter = state.filters?.errorState ?? 'none'
   const sortBy = state.filters?.sortBy ?? 'updatedAt_desc'
+  const showMocks = state.filters?.showMocks ?? true
   const [presetName, setPresetName] = useState('')
   const [presetSaveMessage, setPresetSaveMessage] = useState('')
 
@@ -166,6 +169,7 @@ export function KanbanBoard() {
         phase: selectedPhase,
         errorState,
         sortBy,
+        showMocks,
       }
     }
     dispatch({ type: 'SET_PRESETS', presetKey, presets: newPresets })
@@ -193,6 +197,7 @@ export function KanbanBoard() {
             ? presetValue.errorState
             : 'none',
         sortBy: typeof presetValue.sortBy === 'string' ? presetValue.sortBy : 'updatedAt_desc',
+        showMocks: typeof presetValue.showMocks === 'boolean' ? presetValue.showMocks : true,
       }
     })
   }
@@ -259,8 +264,13 @@ export function KanbanBoard() {
       result = result.filter(t => t.status === 'BLOCKED_ERROR' || t.hasPastErrors === true)
     }
 
+    // 8. Mock Tickets Filter
+    if (!showMocks) {
+      result = result.filter(t => !t.isDisplayOnlyMock)
+    }
+
     return result
-  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStatus, selectedPhase, selectedStuckDays, errorState, projectMap])
+  }, [tickets, selectedProjectId, searchQuery, selectedPriority, selectedStatus, selectedPhase, selectedStuckDays, errorState, showMocks, projectMap])
 
   const ticketsByPhase = useMemo(() => columns.map(col => ({
     ...col,
@@ -268,10 +278,10 @@ export function KanbanBoard() {
   })), [filteredTickets])
 
   const hasLoadedTickets = Array.isArray(tickets)
-  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStatus !== null || selectedPhase !== null || selectedStuckDays !== null || errorState !== 'none'
+  const isAnyFilterActive = isSearchActive || selectedProjectId !== null || selectedPriority !== null || selectedStatus !== null || selectedPhase !== null || selectedStuckDays !== null || errorState !== 'none' || showMocks === false
   const hasNoSearchResults = hasLoadedTickets && isAnyFilterActive && filteredTickets.length === 0
 
-  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStatus?.join(',')}-${selectedPhase?.join(',')}-${selectedStuckDays}-${errorState}-${sortBy}`
+  const resetFiltersKey = `${searchQuery}-${selectedProjectId}-${selectedPriority?.join(',')}-${selectedStatus?.join(',')}-${selectedPhase?.join(',')}-${selectedStuckDays}-${errorState}-${showMocks}-${sortBy}`
 
   return (
     <div className="flex flex-col h-[calc(100vh-3.5rem)]">
@@ -504,6 +514,24 @@ export function KanbanBoard() {
               <option value="blocked">Currently blocked</option>
             </select>
           </label>
+
+          <div className="h-4 w-px bg-border/50 hidden sm:block" />
+
+          {/* Mock tickets filter */}
+          <label className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+            <span>Mocks</span>
+            <select
+              value={showMocks ? "show" : "hide"}
+              onChange={(e) => dispatch({ type: 'SET_FILTER', filter: { showMocks: e.target.value === 'show' } })}
+              className={cn(
+                "h-8 rounded-lg border border-border/80 bg-background/40 hover:bg-background/80 px-2.5 text-xs text-foreground outline-none transition-colors focus:ring-1 focus:ring-ring cursor-pointer font-medium",
+                !showMocks && "border-amber-500/80 bg-amber-500/10 text-amber-600 dark:text-amber-400 dark:bg-amber-500/5 shadow-[0_0_8px_rgba(245,158,11,0.12)]"
+              )}
+            >
+              <option value="show">Show mocks</option>
+              <option value="hide">Hide mocks</option>
+            </select>
+          </label>
         </div>
 
         <div className="flex items-center gap-3">
@@ -632,6 +660,7 @@ export function KanbanBoard() {
                     stuckDays: null,
                     errorState: 'none',
                     sortBy: 'updatedAt_desc',
+                    showMocks: true,
                   }
                 })
               }}
@@ -687,7 +716,7 @@ export function KanbanBoard() {
               variant="outline"
               size="sm"
               onClick={() => {
-                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStatus && !selectedPhase && !selectedStuckDays && errorState === 'none') {
+                if (isSearchActive && !selectedProjectId && !selectedPriority && !selectedStatus && !selectedPhase && !selectedStuckDays && errorState === 'none' && showMocks === true) {
                   dispatch({ type: 'SET_FILTER', filter: { search: '' } })
                 } else {
                   dispatch({
@@ -701,6 +730,7 @@ export function KanbanBoard() {
                       stuckDays: null,
                       errorState: 'none',
                       sortBy: 'updatedAt_desc',
+                      showMocks: true,
                     }
                   })
                 }

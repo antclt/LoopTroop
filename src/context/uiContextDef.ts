@@ -16,6 +16,7 @@ export interface TriagePreset {
   phase: WorkflowGroupId[] | null
   errorState: 'none' | 'past' | 'blocked'
   sortBy: string
+  showMocks: boolean
 }
 
 /** Tri-state error filter for the Kanban triage bar. */
@@ -39,6 +40,7 @@ export interface UIState {
     /** Tri-state error filter replacing the legacy binary `onlyErrors`. */
     errorState: ErrorStateFilter
     sortBy: string
+    showMocks: boolean
   }
   /** Per-scope Kanban triage presets, keyed by `looptroop-presets-${projectId}` or `looptroop-presets-global`. */
   presetsByProject: Record<string, Record<string, TriagePreset>>

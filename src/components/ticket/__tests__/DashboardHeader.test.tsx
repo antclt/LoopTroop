@@ -39,6 +39,7 @@ function makeFilters(): UIContextValue['state']['filters'] {
     stuckDays: null,
     errorState: 'none',
     sortBy: 'updatedAt_desc',
+    showMocks: true,
   }
 }
 

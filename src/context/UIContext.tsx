@@ -34,6 +34,7 @@ const defaultState: UIState = {
     stuckDays: null,
     errorState: 'none',
     sortBy: 'updatedAt_desc',
+    showMocks: true,
   },
   presetsByProject: {},
   theme: 'system',
@@ -75,6 +76,7 @@ function normalizeFilters(value: Record<string, unknown> | undefined): UIState['
     stuckDays: typeof merged.stuckDays === 'number' ? merged.stuckDays : null,
     errorState,
     sortBy: typeof merged.sortBy === 'string' ? merged.sortBy : defaultState.filters.sortBy,
+    showMocks: typeof merged.showMocks === 'boolean' ? merged.showMocks : true,
   }
 }
 
@@ -97,7 +99,8 @@ function normalizePreset(raw: unknown): TriagePreset | null {
   if (p.errorState === 'past' || p.errorState === 'blocked') errorState = p.errorState
   else if (p.onlyErrors === true) errorState = 'blocked' // legacy migration
   const sortBy = typeof p.sortBy === 'string' ? p.sortBy : 'updatedAt_desc'
-  return { priority, stuckDays, status, phase, errorState, sortBy }
+  const showMocks = typeof p.showMocks === 'boolean' ? p.showMocks : true
+  return { priority, stuckDays, status, phase, errorState, sortBy, showMocks }
 }
 
 function normalizePresetsByProject(value: unknown): Record<string, Record<string, TriagePreset>> {

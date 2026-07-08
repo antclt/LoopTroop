@@ -13,12 +13,14 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Summary
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
+- Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
 
 ### Detailed Changes
 
 #### Added
 
 #### Changed
+- Updated the Kanban triage control bar to support showing or hiding mock tickets (marked with `(M)`). This setting can be persisted in Kanban filter presets and defaults to showing mocks.
 
 #### Fixed
 
