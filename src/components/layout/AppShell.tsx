@@ -61,6 +61,7 @@ function getActiveTriageFilterSummaries(filters: UIState['filters']): string[] {
   }
   if (filters.errorState === 'blocked') summaries.push('Errors: Currently blocked')
   else if (filters.errorState === 'past') summaries.push('Errors: Has errored before')
+  if (filters.showMocks === false) summaries.push('Mocks: Hidden')
   if (filters.sortBy !== DEFAULT_SORT) summaries.push(`Sort: ${SORT_FILTER_LABELS[filters.sortBy] ?? filters.sortBy}`)
 
   return summaries

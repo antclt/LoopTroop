@@ -205,6 +205,19 @@ describe('AppShell', () => {
     expect(within(filterButton).getByText('4')).toBeInTheDocument()
   })
 
+  it('shows a count badge on the filter button when showMocks is false (mocks hidden)', () => {
+    renderShell(makeUIValue({
+      filters: {
+        ...makeFilters('visible-search-does-not-count'),
+        showMocks: false,
+      },
+    }))
+
+    const filterButton = screen.getByRole('button', { name: /show filters, 1 active/i })
+
+    expect(within(filterButton).getByText('1')).toBeInTheDocument()
+  })
+
   it('suggests only project names that start with the typed search', () => {
     const dispatch = vi.fn()
 

@@ -40,6 +40,7 @@ function PresetDispatchProbe() {
               phase: null,
               errorState: 'blocked',
               sortBy: 'priority_asc',
+              showMocks: true,
             },
           },
         })}

@@ -349,6 +349,7 @@ describe('KanbanBoard', () => {
           phase: null,
           errorState: 'blocked',
           sortBy: 'priority_asc',
+          showMocks: true,
         },
       },
     }
