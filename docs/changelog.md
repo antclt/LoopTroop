@@ -12,7 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
-_No unreleased changes yet._
+- Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 
 ### Detailed Changes
 
@@ -27,6 +27,7 @@ _No unreleased changes yet._
 #### Maintenance
 
 #### Documentation
+- Added **Skip Reason Auditability** to the [High Priority roadmap](roadmap.md#high-priority): users can provide an optional reason when skipping any step, prompt, or approval gate, and the reason is persisted in the relevant ticket artifact.
 
 :::
 

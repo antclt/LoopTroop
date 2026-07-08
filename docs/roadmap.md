@@ -14,6 +14,14 @@ search: false
 
 ## High Priority
 
+*   **Skip Reason Auditability:** Allow users to provide an optional reason any time they skip a step, prompt, question, or approval gate in the app. The reason is persisted in the relevant ticket artifact for auditability and later review.
+    *   Add a skip-reason input surface on every user-facing skip action (e.g., skip interview question, skip phase review, skip approval, skip critique/research generation).
+    *   The reason must be optional and not block the skip action when left blank; if blank, record `reason: null` explicitly.
+    *   Persist the reason in the corresponding artifact (e.g., `interview.yaml`, `critique.yaml`, `research/repository-brief.yaml`, `planning-context.yaml`, phase review receipts) alongside `skipped_at`, `skipped_by`, and the skipped item identifier.
+    *   Include skipped item metadata: item id/type, phase/status where skipped, original prompt text or reference, and user-provided reason.
+    *   Make skip reasons visible in the ticket UI and export views so users and auditors can review why items were bypassed.
+    *   Ensure skip reasons are treated as user-generated planning context, not as agent instructions, and do not alter model behavior beyond being available for downstream human review.
+    *   Add a `doctor` check that flags skips without reasons when the project policy requires reasons, and report aggregate skip statistics per ticket.
 *   **Context Slimming Pipeline (per-phase input/output field audit + deterministic strip-and-store contract):** For every workflow phase, manually audit which fields the AI model outputs and which fields downstream phases actually consume, then strip unused fields from the canonical context so future model calls receive slimmer input while stripped data is preserved for UI display and forensic audit.
     *   Audit each phase input and output, status by status, starting with the first (`DRAFT`) and proceeding sequentially through the full lifecycle.
     *   The AI model must continue to output all fields it currently outputs; no model-side changes are required.
@@ -520,16 +528,6 @@ search: false
     *   Runner behavior: deduplicate findings, validate each finding before fix, and loop `review -> fix -> review` until no valid critical/major findings remain.
     *   Reviewer output rule: report issues only (no positive commentary).
     *   Failure policy: if final verdict is missing/invalid/timed out, do **not** auto-approve; retry reviewer or transition ticket to `BLOCKED_ERROR` with explicit remediation.
-*   **Manual QA Loop (required post-final-test gate):** After `RUNNING_FINAL_TEST`, pause for human QA before `INTEGRATING_CHANGES`.
-    *   Generate a deterministic checklist from approved requirements and preload `quickstart.md` in the QA UI.
-    *   Persist QA runs at `.looptroop/tickets/<ticket-id>/verification/wizard-<run-id>.yaml` and issues at `.looptroop/tickets/<ticket-id>/verification/issues.jsonl`.
-    *   Each failed check or user-reported defect creates a structured QA issue with repro, expected result, actual result, evidence, and linked requirement/bead where possible.
-    *   Fixes run as fresh-session QA mini-beads and return to the Manual QA Loop until the user clears blocking issues or signs an explicit waiver.
-    *   A successful automated final test may not transition directly to integration when `phase_flags.manual_qa.required=true`.
-    *   QA mini-beads may fix verified defects only; design or scope changes require an explicit escalation back to planning.
-    *   Waivers must persist who approved them, which checks were waived, and why integration may continue.
-    *   Legacy in-flight tickets can keep old behavior if they already passed the post-implementation boundary before this feature lands.
-    *   The final verification scorecard prepares this loop; any critical finding blocks manual QA clearance until resolved.
 *   **Per-bead Fast Quality Gate + Lightweight Security Gate (changed-files first):**
     *   Before a bead can be marked `done`, run deterministic changed-files gates with two mandatory events: `idle_gate` and `completion_gate`.
     *   `idle_gate` blocks immediately on changed files for:
@@ -799,25 +797,6 @@ search: false
     *   Retry only the conflicted merge step with provided steering; keep prior artifacts immutable for auditability.
     *   Persist one conflict report per event with files involved, severity, attempted strategy, final outcome, `needs_review_reason`, and `review_resolution`.
 *   **Project Context Awareness:** During project creation, distinguish between "Demo" and "Production" environments to adjust the AI's safety protocols and architectural rigor.
-*   **Repository Script Contract (setup + preview + cleanup):**
-    *   Add project-level repository scripts: `setup_command`, `dev_server_command`, `cleanup_command`.
-    *   Persist script configuration at `.looptroop/project/scripts.yaml` with timeout, retry behavior, and failure-policy fields.
-    *   `setup_command` runs before planning/execution to prepare dependencies and environment.
-    *   `dev_server_command` powers preview/manual verification flows and standardized local test startup.
-    *   Generate an auto-authored quickstart validation guide at `.looptroop/tickets/<ticket-id>/quickstart.md` from approved PRD user stories + acceptance criteria.
-        *   Each scenario must include prerequisites, numbered human-readable steps, and explicit expected outcomes.
-        *   Persist quickstart metadata (`source_artifact_versions`, `generated_at`, `generator_model`) for auditability.
-    *   Support the **Manual QA Loop** with a guided verification UI:
-        *   Generate a deterministic checklist from PRD acceptance criteria and ticket traceability links.
-        *   Pre-load `quickstart.md` in the verification UI and map wizard checklist items to quickstart scenarios.
-        *   Each checklist item must include explicit user action steps and expected visible outcome.
-        *   User marks each item as `pass` or `failed`; failed items require a short observation and optional evidence refs.
-        *   For each failed item, auto-create a high-priority QA mini-bead linked to the failed requirement/checklist item.
-        *   Route to QA fix work for fixable gaps; route to `BLOCKED_ERROR` for blocker severity or policy-mandated hard stops.
-        *   Persist wizard runs at `.looptroop/tickets/<ticket-id>/verification/wizard-<run-id>.yaml` and append item events to `.looptroop/tickets/<ticket-id>/verification/wizard-events.jsonl`.
-    *   `cleanup_command` runs on success, cancel, and error paths to stop services and remove temporary resources.
-    *   `Doctor` validates script availability and timeout bounds; blocking failures prevent execution with explicit remediation.
-    *   Persist per-run script receipts (`script_name`, `exit_code`, `duration_ms`, `started_at`, `ended_at`, `result`) for diagnostics.
 *   **Sandboxing & Guardrails (policy profiles + permission-denial remediation):**
     *   **Pre-execution command safety guard:**
         *   Every agent-issued shell command must pass a command-safety guard before execution.
