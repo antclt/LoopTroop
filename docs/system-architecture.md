@@ -182,7 +182,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | App bootstrap and query client | `src/main.tsx`, `src/lib/queryClient.ts` |
 | App shell, modal routing, startup overlays | `src/App.tsx`, `src/components/layout/*`, `src/components/shared/StartupRestorePopup.tsx`, `src/components/shared/WelcomeDisclaimer.tsx` |
 | Ticket workspace and shared UI | `src/components/ticket/*`, `src/components/workspace/*`, `src/components/shared/*` |
-| Manual QA workspace and data | `src/components/manual-qa/*`, `src/components/workspace/ManualQAView.tsx`, `src/hooks/useManualQA.ts` |
+| Manual QA preparation, workspace, and data | `src/components/workspace/CodingView.tsx`, `src/components/workspace/PhaseArtifactsPanel.tsx`, `src/components/manual-qa/*`, `src/components/workspace/ManualQAView.tsx`, `src/hooks/useManualQA.ts`, `src/hooks/useSSE.ts` |
 | Browser state providers | `src/context/UIContext.tsx`, `src/context/AIQuestionContext.tsx`, `src/context/LogContext.tsx` |
 | Data hooks and live updates | `src/hooks/useTickets.ts`, `useTicketArtifacts.ts`, `useTicketPhaseAttempts.ts`, `useWorkflowMeta.ts`, `useSSE.ts`, `useStartupStatus.ts`, `useRecoveryAutoReload.ts` |
 

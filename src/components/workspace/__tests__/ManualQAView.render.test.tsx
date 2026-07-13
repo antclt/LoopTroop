@@ -334,4 +334,30 @@ describe('ManualQAView recovery behavior', () => {
     expect(screen.getByText('Manual QA · Round v1')).toBeInTheDocument()
     expect(screen.getByText('Read only')).toBeInTheDocument()
   })
+
+  it('does not query a reserved active version until generation hands it to Manual QA', () => {
+    const generatingTicket = makeTicket({
+      status: 'GENERATING_QA_CHECKLIST',
+      manualQa: {
+        activeVersion: 1,
+        completedRoundCount: 0,
+        latestOutcome: null,
+        artifactAvailability: { checklist: false, results: false, coverage: false, summary: false },
+      },
+    })
+    mocks.round.mockImplementation((_ticketId: string, _version: number, enabled: boolean) => ({
+      data: enabled ? round : undefined,
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    }))
+
+    const { rerender } = renderWithProviders(<ManualQAView ticket={generatingTicket} />)
+    expect(mocks.round).toHaveBeenLastCalledWith(generatingTicket.id, 1, false)
+
+    rerender(<ManualQAView ticket={waitingTicket()} />)
+    expect(mocks.round).toHaveBeenLastCalledWith(generatingTicket.id, 1, true)
+    expect(screen.getByText('Manual QA · Round v1')).toBeInTheDocument()
+    expect(screen.queryByText('Manual QA version not found')).not.toBeInTheDocument()
+  })
 })

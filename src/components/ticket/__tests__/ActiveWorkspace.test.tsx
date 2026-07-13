@@ -177,6 +177,30 @@ describe('ActiveWorkspace', () => {
     expect(await screen.findByText('manual qa view:live')).toBeInTheDocument()
   })
 
+  it('renders Manual QA preparation as an artifact-and-log producer workspace', async () => {
+    renderWithProviders(
+      <ActiveWorkspace
+        ticket={makeTicket({ status: 'GENERATING_QA_CHECKLIST' })}
+        selectedPhase="GENERATING_QA_CHECKLIST"
+      />,
+    )
+
+    expect(await screen.findByText('coding view')).toBeInTheDocument()
+    expect(screen.queryByText(/manual qa view/i)).not.toBeInTheDocument()
+  })
+
+  it('reviews completed Manual QA preparation separately from the live checklist', async () => {
+    renderWithProviders(
+      <ActiveWorkspace
+        ticket={makeTicket({ status: 'WAITING_MANUAL_QA', visitedStatuses: ['GENERATING_QA_CHECKLIST'] })}
+        selectedPhase="GENERATING_QA_CHECKLIST"
+      />,
+    )
+
+    expect(await screen.findByText('review:GENERATING_QA_CHECKLIST')).toBeInTheDocument()
+    expect(screen.queryByText(/manual qa view/i)).not.toBeInTheDocument()
+  })
+
   it('keeps a visited Manual QA round selectable after failures return to coding', async () => {
     renderWithProviders(
       <ActiveWorkspace

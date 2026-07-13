@@ -6545,6 +6545,17 @@ export function ArtifactContent({
   if (artifactId === 'test-results') {
     return <FinalTestResultsView content={content} />
   }
+  if (artifactId === 'manual-qa-checklist') {
+    try {
+      const envelope = JSON.parse(content) as { checklist?: unknown }
+      if (typeof envelope.checklist === 'string' && envelope.checklist.trim()) {
+        return <RawContentWithCopy content={envelope.checklist} />
+      }
+    } catch {
+      // Older artifacts may already contain the checklist directly.
+    }
+    return <RawContentWithCopy content={content} />
+  }
   if (artifactId === 'cleanup-report') {
     return <CleanupReportView content={content} />
   }

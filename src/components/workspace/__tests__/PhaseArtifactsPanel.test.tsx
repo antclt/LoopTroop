@@ -57,6 +57,37 @@ describe('PhaseArtifactsPanel', () => {
     resetArtifactIds()
   })
 
+  it('opens the generated Manual QA checklist artifact with readable results', () => {
+    const checklistArtifact = makeArtifact({
+      phase: 'GENERATING_QA_CHECKLIST',
+      artifactType: 'manual_qa_checklist',
+      content: JSON.stringify({
+        version: 1,
+        checklist: [
+          'schemaVersion: 1',
+          'summary: Verify the new checkout behavior.',
+          'items:',
+          '  - title: Checkout succeeds',
+          '    expectedResult: The order is confirmed.',
+        ].join('\n'),
+      }),
+    })
+
+    renderWithProviders(
+      <PhaseArtifactsPanel
+        phase="GENERATING_QA_CHECKLIST"
+        isCompleted
+        preloadedArtifacts={[checklistArtifact]}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: /Manual QA Checklist/i })).toHaveTextContent('v1 · 1 check')
+    fireEvent.click(screen.getByRole('button', { name: /Manual QA Checklist/i }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('Verify the new checkout behavior.')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Checkout succeeds')
+    expect(screen.getByRole('dialog')).toHaveTextContent('The order is confirmed.')
+  })
+
   it('shows the execution setup runtime as one structured artifact with useful chip details', () => {
     const profileArtifact = makeArtifact({
       phase: 'PREPARING_EXECUTION_ENV',

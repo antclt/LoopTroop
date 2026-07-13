@@ -79,7 +79,7 @@ RUNNING_FINAL_TEST → GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA
 
 #### `GENERATING_QA_CHECKLIST`
 
-“LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.”
+“LoopTroop is preparing a human-facing Manual QA checklist from approved context and focused implementation evidence, with generation status, logs, and the produced checklist artifact available in the phase workspace.”
 
 No user action is needed. LoopTroop first resolves the current final-test audit, commits accepted candidate effects into a dedicated local checkpoint, quarantines ticket-owned temporary/unexpected or prior residue, and records HEAD/status/file signatures. Generation requires a clean Git-visible worktree so the first QA-fix bead cannot accidentally commit test or application-runtime residue.
 
@@ -87,9 +87,11 @@ Before the model call, `vN` is reserved and projected immediately. A restart or 
 
 One strict tagged YAML response supplies each short item title, checklist content, and `full | partial` PRD references. Checklist items use `prd | bead | previous_qa | implementation_diff` sources, `required | optional` severity, and `new | pending_recheck | previously_passed` recheck state; requiredness is not duplicated in a second boolean. Formatting repairs may normalize envelopes, YAML syntax, or known aliases, but never invent behavior, actions, observations, or expected results. Invalid criterion refs and invalid later-round lineage/recheck relationships fail validation and use normal structured retries. LoopTroop derives refs as `<epic-id>/<story-id>/AC-<1-based-index>` and computes coverage plus checklist source-category counts in code: any valid full ref covers a criterion, partial-only refs make it partially covered, and no valid refs leave it uncovered. Gaps are advisory.
 
+The preparation workspace mirrors other artifact-producing phases: it shows a concise live status, exposes the exact `manual_qa_checklist` artifact in a clickable viewer as soon as it is persisted, and keeps the phase log available. It does not mount the result-entry form or query a merely reserved version before handoff; the following status owns those interactions.
+
 #### `WAITING_MANUAL_QA`
 
-“LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.”
+“LoopTroop is waiting in the interactive Manual QA workspace for the user to record results and evidence, then complete, waive, skip, or submit the checklist before final integration.”
 
 The user—not LoopTroop—starts and controls the application, follows prerequisites/actions, and records results. Every item offers Pass, Fail, Waive, and Improvement; required items cannot remain Pending, while optional items may. Any Fail blocks integration, including an optional item, and requires an observation. Waive requires a reason; Pass notes are optional. Improvements are non-blocking, require a reviewed title/description/context, and each produces exactly one Normal-priority Draft ticket in the same project on final Submit.
 

@@ -60,6 +60,10 @@ function dispatchServerLogRefresh(ticketId: string) {
   window.dispatchEvent(new CustomEvent(SERVER_LOG_REFRESH_EVENT, { detail: { ticketId } }))
 }
 
+function invalidateManualQaQueries(ticketId: string) {
+  queryClient.invalidateQueries({ queryKey: ['manual-qa', ticketId] })
+}
+
 function recoverTicketAfterStreamGap(ticketId: string) {
   queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
   queryClient.invalidateQueries({ queryKey: ['tickets'] })
@@ -69,6 +73,7 @@ function recoverTicketAfterStreamGap(ticketId: string) {
   queryClient.invalidateQueries({ queryKey: ['artifact', ticketId, 'execution-setup-plan'] })
   queryClient.invalidateQueries({ queryKey: ['ticket-beads', ticketId] })
   queryClient.invalidateQueries({ queryKey: ['artifact', ticketId, 'beads'] })
+  invalidateManualQaQueries(ticketId)
   dispatchServerLogRefresh(ticketId)
 }
 
@@ -173,6 +178,16 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
             )
           }
           queryClient.invalidateQueries({ queryKey: ['ticket', ticketId] })
+          if (
+            data.from === 'GENERATING_QA_CHECKLIST'
+            || data.from === 'WAITING_MANUAL_QA'
+            || data.previousStatus === 'GENERATING_QA_CHECKLIST'
+            || data.previousStatus === 'WAITING_MANUAL_QA'
+            || data.to === 'GENERATING_QA_CHECKLIST'
+            || data.to === 'WAITING_MANUAL_QA'
+          ) {
+            invalidateManualQaQueries(ticketId)
+          }
           if (data.to === 'WAITING_INTERVIEW_ANSWERS' || data.to === 'WAITING_INTERVIEW_APPROVAL') {
             queryClient.invalidateQueries({ queryKey: ['interview', ticketId] })
           }
@@ -289,6 +304,13 @@ export function useSSE({ ticketId, onEvent }: SSEOptions) {
             )
             if (beadId) {
               invalidateBeadDiffQuery(ticketId, beadId)
+            }
+
+            const artifactType = typeof data.artifactType === 'string'
+              ? data.artifactType
+              : snapshot?.artifactType
+            if (artifactType?.startsWith('manual_qa_')) {
+              invalidateManualQaQueries(ticketId)
             }
           }
           onEventRef.current?.({ type: 'artifact_change', data })

@@ -204,6 +204,26 @@ describe('useSSE', () => {
     })
   })
 
+  it('refreshes Manual QA data when preparation hands the checklist to the user', async () => {
+    const ticketId = '1:T-42'
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    renderHook(() => useSSE({ ticketId, onEvent: vi.fn<SSEHandler>() }))
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockEventSource.instances[0]!.emit('state_change', {
+        ticketId,
+        from: 'GENERATING_QA_CHECKLIST',
+        to: 'WAITING_MANUAL_QA',
+      }, '1')
+    })
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['manual-qa', ticketId] })
+    })
+  })
+
   it('refreshes the bead list when a bead completes', async () => {
     const ticketId = '1:T-42'
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
@@ -262,6 +282,34 @@ describe('useSSE', () => {
 
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['bead-diff', ticketId, 'bead-2'], exact: true })
+    })
+  })
+
+  it('refreshes Manual QA data when a checklist artifact arrives', async () => {
+    const ticketId = '1:T-42'
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')
+
+    renderHook(() => useSSE({ ticketId, onEvent: vi.fn<SSEHandler>() }))
+    await waitFor(() => expect(MockEventSource.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockEventSource.instances[0]!.emit('artifact_change', {
+        ticketId,
+        artifactType: 'manual_qa_checklist',
+        artifact: {
+          id: 18,
+          ticketId,
+          phase: 'GENERATING_QA_CHECKLIST',
+          artifactType: 'manual_qa_checklist',
+          filePath: null,
+          content: '{"version":1}',
+          createdAt: '2026-07-13T00:00:00.000Z',
+        },
+      }, '1')
+    })
+
+    await waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['manual-qa', ticketId] })
     })
   })
 
@@ -383,6 +431,7 @@ describe('useSSE', () => {
         expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['artifact', ticketId, 'execution-setup-plan'] })
         expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['ticket-beads', ticketId] })
         expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['artifact', ticketId, 'beads'] })
+        expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['manual-qa', ticketId] })
         expect(logRefreshSpy).toHaveBeenCalledWith(expect.objectContaining({
           detail: { ticketId },
         }))

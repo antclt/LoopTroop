@@ -95,7 +95,7 @@ That split matters because the workspace is designed for both live work and hist
 | `InterviewQAView` | Interactive interview batches, draft persistence, skip flow |
 | `ApprovalView` | Review and edit interview, PRD, beads, and execution setup artifacts; PRD approval also exposes the winning model's Full Answers as compact read-only context, and execution setup approval keeps live logs expanded until the setup plan is ready |
 | `CodingView` | Active bead execution, bead list, logs, diffs, verification actions |
-| `ManualQAView` | Checklist generation, live verification draft, evidence, submission/drift recovery, and read-only round history |
+| `ManualQAView` | Live verification draft, evidence, submission/drift recovery, and read-only round history after the generated checklist is handed off |
 | `ErrorView` | Live blocked state or historical error occurrence review |
 | `PhaseReviewView` | Historical artifact review for completed phases |
 | `FullLogView` | Full folded execution log stream |
@@ -120,7 +120,9 @@ QA-origin beads receive a **Manual QA Fix** badge and keep their version, source
 
 ### Manual QA workspace
 
-`ManualQAView` is lazy-loaded for both `GENERATING_QA_CHECKLIST` and `WAITING_MANUAL_QA`. During generation it explains that automation is preparing the checklist and that no user action—or application control—is taking place. During the gate it renders prerequisites, actions, expected results, watch notes, advisory PRD coverage, Pass/Fail/Waive/Improvement/Pending controls, validation, failure merge groups, and arbitrary evidence upload/download/removal.
+`GENERATING_QA_CHECKLIST` uses the standard non-interactive coding/phase-review workspace: a concise preparation status, a clickable `Manual QA Checklist` artifact that opens the generated user-run checks, and the phase log. `WAITING_MANUAL_QA` then lazy-loads `ManualQAView` as the interactive consumer, rendering prerequisites, actions, expected results, watch notes, advisory PRD coverage, Pass/Fail/Waive/Improvement/Pending controls, validation, failure merge groups, and arbitrary evidence upload/download/removal.
+
+The handoff deliberately avoids querying a merely reserved checklist version while generation is still writing it. Checklist artifact events, Manual QA status transitions, and SSE gap recovery invalidate the Manual QA query family so the interactive gate opens the durable version without requiring a browser refresh.
 
 Only safe raster evidence uses inline previews; SVG, HTML, executables, unknown types, and other files remain downloads. Every checklist item, required or optional, can become a non-blocking Improvement. The Improvement modal lets the user review/edit one title, description, and appended Manual QA context per ticket; untouched context is enriched during submission with concise human-readable PRD requirements, bead work areas, and evidence summaries. It also previews structured provenance (source ticket/project, round, checklist lineage, PRD/bead references, result type, and planned file/link evidence) and the 10,000-character retention warning. The created ticket's origin receipt records which planned evidence was copied or omitted; that final receipt cannot be predicted while editing.
 

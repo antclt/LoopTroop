@@ -856,7 +856,7 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   GENERATING_QA_CHECKLIST: {
-    overview: 'LoopTroop automatically prepares the next versioned Manual QA checklist after final tests pass. This is an automation-only checkpoint: no user action is requested, and LoopTroop never starts, stops, previews, or controls the user’s application.',
+    overview: 'LoopTroop automatically prepares the next versioned Manual QA checklist after final tests pass. This is an automation-only checkpoint whose workspace shows generation progress, phase logs, and the checklist artifact once it is ready; no user action is requested, and LoopTroop never starts, stops, previews, or controls the user’s application.',
     steps: [
       'Clean Checkpoint Preparation: LoopTroop resolves the final-test file-effects audit, checkpoints accepted candidate changes, quarantines ticket-owned test residue, and records a clean workspace baseline for detecting later application drift.',
       'Version Reservation: The next `vN` directory is reserved before model work. Restarts and structured-output retries reuse that reservation so a valid existing checklist advances idempotently without a duplicate model call.',
@@ -876,13 +876,13 @@ const WORKFLOW_PHASE_DETAILS = {
       'Cancel → Canceled: Cancellation stops workflow automation while preserving generated artifacts for audit.',
     ],
     notes: [
-      'No user action is required in this phase; the Manual QA screen presents a generation/loading explanation only.',
+      'No user action is required in this phase; the preparation workspace presents a concise status, phase logs, and a clickable generated-checklist artifact before handing it to the interactive Manual QA gate.',
       'LoopTroop does not launch or interact with the application being tested. The application remains entirely user-controlled.',
       'Coverage gaps are advisory and do not by themselves block the checklist.',
     ],
   },
   WAITING_MANUAL_QA: {
-    overview: 'LoopTroop waits while the user runs the application and verifies the generated checklist. Results and evidence autosave, but no integration, fix bead, or improvement ticket is created until the user explicitly submits or skips the round.',
+    overview: 'LoopTroop waits in the interactive Manual QA workspace while the user runs the application, records results and evidence, and verifies the generated checklist. Draft work autosaves, but no integration, fix bead, or improvement ticket is created until the user explicitly submits or skips the round.',
     steps: [
       'User-Run Verification: The user starts and controls the application outside LoopTroop, follows each item’s prerequisites and actions, and compares observed behavior with the expected result and watch notes.',
       'Autosaved Draft: Pass, Fail, Waive, Improvement, Pending, notes, merge groups, improvement drafts, and evidence references save through revision-checked UI state. The five-second debounce and page-unload keepalive preserve in-progress work.',
@@ -906,6 +906,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'System Failure → Stays Waiting or Blocked Error: Restart-safe creation failures remain in this gate for resumption; unrecoverable workflow errors use Blocked Error.',
     ],
     notes: [
+      'This status is the interactive consumer of the checklist artifact produced by Preparing Manual QA; the producer phase itself remains a concise artifact-and-log review surface.',
       'LoopTroop never starts, stops, previews, or otherwise controls the user’s application.',
       'Retry notes for normal bead failures remain separate from typed Manual QA origin data.',
       'Historical checklist versions remain selectable read-only after the ticket loops back to Coding or advances.',
@@ -1479,11 +1480,11 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'GENERATING_QA_CHECKLIST',
     label: 'Preparing Manual QA',
-    description: 'LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.',
+    description: 'LoopTroop is preparing a human-facing Manual QA checklist from approved context and focused implementation evidence, with generation status, logs, and the produced checklist artifact available in the phase workspace.',
     details: WORKFLOW_PHASE_DETAILS.GENERATING_QA_CHECKLIST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
-    uiView: 'manual_qa',
+    uiView: 'coding',
     editable: false,
     multiModelLogs: false,
     reviewArtifactType: 'manual_qa_checklist',
@@ -1492,7 +1493,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_MANUAL_QA',
     label: 'Manual QA',
-    description: 'LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.',
+    description: 'LoopTroop is waiting in the interactive Manual QA workspace for the user to record results and evidence, then complete, waive, skip, or submit the checklist before final integration.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_MANUAL_QA,
     kanbanPhase: 'needs_input',
     groupId: 'post_implementation',

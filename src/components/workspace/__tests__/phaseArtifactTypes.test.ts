@@ -1,8 +1,29 @@
 import { describe, expect, it } from 'vitest'
 import { TEST } from '@/test/factories'
-import { buildInterviewDiffEntries, buildRefinementDiffEntries } from '../phaseArtifactTypes'
+import { buildInterviewDiffEntries, buildRefinementDiffEntries, resolveStaticArtifact } from '../phaseArtifactTypes'
 
 describe('phaseArtifactTypes', () => {
+  it('resolves Manual QA preparation to the checklist rather than a later coverage artifact', () => {
+    const checklist = {
+      id: 1,
+      ticketId: TEST.ticketId,
+      phase: 'GENERATING_QA_CHECKLIST',
+      phaseAttempt: 1,
+      artifactType: 'manual_qa_checklist',
+      filePath: null,
+      content: '{"version":1,"checklist":"summary: Verify checkout"}',
+      createdAt: '2026-07-13T00:00:00.000Z',
+      updatedAt: '2026-07-13T00:00:00.000Z',
+    }
+    const coverage = { ...checklist, id: 2, artifactType: 'manual_qa_coverage', content: '{"coveredCount":1}' }
+
+    expect(resolveStaticArtifact(
+      { id: 'manual-qa-checklist', label: 'Manual QA Checklist', description: 'Generated checks', icon: null },
+      'GENERATING_QA_CHECKLIST',
+      [coverage, checklist],
+    )).toBe(checklist)
+  })
+
   it('drops persisted interview ui diff entries when before and after text are trim-identical', () => {
     const interviewDocument = JSON.stringify({
       questions: [

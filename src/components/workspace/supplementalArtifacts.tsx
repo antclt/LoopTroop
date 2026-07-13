@@ -69,7 +69,10 @@ export function getSupplementalArtifacts(phase: string, isCompleted = false): Ar
   if (phase === 'RUNNING_FINAL_TEST') {
     return [{ id: 'test-results', label: 'Test Results', description: 'Full test suite results', icon: <CheckCircle2 className="h-3.5 w-3.5" /> }]
   }
-  if (phase === 'GENERATING_QA_CHECKLIST' || phase === 'WAITING_MANUAL_QA') {
+  if (phase === 'GENERATING_QA_CHECKLIST') {
+    return [{ id: 'manual-qa-checklist', label: 'Manual QA Checklist', description: 'Generated user-run checks and their expected results', icon: <CheckCircle2 className="h-3.5 w-3.5" /> }]
+  }
+  if (phase === 'WAITING_MANUAL_QA') {
     return [{ id: 'manual-qa', label: 'Manual QA', description: 'Versioned checklist, advisory coverage, submitted results, and evidence references', icon: <CheckCircle2 className="h-3.5 w-3.5" /> }]
   }
   if (phase === 'INTEGRATING_CHANGES') {

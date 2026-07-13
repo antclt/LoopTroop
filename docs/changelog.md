@@ -15,7 +15,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Council voting phases now show a live `X/Y complete · Leading/Winner: <model> · <pts>` tally appended inline to the council card's description line (e.g. "Council members are scoring all prd drafts. · 2/4 complete · Leading: …") while scoring is in progress.
 - Provider changes now appear after a lightweight Configuration reload without restarting OpenCode or interrupting active tickets.
 - Simplified Manual QA configuration with consistent Enabled/Disabled choices at global, project, and ticket levels.
-- Added a spec-aligned, ticket-locked Manual QA checkpoint that turns post-test failures into traceable fix beads and any reviewed checklist improvement into a context-rich backlog ticket without controlling the user's application.
+- Added a spec-aligned, ticket-locked Manual QA checkpoint with a distinct artifact-and-log preparation view and interactive verification handoff, turning failures into traceable fix beads and reviewed improvements into context-rich backlog tickets without controlling the user's application.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
 
@@ -43,6 +43,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed the first Manual QA handoff showing `Manual QA version not found` until refresh by deferring reserved-version reads until the checklist is handed off and reconciling Manual QA queries on artifact, status, and stream-recovery events; Preparing Manual QA now exposes the exact checklist as a clickable artifact beside its status and log instead of duplicating the interactive Manual QA screen.
 - Fixed the Configuration model-refresh icon to spin and remain disabled for the full provider/model refresh instead of stopping before the refresh request completes.
 - Fixed stale provider/model discovery after OpenCode credentials change: Configuration reload now disposes only LoopTroop's catalog/root OpenCode instance before refetching the catalog, while leaving `opencode serve` and active ticket worktree instances running.
 - Fixed application documentation links to include the VitePress `/docs/` base path, so contextual help and the header Docs link open the locally started documentation server instead of its unmounted root.

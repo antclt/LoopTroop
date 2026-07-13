@@ -88,11 +88,16 @@ describe.concurrent('workflow metadata', () => {
 
   it('preserves the requested Manual QA status descriptions verbatim', () => {
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'GENERATING_QA_CHECKLIST')?.description).toBe(
-      'LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.',
+      'LoopTroop is preparing a human-facing Manual QA checklist from approved context and focused implementation evidence, with generation status, logs, and the produced checklist artifact available in the phase workspace.',
     )
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.description).toBe(
-      'LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.',
+      'LoopTroop is waiting in the interactive Manual QA workspace for the user to record results and evidence, then complete, waive, skip, or submit the checklist before final integration.',
     )
+  })
+
+  it('separates the Manual QA producer workspace from its interactive consumer', () => {
+    expect(WORKFLOW_PHASES.find((phase) => phase.id === 'GENERATING_QA_CHECKLIST')?.uiView).toBe('coding')
+    expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.uiView).toBe('manual_qa')
   })
 
   it('shows only ticket details as allowed context while scanning relevant files', () => {

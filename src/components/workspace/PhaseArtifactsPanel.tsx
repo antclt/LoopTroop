@@ -570,6 +570,27 @@ export function PhaseArtifactsPanel({ phase, isCompleted, ticketId, councilMembe
       return { outcome: 'completed' }
     }
 
+    if (artifact.id === 'manual-qa-checklist') {
+      const envelope = tryParseStructuredContent(content)
+      const checklistContent = isRecord(envelope) && typeof envelope.checklist === 'string'
+        ? envelope.checklist
+        : content
+      const checklist = tryParseStructuredContent(checklistContent)
+      const version = isRecord(envelope) && typeof envelope.version === 'number'
+        ? envelope.version
+        : isRecord(checklist) && typeof checklist.version === 'number'
+          ? checklist.version
+          : null
+      const itemCount = isRecord(checklist) && Array.isArray(checklist.items)
+        ? checklist.items.length
+        : null
+      const detail = [
+        version !== null ? `v${version}` : null,
+        itemCount !== null ? `${itemCount} check${itemCount === 1 ? '' : 's'}` : null,
+      ].filter(Boolean).join(' · ')
+      return { outcome: 'completed', detail: detail || undefined }
+    }
+
     if (artifact.id.includes('winner')) {
       const winnerId = council?.winnerId
       return winnerId ? { outcome: 'completed', detail: `winner: ${getModelDisplayName(winnerId)}` } : {}

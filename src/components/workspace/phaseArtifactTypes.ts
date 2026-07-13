@@ -1966,6 +1966,8 @@ export function resolveStaticArtifact(
       return findByPredicate(artifact => artifact.artifactType.startsWith('bead_diff:'))
     case 'test-results':
       return findExactType('final_test_report')
+    case 'manual-qa-checklist':
+      return findExactType('manual_qa_checklist')
     case 'commit-summary':
       return findExactType('integration_report')
     case 'pull-request-report':

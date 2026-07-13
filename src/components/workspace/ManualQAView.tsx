@@ -157,7 +157,9 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
   const activeVersion = index?.activeVersion ?? projectedVersion
   const version = selectedVersion ?? activeVersion ?? index?.versions.at(-1)?.version ?? null
-  const roundQuery = useManualQaRound(ticket.id, version)
+  // A generation reservation exposes its version before checklist.yaml exists.
+  // Do not cache that expected pre-artifact 404; historical rounds remain selectable.
+  const roundQuery = useManualQaRound(ticket.id, version, !isGenerating || selectedVersion !== null)
   const { data: round, isLoading: roundLoading, error: roundError } = roundQuery
   const scope = version === null ? 'manual_qa_draft:none' : `manual_qa_draft:v${version}`
   const uiState = useTicketUIState<ManualQaDraft>(ticket.id, scope, version !== null)

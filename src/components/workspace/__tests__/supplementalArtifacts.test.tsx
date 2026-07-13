@@ -45,4 +45,13 @@ describe.concurrent('getSupplementalArtifacts', () => {
     expect(artifacts).not.toContainEqual(expect.objectContaining({ id: 'execution-setup-profile' }))
     expect(artifacts).not.toContainEqual(expect.objectContaining({ id: 'execution-setup-report' }))
   })
+
+  it('exposes the generated Manual QA checklist as the preparation artifact', () => {
+    expect(getSupplementalArtifacts('GENERATING_QA_CHECKLIST')).toEqual([
+      expect.objectContaining({
+        id: 'manual-qa-checklist',
+        label: 'Manual QA Checklist',
+      }),
+    ])
+  })
 })
