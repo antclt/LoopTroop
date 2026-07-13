@@ -243,26 +243,22 @@ export function TicketForm({ onClose }: TicketFormProps) {
               <ChevronDown className={cn('h-4 w-4 transition-transform', isAdvancedOpen && 'rotate-180')} />
             </button>
             {isAdvancedOpen && (
-              <div className="border-t border-border p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5">
-                      <label className="text-sm font-medium">Manual QA checkpoint</label>
-                      <ConfigurationDocsLink
-                        docsPath="/configuration#manual-qa"
-                        label="ticket Manual QA checkpoint"
-                        description="Choose whether this ticket pauses for your verification after final tests. Open the Manual QA documentation."
-                      />
-                    </div>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Effective setting: <span className="font-medium text-foreground">{effectiveManualQa.enabled ? 'Enabled' : 'Disabled'}</span> from {effectiveManualQa.source === 'profile' ? 'global configuration' : effectiveManualQa.source}.
-                    </p>
+              <div className="border-t border-border px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <label className="text-xs font-medium">Manual QA checkpoint</label>
+                    <ConfigurationDocsLink
+                      docsPath="/configuration#manual-qa"
+                      label="ticket Manual QA checkpoint"
+                      description="Choose whether this ticket pauses for your verification after final tests. Open the Manual QA documentation."
+                    />
                   </div>
                   <ManualQaSetting
                     idPrefix="ticket-manual-qa"
                     value={manualQaOverride}
                     onChange={setManualQaOverride}
                     inheritedEnabled={effectiveManualQa.enabled}
+                    compact
                   />
                 </div>
               </div>

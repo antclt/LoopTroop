@@ -111,6 +111,7 @@ describe('TicketForm', () => {
     expect(screen.getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByText(/Effective setting:/)).not.toBeInTheDocument()
     const helpLink = screen.getByRole('link', { name: 'Open documentation for ticket Manual QA checkpoint' })
     expect(helpLink).toHaveAttribute(
       'href',

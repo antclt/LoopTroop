@@ -31,6 +31,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Compacted the new-ticket and Draft-ticket Manual QA controls into a single row, retained their contextual `?` documentation links, and removed redundant effective-setting/source text.
 - Removed the visible `Inherit` choice from Manual QA settings, restored the checkpoint selector for all new and Draft tickets, and made new project/ticket saves persist an explicit Enabled/Disabled value while safely resolving legacy unset values.
 - Updated the Kanban triage control bar to support showing or hiding mock tickets (marked with `(M)`). This setting can be persisted in Kanban filter presets and defaults to showing mocks.
 - Changed `TESTS_PASSED` routing to use the ticket's frozen Manual QA value: disabled/missing locks retain direct integration, while enabled tickets checkpoint final-test effects and enter the generated QA loop.
