@@ -7,8 +7,104 @@ import { useTicketArtifacts } from '@/hooks/useTicketArtifacts'
 import { PhaseAttemptSelector } from './PhaseAttemptSelector'
 import { useTicketPhaseAttempts } from '@/hooks/useTicketPhaseAttempts'
 import { getTicketCouncilMembers } from '@/lib/ticketNormalization'
+import { getModelDisplayName } from '@/components/shared/modelBadgeUtils'
+import {
+  findLatestArtifact,
+  findLatestCompanionArtifact,
+  mergeDraftArtifactContent,
+  mergeVoteArtifactContent,
+} from './artifactCompanionUtils'
+import { isRecord } from '@shared/typeGuards'
 
 import type { Ticket } from '@/hooks/useTickets'
+import type { DBartifact } from '@/hooks/useTicketArtifacts'
+
+interface VoteLike {
+  voterId: string
+  draftId: string
+  totalScore: number
+}
+
+interface CouncilResultLike {
+  votes?: VoteLike[]
+  winnerId?: string
+  voterOutcomes?: Record<string, string>
+}
+
+function getPhaseDomain(phase: string): 'interview' | 'prd' | 'beads' | null {
+  if (phase.includes('INTERVIEW') || phase === 'COUNCIL_DELIBERATING' || phase === 'COMPILING_INTERVIEW') return 'interview'
+  if (phase.includes('PRD')) return 'prd'
+  if (phase.includes('BEADS')) return 'beads'
+  return null
+}
+
+function parseCouncilResult(content: string | null | undefined): CouncilResultLike | null {
+  if (!content) return null
+  try {
+    const parsed = JSON.parse(content) as unknown
+    if (isRecord(parsed) && (parsed.drafts || parsed.votes || parsed.voterOutcomes || parsed.winnerId)) {
+      return parsed as CouncilResultLike
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+interface VoteSummary {
+  completedCount: number
+  total: number
+  leaderLabel: 'Leading' | 'Winner'
+  leaderModelId: string
+  leaderTotal: number
+}
+
+function deriveVoteSummary(phase: string, artifacts: DBartifact[]): VoteSummary | null {
+  const domain = getPhaseDomain(phase)
+  if (!domain) return null
+  const voteArtifact = findLatestArtifact(
+    artifacts,
+    (artifact) => artifact.phase === phase && artifact.artifactType === `${domain}_votes`,
+  )
+  if (!voteArtifact) return null
+  const voteCompanion = findLatestCompanionArtifact(artifacts, `${domain}_votes`, [phase])
+  const draftArtifact = findLatestArtifact(artifacts, (artifact) => artifact.artifactType === `${domain}_drafts`)
+  const draftCompanion = findLatestCompanionArtifact(artifacts, `${domain}_drafts`)
+  const mergedDraft = mergeDraftArtifactContent(draftArtifact?.content, draftCompanion?.content)
+  const mergedVote = mergeVoteArtifactContent(voteArtifact.content, voteCompanion?.content, mergedDraft)
+  const result = parseCouncilResult(mergedVote)
+  if (!result) return null
+  const votes = Array.isArray(result.votes) ? result.votes : []
+  const voterOutcomes = result.voterOutcomes ?? {}
+  const voterIds = [
+    ...Object.keys(voterOutcomes),
+    ...votes.map((vote) => vote.voterId),
+  ].filter((voterId, index, values) => Boolean(voterId) && values.indexOf(voterId) === index)
+  if (voterIds.length === 0) return null
+  const completedCount = voterIds.filter((voterId) => {
+    const outcome = voterOutcomes[voterId]
+    if (outcome === 'completed' || outcome === 'failed' || outcome === 'timed_out' || outcome === 'invalid_output' || outcome === 'pending') {
+      return outcome === 'completed'
+    }
+    return votes.some((vote) => vote.voterId === voterId)
+  }).length
+  const totalsByDraft = new Map<string, number>()
+  for (const vote of votes) {
+    if (!vote.draftId) continue
+    totalsByDraft.set(vote.draftId, (totalsByDraft.get(vote.draftId) ?? 0) + (typeof vote.totalScore === 'number' ? vote.totalScore : 0))
+  }
+  const draftScores = [...totalsByDraft.entries()]
+    .map(([draftId, total]) => ({ draftId, total }))
+    .sort((a, b) => b.total - a.total)
+  const winnerId = typeof result.winnerId === 'string' && result.winnerId.trim() ? result.winnerId.trim() : ''
+  const winnerTotal = winnerId ? totalsByDraft.get(winnerId) : undefined
+  if (winnerId && winnerTotal !== undefined) {
+    return { completedCount, total: voterIds.length, leaderLabel: 'Winner', leaderModelId: winnerId, leaderTotal: winnerTotal }
+  }
+  if (draftScores.length === 0) return null
+  const leader = draftScores[0]!
+  return { completedCount, total: voterIds.length, leaderLabel: 'Leading', leaderModelId: leader.draftId, leaderTotal: leader.total }
+}
 
 interface CouncilViewProps {
   phase: string
@@ -69,6 +165,11 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
     [ticket],
   )
   const councilMemberCount = councilMemberNames.length || 3
+  const isLiveVoting = isVoting && archivedAttemptNumber == null
+  const voteSummary = useMemo(
+    () => (isLiveVoting ? deriveVoteSummary(phase, phaseArtifacts) : null),
+    [isLiveVoting, phase, phaseArtifacts],
+  )
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -97,6 +198,14 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
               {isVerifying && `Winning model verifies ${domain.toLowerCase()} covers all requirements.`}
               {isExpanding && 'Winning model expands the validated implementation plan into execution-ready bead records.'}
             </p>
+            {voteSummary && (
+              <p className="text-[11px] leading-[15px] text-muted-foreground">
+                {voteSummary.completedCount}/{voteSummary.total} complete ·{' '}
+                <span className={voteSummary.leaderLabel === 'Winner' ? 'text-primary font-medium' : undefined}>
+                  {voteSummary.leaderLabel}: {getModelDisplayName(voteSummary.leaderModelId)} · {voteSummary.leaderTotal} pts
+                </span>
+              </p>
+            )}
           </CardContent>
         </Card>
 
