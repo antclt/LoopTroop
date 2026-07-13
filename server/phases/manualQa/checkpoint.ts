@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import {
   cpSync,
   existsSync,
@@ -17,6 +18,7 @@ import {
 } from '../finalTest/fileEffectsAudit'
 import { getTicketByRef, getTicketPaths } from '../../storage/tickets'
 import { FINAL_TEST_FILE_EFFECTS_ERROR_CODE } from '@shared/finalTestFileEffects'
+import { appendManualQaEvent } from './storage'
 
 export class ManualQaCheckpointBlockedError extends Error {
   readonly code = FINAL_TEST_FILE_EFFECTS_ERROR_CODE
@@ -126,8 +128,8 @@ function baselinePath(ticketDir: string, version: number): string {
 }
 
 function driftReceiptPath(ticketDir: string, actionId: string): string {
-  const safeActionId = actionId.replace(/[^a-zA-Z0-9_-]/g, '_')
-  return join(ticketDir, 'manual-qa', `workspace-drift-${safeActionId}.json`)
+  const actionHash = createHash('sha256').update(actionId, 'utf8').digest('hex')
+  return join(ticketDir, 'manual-qa', `workspace-drift-${actionHash}.json`)
 }
 
 function readReceipt(path: string): ManualQaDriftReceipt | null {
@@ -137,6 +139,23 @@ function readReceipt(path: string): ManualQaDriftReceipt | null {
   } catch {
     throw new Error(`Manual QA drift receipt is invalid: ${path}`)
   }
+}
+
+function appendDriftEvent(ticketDir: string, ticketExternalId: string, receipt: ManualQaDriftReceipt): void {
+  appendManualQaEvent(ticketDir, {
+    schemaVersion: 1,
+    eventId: `drift-${receipt.decision}-${createHash('sha256').update(receipt.actionId).digest('hex').slice(0, 24)}`,
+    eventType: receipt.decision === 'include' ? 'drift_included' : 'drift_discarded',
+    ticketId: ticketExternalId,
+    version: receipt.version,
+    actionId: receipt.actionId,
+    createdAt: receipt.createdAt,
+    data: {
+      files: receipt.files,
+      previousHead: receipt.previousHead,
+      resultingHead: receipt.resultingHead,
+    },
+  })
 }
 
 function captureTrackedSignatures(worktreePath: string): Record<string, string> {
@@ -239,9 +258,13 @@ function discardExactFiles(worktreePath: string, files: string[], dirtyFiles: Fi
 function commitExactFiles(worktreePath: string, files: string[], message: string): string | null {
   const normalizedFiles = uniqueProjectPaths(files)
   if (normalizedFiles.length === 0) return null
-  runGit(worktreePath, ['add', '-A', '--', ...normalizedFiles.map(literalPathspec)], true)
-  const staged = runGit(worktreePath, ['diff', '--cached', '--name-only', '--', ...EXCLUDED_PATHSPECS], true)
+  const pathspecs = normalizedFiles.map(literalPathspec)
+  runGit(worktreePath, ['add', '-A', '--', ...pathspecs], true)
+  const staged = runGit(worktreePath, ['diff', '--cached', '--name-only', '--', ...pathspecs], true)
   if (!staged) return null
+  // `git commit` normally includes every path already staged in the worktree.
+  // Restrict the commit itself so unrelated staged application/runtime residue
+  // cannot leak into the clean Manual QA checkpoint before it is quarantined.
   runGit(worktreePath, [
     '-c',
     'user.name=LoopTroop',
@@ -251,6 +274,9 @@ function commitExactFiles(worktreePath: string, files: string[], message: string
     '--no-verify',
     '-m',
     message,
+    '--only',
+    '--',
+    ...pathspecs,
   ], true)
   return runGit(worktreePath, ['rev-parse', 'HEAD'])
 }
@@ -318,7 +344,13 @@ function applyManualQaDriftDecision(
   if (!actionId.trim()) throw new Error('Manual QA workspace decision requires an action ID')
   const receiptPath = driftReceiptPath(paths.ticketDir, actionId)
   const existing = readReceipt(receiptPath)
-  if (existing) return existing
+  if (existing) {
+    if (existing.actionId !== actionId || existing.version !== version || existing.decision !== decision) {
+      throw new Error('Manual QA workspace action ID was already used for another decision.')
+    }
+    appendDriftEvent(paths.ticketDir, ticket.externalId, existing)
+    return existing
+  }
 
   const requestedFiles = uniqueProjectPaths(files)
   const currentDirty = captureFinalTestDirtyFiles(paths.worktreePath)
@@ -389,6 +421,7 @@ function applyManualQaDriftDecision(
     createdAt: new Date().toISOString(),
   }
   atomicWriteJson(receiptPath, receipt)
+  appendDriftEvent(paths.ticketDir, ticket.externalId, receipt)
   return receipt
 }
 

@@ -683,7 +683,7 @@ Alias collisions fail instead of choosing one value. Repairs may restore YAML st
 
 PRD criterion refs are validated against the frozen approved PRD after parsing. The canonical form is `<epic-id>/<story-id>/AC-<1-based-index>`, with a required `full | partial` level. Invalid refs use the normal structured-output retry path. After validation, coverage is deterministic code: any valid full reference means covered, partial-only means partially covered, and no valid references means uncovered. Gaps remain advisory and no second model response is requested.
 
-Later rounds reuse stable `lineageId` values and may reference prior item IDs. The version reservation is allocated before generation, so structured retries/restarts reuse the same `vN`; a valid existing checklist plus coverage advances idempotently without normalization or another model call.
+Later rounds reuse stable `lineageId` values and may reference prior item IDs. Code rejects unknown/duplicate prior references, changed lineage, `previously_passed` items whose prior result did not pass, retained waivers not marked for recheck, and any failed prior item omitted from the next checklist. New items must be `pending`; referenced affected items must be `pending_recheck`. The version reservation is allocated before generation, so structured retries/restarts reuse the same `vN`; a valid existing checklist plus coverage advances idempotently without normalization or another model call.
 
 ---
 

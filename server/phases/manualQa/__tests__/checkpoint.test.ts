@@ -13,6 +13,7 @@ import {
   includeManualQaWorkspaceDrift,
   prepareManualQaCheckpoint,
 } from '../checkpoint'
+import { readManualQaEvents } from '../storage'
 
 const repoManager = createTestRepoManager('manual-qa-checkpoint-')
 
@@ -68,6 +69,19 @@ describe('Manual QA workspace checkpoints', () => {
     expect(result.baseline.trackedSignatures['README.md']).toMatch(/^[0-9a-f]{40}$/)
   })
 
+  it('does not include unrelated pre-staged residue in the candidate checkpoint', () => {
+    const setup = prepareFixture()
+    git(setup.paths.worktreePath, 'add', 'final-test.tmp')
+
+    const result = prepareManualQaCheckpoint(setup.ticket.id, 1)
+
+    expect(result.checkpointCommit).toMatch(/^[0-9a-f]{40}$/)
+    expect(git(setup.paths.worktreePath, 'show', '--format=', '--name-only', result.checkpointCommit!))
+      .toBe('README.md')
+    expect(existsSync(resolve(setup.paths.worktreePath, 'final-test.tmp'))).toBe(false)
+    expect(git(setup.paths.worktreePath, 'status', '--porcelain')).toBe('')
+  })
+
   it('includes dirty drift in a checkpoint and discards only explicitly audited drift', () => {
     const setup = prepareFixture()
     prepareManualQaCheckpoint(setup.ticket.id, 1)
@@ -75,6 +89,7 @@ describe('Manual QA workspace checkpoints', () => {
     writeFileSync(resolve(setup.paths.worktreePath, 'README.md'), '# User accepted application change\n')
     const included = includeManualQaWorkspaceDrift(setup.ticket.id, 1, ['README.md'], 'include-drift')
     expect(included.decision).toBe('include')
+    expect(includeManualQaWorkspaceDrift(setup.ticket.id, 1, ['README.md'], 'include-drift')).toEqual(included)
     expect(captureFinalTestDirtyFiles(setup.paths.worktreePath)).toEqual([])
 
     const acceptedContent = readFileSync(resolve(setup.paths.worktreePath, 'README.md'), 'utf8')
@@ -83,6 +98,8 @@ describe('Manual QA workspace checkpoints', () => {
     expect(discarded.decision).toBe('discard')
     expect(readFileSync(resolve(setup.paths.worktreePath, 'README.md'), 'utf8')).toBe(acceptedContent)
     expect(captureFinalTestDirtyFiles(setup.paths.worktreePath)).toEqual([])
+    expect(readManualQaEvents(setup.paths.ticketDir).map((event) => event.eventType))
+      .toEqual(['drift_included', 'drift_discarded'])
   })
 
   it('reverts an explicitly audited committed drift path instead of accepting a changed HEAD silently', () => {

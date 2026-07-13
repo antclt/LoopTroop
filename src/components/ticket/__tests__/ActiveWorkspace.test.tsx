@@ -187,4 +187,17 @@ describe('ActiveWorkspace', () => {
 
     expect(await screen.findByText('manual qa view:readonly')).toBeInTheDocument()
   })
+
+  it('keeps a visited Manual QA round reviewable after a later cancellation', async () => {
+    renderWithProviders(
+      <ActiveWorkspace
+        ticket={makeTicket({ status: 'CANCELED', visitedStatuses: ['WAITING_MANUAL_QA', 'CODING'] })}
+        selectedPhase="WAITING_MANUAL_QA"
+        previousStatus="CODING"
+        reviewCutoffStatus="CODING"
+      />,
+    )
+
+    expect(await screen.findByText('manual qa view:readonly')).toBeInTheDocument()
+  })
 })

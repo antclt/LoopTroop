@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { rmSync } from 'node:fs'
 import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
@@ -7,10 +8,12 @@ import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { attachProject } from '../projects'
 import {
   createTicket,
+  createManualQaImprovementTicket,
   DISPLAY_ONLY_MOCK_BRANCH_NAME,
   findProjectExecutionBandConflict,
   getTicketByRef,
   getTicketPaths,
+  insertPhaseArtifact,
   listNonTerminalTickets,
   lockTicketStartConfiguration,
   patchTicket,
@@ -152,6 +155,31 @@ describe('ticket start configuration locking', () => {
     expect(getTicketPaths(ticket.id)?.aiLogPath).toBe(getTicketAiLogPath(repoDir, ticket.externalId))
   })
 
+  it('recovers the same improvement ticket after database creation but before origin files exist', () => {
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'Manual QA recovery', shortname: 'MQR' })
+    const first = createManualQaImprovementTicket({
+      projectId: project.id,
+      originId: 'manual-qa:MQR-1:v1:improvement-one',
+      actionId: 'submit-one',
+      title: 'Follow-up improvement',
+      description: 'Keep the selected filter.',
+    })
+    // This return point represents the crash window before operations.ts writes
+    // `.ticket/meta/manual-qa-origin.json` and copies evidence.
+    rmSync(getTicketPaths(first.id)!.ticketDir, { recursive: true, force: true })
+    const restored = createManualQaImprovementTicket({
+      projectId: project.id,
+      originId: 'manual-qa:MQR-1:v1:improvement-one',
+      actionId: 'submit-one',
+      title: 'Follow-up improvement',
+      description: 'Keep the selected filter.',
+    })
+    expect(restored.id).toBe(first.id)
+    expect(restored.externalId).toBe(first.externalId)
+    expect(readTicketMeta(repoDir, restored.externalId).externalId).toBe(restored.externalId)
+  })
+
   it('projects loop-aware visited statuses with a monotonic workflow revision', () => {
     const repoDir = lockRepoManager.createRepo()
     const project = attachProject({ folderPath: repoDir, name: 'LoopTroop', shortname: 'VIS' })
@@ -173,6 +201,53 @@ describe('ticket start configuration locking', () => {
       'WAITING_MANUAL_QA',
       'CODING',
     ])
+  })
+
+  it('decodes append-only Manual QA artifact envelopes in public and runtime projections', () => {
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'LoopTroop', shortname: 'QAP' })
+    const ticket = createTicket({ projectId: project.id, title: 'Project Manual QA outcome' })
+    insertPhaseArtifact(ticket.id, {
+      phase: 'RUNNING_FINAL_TEST',
+      artifactType: 'final_test_report',
+      content: JSON.stringify({ status: 'passed', passed: true }),
+    })
+    insertPhaseArtifact(ticket.id, {
+      phase: 'WAITING_MANUAL_QA',
+      artifactType: 'manual_qa_summary',
+      content: JSON.stringify({
+        idempotencyKey: '2:created_fixes',
+        value: { version: 2, outcome: 'created_fixes' },
+      }),
+    })
+
+    const projected = getTicketByRef(ticket.id)
+    expect(projected?.manualQa).toMatchObject({
+      activeVersion: null,
+      completedRoundCount: 1,
+      latestOutcome: 'created_fixes',
+    })
+    expect(projected?.runtime.finalTestStatus).toBe('pending')
+
+    insertPhaseArtifact(ticket.id, {
+      phase: 'GENERATING_QA_CHECKLIST',
+      artifactType: 'manual_qa_generation_reservation',
+      content: JSON.stringify({ version: 3, state: 'reserved' }),
+    })
+    expect(getTicketByRef(ticket.id)?.manualQa).toMatchObject({
+      activeVersion: 3,
+      artifactAvailability: { checklist: false, results: false, coverage: false, summary: false },
+    })
+
+    insertPhaseArtifact(ticket.id, {
+      phase: 'GENERATING_QA_CHECKLIST',
+      artifactType: 'manual_qa_checklist',
+      content: JSON.stringify({ version: 3, artifact: 'manual_qa_checklist' }),
+    })
+    expect(getTicketByRef(ticket.id)?.manualQa).toMatchObject({
+      activeVersion: 3,
+      artifactAvailability: { checklist: true, results: false, coverage: false, summary: false },
+    })
   })
 
   it('allows ticket Manual QA overrides only while Draft', () => {

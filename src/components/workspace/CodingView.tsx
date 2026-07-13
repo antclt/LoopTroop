@@ -1531,7 +1531,7 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                                   ? manualQaEvidenceUrl(viewedBead.qaOrigin.sourceTicketId, viewedBead.qaOrigin.version, source.itemId, evidence.id)
                                   : ''
                                 const evidenceUrl = typeof evidence.url === 'string' ? evidence.url : apiEvidenceUrl
-                                const safePreview = (evidence.previewable === true || ('inlinePreview' in evidence && evidence.inlinePreview === true)) && evidenceUrl && ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'].includes(evidenceType)
+                                const safePreview = evidenceUrl && ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'].includes(evidenceType)
                                 const previewUrl = apiEvidenceUrl ? `${apiEvidenceUrl}?inline=true` : evidenceUrl
                                 return evidenceUrl ? <a key={evidence.id ?? `${evidenceName}:${index}`} href={evidenceUrl} target="_blank" rel="noreferrer" className="rounded border border-border bg-background p-1 text-[10px] text-primary hover:underline">{safePreview && <img src={previewUrl} alt={evidenceName} className="mb-1 h-16 max-w-28 object-contain" />}{evidenceName}</a> : <Badge key={`${evidenceName}:${index}`} variant="outline" className="text-[10px]">{evidenceName}</Badge>
                               })}

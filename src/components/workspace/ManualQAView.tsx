@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Download, FileUp, Loader2, Plus, Save, ShieldCheck, SkipForward, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileUp, Loader2, Plus, RefreshCw, Save, ShieldCheck, SkipForward, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -23,7 +23,7 @@ import {
 } from '@/hooks/useManualQA'
 import { cn } from '@/lib/utils'
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
-import { buildCanonicalManualQaDraft, validateManualQaItem } from '@/lib/manualQaDraft'
+import { buildCanonicalManualQaDraft, composeManualQaImprovementPreview, validateManualQaItem } from '@/lib/manualQaDraft'
 
 interface ManualQAViewProps {
   ticket: Ticket
@@ -72,7 +72,10 @@ function evidenceSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
 }
 
-function ManualQaGeneration() {
+function ManualQaGeneration({ versions, onSelectVersion }: {
+  versions: Array<{ version: number; outcome?: string | null; status: string }>
+  onSelectVersion: (version: number) => void
+}) {
   return (
     <div className="flex h-full items-center justify-center p-6">
       <Card className="max-w-xl">
@@ -84,6 +87,20 @@ function ManualQaGeneration() {
               LoopTroop is generating user-run verification steps from the approved ticket, final tests, and focused implementation evidence. No action is needed, and LoopTroop will not start or control your application.
             </p>
           </div>
+          {versions.length > 0 && (
+            <div className="w-full border-t border-border pt-4">
+              <p className="mb-2 text-xs text-muted-foreground">Previous rounds remain available while the next checklist is generated.</p>
+              <select
+                aria-label="Open historical Manual QA round"
+                defaultValue=""
+                onChange={(event) => event.target.value && onSelectVersion(Number(event.target.value))}
+                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs"
+              >
+                <option value="" disabled>Open a previous round…</option>
+                {versions.map((entry) => <option key={entry.version} value={entry.version}>Round v{entry.version} · {entry.outcome ?? entry.status}</option>)}
+              </select>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -116,14 +133,23 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [skipOpen, setSkipOpen] = useState(false)
   const [improvementItemId, setImprovementItemId] = useState<string | null>(null)
   const [linkDrafts, setLinkDrafts] = useState<Record<string, { url: string; label: string; error?: string }>>({})
+  const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string | undefined>>({})
   const draftRef = useRef(draft)
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const latestDraftRevisionRef = useRef(0)
+  const operationActionIdsRef = useRef(new Map<string, string>())
   draftRef.current = draft
 
   const historical = Boolean(version !== null && activeVersion !== null && version !== activeVersion)
     || round?.readOnly === true
     || readOnly
+  const submissionInProgress = Boolean(
+    !historical
+    && round?.operation?.actionId
+    && round.operation.status !== 'complete',
+  )
+  const resumableOperationType = submissionInProgress ? (round?.operation?.operationType ?? 'submit') : null
+  const editable = !historical && !submissionInProgress
   const checklist = round?.checklist
   const checklistHash = round?.checklistHash ?? ''
   const expectedDraftRevision = getUiRevision(uiState.data, round?.draftRevision ?? 0)
@@ -146,7 +172,11 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   }, [expectedDraftRevision, version])
 
   const persistDraft = useCallback((keepalive = false) => {
-    if (historical || version === null || !dirty) return Promise.resolve()
+    if (!editable || version === null || !dirty) {
+      return saveState === 'conflict'
+        ? Promise.reject(new Error('Manual QA draft conflict; reload the latest draft before continuing.'))
+        : Promise.resolve()
+    }
     setSaveState('saving')
     const current = draftRef.current
     const run = async () => {
@@ -158,21 +188,23 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       if (saved.conflict) throw new Error('Manual QA draft conflict')
       latestDraftRevisionRef.current = saved.revision
     }
-    saveQueueRef.current = saveQueueRef.current.then(run, run).then(() => {
-      setDirty(false)
+    const pending = saveQueueRef.current.then(run, run).then(() => {
+      if (draftRef.current === current) setDirty(false)
       setSaveState('saved')
     }).catch((error) => {
       const message = error instanceof Error ? error.message.toLowerCase() : ''
       setSaveState(message.includes('conflict') || message.includes('stale') ? 'conflict' : 'error')
+      throw error
     })
-    return saveQueueRef.current
-  }, [dirty, historical, saveUiState, scope, ticket.id, version])
+    saveQueueRef.current = pending.catch(() => undefined)
+    return pending
+  }, [dirty, editable, saveState, saveUiState, scope, ticket.id, version])
 
   useEffect(() => {
-    if (!dirty || historical) return
+    if (!dirty || !editable) return
     const timer = window.setTimeout(() => { void persistDraft() }, 5000)
     return () => window.clearTimeout(timer)
-  }, [dirty, historical, persistDraft])
+  }, [dirty, editable, persistDraft])
 
   useEffect(() => {
     const flush = () => { void persistDraft(true) }
@@ -196,6 +228,21 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     setSaveState('idle')
   }, [])
 
+  const appendEvidenceId = useCallback((itemId: string, evidenceId: string) => {
+    setDraft((current) => {
+      const existing = resultFor(current, itemId)
+      return {
+        ...current,
+        results: {
+          ...current.results,
+          [itemId]: { ...existing, evidenceIds: [...new Set([...(existing.evidenceIds ?? []), evidenceId])] },
+        },
+      }
+    })
+    setDirty(true)
+    setSaveState('idle')
+  }, [])
+
   const validation = useMemo(() => Object.fromEntries(
     items.map((item) => [item.id, validateManualQaItem(item, resultFor(draft, item.id))]),
   ), [draft, items])
@@ -204,13 +251,38 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const incompleteRequired = items.filter((item) => item.required && !['pass', 'fail', 'waive'].includes(resultFor(draft, item.id).status)).length
   const improvementItem = items.find((item) => item.id === improvementItemId) ?? null
 
-  const mutationBase = useCallback(() => ({
+  const mutationBase = useCallback((actionId = newManualQaActionId('manual-qa')) => ({
     ticketId: ticket.id,
     version: version!,
-    actionId: newManualQaActionId('manual-qa'),
+    actionId,
     expectedChecklistHash: checklistHash,
     expectedDraftRevision: latestDraftRevisionRef.current,
   }), [checklistHash, ticket.id, version])
+
+  const resumableActionId = useCallback((kind: 'submit' | 'skip') => {
+    const key = `${version}:${kind}`
+    const journalActionId = round?.operation?.status !== 'complete'
+      && (round?.operation?.operationType ?? 'submit') === kind
+      ? round?.operation?.actionId
+      : undefined
+    if (journalActionId) operationActionIdsRef.current.set(key, journalActionId)
+    const existing = operationActionIdsRef.current.get(key)
+    if (existing) return existing
+    const created = newManualQaActionId(`manual-qa-${kind}`)
+    operationActionIdsRef.current.set(key, created)
+    return created
+  }, [round?.operation?.actionId, round?.operation?.operationType, round?.operation?.status, version])
+
+  const reloadConflictingDraft = async () => {
+    const refreshed = await uiState.refetch()
+    const restored = extractSavedDraft(refreshed.data?.data) ?? round?.draft ?? emptyDraft()
+    setDraft(restored)
+    setSkipReason(restored.skipReason ?? '')
+    latestDraftRevisionRef.current = getUiRevision(refreshed.data, round?.draftRevision ?? 0)
+    setDirty(false)
+    setSaveState('idle')
+    setSubmitError(null)
+  }
 
   const handleSubmit = async () => {
     if (version === null || allErrors.length > 0 || !round) return
@@ -218,15 +290,24 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     try {
       await persistDraft()
       const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, round, draftRef.current, latestDraftRevisionRef.current)
-      await submit.mutateAsync({ ...mutationBase(), draft: canonicalDraft })
+      await submit.mutateAsync({ ...mutationBase(resumableActionId('submit')), draft: canonicalDraft })
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Manual QA submission failed.')
     }
   }
 
   const handleSkip = async () => {
-    if (version === null || !round) return
+    if (version === null || !round || (submissionInProgress && resumableOperationType !== 'skip')) return
     setSubmitError(null)
+    if (submissionInProgress) {
+      try {
+        const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, round, draftRef.current, latestDraftRevisionRef.current)
+        await skip.mutateAsync({ ...mutationBase(resumableActionId('skip')), reason: skipReason.trim() || undefined, draft: canonicalDraft })
+      } catch (error) {
+        setSubmitError(error instanceof Error ? error.message : 'Manual QA skip recovery failed.')
+      }
+      return
+    }
     const skippedDraft = { ...draft, skipReason: skipReason.trim() || undefined }
     setDraft(skippedDraft)
     try {
@@ -234,14 +315,16 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       if (saved.conflict) throw new Error('Manual QA draft conflict')
       latestDraftRevisionRef.current = saved.revision
       const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, round, skippedDraft, saved.revision)
-      await skip.mutateAsync({ ...mutationBase(), reason: skipReason.trim() || undefined, draft: canonicalDraft })
+      await skip.mutateAsync({ ...mutationBase(resumableActionId('skip')), reason: skipReason.trim() || undefined, draft: canonicalDraft })
       setSkipOpen(false)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Manual QA skip failed.')
     }
   }
 
-  if (isGenerating || indexLoading || (version !== null && roundLoading)) return <ManualQaGeneration />
+  if (indexLoading || (isGenerating && selectedVersion === null) || (version !== null && roundLoading)) {
+    return <ManualQaGeneration versions={(index?.versions ?? []).filter((entry) => entry.version !== activeVersion)} onSelectVersion={setSelectedVersion} />
+  }
 
   const error = indexError ?? roundError
   if (error || !round || !checklist || version === null) {
@@ -272,17 +355,23 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {(index?.versions.length ?? 0) > 1 && (
+            {(isGenerating || (index?.versions.length ?? 0) > 1) && (
               <select
                 aria-label="Manual QA version"
                 value={version}
-                onChange={(event) => setSelectedVersion(Number(event.target.value))}
+                onChange={(event) => {
+                  const selected = Number(event.target.value)
+                  setSelectedVersion(isGenerating && selected === activeVersion ? null : selected)
+                }}
                 className="rounded-md border border-input bg-background px-2 py-1.5 text-xs"
               >
+                {isGenerating && activeVersion !== null && !index?.versions.some((entry) => entry.version === activeVersion) && (
+                  <option value={activeVersion}>Round v{activeVersion} · generating</option>
+                )}
                 {index?.versions.map((entry) => <option key={entry.version} value={entry.version}>Round v{entry.version} · {entry.outcome ?? entry.status}</option>)}
               </select>
             )}
-            {!historical && (
+            {editable && (
               <span className={cn('text-xs', saveState === 'error' || saveState === 'conflict' ? 'text-destructive' : 'text-muted-foreground')}>
                 {saveState === 'saving' && 'Saving…'}
                 {saveState === 'saved' && 'Saved'}
@@ -290,6 +379,11 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 {saveState === 'error' && 'Autosave failed'}
                 {saveState === 'idle' && dirty && 'Unsaved changes'}
               </span>
+            )}
+            {editable && saveState === 'conflict' && (
+              <Button type="button" size="sm" variant="outline" onClick={() => void reloadConflictingDraft()}>
+                <RefreshCw className="mr-1 h-3.5 w-3.5" />Reload latest draft
+              </Button>
             )}
           </div>
         </div>
@@ -305,7 +399,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 <ul className="mt-2 max-h-28 overflow-y-auto rounded border border-border bg-background p-2 font-mono text-xs">
                   {round.workspaceDrift.files.map((file) => <li key={file.path}>{file.path}</li>)}
                 </ul>
-                {!historical && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => includeDrift.mutate(mutationBase())} disabled={includeDrift.isPending || discardDrift.isPending}>Include in checkpoint</Button><Button size="sm" variant="outline" onClick={() => discardDrift.mutate(mutationBase())} disabled={includeDrift.isPending || discardDrift.isPending}>Discard audited changes</Button></div>}
+                {editable && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => includeDrift.mutate(mutationBase())} disabled={includeDrift.isPending || discardDrift.isPending}>Include in checkpoint</Button><Button size="sm" variant="outline" onClick={() => discardDrift.mutate(mutationBase())} disabled={includeDrift.isPending || discardDrift.isPending}>Discard audited changes</Button></div>}
               </CardContent>
             </Card>
           )}
@@ -329,7 +423,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             const errors = validation[item.id] ?? []
             const evidence = round.evidence.filter((file) => file.itemId === item.id)
             return (
-              <Card key={item.id} className={cn(errors.length > 0 && !historical && 'border-destructive/50')}>
+              <Card key={item.id} className={cn(errors.length > 0 && editable && 'border-destructive/50')}>
                 <CardHeader className="space-y-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -354,25 +448,40 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                     <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Result</h5>
                     <div className="flex flex-wrap gap-2">
                       {RESULT_OPTIONS.filter((option) => !item.required || option.value !== 'improvement').map((option) => (
-                        <button key={option.value} type="button" data-selected={result.status === option.value} disabled={historical} onClick={() => { updateResult(item.id, { status: option.value }); if (option.value === 'improvement') setImprovementItemId(item.id) }} className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}>{option.label}</button>
+                        <button key={option.value} type="button" data-selected={result.status === option.value} disabled={!editable} onClick={() => { updateResult(item.id, { status: option.value }); if (option.value === 'improvement') setImprovementItemId(item.id) }} className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}>{option.label}</button>
                       ))}
-                      {!item.required && result.status !== 'improvement' && !historical && <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { updateResult(item.id, { status: 'improvement' }); setImprovementItemId(item.id) }}><Plus className="mr-1 h-3 w-3" />Improvement</Button>}
+                      {!item.required && result.status !== 'improvement' && editable && <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { updateResult(item.id, { status: 'improvement' }); setImprovementItemId(item.id) }}><Plus className="mr-1 h-3 w-3" />Improvement</Button>}
                     </div>
                   </div>
 
-                  {result.status === 'fail' && <div><label className="text-xs font-medium">Observed behavior <span className="text-destructive">*</span></label><textarea disabled={historical} value={result.observation ?? ''} onChange={(event) => updateResult(item.id, { observation: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="What happened, and how did it differ from the expected result?" /><label className="mt-2 block text-xs font-medium">Merge group <span className="font-normal text-muted-foreground">(optional; matching names create one fix bead)</span></label><input disabled={historical} value={result.mergeGroup ?? ''} onChange={(event) => updateResult(item.id, { mergeGroup: event.target.value || null })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. checkout-errors" /></div>}
-                  {result.status === 'waive' && <div><label className="text-xs font-medium">Waiver reason <span className="text-destructive">*</span></label><textarea disabled={historical} value={result.waiverReason ?? ''} onChange={(event) => updateResult(item.id, { waiverReason: event.target.value })} className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
-                  {result.status === 'pass' && <div><label className="text-xs font-medium">Notes <span className="font-normal text-muted-foreground">(optional)</span></label><textarea disabled={historical} value={result.note ?? ''} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
-                  {result.status === 'improvement' && <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-sm font-medium">{result.improvement?.title || 'Improvement draft incomplete'}</p><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{result.improvement?.description || 'Add a reviewed title and description before submission.'}</p></div>{!historical && <Button size="sm" variant="outline" onClick={() => setImprovementItemId(item.id)}>Edit draft</Button>}</div></div>}
+                  {result.status === 'fail' && <div><label className="text-xs font-medium">Observed behavior <span className="text-destructive">*</span></label><textarea disabled={!editable} value={result.observation ?? ''} onChange={(event) => updateResult(item.id, { observation: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="What happened, and how did it differ from the expected result?" /><label className="mt-2 block text-xs font-medium">Merge group <span className="font-normal text-muted-foreground">(optional; matching names create one fix bead)</span></label><input disabled={!editable} value={result.mergeGroup ?? ''} onChange={(event) => updateResult(item.id, { mergeGroup: event.target.value || null })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. checkout-errors" /></div>}
+                  {result.status === 'waive' && <div><label className="text-xs font-medium">Waiver reason <span className="text-destructive">*</span></label><textarea disabled={!editable} value={result.waiverReason ?? ''} onChange={(event) => updateResult(item.id, { waiverReason: event.target.value })} className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
+                  {result.status === 'pass' && <div><label className="text-xs font-medium">Notes <span className="font-normal text-muted-foreground">(optional)</span></label><textarea disabled={!editable} value={result.note ?? ''} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
+                  {result.status === 'improvement' && <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-sm font-medium">{result.improvement?.title || 'Improvement draft incomplete'}</p><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{result.improvement?.description || 'Add a reviewed title and description before submission.'}</p></div>{editable && <Button size="sm" variant="outline" onClick={() => setImprovementItemId(item.id)}>Edit draft</Button>}</div></div>}
 
                   <section>
-                    <div className="flex items-center justify-between gap-2"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h5>{!historical && <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-2 py-1 text-xs hover:bg-accent"><FileUp className="mr-1 h-3 w-3" />Add files<input type="file" multiple className="sr-only" onChange={async (event) => { const files = Array.from(event.target.files ?? []); const evidenceIds = [...(result.evidenceIds ?? [])]; for (const file of files) { const saved = await uploadEvidence.mutateAsync({ ...mutationBase(), itemId: item.id, file }); evidenceIds.push(saved.id) } updateResult(item.id, { evidenceIds: [...new Set(evidenceIds)] }); event.target.value = '' }} /></label>}</div>
-                    {evidence.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No evidence attached. Any file type is accepted up to 250 MiB per file.</p> : <div className="mt-2 grid gap-2 sm:grid-cols-2">{evidence.map((file) => { const downloadUrl = file.downloadUrl ?? manualQaEvidenceUrl(ticket.id, version, item.id, file.id); const previewUrl = manualQaEvidenceUrl(ticket.id, version, item.id, file.id, true); const canPreview = file.previewable && SAFE_RASTER_MEDIA_TYPES.has(file.mediaType); return <div key={file.id} className="overflow-hidden rounded-md border border-border bg-muted/20">{canPreview && <a href={downloadUrl} target="_blank" rel="noreferrer"><img src={previewUrl} alt={file.name} className="max-h-40 w-full object-contain bg-black/5" /></a>}<div className="flex items-center gap-2 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{file.name}</p><p className="text-[10px] text-muted-foreground">{evidenceSize(file.size)} · {file.mediaType || 'unknown type'}</p></div><a href={downloadUrl} download={file.name} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${file.name}`}><Download className="h-3.5 w-3.5" /></a>{!historical && <button type="button" className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove ${file.name}`} onClick={async () => { await removeEvidence.mutateAsync({ ...mutationBase(), itemId: item.id, evidenceId: file.id }); updateResult(item.id, { evidenceIds: (result.evidenceIds ?? []).filter((id) => id !== file.id) }) }}><Trash2 className="h-3.5 w-3.5" /></button>}</div></div> })}</div>}
-                    {(result.links?.length ?? 0) > 0 && <div className="mt-2 space-y-1">{result.links?.map((link) => <div key={link.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"><a href={link.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-primary hover:underline">{link.label || link.url}</a>{!historical && <button type="button" aria-label={`Remove link ${link.label || link.url}`} onClick={() => updateResult(item.id, { links: result.links?.filter((entry) => entry.id !== link.id) })} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}</div>}
-                    {!historical && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input aria-label={`Evidence link for ${item.id}`} value={linkDrafts[item.id]?.url ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { label: '' }), url: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="https://…" /><input aria-label={`Evidence link label for ${item.id}`} value={linkDrafts[item.id]?.label ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { url: '' }), label: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="Label (optional)" /><Button type="button" size="sm" variant="outline" onClick={() => { const pending = linkDrafts[item.id] ?? { url: '', label: '' }; try { const parsed = new URL(pending.url); if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(); const link = { id: newManualQaActionId('link'), url: parsed.toString(), label: pending.label.trim() || undefined }; updateResult(item.id, { links: [...(result.links ?? []), link] }); setLinkDrafts((current) => ({ ...current, [item.id]: { url: '', label: '' } })) } catch { setLinkDrafts((current) => ({ ...current, [item.id]: { ...pending, error: 'Use an HTTP or HTTPS link.' } })) } }}>Add link</Button>{linkDrafts[item.id]?.error && <p role="alert" className="text-xs text-destructive sm:col-span-3">{linkDrafts[item.id]?.error}</p>}</div>}
+                    <div className="flex items-center justify-between gap-2"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h5>{editable && <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-2 py-1 text-xs hover:bg-accent"><FileUp className="mr-1 h-3 w-3" />Add files<input type="file" multiple className="sr-only" onChange={async (event) => {
+                      const files = Array.from(event.target.files ?? [])
+                      setEvidenceErrors((current) => ({ ...current, [item.id]: undefined }))
+                      const failures: string[] = []
+                      for (const file of files) {
+                        try {
+                          const saved = await uploadEvidence.mutateAsync({ ...mutationBase(), itemId: item.id, file })
+                          appendEvidenceId(item.id, saved.id)
+                        } catch (error) {
+                          failures.push(`${file.name}: ${error instanceof Error ? error.message : 'upload failed'}`)
+                        }
+                      }
+                      if (failures.length > 0) setEvidenceErrors((current) => ({ ...current, [item.id]: failures.join(' ') }))
+                      event.target.value = ''
+                    }} /></label>}</div>
+                    {evidence.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No evidence attached. Any file type is accepted up to 250 MiB per file.</p> : <div className="mt-2 grid gap-2 sm:grid-cols-2">{evidence.map((file) => { const downloadUrl = file.downloadUrl ?? manualQaEvidenceUrl(ticket.id, version, item.id, file.id); const previewUrl = manualQaEvidenceUrl(ticket.id, version, item.id, file.id, true); const canPreview = file.previewable && SAFE_RASTER_MEDIA_TYPES.has(file.mediaType); return <div key={file.id} className="overflow-hidden rounded-md border border-border bg-muted/20">{canPreview && <a href={downloadUrl} target="_blank" rel="noreferrer"><img src={previewUrl} alt={file.name} className="max-h-40 w-full object-contain bg-black/5" /></a>}<div className="flex items-center gap-2 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{file.name}</p><p className="text-[10px] text-muted-foreground">{evidenceSize(file.size)} · {file.mediaType || 'unknown type'}</p></div><a href={downloadUrl} download={file.name} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${file.name}`}><Download className="h-3.5 w-3.5" /></a>{editable && <button type="button" className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove ${file.name}`} onClick={async () => { await removeEvidence.mutateAsync({ ...mutationBase(), itemId: item.id, evidenceId: file.id }); updateResult(item.id, { evidenceIds: (result.evidenceIds ?? []).filter((id) => id !== file.id) }) }}><Trash2 className="h-3.5 w-3.5" /></button>}</div></div> })}</div>}
+                    {(result.links?.length ?? 0) > 0 && <div className="mt-2 space-y-1">{result.links?.map((link) => <div key={link.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"><a href={link.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-primary hover:underline">{link.label || link.url}</a>{editable && <button type="button" aria-label={`Remove link ${link.label || link.url}`} onClick={() => updateResult(item.id, { links: result.links?.filter((entry) => entry.id !== link.id) })} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}</div>}
+                    {editable && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input aria-label={`Evidence link for ${item.id}`} value={linkDrafts[item.id]?.url ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { label: '' }), url: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="https://…" /><input aria-label={`Evidence link label for ${item.id}`} value={linkDrafts[item.id]?.label ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { url: '' }), label: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="Label (optional)" /><Button type="button" size="sm" variant="outline" onClick={() => { const pending = linkDrafts[item.id] ?? { url: '', label: '' }; try { const parsed = new URL(pending.url); if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(); const link = { id: newManualQaActionId('link'), url: parsed.toString(), label: pending.label.trim() || undefined }; updateResult(item.id, { links: [...(result.links ?? []), link] }); setLinkDrafts((current) => ({ ...current, [item.id]: { url: '', label: '' } })) } catch { setLinkDrafts((current) => ({ ...current, [item.id]: { ...pending, error: 'Use an HTTP or HTTPS link.' } })) } }}>Add link</Button>{linkDrafts[item.id]?.error && <p role="alert" className="text-xs text-destructive sm:col-span-3">{linkDrafts[item.id]?.error}</p>}</div>}
+                    {evidenceErrors[item.id] && <p role="alert" className="mt-2 text-xs text-destructive">Some files could not be uploaded. Successfully uploaded files remain linked. {evidenceErrors[item.id]}</p>}
                   </section>
 
-                  {errors.length > 0 && !historical && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{errors.map((message) => <p key={message}>{message}</p>)}</div>}
+                  {errors.length > 0 && editable && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{errors.map((message) => <p key={message}>{message}</p>)}</div>}
                 </CardContent>
               </Card>
             )
@@ -387,20 +496,60 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
               {incompleteRequired > 0 ? `${incompleteRequired} required check${incompleteRequired === 1 ? '' : 's'} incomplete` : hasFailures ? 'Failures will create Manual QA fix beads and return the ticket to Coding.' : 'Ready to submit for integration.'}
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submit.isPending || skip.isPending}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA</Button>
-              <Button variant="outline" onClick={() => void persistDraft()} disabled={!dirty || saveState === 'saving'}><Save className="mr-1 h-4 w-4" />Save now</Button>
-              <Button onClick={handleSubmit} disabled={allErrors.length > 0 || submit.isPending || round.workspaceDrift?.detected === true}>{submit.isPending ? <LoadingText text="Creating work" /> : hasFailures ? <><XCircle className="mr-1 h-4 w-4" />Submit failures</> : <><CheckCircle2 className="mr-1 h-4 w-4" />Submit QA</>}</Button>
+              <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submissionInProgress || submit.isPending || skip.isPending || saveState === 'conflict'}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA</Button>
+              <Button variant="outline" onClick={() => void persistDraft()} disabled={submissionInProgress || !dirty || saveState === 'saving'}><Save className="mr-1 h-4 w-4" />Save now</Button>
+              {resumableOperationType === 'skip'
+                ? <Button onClick={handleSkip} disabled={skip.isPending}>{skip.isPending ? <LoadingText text="Resuming skip" /> : <><RefreshCw className="mr-1 h-4 w-4" />Resume skip</>}</Button>
+                : <Button onClick={handleSubmit} disabled={allErrors.length > 0 || submit.isPending || saveState === 'conflict' || round.workspaceDrift?.detected === true}>{submit.isPending ? <LoadingText text="Creating work" /> : submissionInProgress ? <><RefreshCw className="mr-1 h-4 w-4" />Resume submission</> : hasFailures ? <><XCircle className="mr-1 h-4 w-4" />Submit failures</> : <><CheckCircle2 className="mr-1 h-4 w-4" />Submit QA</>}</Button>}
             </div>
           </div>
           {submitError && <p role="alert" className="mx-auto mt-2 max-w-4xl text-right text-xs text-destructive">{submitError}</p>}
-          {round.operation && round.operation.status !== 'complete' && <p className="mx-auto mt-2 max-w-4xl text-right text-xs text-muted-foreground">{round.operation.message ?? `Submission operation: ${round.operation.status}`}</p>}
+          {submissionInProgress && <p className="mx-auto mt-2 max-w-4xl text-right text-xs text-muted-foreground">{round.operation?.message ?? `Submission operation: ${round.operation?.status.replace(/_/g, ' ')}`}. Editing and Skip are locked until this exact operation resumes.</p>}
         </div>
       )}
 
       <Dialog open={improvementItem !== null} onOpenChange={(open) => { if (!open) setImprovementItemId(null) }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>Improvement backlog ticket</DialogTitle><DialogDescription>Review the title and description. One DRAFT ticket with Normal priority will be created in this project when you submit Manual QA.</DialogDescription></DialogHeader>
-          {improvementItem && (() => { const result = resultFor(draft, improvementItem.id); const improvement = result.improvement ?? { title: '', description: '' }; const contextLength = `\n\n## Manual QA context\nSource ticket: ${ticket.externalId}\nRound: v${version}\nChecklist item: ${improvementItem.id}\nExpected: ${improvementItem.expectedResult}`.length; const projectedLength = improvement.description.length + contextLength; return <div className="space-y-4"><div><label className="text-sm font-medium">Title</label><input autoFocus value={improvement.title} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, title: event.target.value } })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><div><label className="text-sm font-medium">Description</label><textarea value={improvement.description} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><div className="rounded-md border border-border bg-muted/30 p-3 text-xs"><p className="font-medium">Appended context preview</p><p className="mt-1 text-muted-foreground">Source {ticket.externalId} · Manual QA v{version} · item {improvementItem.id} · evidence and provenance copied to the child ticket origin area.</p><p className={cn('mt-2', projectedLength > 10_000 ? 'text-amber-600' : 'text-muted-foreground')}>{projectedLength.toLocaleString()} / 10,000 projected characters{projectedLength > 10_000 ? ' — lower-priority context will be omitted and reported.' : ''}</p></div><div className="flex justify-end"><Button onClick={() => setImprovementItemId(null)} disabled={!improvement.title.trim() || !improvement.description.trim()}>Done</Button></div></div> })()}
+          {improvementItem && (() => {
+            const result = resultFor(draft, improvementItem.id)
+            const improvement = result.improvement ?? { title: '', description: '' }
+            const preview = composeManualQaImprovementPreview(improvementItem, { ...result, improvement })
+            const evidenceFiles = round.evidence.filter((file) => (result.evidenceIds ?? []).includes(file.id))
+            return (
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">Title</label>
+                  <input autoFocus value={improvement.title} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, title: event.target.value } })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea value={improvement.description} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Improvement note <span className="font-normal text-muted-foreground">(optional)</span></label>
+                  <textarea value={result.note ?? ''} onChange={(event) => updateResult(improvementItem.id, { note: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Add an observation or extra guidance for future implementation." />
+                </div>
+                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs">
+                  <p className="font-medium">Final description preview</p>
+                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-sans text-muted-foreground">{preview.description}</pre>
+                  <p className={cn('mt-2', preview.omittedCharacters > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
+                    {preview.requestedLength.toLocaleString()} / 10,000 projected characters{preview.omittedCharacters > 0 ? ` — ${preview.omittedCharacters.toLocaleString()} lower-priority characters will be omitted and reported.` : ''}
+                  </p>
+                </div>
+                <div className="rounded-md border border-border p-3 text-xs">
+                  <p className="font-medium">Evidence and provenance preview</p>
+                  <p className="mt-1 text-muted-foreground">The source round and checklist lineage are stored as audit metadata, outside future prompt context.</p>
+                  {evidenceFiles.length > 0 ? (
+                    <ul className="mt-2 list-disc pl-5 text-muted-foreground">
+                      {evidenceFiles.map((file) => <li key={file.id}>{file.name} · {evidenceSize(file.size)}</li>)}
+                    </ul>
+                  ) : <p className="mt-2 text-muted-foreground">No uploaded evidence selected.</p>}
+                </div>
+                <div className="flex justify-end"><Button onClick={() => setImprovementItemId(null)} disabled={!improvement.title.trim() || !improvement.description.trim()}>Done</Button></div>
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -408,7 +557,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
         <DialogContent>
           <DialogHeader><DialogTitle>Skip Manual QA?</DialogTitle><DialogDescription>The current draft will be archived. Drafted improvements and failures will not create tickets or beads, and the workflow will continue to integration.</DialogDescription></DialogHeader>
           <div><label className="text-sm font-medium">Reason <span className="font-normal text-muted-foreground">(optional)</span></label><textarea value={skipReason} onChange={(event) => setSkipReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
-          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSkipOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handleSkip} disabled={skip.isPending}>{skip.isPending ? <LoadingText text="Skipping" /> : 'Skip and integrate'}</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSkipOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handleSkip} disabled={skip.isPending || saveState === 'conflict'}>{skip.isPending ? <LoadingText text="Skipping" /> : 'Skip and integrate'}</Button></div>
         </DialogContent>
       </Dialog>
     </div>

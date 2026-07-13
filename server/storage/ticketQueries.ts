@@ -29,6 +29,10 @@ import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '
 import { isContinuableBlockedError } from '../opencode/sessionContinuation'
 import { computeEtaRange, type EtaRange } from '../workflow/eta/computeEta'
 import { bucketForBeadCount, getThroughputSamples, getTicketBeadSamples } from './executionTelemetry'
+import {
+  ManualQaImprovementOriginSchema,
+  type ManualQaImprovementOrigin,
+} from '../phases/manualQa/types'
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
@@ -105,26 +109,7 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
       summary: boolean
     }
   }
-  manualQaOrigin: {
-    schemaVersion: 1
-    originId: string
-    actionId: string
-    sourceTicketId: string
-    sourceTicketExternalId: string
-    sourceVersion: number
-    sourceItemId: string
-    sourceItemTitle: string
-    evidenceRefs: Array<{
-      id: string
-      originalName: string
-      mediaType: string
-      size: number
-      sha256: string
-      relativePath: string
-    }>
-    omittedEvidence: Array<{ id: string; reason: string }>
-    createdAt: string
-  } | null
+  manualQaOrigin: ManualQaImprovementOrigin | null
   availableActions: string[]
   previousStatus: string | null
   reviewCutoffStatus: string | null
@@ -289,6 +274,15 @@ function parseJsonObject<T>(raw: string | null | undefined): T | null {
   } catch {
     return null
   }
+}
+
+function parseManualQaArtifactValue<T>(raw: string | null | undefined): T | null {
+  const parsed = parseJsonObject<Record<string, unknown>>(raw)
+  if (!parsed) return null
+  const nested = parsed.value
+  return nested && typeof nested === 'object' && !Array.isArray(nested)
+    ? nested as T
+    : parsed as T
 }
 
 function parseTicketErrorCodes(raw: string | null | undefined): string[] {
@@ -521,18 +515,23 @@ function readManualQaProjection(
     .filter((artifact) => typeof artifact.artifactType === 'string' && artifact.artifactType.startsWith('manual_qa_'))
   if (artifacts.length === 0) return empty
 
-  let activeVersion: number | null = null
   let latestOutcome: PublicTicket['manualQa']['latestOutcome'] = null
+  const artifactVersions = new Set<number>()
   const completedVersions = new Set<number>()
-  const types = new Set(artifacts.map((artifact) => artifact.artifactType))
+  const typesByVersion = new Map<number, Set<string>>()
 
   for (const artifact of artifacts) {
-    const parsed = parseJsonObject<Record<string, unknown>>(artifact.content)
+    const parsed = parseManualQaArtifactValue<Record<string, unknown>>(artifact.content)
     const rawVersion = parsed?.version ?? parsed?.checklistVersion ?? parsed?.activeVersion
     const version = typeof rawVersion === 'number' && Number.isInteger(rawVersion) && rawVersion > 0
       ? rawVersion
       : null
-    if (version !== null && (activeVersion === null || version > activeVersion)) activeVersion = version
+    if (version !== null) {
+      artifactVersions.add(version)
+      const versionTypes = typesByVersion.get(version) ?? new Set<string>()
+      versionTypes.add(artifact.artifactType!)
+      typesByVersion.set(version, versionTypes)
+    }
 
     if (artifact.artifactType === 'manual_qa_summary') {
       const rawOutcome = parsed?.outcome ?? parsed?.status
@@ -542,6 +541,12 @@ function readManualQaProjection(
       }
     }
   }
+
+  const activeVersion = [...artifactVersions]
+    .filter((version) => !completedVersions.has(version))
+    .sort((left, right) => right - left)[0] ?? null
+  const projectedVersion = activeVersion ?? [...artifactVersions].sort((left, right) => right - left)[0] ?? null
+  const types = projectedVersion === null ? new Set<string>() : (typesByVersion.get(projectedVersion) ?? new Set<string>())
 
   return {
     activeVersion,
@@ -556,35 +561,11 @@ function readManualQaProjection(
   }
 }
 
-const ManualQaOriginSchema = z.object({
-  schemaVersion: z.literal(1),
-  originId: z.string().min(1),
-  actionId: z.string().min(1),
-  sourceTicketId: z.string().min(1),
-  sourceTicketExternalId: z.string().min(1),
-  sourceVersion: z.number().int().positive(),
-  sourceItemId: z.string().min(1),
-  sourceItemTitle: z.string(),
-  evidenceRefs: z.array(z.object({
-    id: z.string().min(1),
-    originalName: z.string(),
-    mediaType: z.string(),
-    size: z.number().nonnegative(),
-    sha256: z.string(),
-    relativePath: z.string(),
-  })).default([]),
-  omittedEvidence: z.array(z.object({
-    id: z.string().min(1),
-    reason: z.string(),
-  })).default([]),
-  createdAt: z.string(),
-}).strict()
-
 function readManualQaOrigin(projectRoot: string | undefined, externalId: string): PublicTicket['manualQaOrigin'] {
   if (!projectRoot) return null
   try {
     const content = readFileSync(resolve(getTicketDir(projectRoot, externalId), 'meta', 'manual-qa-origin.json'), 'utf8')
-    const parsed = ManualQaOriginSchema.safeParse(JSON.parse(content) as unknown)
+    const parsed = ManualQaImprovementOriginSchema.safeParse(JSON.parse(content) as unknown)
     return parsed.success ? parsed.data : null
   } catch {
     return null
@@ -844,7 +825,7 @@ function buildRuntime(
     .orderBy(desc(phaseArtifacts.id))
     .get()
   const finalTestReport = parseJsonObject<{ status?: 'passed' | 'failed'; passed?: boolean }>(finalTestArtifact?.content)
-  const latestManualQaSummary = parseJsonObject<{ outcome?: unknown; status?: unknown }>(latestManualQaSummaryArtifact?.content)
+  const latestManualQaSummary = parseManualQaArtifactValue<{ outcome?: unknown; status?: unknown }>(latestManualQaSummaryArtifact?.content)
   const latestManualQaOutcome = latestManualQaSummary?.outcome ?? latestManualQaSummary?.status
   const qaFixesAreNewerThanFinalTest = (
     (latestManualQaOutcome === 'created_fixes' || latestManualQaOutcome === 'failed')

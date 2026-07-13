@@ -4,6 +4,7 @@ import type {
   ManualQaItemResult,
   ManualQaRound,
 } from '@/hooks/useManualQA'
+import { composeManualQaImprovementDescription } from '@shared/manualQaImprovement'
 
 function resultFor(draft: ManualQaDraft, itemId: string): ManualQaItemResult {
   return draft.results[itemId] ?? { itemId, status: 'pending', evidenceIds: [] }
@@ -89,4 +90,33 @@ export function buildCanonicalManualQaDraft(
     })),
     updatedAt: new Date().toISOString(),
   }
+}
+
+export function buildManualQaImprovementContextPreview(
+  item: ManualQaChecklistItem,
+  result: ManualQaItemResult,
+): string {
+  return composeManualQaImprovementPreview(item, result).description
+}
+
+export function composeManualQaImprovementPreview(
+  item: ManualQaChecklistItem,
+  result: ManualQaItemResult,
+) {
+  const improvement = result.improvement
+  return composeManualQaImprovementDescription({
+    description: improvement?.description.trim() ?? '',
+    itemTitle: item.title?.trim() || item.behavior,
+    behavior: item.behavior,
+    source: item.source,
+    expectedResult: item.expectedResult,
+    actions: item.actions,
+    userNote: result.note,
+    improvementTitle: improvement?.title.trim(),
+    observation: result.observation,
+    links: result.links,
+    evidenceCount: result.evidenceIds?.length ?? 0,
+    hasPrdRefs: item.prdRefs.length > 0,
+    hasBeadRefs: (item.beadRefs?.length ?? 0) > 0,
+  })
 }

@@ -310,7 +310,7 @@ Manual QA live drafts use the sole scope `manual_qa_draft:vN`; only evidence met
 | Method | Route | Notes |
 | --- | --- | --- |
 | `GET` | `/api/tickets/:id/manual-qa` | Round index/current projection: active version, completed rounds, latest outcome, and artifact availability |
-| `GET` | `/api/tickets/:id/manual-qa/versions/:version` | Checklist, coverage, results, summary, evidence metadata, hash, and read-only historical detail |
+| `GET` | `/api/tickets/:id/manual-qa/versions/:version` | Checklist, coverage, results, summary, evidence metadata, hash, read-only state, and any resumable `{ actionId, operationType, state }` journal |
 | `PUT` | `/api/tickets/:id/manual-qa/versions/:version/evidence?itemId=...` | Stream one evidence file; filename/media metadata use headers/query fields; 250 MiB per-file limit |
 | `GET` | `/api/tickets/:id/manual-qa/versions/:version/evidence/:itemId/:evidenceId` | Secure read/download; `?inline=true` works only for safe raster media types |
 | `DELETE` | `/api/tickets/:id/manual-qa/versions/:version/evidence/:itemId/:evidenceId` | Remove one evidence file and metadata record while waiting |
@@ -319,7 +319,7 @@ Manual QA live drafts use the sole scope `manual_qa_draft:vN`; only evidence met
 | `POST` | `/api/tickets/:id/manual-qa/workspace-drift/include` | Commit only the selected audited drift files into the QA checkpoint |
 | `POST` | `/api/tickets/:id/manual-qa/workspace-drift/discard` | Discard only the selected audited drift files |
 
-Evidence upload/remove calls carry `X-Action-Id`, `X-Checklist-Hash`, and `X-Draft-Revision` (query equivalents are supported). The raw upload body is streamed; `X-Checklist-Item-Id`, `X-File-Name`, and optional `X-Evidence-Id` identify it. Submit, skip, and drift decisions carry `actionId`, `expectedChecklistHash`, and `expectedDraftRevision` in JSON. Mutations are allowed only during `WAITING_MANUAL_QA` and return `409` for stale guards or detected workspace drift.
+Evidence upload/remove calls carry `X-Action-Id`, `X-Checklist-Hash`, and `X-Draft-Revision` (query equivalents are supported). The raw upload body is streamed; `X-Checklist-Item-Id`, `X-File-Name`, and optional stable `X-Evidence-Id` identify it. Submit, skip, and drift decisions carry `actionId`, `expectedChecklistHash`, and `expectedDraftRevision` in JSON. Action IDs use the strict workflow identifier grammar and are rejected before any reservation or filesystem mutation. Mutations are allowed only during `WAITING_MANUAL_QA` and return `409` for stale guards or detected workspace drift. Interrupted Submit/Skip calls must resume the journal’s same action and operation type; evidence retries reconcile the contained file/index/receipt windows with the same evidence/action identities.
 
 Only PNG, JPEG, GIF, WebP, and AVIF may be served inline. SVG, HTML, executable/unknown content, and all other files are sent with `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, and `Cache-Control: private, no-store`. Evidence links in results accept HTTP or HTTPS only.
 

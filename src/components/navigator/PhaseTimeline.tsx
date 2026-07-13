@@ -40,6 +40,7 @@ function getPhaseIndicatorStatus(
         if (phaseIndex === prevIndex) return 'error'
       }
     }
+    if (visitedStatuses.includes(phaseId)) return 'completed'
     return 'pending'
   }
 
@@ -59,6 +60,7 @@ function getPhaseIndicatorStatus(
           if (phaseIndex < cutoffIndex) return 'completed'
         }
       }
+      if (visitedStatuses.includes(phaseId)) return 'completed'
       return 'pending'
     }
     if (reviewCutoffStatus) {
@@ -68,6 +70,7 @@ function getPhaseIndicatorStatus(
         return 'completed'
       }
     }
+    if (visitedStatuses.includes(phaseId)) return 'completed'
     return 'pending'
   }
 
@@ -113,7 +116,10 @@ function getGroupStatus(
   if (statuses.some(s => s === 'error')) return 'error'
   if (statuses.every(s => s === 'canceled')) return 'canceled'
   if (statuses.every(s => s === 'completed')) return 'completed'
-  if (statuses.some(s => s === 'completed')) return 'active'
+  // A loop may visit post-implementation phases and then return to Coding. The
+  // group remains historical/selectable, but it must not look like the active
+  // group when none of its phases is currently active.
+  if (statuses.some(s => s === 'completed')) return 'completed'
   return 'pending'
 }
 

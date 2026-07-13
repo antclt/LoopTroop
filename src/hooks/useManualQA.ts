@@ -96,7 +96,13 @@ export interface ManualQaRound {
   outcome?: 'passed' | 'waived_through' | 'skipped' | 'failed' | 'created_fixes' | null
   readOnly?: boolean
   workspaceDrift?: ManualQaWorkspaceDrift | null
-  operation?: { status: string; message?: string | null } | null
+  operation?: {
+    actionId?: string
+    operationType?: 'submit' | 'skip'
+    state: string
+    status: string
+    message?: string | null
+  } | null
   draft?: ManualQaDraft | null
   summary?: { outcome?: ManualQaRound['outcome']; message?: string } | null
 }
@@ -205,6 +211,8 @@ function normalizeRound(value: unknown, version: number): ManualQaRound {
   const summary = asRecord(raw.summary)
   const draft = normalizeDraft(raw.draft ?? raw.results)
   const evidenceValues = Array.isArray(raw.evidence) ? raw.evidence : []
+  const operationRaw = asRecord(raw.operation)
+  const operationState = String(operationRaw.state ?? operationRaw.status ?? '')
   return {
     version,
     status: String(raw.status ?? (raw.summary ? 'completed' : raw.checklist ? 'waiting' : 'generating')),
@@ -222,9 +230,15 @@ function normalizeRound(value: unknown, version: number): ManualQaRound {
     draftRevision: typeof raw.draftRevision === 'number' ? raw.draftRevision : Number(asRecord(raw.draft).draftRevision ?? asRecord(raw.results).draftRevision ?? 0),
     completedAt: typeof summary.completedAt === 'string' ? summary.completedAt : null,
     outcome: typeof summary.outcome === 'string' ? summary.outcome as ManualQaRound['outcome'] : null,
-    readOnly: raw.readOnly === true || Boolean(raw.summary),
+    readOnly: raw.readOnly === true || (Boolean(raw.summary) && summary.outcome !== 'failed'),
     workspaceDrift: raw.workspaceDrift as ManualQaWorkspaceDrift | null | undefined,
-    operation: raw.operation as ManualQaRound['operation'],
+    operation: raw.operation ? {
+      actionId: typeof operationRaw.actionId === 'string' ? operationRaw.actionId : undefined,
+      operationType: operationRaw.operationType === 'skip' ? 'skip' : operationRaw.operationType === 'submit' ? 'submit' : undefined,
+      state: operationState,
+      status: operationState,
+      message: typeof operationRaw.message === 'string' ? operationRaw.message : undefined,
+    } : null,
     draft,
     summary: raw.summary ? { outcome: summary.outcome as ManualQaRound['outcome'], message: typeof summary.message === 'string' ? summary.message : undefined } : null,
   }

@@ -164,6 +164,8 @@ Operational notes:
 - Manual QA keeps compact append-only checklist, coverage, results, draft snapshot, and summary artifacts here; live editing exists only as `ui_state:manual_qa_draft:vN` with a server-owned compare-and-set revision
 - council companion artifacts may embed draft/vote metadata and attempt diagnostics in `content`; malformed model text is intentionally kept out of structured fields
 
+Manual QA also uses `manual_qa_operations` for submission recovery and `manual_qa_improvement_tickets` for the unique origin-to-child-ticket mapping. The latter is created in the same SQLite transaction as the Draft child ticket, so a restart after database creation but before filesystem provenance/evidence writes finds the same child and repairs the missing receipts instead of creating a duplicate.
+
 ### `ticket_phase_attempts`
 
 This table tracks active and archived phase versions.
@@ -309,11 +311,13 @@ SQLite is not the whole system. Some ticket state is intentionally filesystem-ba
 | `.ticket/manual-qa/vN/checklist.yaml` | Immutable generated checklist for one round | Canonical versioned artifact |
 | `.ticket/manual-qa/vN/results.yaml` and `summary.yaml` | Submitted results and round outcome | Canonical submission records |
 | `.ticket/manual-qa/vN/coverage.yaml` | Code-computed PRD criterion coverage | Advisory canonical report |
+| `.ticket/manual-qa/vN/model-capability.json` | Immutable locked-model image capability snapshot | Captured for evidence delivery auditing |
 | `.ticket/manual-qa/vN/evidence/**` | Contained evidence binaries plus metadata index | Disk-only binaries; database/UI state stores refs only |
 | `.ticket/manual-qa/generation-reservation-vN.json` | Restart-safe version reservation | Reused after generation retry/restart |
 | `.ticket/manual-qa/workspace-baseline-vN.json` and drift receipts | Git baseline and audited include/discard decisions | Submission/skip safety records |
+| `.ticket/manual-qa/events.jsonl` | Idempotent versioned generation, evidence, drift, submission, child-work, and completion events | Append-only Manual QA audit stream |
 
-Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks are rejected, bytes are streamed through contained temporary files, and the verified hash/size metadata is persisted before atomic rename. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
+Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks are rejected, and bytes are streamed through contained temporary files, hashed, and atomically renamed. Stable evidence/action IDs reconcile a restart between file rename, index persistence, and the final upload/remove receipt. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
 
 The important split is:
 

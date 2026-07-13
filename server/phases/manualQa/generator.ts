@@ -7,7 +7,7 @@ import type { PrdDocument } from '../../structuredOutput/types'
 import { parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
 import { readJsonl } from '../../io/jsonl'
 import type { Bead } from '../beads/types'
-import { getLatestPhaseArtifact, getTicketPaths, insertPhaseArtifact, resolvePhaseAttempt } from '../../storage/tickets'
+import { getLatestPhaseArtifact, getTicketByRef, getTicketPaths, insertPhaseArtifact, resolvePhaseAttempt } from '../../storage/tickets'
 import { runOpenCodePrompt } from '../../workflow/runOpenCodePrompt'
 import { adapter } from '../../workflow/phases/state'
 import {
@@ -19,6 +19,7 @@ import { deriveManualQaPrdCriteria, computeManualQaCoverage } from './coverage'
 import { MANUAL_QA_CHECKLIST_TAG, parseManualQaChecklistOutput } from './parser'
 import {
   allocateNextManualQaVersion,
+  appendManualQaEvent,
   completeManualQaReservation,
   getManualQaChecklistHash,
   listManualQaVersions,
@@ -26,6 +27,7 @@ import {
   persistManualQaCoverage,
   readManualQaChecklist,
   readManualQaCoverage,
+  readManualQaResults,
   readManualQaSummary,
   reserveManualQaVersion,
 } from './storage'
@@ -62,17 +64,25 @@ function readApprovedPrd(ticketDir: string): PrdDocument {
   return parsed as unknown as PrdDocument
 }
 
-function focusedDiffMetadata(worktreePath: string): string {
+function focusedDiffMetadata(worktreePath: string, baseBranch: string): string {
+  const mergeBaseResult = spawnSync('git', ['-C', worktreePath, 'merge-base', 'HEAD', baseBranch], {
+    encoding: 'utf8',
+    timeout: 30_000,
+  })
+  const mergeBase = mergeBaseResult.status === 0 ? (mergeBaseResult.stdout ?? '').trim() : ''
+  if (!mergeBase) return 'Focused diff metadata unavailable.'
   const result = spawnSync('git', [
     '-C', worktreePath,
-    'show', '--format=', '--name-status', '--stat=120,80', 'HEAD',
+    'diff', '--name-status', '--stat=120,80', `${mergeBase}..HEAD`,
     '--', '.', ':(top,exclude).ticket', ':(top,exclude).looptroop',
   ], { encoding: 'utf8', timeout: 30_000 })
   if (result.status !== 0) return 'Focused diff metadata unavailable.'
   return (result.stdout ?? '').trim().slice(0, 80_000) || 'No candidate file metadata was reported.'
 }
 
-function compactBeads(beadsPath: string): Array<Pick<Bead, 'id' | 'title' | 'description' | 'prdRefs' | 'targetFiles' | 'acceptanceCriteria'>> {
+function compactBeads(beadsPath: string): Array<Pick<Bead,
+  'id' | 'title' | 'description' | 'prdRefs' | 'targetFiles' | 'acceptanceCriteria' | 'tests' | 'labels' | 'issueType'
+>> {
   return readJsonl<Bead>(beadsPath).map((bead) => ({
     id: bead.id,
     title: bead.title,
@@ -80,11 +90,15 @@ function compactBeads(beadsPath: string): Array<Pick<Bead, 'id' | 'title' | 'des
     prdRefs: bead.prdRefs,
     targetFiles: bead.targetFiles,
     acceptanceCriteria: bead.acceptanceCriteria,
+    tests: bead.tests,
+    labels: bead.labels,
+    issueType: bead.issueType,
   }))
 }
 
-function buildGenerationPrompt(input: {
+export function buildGenerationPrompt(input: {
   context: TicketContext
+  ticketDescription: string
   prd: PrdDocument
   beads: ReturnType<typeof compactBeads>
   finalTestReport: string
@@ -102,6 +116,7 @@ function buildGenerationPrompt(input: {
     'items:',
     '  - lineage_id: stable-kebab-id',
     '    prior_item_ids: [prior version item IDs]',
+    '    title: concise human-facing check title',
     '    source: prd | bead | final_test | previous_qa | implementation',
     '    behavior: string',
     '    severity: critical | high | medium | low',
@@ -120,7 +135,11 @@ function buildGenerationPrompt(input: {
     'Later-round rules: preserve relevant lineage/structure; failed/fixed or affected passed/waived items become pending_recheck; unaffected passed items may be previously_passed; omit unaffected waived items; add items only for newly affected user-facing behavior.',
     '',
     '## Ticket',
-    JSON.stringify({ id: input.context.externalId, title: input.context.title }, null, 2),
+    JSON.stringify({
+      id: input.context.externalId,
+      title: input.context.title,
+      description: input.ticketDescription,
+    }, null, 2),
     '',
     '## Approved PRD',
     JSON.stringify(input.prd, null, 2),
@@ -159,6 +178,19 @@ function persistGenerationArtifacts(ticketId: string, version: number, checklist
   }
 }
 
+function persistGenerationReservationArtifact(ticketId: string, version: number, actionId: string): void {
+  const phase = 'GENERATING_QA_CHECKLIST'
+  const phaseAttempt = resolvePhaseAttempt(ticketId, phase)
+  const existing = getLatestPhaseArtifact(ticketId, 'manual_qa_generation_reservation', phase, phaseAttempt)
+  if (existing?.content.includes(`"version":${version}`)) return
+  insertPhaseArtifact(ticketId, {
+    phase,
+    phaseAttempt,
+    artifactType: 'manual_qa_generation_reservation',
+    content: JSON.stringify({ version, actionId, state: 'reserved' }),
+  })
+}
+
 export async function handleManualQaChecklistGeneration(
   ticketId: string,
   context: TicketContext,
@@ -169,6 +201,17 @@ export async function handleManualQaChecklistGeneration(
   if (!paths) throw new Error(`Ticket storage was not found: ${ticketId}`)
   const version = resolveGenerationVersion(paths.ticketDir)
   const reservation = reserveManualQaVersion(paths.ticketDir, ticketId, version)
+  persistGenerationReservationArtifact(ticketId, version, reservation.actionId)
+  appendManualQaEvent(paths.ticketDir, {
+    schemaVersion: 1,
+    eventId: `generation-v${version}-reserved`,
+    eventType: 'generation_reserved',
+    ticketId: context.externalId,
+    version,
+    actionId: reservation.actionId,
+    createdAt: reservation.createdAt,
+    data: {},
+  })
 
   prepareManualQaCheckpoint(ticketId, version)
 
@@ -179,6 +222,16 @@ export async function handleManualQaChecklistGeneration(
     if (!checklistHash) throw new Error('Existing Manual QA checklist hash is unavailable.')
     completeManualQaReservation(paths.ticketDir, reservation, checklistHash)
     persistGenerationArtifacts(ticketId, version, JSON.stringify(existingChecklist), existingCoverage)
+    appendManualQaEvent(paths.ticketDir, {
+      schemaVersion: 1,
+      eventId: `checklist-v${version}-ready`,
+      eventType: 'checklist_ready',
+      ticketId: context.externalId,
+      version,
+      actionId: reservation.actionId,
+      createdAt: existingChecklist.generatedAt,
+      data: { checklistHash },
+    })
     sendEvent({ type: 'QA_CHECKLIST_READY' })
     return
   }
@@ -186,22 +239,27 @@ export async function handleManualQaChecklistGeneration(
   const model = context.lockedMainImplementer?.trim()
   if (!model) throw new Error('Manual QA generation requires the locked main implementer model.')
   const prd = readApprovedPrd(paths.ticketDir)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) throw new Error(`Ticket was not found: ${ticketId}`)
   const criteria = deriveManualQaPrdCriteria(prd)
   const priorVersion = listManualQaVersions(paths.ticketDir).filter((candidate) => candidate < version).at(-1)
   const previousQa = priorVersion
     ? {
         checklist: readManualQaChecklist(paths.ticketDir, priorVersion),
+        results: readManualQaResults(paths.ticketDir, priorVersion),
+        coverage: readManualQaCoverage(paths.ticketDir, priorVersion),
         summary: readManualQaSummary(paths.ticketDir, priorVersion),
       }
     : null
   const finalTestReport = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')?.content ?? ''
   const basePrompt = buildGenerationPrompt({
     context,
+    ticketDescription: ticket.description ?? '',
     prd,
     beads: compactBeads(paths.beadsPath),
     finalTestReport,
     previousQa,
-    diffMetadata: focusedDiffMetadata(paths.worktreePath),
+    diffMetadata: focusedDiffMetadata(paths.worktreePath, ticket.runtime.baseBranch),
   })
   const timeoutMs = resolveAiResponseRuntimeSettings(context).timeoutMs
   const maxRetries = resolveStructuredRetryRuntimeSettings(context).structuredRetryCount
@@ -232,6 +290,8 @@ export async function handleManualQaChecklistGeneration(
       ticketId: context.externalId,
       version,
       prdCriteria: criteria,
+      previousChecklist: priorVersion ? readManualQaChecklist(paths.ticketDir, priorVersion) : null,
+      previousResults: priorVersion ? readManualQaResults(paths.ticketDir, priorVersion) : null,
     })
     if (parsed.ok) {
       const checklistHash = persistManualQaChecklist(paths.ticketDir, parsed.value)
@@ -239,6 +299,16 @@ export async function handleManualQaChecklistGeneration(
       persistManualQaCoverage(paths.ticketDir, coverage)
       completeManualQaReservation(paths.ticketDir, reservation, checklistHash)
       persistGenerationArtifacts(ticketId, version, parsed.normalizedContent, coverage)
+      appendManualQaEvent(paths.ticketDir, {
+        schemaVersion: 1,
+        eventId: `checklist-v${version}-ready`,
+        eventType: 'checklist_ready',
+        ticketId: context.externalId,
+        version,
+        actionId: reservation.actionId,
+        createdAt: parsed.value.generatedAt,
+        data: { checklistHash },
+      })
       sendEvent({ type: 'QA_CHECKLIST_READY' })
       return
     }

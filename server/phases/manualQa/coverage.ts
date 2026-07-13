@@ -57,6 +57,8 @@ export function computeManualQaCoverage(
       itemIds: [...new Set(references.map((reference) => reference.itemId))],
     }
   })
+  const countSource = (source: ManualQaChecklist['items'][number]['source']) =>
+    checklist.items.filter((item) => item.source === source).length
 
   return {
     schemaVersion: MANUAL_QA_SCHEMA_VERSION,
@@ -67,5 +69,12 @@ export function computeManualQaCoverage(
     coveredCount: entries.filter((entry) => entry.status === 'covered').length,
     partiallyCoveredCount: entries.filter((entry) => entry.status === 'partially_covered').length,
     uncoveredCount: entries.filter((entry) => entry.status === 'uncovered').length,
+    sourceItemCounts: {
+      prd: countSource('prd'),
+      bead: countSource('bead'),
+      finalTest: countSource('final_test'),
+      previousQa: countSource('previous_qa'),
+      implementationDiff: countSource('implementation'),
+    },
   }
 }

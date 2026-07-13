@@ -840,11 +840,12 @@ const WORKFLOW_PHASE_DETAILS = {
       'Final test report with the generated test plan, file effects declarations, execution results, pass/fail status, error details, and raw attempt diagnostics for final-test generation retries.',
       'Final-test file effects audit listing baseline dirty files, post-test dirty files, files produced or changed by final testing, declared effects, candidate files, temporary files, unexpected files, and any unclassified files.',
       'Phase logs showing test command execution and output.',
-      'A pass/fail gate that determines whether the implementation proceeds to integration or needs manual intervention.',
+      'A pass/fail gate that determines whether the implementation proceeds to the locked Manual QA route, direct integration, or recoverable error handling.',
     ],
     transitions: [
-      'All Tests Pass → Preparing Final Commit: Successful final tests advance the workflow to the integration phase. If the file effects audit is fully classified, integration prepares a clean candidate commit using audited candidate files.',
-      'Unclassified File Effects → Blocked Error: If final testing leaves dirty files that were not declared in `file_effects` or the legacy candidate fields, integration blocks with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` so you can include those files in the PR, discard them, or cancel.',
+      'All Tests Pass + Manual QA Disabled → Preparing Final Commit: Successful final tests advance directly to integration using the ticket’s start-time Manual QA lock.',
+      'All Tests Pass + Manual QA Enabled → Preparing Manual QA: Successful final tests advance to automated checklist generation; that phase resolves the file-effects audit and prepares the clean QA checkpoint before asking for user verification.',
+      'Unclassified File Effects → Blocked Error: If final testing leaves dirty files that were not declared in `file_effects` or the legacy candidate fields, the next post-test phase blocks with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` so you can include those files, discard them, or cancel.',
       'Any Test Failure → Blocked Error: Failed tests or test generation failures route the ticket to Blocked Error, where you can retry (re-run tests) or cancel.',
     ],
     notes: [
@@ -1163,9 +1164,13 @@ function getSafeResumeDescription(phase: Pick<WorkflowPhaseMeta, 'id' | 'kanbanP
 
 function withSafeResumeMetadata(phase: WorkflowPhaseMeta): WorkflowPhaseMeta {
   const safeResume = getSafeResumeDescription(phase)
+  const preservesVerbatimDescription = phase.id === 'GENERATING_QA_CHECKLIST'
+    || phase.id === 'WAITING_MANUAL_QA'
   return {
     ...phase,
-    description: `${phase.description} Safe resume: ${safeResume}`,
+    description: preservesVerbatimDescription
+      ? phase.description
+      : `${phase.description} Safe resume: ${safeResume}`,
     details: {
       ...phase.details,
       notes: [...(phase.details.notes ?? []), `Safe resume: ${safeResume}`],

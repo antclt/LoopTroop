@@ -251,6 +251,9 @@ export function buildManualQaPullRequestSection(rawSummary: string): string {
     return ''
   }
   if (!parsed) return ''
+  if (parsed.value && typeof parsed.value === 'object' && !Array.isArray(parsed.value)) {
+    parsed = parsed.value as Record<string, unknown>
+  }
 
   const outcome = typeof parsed.outcome === 'string'
     ? parsed.outcome
@@ -598,11 +601,26 @@ export function buildPullRequestContext(ticketId: string, context: TicketContext
 
   const finalTestArtifact = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')
   const manualQaArtifact = getLatestPhaseArtifact(ticketId, 'manual_qa_summary')
+  let manualQaSummary = manualQaArtifact?.content ?? ''
+  if (manualQaSummary) {
+    try {
+      const parsed = jsYaml.load(manualQaSummary)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && 'value' in parsed) {
+        const nested = (parsed as { value?: unknown }).value
+        if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+          manualQaSummary = JSON.stringify(nested)
+        }
+      }
+    } catch {
+      // Keep malformed content unchanged so the prompt still exposes the
+      // durable artifact and the compact formatter can safely omit it.
+    }
+  }
   return {
     ticketState,
     contextParts: buildMinimalContext('pull_request', ticketState),
     finalTestReport: finalTestArtifact?.content ?? '',
-    manualQaSummary: manualQaArtifact?.content ?? '',
+    manualQaSummary,
   }
 }
 

@@ -10,6 +10,7 @@ import { emitPhaseLog } from './helpers'
 import { handleMockExecutionUnsupported } from './executionPhase'
 import { withCommandLoggingAsync } from '../../log/commandLogger'
 import { CancelledError } from '../../council/types'
+import { ManualQaSummarySchema } from '../../phases/manualQa/types'
 
 function readFinalTestFilesToStage(ticketId: string): string[] {
   const artifact = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')
@@ -31,6 +32,31 @@ function readFinalTestFilesToStage(ticketId: string): string[] {
     return [...new Set(testFiles)]
   } catch {
     return []
+  }
+}
+
+function readManualQaDeliverySummary(ticketId: string) {
+  const artifact = getLatestPhaseArtifact(ticketId, 'manual_qa_summary')
+  if (!artifact) return null
+  try {
+    const raw = JSON.parse(artifact.content) as unknown
+    const record = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {}
+    const candidate = record.value && typeof record.value === 'object' && !Array.isArray(record.value)
+      ? record.value as Record<string, unknown>
+      : record
+    const { idempotencyKey: _idempotencyKey, ...summaryValue } = candidate
+    const parsed = ManualQaSummarySchema.safeParse(summaryValue)
+    if (!parsed.success || parsed.data.outcome === 'failed') return null
+    return {
+      version: parsed.data.version,
+      outcome: parsed.data.outcome,
+      createdFixBeadIds: parsed.data.createdFixBeadIds,
+      improvementTicketIds: parsed.data.improvementTicketIds,
+      waivedItemIds: parsed.data.waivedItemIds,
+      skipReason: parsed.data.skipReason ?? null,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -69,6 +95,7 @@ export async function handleIntegration(
         status: 'blocked',
         completedAt: new Date().toISOString(),
         baseBranch: paths.baseBranch,
+        manualQa: readManualQaDeliverySummary(ticketId),
         errorCode: FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
         message,
       }),
@@ -117,6 +144,7 @@ export async function handleIntegration(
     pushed: false,
     pushDeferred: squash.success,
     pushError: null,
+    manualQa: readManualQaDeliverySummary(ticketId),
     message: squash.success
       ? 'Integration phase completed. Draft pull request creation is next.'
       : squash.message,

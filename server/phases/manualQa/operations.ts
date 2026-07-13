@@ -8,12 +8,13 @@ import { writeJsonl, readJsonl } from '../../io/jsonl'
 import {
   archiveActivePhaseAttempts,
   createFreshPhaseAttempts,
-  createTicket,
+  createManualQaImprovementTicket,
   getLatestPhaseArtifact,
   getTicketContext,
   getTicketByRef,
   getTicketPaths,
   insertPhaseArtifact,
+  listPhaseAttempts,
   listTickets,
   patchTicket,
   resolvePhaseAttempt,
@@ -23,25 +24,33 @@ import type { TicketEvent } from '../../machines/types'
 import type { Bead, QaOrigin, QaOriginEvidenceRef, QaOriginSourceItem } from '../beads/types'
 import { captureFinalTestDirtyFiles } from '../finalTest/fileEffectsAudit'
 import { fetchProviderCatalog, flattenCatalogModels } from '../../opencode/providerCatalog'
+import { composeManualQaImprovementDescription } from '../../../shared/manualQaImprovement'
 import {
   MANUAL_QA_SCHEMA_VERSION,
   ManualQaDraftSchema,
+  ManualQaImprovementOriginSchema,
   type ManualQaChecklist,
   type ManualQaDraft,
   type ManualQaEvidenceRef,
   type ManualQaImprovementDraft,
   type ManualQaItemResult,
+  type ManualQaModelCapabilitySnapshot,
   type ManualQaResults,
   type ManualQaSummary,
 } from './types'
 import {
+  appendManualQaEvent,
   getManualQaChecklistHash,
   getManualQaStoragePaths,
   getManualQaEvidenceRelativePath,
   persistManualQaResults,
+  persistManualQaModelCapabilitySnapshot,
   persistManualQaSummary,
   readManualQaChecklist,
+  readManualQaCoverage,
   readManualQaEvidenceIndex,
+  readManualQaModelCapabilitySnapshot,
+  readManualQaResults,
   readManualQaSummary,
   resolveManualQaEvidence,
   resolveManualQaTicketDir,
@@ -50,6 +59,7 @@ import {
 
 export interface ManualQaMutationGuard {
   actionId: string
+  operationType: 'submit' | 'skip'
   expectedChecklistHash: string
   expectedDraftRevision: number
 }
@@ -65,6 +75,7 @@ export interface ManualQaWorkspaceDrift {
 interface ManualQaOperationJournal {
   schemaVersion: 1
   actionId: string
+  operationType: 'submit' | 'skip'
   ticketId: string
   version: number
   checklistHash: string
@@ -72,25 +83,9 @@ interface ManualQaOperationJournal {
   state: 'staged' | 'creating_improvements' | 'creating_beads' | 'complete'
   improvementTicketIds: string[]
   fixBeadIds: string[]
+  sourcePhaseAttempts?: Record<string, number>
   createdAt: string
   updatedAt: string
-}
-
-interface ImprovementOrigin {
-  schemaVersion: 1
-  originId: string
-  actionId: string
-  sourceTicketId: string
-  sourceTicketExternalId: string
-  sourceVersion: number
-  sourceItemId: string
-  sourceItemTitle: string
-  evidenceRefs: QaOriginEvidenceRef[]
-  omittedEvidence: Array<{ id: string; reason: string }>
-  titleSha256: string
-  descriptionSha256: string
-  omittedFields: string[]
-  createdAt: string
 }
 
 function runGitHead(worktreePath: string): string {
@@ -154,7 +149,15 @@ export function detectManualQaWorkspaceDrift(ticketId: string, version: number):
 }
 
 function assertMutationGuard(ticketId: string, ticketDir: string, version: number, draft: ManualQaDraft, guard: ManualQaMutationGuard): void {
-  if (!guard.actionId.trim()) throw new Error('Manual QA mutation requires an action ID.')
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(guard.actionId)) {
+    throw new Error('Manual QA mutation requires a valid action ID.')
+  }
+  if (!/^[a-f0-9]{64}$/.test(guard.expectedChecklistHash)) {
+    throw new Error('Manual QA mutation requires a valid checklist hash.')
+  }
+  if (!Number.isInteger(guard.expectedDraftRevision) || guard.expectedDraftRevision < 0) {
+    throw new Error('Manual QA mutation requires a valid draft revision.')
+  }
   const checklistHash = getManualQaChecklistHash(ticketDir, version)
   if (!checklistHash || checklistHash !== guard.expectedChecklistHash || checklistHash !== draft.checklistHash) {
     throw new Error('Manual QA checklist changed; reload the active version before submitting.')
@@ -177,7 +180,11 @@ function assertMutationGuard(ticketId: string, ticketDir: string, version: numbe
   }
 }
 
-function validateSubmission(checklist: ManualQaChecklist, draft: ManualQaDraft): void {
+function validateSubmission(
+  checklist: ManualQaChecklist,
+  draft: ManualQaDraft,
+  storedEvidence: ManualQaEvidenceRef[],
+): void {
   const items = new Map(checklist.items.map((item) => [item.id, item]))
   const results = new Map<string, ManualQaItemResult>()
   for (const result of draft.results) {
@@ -201,13 +208,29 @@ function validateSubmission(checklist: ManualQaChecklist, draft: ManualQaDraft):
     }
   }
 
-  const knownEvidence = new Set(draft.evidence.map((entry) => entry.id))
-  const referencedEvidence = [
-    ...draft.results.flatMap((result) => result.evidenceIds),
-    ...draft.improvements.flatMap((improvement) => improvement.evidenceIds),
-  ]
-  const unknown = referencedEvidence.find((id) => !knownEvidence.has(id))
-  if (unknown) throw new Error(`Manual QA draft references unknown evidence: ${unknown}`)
+  const canonicalEvidence = new Map(storedEvidence.map((entry) => [entry.id, entry]))
+  for (const draftEvidence of draft.evidence) {
+    const stored = canonicalEvidence.get(draftEvidence.id)
+    if (!stored) throw new Error(`Manual QA draft references unknown evidence: ${draftEvidence.id}`)
+    if (
+      stored.itemId !== draftEvidence.itemId
+      || stored.sha256 !== draftEvidence.sha256
+      || stored.storedName !== draftEvidence.storedName
+    ) throw new Error(`Manual QA draft evidence metadata changed: ${draftEvidence.id}`)
+  }
+  const assertEvidenceBelongsToItem = (evidenceId: string, itemId: string) => {
+    const evidence = canonicalEvidence.get(evidenceId)
+    if (!evidence) throw new Error(`Manual QA draft references unknown evidence: ${evidenceId}`)
+    if (evidence.itemId !== itemId) {
+      throw new Error(`Manual QA evidence ${evidenceId} does not belong to checklist item ${itemId}.`)
+    }
+  }
+  for (const result of draft.results) {
+    for (const evidenceId of result.evidenceIds) assertEvidenceBelongsToItem(evidenceId, result.itemId)
+  }
+  for (const improvement of draft.improvements) {
+    for (const evidenceId of improvement.evidenceIds) assertEvidenceBelongsToItem(evidenceId, improvement.itemId)
+  }
 }
 
 function deterministicId(prefix: string, value: string): string {
@@ -251,6 +274,7 @@ function persistManualQaDatabaseOperation(ticketId: string, journal: ManualQaOpe
 export function reserveManualQaSubmissionOperation(input: {
   path: string
   actionId: string
+  operationType: ManualQaOperationJournal['operationType']
   ticketId: string
   version: number
   checklistHash: string
@@ -260,6 +284,7 @@ export function reserveManualQaSubmissionOperation(input: {
     const existing = JSON.parse(readFileSync(input.path, 'utf8')) as ManualQaOperationJournal
     if (
       existing.actionId !== input.actionId
+      || existing.operationType !== input.operationType
       || existing.ticketId !== input.ticketId
       || existing.version !== input.version
       || existing.checklistHash !== input.checklistHash
@@ -271,6 +296,7 @@ export function reserveManualQaSubmissionOperation(input: {
   const journal: ManualQaOperationJournal = {
     schemaVersion: MANUAL_QA_SCHEMA_VERSION,
     actionId: input.actionId,
+    operationType: input.operationType,
     ticketId: input.ticketId,
     version: input.version,
     checklistHash: input.checklistHash,
@@ -290,49 +316,9 @@ function evidenceForIds(evidence: ManualQaEvidenceRef[], ids: string[]): ManualQ
   return evidence.filter((entry) => wanted.has(entry.id))
 }
 
-function buildQaContextSection(input: {
-  sourceExternalId: string
-  version: number
-  itemId: string
-  behavior: string
-  source?: string
-  expectedResult: string
-  actions?: string[]
-  userNote?: string
-  improvementTitle?: string
-  evidence: ManualQaEvidenceRef[]
-  links?: Array<{ url: string; label?: string }>
-  prdRefs?: string[]
-  beadRefs?: string[]
-}): string {
-  return [
-    '',
-    '## Manual QA Context',
-    'This ticket was created from a reviewed Manual QA improvement. Implement it as independent backlog work; the source evidence and checklist context are provenance, not instructions to control or start the user application.',
-    `Source ticket: ${input.sourceExternalId}`,
-    `QA round: v${input.version}`,
-    `Source item: ${input.itemId}`,
-    ...(input.userNote?.trim() ? ['', '### User Note', input.userNote.trim()] : []),
-    '',
-    '### Checklist Item',
-    `Behavior: ${input.behavior}`,
-    ...(input.source ? [`Source: ${input.source}`] : []),
-    `Expected result: ${input.expectedResult}`,
-    ...(input.actions?.length ? ['Actions:', ...input.actions.map((action) => `- ${action}`)] : []),
-    ...(input.improvementTitle ? ['', '### Improvement Request', input.improvementTitle] : []),
-    ...(input.evidence.length || input.links?.length ? [
-      '',
-      '### Evidence',
-      ...input.evidence.map((entry) => `- ${entry.originalName} (${entry.mediaType}, ${entry.size} bytes, sha256 ${entry.sha256})`),
-      ...(input.links ?? []).map((link) => `- ${link.label ? `${link.label}: ` : ''}${link.url}`),
-    ] : []),
-    ...(input.prdRefs?.length ? ['', `PRD references: ${input.prdRefs.join(', ')}`] : []),
-    ...(input.beadRefs?.length ? [`Bead references: ${input.beadRefs.join(', ')}`] : []),
-  ].join('\n')
-}
-
 export function buildImprovementDescription(input: {
   description: string
+  title?: string
   sourceExternalId: string
   version: number
   itemId: string
@@ -342,48 +328,31 @@ export function buildImprovementDescription(input: {
   actions?: string[]
   userNote?: string
   improvementTitle?: string
+  observation?: string
   evidence: ManualQaEvidenceRef[]
   links?: Array<{ url: string; label?: string }>
   prdRefs?: string[]
   beadRefs?: string[]
 }): { description: string; omittedCharacters: number; omittedFields: string[] } {
-  const omittedFields: string[] = []
-  const baseContext = buildQaContextSection({
-    ...input,
-    actions: [],
-    evidence: [],
-    links: [],
-    prdRefs: [],
-    beadRefs: [],
+  const composed = composeManualQaImprovementDescription({
+    description: input.description,
+    itemTitle: input.title ?? input.behavior,
+    behavior: input.behavior,
+    source: input.source,
+    expectedResult: input.expectedResult,
+    actions: input.actions,
+    userNote: input.userNote,
+    improvementTitle: input.improvementTitle,
+    observation: input.observation,
+    links: input.links,
+    evidenceCount: input.evidence.length,
+    hasPrdRefs: Boolean(input.prdRefs?.length),
+    hasBeadRefs: Boolean(input.beadRefs?.length),
   })
-  // Retention priority: edited description, improvement/user note and request,
-  // actions/observed behavior, evidence, then compact PRD/bead provenance.
-  const descriptionBudget = Math.max(0, 10_000 - baseContext.length - 2)
-  const retained = input.description.slice(0, descriptionBudget)
-  if (retained.length < input.description.length) omittedFields.push('userEditedDescription')
-  let output = `${retained}${baseContext}`
-  const append = (label: string, content: string) => {
-    if (!content.trim()) return
-    const fragment = `\n${content}`
-    const available = 10_000 - output.length
-    if (available <= 1) {
-      omittedFields.push(label)
-      return
-    }
-    output += fragment.slice(0, available)
-    if (fragment.length > available) omittedFields.push(label)
-  }
-  append('actions', input.actions?.length ? `Actions:\n${input.actions.map((action) => `- ${action}`).join('\n')}` : '')
-  append('evidence', [
-    ...input.evidence.map((entry) => `- ${entry.originalName} (${entry.mediaType}, ${entry.size} bytes, sha256 ${entry.sha256})`),
-    ...(input.links ?? []).map((link) => `- ${link.label ? `${link.label}: ` : ''}${link.url}`),
-  ].join('\n'))
-  append('prdRefs', input.prdRefs?.length ? `PRD references: ${input.prdRefs.join(', ')}` : '')
-  append('beadRefs', input.beadRefs?.length ? `Bead references: ${input.beadRefs.join(', ')}` : '')
   return {
-    description: output.slice(0, 10_000),
-    omittedCharacters: Math.max(0, input.description.length - retained.length),
-    omittedFields: [...new Set(omittedFields)],
+    description: composed.description,
+    omittedCharacters: composed.omittedCharacters,
+    omittedFields: composed.omittedFields,
   }
 }
 
@@ -428,7 +397,16 @@ function copyImprovementEvidence(input: {
 }
 
 function findExistingImprovement(projectId: number, originId: string): ReturnType<typeof listTickets>[number] | null {
-  return listTickets(projectId).find((ticket) => ticket.description?.includes(`Manual QA origin: ${originId}`)) ?? null
+  return listTickets(projectId).find((ticket) => {
+    const paths = getTicketPaths(ticket.id)
+    if (!paths) return false
+    try {
+      const raw = JSON.parse(readFileSync(resolve(paths.ticketDir, 'meta', 'manual-qa-origin.json'), 'utf8')) as unknown
+      return Boolean(raw && typeof raw === 'object' && (raw as { originId?: unknown }).originId === originId)
+    } catch {
+      return false
+    }
+  }) ?? null
 }
 
 function createImprovementTicket(input: {
@@ -444,35 +422,66 @@ function createImprovementTicket(input: {
   evidence: ManualQaEvidenceRef[]
 }): string {
   const originId = `manual-qa:${input.sourceExternalId}:v${input.version}:${input.draft.id}`
-  const existing = findExistingImprovement(input.projectId, originId)
-  if (existing) return existing.id
+  const reservationPath = resolve(
+    getManualQaStoragePaths(input.sourceTicketDir, input.version).versionDir,
+    'improvement-operations',
+    `${contentSha256Text(originId)}.json`,
+  )
+  let reservedTicketId: string | null = null
+  if (existsSync(reservationPath)) {
+    const reservation = JSON.parse(readFileSync(reservationPath, 'utf8')) as { originId?: unknown; ticketId?: unknown }
+    if (reservation.originId !== originId || typeof reservation.ticketId !== 'string') {
+      throw new Error(`Manual QA improvement reservation is invalid: ${originId}`)
+    }
+    reservedTicketId = reservation.ticketId
+  }
+  const existing = reservedTicketId ? getTicketByRef(reservedTicketId) : findExistingImprovement(input.projectId, originId)
   const built = buildImprovementDescription({
     description: input.draft.description,
     sourceExternalId: input.sourceExternalId,
     version: input.version,
     itemId: input.item.id,
+    title: input.item.title,
     behavior: input.item.behavior,
     source: input.item.source,
     expectedResult: input.item.expectedResult,
     actions: input.item.actions,
     userNote: input.result.note,
     improvementTitle: input.draft.title,
+    observation: input.result.observation,
     evidence: input.evidence,
     links: input.result.links,
     prdRefs: input.item.prdRefs.map((entry) => `${entry.ref} (${entry.coverage})`),
     beadRefs: input.item.beadRefs,
   })
-  const contextMarker = `\nManual QA origin: ${originId}`
-  const description = `${built.description.slice(0, 10_000 - contextMarker.length)}${contextMarker}`
-  const ticket = createTicket({
+  const description = built.description
+  const ticket = existing ?? createManualQaImprovementTicket({
     projectId: input.projectId,
+    originId,
+    actionId: input.actionId,
     title: input.draft.title,
     description,
     priority: 3,
-    manualQaOverride: null,
   })
   const destinationPaths = getTicketPaths(ticket.id)
   if (!destinationPaths) throw new Error(`Improvement ticket storage was not created: ${ticket.id}`)
+  safeAtomicWrite(reservationPath, JSON.stringify({
+    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+    originId,
+    actionId: input.actionId,
+    ticketId: ticket.id,
+    state: 'created',
+    createdAt: ticket.createdAt,
+  }, null, 2))
+  const childOriginPath = resolve(destinationPaths.ticketDir, 'meta', 'manual-qa-origin.json')
+  if (!existsSync(childOriginPath)) {
+    safeAtomicWrite(childOriginPath, JSON.stringify({
+      schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+      originId,
+      actionId: input.actionId,
+      state: 'repairing',
+    }, null, 2))
+  }
   const copied = copyImprovementEvidence({
     sourceTicketDir: input.sourceTicketDir,
     destinationTicketDir: destinationPaths.ticketDir,
@@ -480,23 +489,29 @@ function createImprovementTicket(input: {
     itemId: input.item.id,
     evidence: input.evidence,
   })
-  const origin: ImprovementOrigin = {
+  const origin = ManualQaImprovementOriginSchema.parse({
     schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+    source: 'manual_qa_improvement',
     originId,
     actionId: input.actionId,
     sourceTicketId: input.sourceTicketId,
     sourceTicketExternalId: input.sourceExternalId,
+    sourceProjectId: input.projectId,
     sourceVersion: input.version,
-    sourceItemId: input.item.id,
-    sourceItemTitle: input.item.behavior,
+    sourceItemIds: [input.item.id],
+    sourceItemTitles: [input.item.title],
+    resultType: 'improvement',
+    relatedPrdRefs: input.item.prdRefs.map((entry) => entry.ref),
+    relatedBeadRefs: input.item.beadRefs,
     evidenceRefs: copied.copied,
     omittedEvidence: copied.omitted,
     titleSha256: contentSha256Text(input.draft.title),
     descriptionSha256: contentSha256Text(description),
     omittedFields: built.omittedFields,
-    createdAt: new Date().toISOString(),
-  }
-  safeAtomicWrite(resolve(destinationPaths.ticketDir, 'meta', 'manual-qa-origin.json'), JSON.stringify(origin, null, 2))
+    imageEvidenceMode: 'references_only',
+    createdAt: ticket.createdAt,
+  })
+  safeAtomicWrite(childOriginPath, JSON.stringify(origin, null, 2))
   safeAtomicWrite(resolve(destinationPaths.ticketDir, 'origin', 'manual-qa', 'source-receipt.json'), JSON.stringify(origin, null, 2))
   return ticket.id
 }
@@ -590,16 +605,121 @@ function buildQaFixBeads(input: {
   })
 }
 
-async function resolveQaImageDelivery(modelId: string | null | undefined, evidence: ManualQaEvidenceRef[]): Promise<'attached' | 'references_only'> {
-  if (!modelId || !evidence.some((entry) => entry.mediaType.toLowerCase().startsWith('image/'))) return 'references_only'
+async function resolveQaModelCapability(input: {
+  ticketId: string
+  version: number
+  modelId: string | null | undefined
+  modelVariant: string | null | undefined
+}): Promise<ManualQaModelCapabilitySnapshot> {
+  const capturedAt = new Date().toISOString()
+  if (!input.modelId) return {
+    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+    artifact: 'manual_qa_model_capability',
+    ticketId: input.ticketId,
+    version: input.version,
+    modelId: null,
+    modelVariant: input.modelVariant?.trim() || null,
+    capabilityLookup: 'unavailable',
+    supportsImages: null,
+    imageEvidenceMode: 'references_only',
+    capturedAt,
+  }
   try {
     const catalog = await fetchProviderCatalog()
-    return flattenCatalogModels(catalog, 'all').some((model) => model.fullId === modelId && model.canSeeImages)
-      ? 'attached'
-      : 'references_only'
+    const selected = flattenCatalogModels(catalog, 'all').find((model) => model.fullId === input.modelId)
+    const supportsImages = selected?.canSeeImages ?? false
+    return {
+      schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+      artifact: 'manual_qa_model_capability',
+      ticketId: input.ticketId,
+      version: input.version,
+      modelId: input.modelId,
+      modelVariant: input.modelVariant?.trim() || null,
+      capabilityLookup: selected ? 'available' : 'unavailable',
+      supportsImages: selected ? supportsImages : null,
+      imageEvidenceMode: selected && supportsImages ? 'attached' : 'references_only',
+      capturedAt,
+    }
   } catch {
-    return 'references_only'
+    return {
+      schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+      artifact: 'manual_qa_model_capability',
+      ticketId: input.ticketId,
+      version: input.version,
+      modelId: input.modelId,
+      modelVariant: input.modelVariant?.trim() || null,
+      capabilityLookup: 'unavailable',
+      supportsImages: null,
+      imageEvidenceMode: 'references_only',
+      capturedAt,
+    }
   }
+}
+
+function buildManualQaSummary(input: {
+  checklist: ManualQaChecklist
+  draft: ManualQaDraft
+  evidence: ManualQaEvidenceRef[]
+  outcome: ManualQaSummary['outcome']
+  createdFixBeadIds: string[]
+  improvementTicketIds: string[]
+  completedAt: string
+  skipReason?: string
+  modelCapability: ManualQaModelCapabilitySnapshot | null
+  coverage: ReturnType<typeof readManualQaCoverage>
+}): ManualQaSummary {
+  const resultByItemId = new Map(input.draft.results.map((result) => [result.itemId, result]))
+  const itemCounts = { pass: 0, fail: 0, waive: 0, improvement: 0, pending: 0 }
+  for (const item of input.checklist.items) {
+    const outcome = resultByItemId.get(item.id)?.outcome ?? 'pending'
+    itemCounts[outcome] += 1
+  }
+  const waivedItems = input.draft.results
+    .filter((result) => result.outcome === 'waive')
+    .map((result) => ({ itemId: result.itemId, reason: result.reason.trim() }))
+  const startedAt = input.checklist.generatedAt
+  return {
+    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+    artifact: 'manual_qa_summary',
+    ticketId: input.checklist.ticketId,
+    version: input.checklist.version,
+    outcome: input.outcome,
+    createdFixBeadIds: input.createdFixBeadIds,
+    improvementTicketIds: input.improvementTicketIds,
+    waivedItemIds: waivedItems.map((item) => item.itemId),
+    waivedItems,
+    ...(input.skipReason?.trim() ? { skipReason: input.skipReason.trim() } : {}),
+    startedAt,
+    completedAt: input.completedAt,
+    durationMs: Math.max(0, Date.parse(input.completedAt) - Date.parse(startedAt)),
+    itemCounts,
+    requiredItemCount: input.checklist.items.filter((item) => item.required).length,
+    optionalItemCount: input.checklist.items.filter((item) => !item.required).length,
+    evidenceCount: input.evidence.length,
+    nextAction: input.outcome === 'failed' || input.outcome === 'created_fixes' ? 'return_to_coding' : 'integrate',
+    coverage: {
+      covered: input.coverage?.coveredCount ?? 0,
+      partiallyCovered: input.coverage?.partiallyCoveredCount ?? 0,
+      uncovered: input.coverage?.uncoveredCount ?? 0,
+    },
+    modelCapability: input.modelCapability,
+  }
+}
+
+function appendManualQaSummaryEvent(ticketDir: string, summary: ManualQaSummary, actionId: string): void {
+  const skipped = summary.outcome === 'skipped'
+  appendManualQaEvent(ticketDir, {
+    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+    eventId: deterministicId(`${skipped ? 'skipped' : 'completed'}-v${summary.version}`, skipped ? actionId : summary.outcome),
+    eventType: skipped ? 'skipped' : 'completed',
+    ticketId: summary.ticketId,
+    version: summary.version,
+    actionId,
+    createdAt: summary.completedAt,
+    data: skipped
+      ? { reason: summary.skipReason ?? '' }
+      : { outcome: summary.outcome, nextAction: summary.nextAction },
+  })
 }
 
 function persistSummaryArtifact(ticketId: string, summary: ManualQaSummary): void {
@@ -609,12 +729,105 @@ function persistSummaryArtifact(ticketId: string, summary: ManualQaSummary): voi
 function persistManualQaPhaseArtifact(ticketId: string, artifactType: string, value: unknown, idempotencyKey: string): void {
   const existing = getLatestPhaseArtifact(ticketId, artifactType, 'WAITING_MANUAL_QA')
   if (existing?.content.includes(`"idempotencyKey":"${idempotencyKey}"`)) return
+  const content = value && typeof value === 'object' && !Array.isArray(value)
+    ? { ...(value as Record<string, unknown>), idempotencyKey }
+    : { idempotencyKey, value }
   insertPhaseArtifact(ticketId, {
     phase: 'WAITING_MANUAL_QA',
     phaseAttempt: resolvePhaseAttempt(ticketId, 'WAITING_MANUAL_QA'),
     artifactType,
-    content: JSON.stringify({ idempotencyKey, value }),
+    content: JSON.stringify(content),
   })
+}
+
+const QA_RESTART_PHASES = ['RUNNING_FINAL_TEST', 'GENERATING_QA_CHECKLIST', 'WAITING_MANUAL_QA'] as const
+
+function captureOperationSourceAttempts(ticketId: string, journal: ManualQaOperationJournal): boolean {
+  if (journal.sourcePhaseAttempts) return false
+  // Materialize attempt rows before recording their numbers. A synthetic
+  // default attempt (`1`) cannot later be distinguished from the first fresh
+  // row created for QA fixes, which would make recovery archive twice.
+  createFreshPhaseAttempts(ticketId, QA_RESTART_PHASES)
+  journal.sourcePhaseAttempts = Object.fromEntries(
+    QA_RESTART_PHASES.map((phase) => [phase, resolvePhaseAttempt(ticketId, phase)]),
+  )
+  return true
+}
+
+function prepareQaFixWorkflow(ticketId: string, journal: ManualQaOperationJournal): void {
+  const beadsPath = getTicketPaths(ticketId)?.beadsPath
+  if (!beadsPath) throw new Error(`Ticket storage was not found: ${ticketId}`)
+  const beads = readJsonl<Bead>(beadsPath)
+  const completed = beads.filter((bead) => bead.status === 'done').length
+  const currentBead = beads.length === 0 ? 0 : completed >= beads.length ? beads.length : completed + 1
+  patchTicket(ticketId, {
+    totalBeads: beads.length,
+    currentBead,
+    percentComplete: beads.length === 0 ? 0 : Math.round((completed / beads.length) * 100),
+  })
+  for (const phase of QA_RESTART_PHASES) {
+    const sourceAttempt = journal.sourcePhaseAttempts?.[phase]
+    const activeAttempt = listPhaseAttempts(ticketId, phase).find((attempt) => attempt.state === 'active')
+    if (sourceAttempt !== undefined && activeAttempt && activeAttempt.attemptNumber > sourceAttempt) continue
+    archiveActivePhaseAttempts(ticketId, [phase], 'manual_qa_fixes_created')
+    createFreshPhaseAttempts(ticketId, [phase])
+  }
+}
+
+function dispatchCompletedManualQaWorkflow(input: {
+  ticketId: string
+  summary: ManualQaSummary
+  journal?: ManualQaOperationJournal | null
+  sendEvent: (event: TicketEvent) => void
+}): void {
+  // A durable summary is written before the state-machine transition. Retried
+  // requests must finish that last step, but must not send an obsolete event
+  // after a prior request already moved the ticket out of Manual QA.
+  if (getTicketByRef(input.ticketId)?.status !== 'WAITING_MANUAL_QA') return
+  if (input.summary.outcome === 'failed') return
+  if (input.summary.outcome === 'created_fixes') {
+    const journal = input.journal ?? {
+      schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+      actionId: 'manual-qa-recovery',
+      operationType: 'submit',
+      ticketId: input.ticketId,
+      version: input.summary.version,
+      checklistHash: '',
+      draftRevision: 0,
+      state: 'complete',
+      improvementTicketIds: input.summary.improvementTicketIds,
+      fixBeadIds: input.summary.createdFixBeadIds,
+      sourcePhaseAttempts: Object.fromEntries(
+        QA_RESTART_PHASES.map((phase) => [phase, resolvePhaseAttempt(input.ticketId, phase)]),
+      ),
+      createdAt: input.summary.completedAt,
+      updatedAt: input.summary.completedAt,
+    } satisfies ManualQaOperationJournal
+    prepareQaFixWorkflow(input.ticketId, journal)
+  }
+  input.sendEvent({
+    type: input.summary.outcome === 'created_fixes'
+      ? 'MANUAL_QA_FIXES_CREATED'
+      : input.summary.outcome === 'skipped'
+        ? 'MANUAL_QA_SKIPPED'
+        : 'MANUAL_QA_COMPLETE',
+  })
+}
+
+function finalizeRecoveredOperation(
+  ticketId: string,
+  operationPath: string,
+  journal: ManualQaOperationJournal | null,
+  summary: ManualQaSummary,
+): void {
+  if (!journal || journal.state === 'complete') return
+  if (journal.ticketId !== ticketId || journal.version !== summary.version) {
+    throw new Error('Manual QA operation journal does not match the durable summary.')
+  }
+  journal.state = 'complete'
+  journal.updatedAt = summary.completedAt
+  writeJournal(operationPath, journal)
+  persistManualQaDatabaseOperation(ticketId, journal)
 }
 
 export async function submitManualQa(input: {
@@ -628,12 +841,27 @@ export async function submitManualQa(input: {
   const paths = getTicketPaths(input.ticketId)
   if (!ticket || !paths) throw new Error(`Ticket was not found: ${input.ticketId}`)
   const existingSummary = readManualQaSummary(paths.ticketDir, input.version)
-  if (existingSummary && existingSummary.outcome !== 'failed') return existingSummary
+  const operationPath = getManualQaStoragePaths(paths.ticketDir, input.version).operationPath
+  if (existingSummary && existingSummary.outcome !== 'failed') {
+    const existingJournal = existsSync(operationPath)
+      ? JSON.parse(readFileSync(operationPath, 'utf8')) as ManualQaOperationJournal
+      : null
+    finalizeRecoveredOperation(input.ticketId, operationPath, existingJournal, existingSummary)
+    appendManualQaSummaryEvent(paths.ticketDir, existingSummary, existingJournal?.actionId ?? `manual-qa-recovery-v${input.version}`)
+    dispatchCompletedManualQaWorkflow({
+      ticketId: input.ticketId,
+      summary: existingSummary,
+      journal: existingJournal,
+      sendEvent: input.sendEvent,
+    })
+    return existingSummary
+  }
   const draft = ManualQaDraftSchema.parse(input.draft)
   assertMutationGuard(input.ticketId, paths.ticketDir, input.version, draft, input.guard)
   const checklist = readManualQaChecklist(paths.ticketDir, input.version)
   if (!checklist) throw new Error('Manual QA checklist was not found.')
-  validateSubmission(checklist, draft)
+  const evidence = readManualQaEvidenceIndex(paths.ticketDir, input.version)
+  validateSubmission(checklist, draft, evidence)
   const drift = detectManualQaWorkspaceDrift(input.ticketId, input.version)
   if (drift.drifted) {
     const error = new Error('Manual QA workspace changed during user verification; include or discard audited files before submitting.')
@@ -641,33 +869,87 @@ export async function submitManualQa(input: {
     throw error
   }
 
-  snapshotManualQaDraft(paths.ticketDir, draft)
-  const evidence = readManualQaEvidenceIndex(paths.ticketDir, input.version)
-  const results: ManualQaResults = {
-    ...draft,
-    artifact: 'manual_qa_results',
-    actionId: input.guard.actionId,
-    submittedAt: new Date().toISOString(),
-  }
-  persistManualQaResults(paths.ticketDir, results)
-  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_draft', draft, input.guard.actionId)
-  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_results', results, input.guard.actionId)
-  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_submission_idempotency', {
-    actionId: input.guard.actionId,
-    version: input.version,
-    checklistHash: input.guard.expectedChecklistHash,
-    draftRevision: input.guard.expectedDraftRevision,
-  }, input.guard.actionId)
-  const operationPath = getManualQaStoragePaths(paths.ticketDir, input.version).operationPath
+  // Reserve and validate the durable operation before writing immutable
+  // snapshots. Conflicting retries must not modify canonical results first.
   const journal = reserveManualQaSubmissionOperation({
     path: operationPath,
     actionId: input.guard.actionId,
+    operationType: 'submit',
     ticketId: input.ticketId,
     version: input.version,
     checklistHash: input.guard.expectedChecklistHash,
     draftRevision: input.guard.expectedDraftRevision,
   })
+  if (captureOperationSourceAttempts(input.ticketId, journal)) {
+    journal.updatedAt = new Date().toISOString()
+    writeJournal(operationPath, journal)
+  }
   persistManualQaDatabaseOperation(input.ticketId, journal)
+  const operationActionId = journal.actionId
+
+  snapshotManualQaDraft(paths.ticketDir, draft)
+  const existingResults = readManualQaResults(paths.ticketDir, input.version)
+  let results: ManualQaResults
+  if (existingResults) {
+    const { artifact: _existingArtifact, actionId, submittedAt: _submittedAt, ...existingDraft } = existingResults
+    const { artifact: _draftArtifact, ...draftValue } = draft
+    if (actionId !== operationActionId || JSON.stringify(existingDraft) !== JSON.stringify(draftValue)) {
+      throw new Error('Canonical Manual QA results conflict with the reserved submission operation.')
+    }
+    results = existingResults
+  } else {
+    results = {
+      ...draft,
+      artifact: 'manual_qa_results',
+      actionId: operationActionId,
+      submittedAt: new Date().toISOString(),
+    }
+    persistManualQaResults(paths.ticketDir, results)
+  }
+  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_draft', draft, operationActionId)
+  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_results', results, operationActionId)
+  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_submission_idempotency', {
+    actionId: operationActionId,
+    version: input.version,
+    checklistHash: input.guard.expectedChecklistHash,
+    draftRevision: input.guard.expectedDraftRevision,
+  }, operationActionId)
+  appendManualQaEvent(paths.ticketDir, {
+    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+    eventId: deterministicId(`submission-v${input.version}`, operationActionId),
+    eventType: 'draft_submitted',
+    ticketId: ticket.externalId,
+    version: input.version,
+    actionId: operationActionId,
+    createdAt: journal.createdAt,
+    data: { draftRevision: journal.draftRevision, checklistHash: journal.checklistHash },
+  })
+
+  const failed = draft.results.filter((result) => result.outcome === 'fail')
+  const modelCapability = readManualQaModelCapabilitySnapshot(paths.ticketDir, input.version)
+    ?? await resolveQaModelCapability({
+      ticketId: ticket.externalId,
+      version: input.version,
+      modelId: ticket.lockedMainImplementer,
+      modelVariant: ticket.lockedMainImplementerVariant,
+    })
+  persistManualQaModelCapabilitySnapshot(paths.ticketDir, modelCapability)
+  const coverage = readManualQaCoverage(paths.ticketDir, input.version)
+  if (failed.length > 0 && existingSummary?.outcome !== 'failed') {
+    const intermediate = buildManualQaSummary({
+      checklist,
+      draft,
+      evidence,
+      outcome: 'failed',
+      createdFixBeadIds: [],
+      improvementTicketIds: [],
+      completedAt: new Date().toISOString(),
+      modelCapability,
+      coverage,
+    })
+    persistManualQaSummary(paths.ticketDir, intermediate)
+    persistSummaryArtifact(input.ticketId, intermediate)
+  }
 
   const itemById = new Map(checklist.items.map((item) => [item.id, item]))
   journal.state = 'creating_improvements'
@@ -676,15 +958,13 @@ export async function submitManualQa(input: {
   persistManualQaDatabaseOperation(input.ticketId, journal)
   for (const result of draft.results.filter((entry) => entry.outcome === 'improvement')) {
     const improvement = draft.improvements.find((entry) => entry.id === result.improvementDraftId)!
-    const deterministicOrigin = `manual-qa:${ticket.externalId}:v${input.version}:${improvement.id}`
-    const existing = findExistingImprovement(ticket.projectId, deterministicOrigin)
-    const ticketId = existing?.id ?? createImprovementTicket({
+    const ticketId = createImprovementTicket({
       sourceTicketId: input.ticketId,
       sourceExternalId: ticket.externalId,
       sourceTicketDir: paths.ticketDir,
       projectId: ticket.projectId,
       version: input.version,
-      actionId: input.guard.actionId,
+      actionId: operationActionId,
       draft: improvement,
       item: itemById.get(result.itemId)!,
       result,
@@ -697,31 +977,44 @@ export async function submitManualQa(input: {
       persistManualQaDatabaseOperation(input.ticketId, journal)
     }
   }
+  const improvementCreations = journal.improvementTicketIds.map((ticketId) => {
+    const childPaths = getTicketPaths(ticketId)
+    if (!childPaths) throw new Error(`Improvement ticket storage was not found while writing its source receipt: ${ticketId}`)
+    const origin = ManualQaImprovementOriginSchema.parse(JSON.parse(
+      readFileSync(resolve(childPaths.ticketDir, 'meta', 'manual-qa-origin.json'), 'utf8'),
+    ) as unknown)
+    return {
+      ticketId,
+      sourceItemIds: origin.sourceItemIds,
+      titleSha256: origin.titleSha256,
+      descriptionSha256: origin.descriptionSha256,
+      copiedEvidence: origin.evidenceRefs.map((entry) => ({ id: entry.id, sha256: entry.sha256 })),
+      omittedEvidence: origin.omittedEvidence,
+      omittedFields: origin.omittedFields,
+      createdAt: origin.createdAt,
+    }
+  })
   const improvementReceipt = {
     schemaVersion: MANUAL_QA_SCHEMA_VERSION,
-    actionId: input.guard.actionId,
+    actionId: operationActionId,
     version: input.version,
     ticketIds: journal.improvementTicketIds,
+    tickets: improvementCreations,
     createdAt: new Date().toISOString(),
   }
   safeAtomicWrite(getManualQaStoragePaths(paths.ticketDir, input.version).improvementTicketReceiptPath, JSON.stringify(improvementReceipt, null, 2))
-  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_improvement_ticket_receipt', improvementReceipt, input.guard.actionId)
-
-  const failed = draft.results.filter((result) => result.outcome === 'fail')
-  if (failed.length > 0 && existingSummary?.outcome !== 'failed') {
-    const intermediate: ManualQaSummary = {
+  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_improvement_ticket_receipt', improvementReceipt, operationActionId)
+  for (const creation of improvementCreations) {
+    appendManualQaEvent(paths.ticketDir, {
       schemaVersion: MANUAL_QA_SCHEMA_VERSION,
-      artifact: 'manual_qa_summary',
+      eventId: deterministicId(`improvement-v${input.version}`, creation.ticketId),
+      eventType: 'improvement_created',
       ticketId: ticket.externalId,
       version: input.version,
-      outcome: 'failed',
-      createdFixBeadIds: [],
-      improvementTicketIds: journal.improvementTicketIds,
-      waivedItemIds: draft.results.filter((entry) => entry.outcome === 'waive').map((entry) => entry.itemId),
-      completedAt: new Date().toISOString(),
-    }
-    persistManualQaSummary(paths.ticketDir, intermediate)
-    persistSummaryArtifact(input.ticketId, intermediate)
+      actionId: operationActionId,
+      createdAt: creation.createdAt,
+      data: { ticketId: creation.ticketId, sourceItemIds: creation.sourceItemIds },
+    })
   }
 
   const existingBeads = readJsonl<Bead>(paths.beadsPath)
@@ -733,8 +1026,8 @@ export async function submitManualQa(input: {
     ticketId: input.ticketId,
     externalId: ticket.externalId,
     version: input.version,
-    actionId: input.guard.actionId,
-    imageDelivery: await resolveQaImageDelivery(ticket.lockedMainImplementer, evidence),
+    actionId: operationActionId,
+    imageDelivery: modelCapability.imageEvidenceMode,
   })
   journal.state = 'creating_beads'
   journal.fixBeadIds = fixBeads.map((bead) => bead.id)
@@ -748,46 +1041,52 @@ export async function submitManualQa(input: {
 
   const beadReceipt = {
     schemaVersion: MANUAL_QA_SCHEMA_VERSION,
-    actionId: input.guard.actionId,
+    actionId: operationActionId,
     version: input.version,
     beadIds: journal.fixBeadIds,
     createdAt: new Date().toISOString(),
   }
   safeAtomicWrite(getManualQaStoragePaths(paths.ticketDir, input.version).beadCreationReceiptPath, JSON.stringify(beadReceipt, null, 2))
-  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_bead_creation_receipt', beadReceipt, input.guard.actionId)
+  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_bead_creation_receipt', beadReceipt, operationActionId)
+  if (journal.fixBeadIds.length > 0) {
+    appendManualQaEvent(paths.ticketDir, {
+      schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+      eventId: deterministicId(`fixes-v${input.version}`, operationActionId),
+      eventType: 'fixes_created',
+      ticketId: ticket.externalId,
+      version: input.version,
+      actionId: operationActionId,
+      createdAt: beadReceipt.createdAt,
+      data: { beadIds: journal.fixBeadIds },
+    })
+  }
 
   const waivedItemIds = draft.results.filter((result) => result.outcome === 'waive').map((result) => result.itemId)
   const requiredWaivers = waivedItemIds.filter((itemId) => itemById.get(itemId)?.required)
-  const summary: ManualQaSummary = {
-    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
-    artifact: 'manual_qa_summary',
-    ticketId: ticket.externalId,
-    version: input.version,
+  const summary = buildManualQaSummary({
+    checklist,
+    draft,
+    evidence,
     outcome: failed.length > 0 ? 'created_fixes' : requiredWaivers.length > 0 ? 'waived_through' : 'passed',
     createdFixBeadIds: journal.fixBeadIds,
     improvementTicketIds: journal.improvementTicketIds,
-    waivedItemIds,
     completedAt: new Date().toISOString(),
-  }
+    modelCapability,
+    coverage,
+  })
   persistManualQaSummary(paths.ticketDir, summary)
   persistSummaryArtifact(input.ticketId, summary)
+  appendManualQaSummaryEvent(paths.ticketDir, summary, operationActionId)
   journal.state = 'complete'
   journal.updatedAt = new Date().toISOString()
   writeJournal(operationPath, journal)
   persistManualQaDatabaseOperation(input.ticketId, journal)
-  if (failed.length > 0) {
-    patchTicket(input.ticketId, {
-      totalBeads: existingBeads.length + fixBeads.filter((bead) => !existingBeads.some((existingBead) => existingBead.id === bead.id)).length,
-      currentBead: existingBeads.filter((bead) => bead.status === 'done').length,
-    })
-    archiveActivePhaseAttempts(
-      input.ticketId,
-      ['RUNNING_FINAL_TEST', 'GENERATING_QA_CHECKLIST', 'WAITING_MANUAL_QA'],
-      'manual_qa_fixes_created',
-    )
-    createFreshPhaseAttempts(input.ticketId, ['RUNNING_FINAL_TEST', 'GENERATING_QA_CHECKLIST', 'WAITING_MANUAL_QA'])
-  }
-  input.sendEvent({ type: failed.length > 0 ? 'MANUAL_QA_FIXES_CREATED' : 'MANUAL_QA_COMPLETE' })
+  dispatchCompletedManualQaWorkflow({
+    ticketId: input.ticketId,
+    summary,
+    journal,
+    sendEvent: input.sendEvent,
+  })
   return summary
 }
 
@@ -802,8 +1101,22 @@ export async function skipManualQa(input: {
   const ticket = getTicketByRef(input.ticketId)
   const ticketDir = resolveManualQaTicketDir(input.ticketId)
   if (!ticket) throw new Error(`Ticket was not found: ${input.ticketId}`)
+  const operationPath = getManualQaStoragePaths(ticketDir, input.version).operationPath
   const existing = readManualQaSummary(ticketDir, input.version)
-  if (existing) return existing
+  if (existing && existing.outcome !== 'failed') {
+    const existingJournal = existsSync(operationPath)
+      ? JSON.parse(readFileSync(operationPath, 'utf8')) as ManualQaOperationJournal
+      : null
+    finalizeRecoveredOperation(input.ticketId, operationPath, existingJournal, existing)
+    appendManualQaSummaryEvent(ticketDir, existing, existingJournal?.actionId ?? `manual-qa-recovery-v${input.version}`)
+    dispatchCompletedManualQaWorkflow({
+      ticketId: input.ticketId,
+      summary: existing,
+      journal: existingJournal,
+      sendEvent: input.sendEvent,
+    })
+    return existing
+  }
   const draft = ManualQaDraftSchema.parse(input.draft)
   assertMutationGuard(input.ticketId, ticketDir, input.version, draft, input.guard)
   const drift = detectManualQaWorkspaceDrift(input.ticketId, input.version)
@@ -812,52 +1125,75 @@ export async function skipManualQa(input: {
     Object.assign(error, { code: 'MANUAL_QA_WORKSPACE_DRIFT', drift })
     throw error
   }
-  snapshotManualQaDraft(ticketDir, draft)
-  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_draft', draft, input.guard.actionId)
   const now = new Date().toISOString()
-  persistManualQaDatabaseOperation(input.ticketId, {
-    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
+  const journal = reserveManualQaSubmissionOperation({
+    path: operationPath,
     actionId: input.guard.actionId,
+    operationType: 'skip',
     ticketId: input.ticketId,
     version: input.version,
     checklistHash: input.guard.expectedChecklistHash,
     draftRevision: input.guard.expectedDraftRevision,
-    state: 'complete',
-    improvementTicketIds: [],
-    fixBeadIds: [],
-    createdAt: now,
-    updatedAt: now,
   })
+  captureOperationSourceAttempts(input.ticketId, journal)
+  journal.updatedAt = now
+  writeJournal(operationPath, journal)
+  persistManualQaDatabaseOperation(input.ticketId, journal)
+  const operationActionId = journal.actionId
+  const checklist = readManualQaChecklist(ticketDir, input.version)
+  if (!checklist) throw new Error('Manual QA checklist was not found.')
+  const evidence = readManualQaEvidenceIndex(ticketDir, input.version)
+
+  snapshotManualQaDraft(ticketDir, draft)
+  persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_draft', draft, operationActionId)
   safeAtomicWrite(getManualQaStoragePaths(ticketDir, input.version).skipReceiptPath, [
     `schemaVersion: ${MANUAL_QA_SCHEMA_VERSION}`,
     'artifact: manual_qa_skip_receipt',
     `ticketId: ${JSON.stringify(ticket.externalId)}`,
     `version: ${input.version}`,
-    `actionId: ${JSON.stringify(input.guard.actionId)}`,
+    `actionId: ${JSON.stringify(operationActionId)}`,
     `reason: ${JSON.stringify(input.reason ?? '')}`,
     `createdAt: ${JSON.stringify(now)}`,
     '',
   ].join('\n'))
-  const summary: ManualQaSummary = {
-    schemaVersion: MANUAL_QA_SCHEMA_VERSION,
-    artifact: 'manual_qa_summary',
-    ticketId: ticket.externalId,
-    version: input.version,
+  const modelCapability = readManualQaModelCapabilitySnapshot(ticketDir, input.version)
+    ?? await resolveQaModelCapability({
+      ticketId: ticket.externalId,
+      version: input.version,
+      modelId: ticket.lockedMainImplementer,
+      modelVariant: ticket.lockedMainImplementerVariant,
+    })
+  persistManualQaModelCapabilitySnapshot(ticketDir, modelCapability)
+  const summary = buildManualQaSummary({
+    checklist,
+    draft,
+    evidence,
     outcome: 'skipped',
     createdFixBeadIds: [],
     improvementTicketIds: [],
-    waivedItemIds: [],
-    ...(input.reason?.trim() ? { skipReason: input.reason.trim() } : {}),
+    skipReason: input.reason,
     completedAt: now,
-  }
+    modelCapability,
+    coverage: readManualQaCoverage(ticketDir, input.version),
+  })
   persistManualQaSummary(ticketDir, summary)
   persistManualQaPhaseArtifact(input.ticketId, 'manual_qa_skip_receipt', {
-    actionId: input.guard.actionId,
+    actionId: operationActionId,
     version: input.version,
     reason: input.reason ?? '',
     createdAt: now,
-  }, input.guard.actionId)
+  }, operationActionId)
   persistSummaryArtifact(input.ticketId, summary)
-  input.sendEvent({ type: 'MANUAL_QA_SKIPPED' })
+  appendManualQaSummaryEvent(ticketDir, summary, operationActionId)
+  journal.state = 'complete'
+  journal.updatedAt = new Date().toISOString()
+  writeJournal(operationPath, journal)
+  persistManualQaDatabaseOperation(input.ticketId, journal)
+  dispatchCompletedManualQaWorkflow({
+    ticketId: input.ticketId,
+    summary,
+    journal,
+    sendEvent: input.sendEvent,
+  })
   return summary
 }

@@ -34,6 +34,7 @@ function isReviewablePhase(
 ): boolean {
   const phaseIndex = phaseOrder.indexOf(phase)
   if (currentStatus === 'CANCELED') {
+    if (visitedStatuses.includes(phase)) return true
     if (!reviewCutoffStatus) return false
     const cutoffIndex = phaseOrder.indexOf(reviewCutoffStatus)
     return phaseIndex >= 0 && cutoffIndex >= 0 && phaseIndex <= cutoffIndex

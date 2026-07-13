@@ -451,13 +451,21 @@ export async function executeBead(
 
     try {
       let sessionId = ''
-      const promptContent = buildPromptFromTemplate(PROM_CODING, await resolveContextParts(contextParts))
+      const resolvedContextParts = await resolveContextParts(contextParts)
+      const promptContent = buildPromptFromTemplate(
+        PROM_CODING,
+        resolvedContextParts.filter((part) => part.type !== 'file'),
+      )
       iterationInitialInput = promptContent
       const beadPrompt: PromptPart[] = [
         {
           type: 'text',
           content: promptContent,
         },
+        // Keep SDK file parts out of the rendered text template and forward
+        // them intact. Manual QA image evidence relies on the OpenCode file
+        // part contract; provider/context failures must surface normally.
+        ...resolvedContextParts.filter((part) => part.type === 'file'),
       ]
 
       const runBeadPrompt = () => runOpenCodePrompt({

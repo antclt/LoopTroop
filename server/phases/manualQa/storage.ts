@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import {
   constants as fsConstants,
+  createReadStream,
   existsSync,
   lstatSync,
   mkdirSync,
@@ -12,6 +13,7 @@ import {
 import { open, realpath } from 'node:fs/promises'
 import { basename, extname, resolve, sep } from 'node:path'
 import { safeAtomicWrite } from '../../io/atomicWrite'
+import { appendJsonl, readJsonl } from '../../io/jsonl'
 import { buildYamlDocument, parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
 import { contentSha256 } from '../../lib/contentHash'
 import { getTicketPaths } from '../../storage/tickets'
@@ -22,14 +24,18 @@ import {
   ManualQaCoverageSchema,
   ManualQaDraftSchema,
   ManualQaEvidenceRefSchema,
+  ManualQaEventSchema,
+  ManualQaModelCapabilitySnapshotSchema,
   ManualQaResultsSchema,
   ManualQaSummarySchema,
   type ManualQaChecklist,
   type ManualQaCoverage,
   type ManualQaDraft,
   type ManualQaEvidenceRef,
+  type ManualQaEvent,
   type ManualQaGenerationReservation,
   type ManualQaResults,
+  type ManualQaModelCapabilitySnapshot,
   type ManualQaSummary,
 } from './types'
 
@@ -50,6 +56,8 @@ export interface ManualQaStoragePaths {
   evidenceIndexPath: string
   reservationPath: string
   baselinePath: string
+  modelCapabilityPath: string
+  eventsPath: string
 }
 
 function assertVersion(version: number): void {
@@ -75,6 +83,8 @@ export function getManualQaStoragePaths(ticketDir: string, version: number): Man
     evidenceIndexPath: resolve(versionDir, 'evidence', 'index.json'),
     reservationPath: resolve(root, `generation-reservation-v${version}.json`),
     baselinePath: resolve(root, `workspace-baseline-v${version}.json`),
+    modelCapabilityPath: resolve(versionDir, 'model-capability.json'),
+    eventsPath: resolve(root, 'events.jsonl'),
   }
 }
 
@@ -134,6 +144,52 @@ export function persistManualQaSummary(ticketDir: string, summary: ManualQaSumma
 
 export function readManualQaSummary(ticketDir: string, version: number): ManualQaSummary | null {
   return readYaml(getManualQaStoragePaths(ticketDir, version).summaryPath, ManualQaSummarySchema)
+}
+
+export function persistManualQaModelCapabilitySnapshot(
+  ticketDir: string,
+  snapshot: ManualQaModelCapabilitySnapshot,
+): void {
+  const parsed = ManualQaModelCapabilitySnapshotSchema.parse(snapshot)
+  const path = getManualQaStoragePaths(ticketDir, parsed.version).modelCapabilityPath
+  if (existsSync(path)) {
+    const existing = ManualQaModelCapabilitySnapshotSchema.parse(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+    if (JSON.stringify(existing) !== JSON.stringify(parsed)) {
+      throw new Error('Manual QA model capability snapshot is immutable once captured.')
+    }
+    return
+  }
+  safeAtomicWrite(path, JSON.stringify(parsed, null, 2))
+}
+
+export function readManualQaModelCapabilitySnapshot(
+  ticketDir: string,
+  version: number,
+): ManualQaModelCapabilitySnapshot | null {
+  const path = getManualQaStoragePaths(ticketDir, version).modelCapabilityPath
+  if (!existsSync(path)) return null
+  return ManualQaModelCapabilitySnapshotSchema.parse(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+}
+
+export function appendManualQaEvent(ticketDir: string, event: ManualQaEvent): ManualQaEvent {
+  const parsed = ManualQaEventSchema.parse(event)
+  const path = getManualQaStoragePaths(ticketDir, parsed.version).eventsPath
+  mkdirSync(resolve(path, '..'), { recursive: true })
+  const existing = readJsonl<unknown>(path).map((value) => ManualQaEventSchema.parse(value))
+  const duplicate = existing.find((entry) => entry.eventId === parsed.eventId)
+  if (duplicate) {
+    if (JSON.stringify(duplicate) !== JSON.stringify(parsed)) {
+      throw new Error(`Manual QA event ID ${parsed.eventId} was reused with different content.`)
+    }
+    return duplicate
+  }
+  appendJsonl(path, parsed)
+  return parsed
+}
+
+export function readManualQaEvents(ticketDir: string): ManualQaEvent[] {
+  const path = resolve(ticketDir, 'manual-qa', 'events.jsonl')
+  return readJsonl<unknown>(path).map((value) => ManualQaEventSchema.parse(value))
 }
 
 export function snapshotManualQaDraft(ticketDir: string, draft: ManualQaDraft): ManualQaDraft {
@@ -206,13 +262,14 @@ export interface ManualQaEvidenceActionReceipt {
   schemaVersion: 1
   actionId: string
   operation: 'upload' | 'remove'
+  state: 'staged' | 'complete'
   evidence: ManualQaEvidenceRef
   createdAt: string
 }
 
 function evidenceActionReceiptPath(ticketDir: string, version: number, actionId: string): string {
-  const safeId = actionId.replace(/[^A-Za-z0-9._-]/g, '_')
-  return resolve(getManualQaStoragePaths(ticketDir, version).evidenceDir, 'operations', `${safeId}.json`)
+  const actionHash = createHash('sha256').update(actionId, 'utf8').digest('hex')
+  return resolve(getManualQaStoragePaths(ticketDir, version).evidenceDir, 'operations', `${actionHash}.json`)
 }
 
 export function readManualQaEvidenceActionReceipt(
@@ -221,7 +278,10 @@ export function readManualQaEvidenceActionReceipt(
   actionId: string,
 ): ManualQaEvidenceActionReceipt | null {
   const path = evidenceActionReceiptPath(ticketDir, version, actionId)
-  return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) as ManualQaEvidenceActionReceipt : null
+  if (!existsSync(path)) return null
+  const receipt = JSON.parse(readFileSync(path, 'utf8')) as ManualQaEvidenceActionReceipt
+  if (receipt.actionId !== actionId) throw new Error('Evidence action receipt identity does not match its request.')
+  return receipt
 }
 
 export function persistManualQaEvidenceActionReceipt(
@@ -230,16 +290,28 @@ export function persistManualQaEvidenceActionReceipt(
   actionId: string,
   operation: ManualQaEvidenceActionReceipt['operation'],
   evidence: ManualQaEvidenceRef,
+  state: ManualQaEvidenceActionReceipt['state'] = 'complete',
 ): ManualQaEvidenceActionReceipt {
   const existing = readManualQaEvidenceActionReceipt(ticketDir, version, actionId)
   if (existing) {
-    if (existing.operation !== operation) throw new Error('Evidence action ID was already used for another operation.')
+    if (
+      existing.operation !== operation
+      || existing.evidence.id !== evidence.id
+      || existing.evidence.itemId !== evidence.itemId
+      || existing.evidence.sha256 !== evidence.sha256
+    ) throw new Error('Evidence action ID was already used for another operation or evidence item.')
+    if (existing.state === 'staged' && state === 'complete') {
+      const completed = { ...existing, state: 'complete' as const }
+      safeAtomicWrite(evidenceActionReceiptPath(ticketDir, version, actionId), JSON.stringify(completed, null, 2))
+      return completed
+    }
     return existing
   }
   const receipt: ManualQaEvidenceActionReceipt = {
     schemaVersion: MANUAL_QA_SCHEMA_VERSION,
     actionId,
     operation,
+    state,
     evidence: ManualQaEvidenceRefSchema.parse(evidence),
     createdAt: new Date().toISOString(),
   }
@@ -274,6 +346,33 @@ export function isSafeRasterMediaType(mediaType: string): boolean {
   return SAFE_RASTER_TYPES.has(mediaType.toLowerCase())
 }
 
+function hasRasterSignature(mediaType: string, header: Uint8Array): boolean {
+  const ascii = (start: number, end: number) => String.fromCharCode(...header.slice(start, end))
+  switch (mediaType.toLowerCase()) {
+    case 'image/png':
+      return header.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => header[index] === value)
+    case 'image/jpeg':
+      return header.length >= 3 && header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff
+    case 'image/gif':
+      return header.length >= 6 && (ascii(0, 6) === 'GIF87a' || ascii(0, 6) === 'GIF89a')
+    case 'image/webp':
+      return header.length >= 12 && ascii(0, 4) === 'RIFF' && ascii(8, 12) === 'WEBP'
+    case 'image/avif': {
+      if (header.length < 12 || ascii(4, 8) !== 'ftyp') return false
+      const brand = ascii(8, 12)
+      return brand === 'avif' || brand === 'avis'
+    }
+    default:
+      return false
+  }
+}
+
+async function sha256File(path: string): Promise<string> {
+  const hash = createHash('sha256')
+  for await (const chunk of createReadStream(path)) hash.update(chunk)
+  return hash.digest('hex')
+}
+
 async function assertContainedDirectory(directory: string, root: string): Promise<void> {
   mkdirSync(directory, { recursive: true })
   const resolvedRoot = await realpath(root)
@@ -300,6 +399,11 @@ export async function streamManualQaEvidence(input: {
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(itemId)) throw new Error('Invalid checklist item ID.')
 
   const paths = getManualQaStoragePaths(input.ticketDir, input.version)
+  const checklist = readManualQaChecklist(input.ticketDir, input.version)
+  if (!checklist) throw new Error('Manual QA checklist was not found for evidence upload.')
+  if (!checklist.items.some((item) => item.id === itemId)) {
+    throw new Error(`Evidence references unknown checklist item: ${itemId}`)
+  }
   await assertContainedDirectory(paths.evidenceDir, paths.root)
   const existing = readManualQaEvidenceIndex(input.ticketDir, input.version)
   if (existing.some((entry) => entry.id === evidenceId)) throw new Error(`Evidence ID already exists: ${evidenceId}`)
@@ -320,6 +424,7 @@ export async function streamManualQaEvidence(input: {
   const handle = await open(temporaryPath, fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_WRONLY, 0o600)
   const reader = input.body.getReader()
   const hash = createHash('sha256')
+  const signatureBytes: number[] = []
   let size = 0
   try {
     while (true) {
@@ -332,6 +437,10 @@ export async function streamManualQaEvidence(input: {
         throw new Error(`Evidence file exceeds ${MAX_MANUAL_QA_EVIDENCE_BYTES} bytes.`)
       }
       hash.update(value)
+      for (const byte of value) {
+        if (signatureBytes.length >= 16) break
+        signatureBytes.push(byte)
+      }
       await handle.write(value)
     }
     await handle.sync()
@@ -343,13 +452,26 @@ export async function streamManualQaEvidence(input: {
     reader.releaseLock()
   }
   await handle.close()
-  if (existsSync(finalPath) || lstatSync(temporaryPath).isSymbolicLink()) {
+  const sha256 = hash.digest('hex')
+  if (lstatSync(temporaryPath).isSymbolicLink()) {
     rmSync(temporaryPath, { force: true })
-    throw new Error('Evidence destination already exists or is unsafe.')
+    throw new Error('Evidence upload temporary file is unsafe.')
   }
-  renameSync(temporaryPath, finalPath)
+  if (existsSync(finalPath)) {
+    const finalStats = lstatSync(finalPath)
+    const matchesInterruptedUpload = finalStats.isFile()
+      && !finalStats.isSymbolicLink()
+      && finalStats.size === size
+      && await sha256File(finalPath) === sha256
+    rmSync(temporaryPath, { force: true })
+    if (!matchesInterruptedUpload) throw new Error('Evidence destination already exists or is unsafe.')
+  } else {
+    renameSync(temporaryPath, finalPath)
+  }
 
   const mediaType = (input.mediaType || 'application/octet-stream').trim().toLowerCase()
+  const inlinePreview = isSafeRasterMediaType(mediaType)
+    && hasRasterSignature(mediaType, Uint8Array.from(signatureBytes))
   const metadata = ManualQaEvidenceRefSchema.parse({
     id: evidenceId,
     itemId,
@@ -357,8 +479,8 @@ export async function streamManualQaEvidence(input: {
     storedName,
     mediaType,
     size,
-    sha256: hash.digest('hex'),
-    inlinePreview: isSafeRasterMediaType(mediaType),
+    sha256,
+    inlinePreview,
     createdAt: new Date().toISOString(),
   })
   writeEvidenceIndex(input.ticketDir, input.version, [...existing, metadata])
@@ -408,6 +530,7 @@ export interface ManualQaVersionDetail {
   results: ManualQaResults | null
   summary: ManualQaSummary | null
   evidence: ManualQaEvidenceRef[]
+  modelCapability: ManualQaModelCapabilitySnapshot | null
 }
 
 export function getManualQaVersionDetail(ticketDir: string, version: number): ManualQaVersionDetail {
@@ -418,17 +541,26 @@ export function getManualQaVersionDetail(ticketDir: string, version: number): Ma
     results: readManualQaResults(ticketDir, version),
     summary: readManualQaSummary(ticketDir, version),
     evidence: readManualQaEvidenceIndex(ticketDir, version),
+    modelCapability: readManualQaModelCapabilitySnapshot(ticketDir, version),
   }
+}
+
+export function resolveActiveManualQaVersion(ticketDir: string): number | null {
+  return listManualQaVersions(ticketDir).findLast((version) => {
+    const summary = readManualQaSummary(ticketDir, version)
+    return !summary || summary.outcome === 'failed'
+  }) ?? null
 }
 
 export function buildManualQaProjection(ticketId: string) {
   const ticketDir = resolveManualQaTicketDir(ticketId)
   const versions = listManualQaVersions(ticketDir)
-  const activeVersion = versions.findLast((version) => !readManualQaSummary(ticketDir, version)) ?? versions.at(-1) ?? null
+  const activeVersion = resolveActiveManualQaVersion(ticketDir)
   const summaries = versions.map((version) => readManualQaSummary(ticketDir, version)).filter((value): value is ManualQaSummary => Boolean(value))
+  const completedSummaries = summaries.filter((summary) => summary.outcome !== 'failed')
   return {
     activeVersion,
-    completedRoundCount: summaries.length,
+    completedRoundCount: completedSummaries.length,
     latestOutcome: summaries.at(-1)?.outcome ?? null,
     artifactAvailable: activeVersion !== null && readManualQaChecklist(ticketDir, activeVersion) !== null,
     versions,

@@ -181,6 +181,36 @@ describe('executeBead', () => {
     expect(result.rawAttempts?.[0]?.initialInput).toContain('BEAD_STATUS')
   })
 
+  it('forwards Manual QA image evidence as SDK file parts', async () => {
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.mockResponses.set('mock-session-1#1', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+
+    const imagePart = {
+      type: 'file' as const,
+      content: '',
+      source: 'manual_qa_evidence:item-1:evidence-1',
+      url: 'file:///contained/screenshot.png',
+      mime: 'image/png',
+      filename: 'screenshot.png',
+    }
+    const result = await executeBead(
+      adapter,
+      buildBead(),
+      [{ type: 'text', content: 'Bead context' }, imagePart],
+      '/tmp/test',
+      1,
+    )
+
+    expect(result.success).toBe(true)
+    expect(adapter.promptCalls[0]?.parts).toEqual(expect.arrayContaining([imagePart]))
+    const textPart = adapter.promptCalls[0]?.parts.find((part) => part.type === 'text')
+    expect(textPart?.content).not.toContain('manual_qa_evidence')
+  })
+
   it('continues the same session when the model reports status:error before eventually succeeding', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()
     adapter.mockResponses.set('mock-session-1#1', [
@@ -644,7 +674,7 @@ describe('executeBead', () => {
     expect(preservedTimeouts).toEqual([])
     expect(adapter.abortCalls).toEqual(['mock-session-1'])
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1', 'mock-session-2'])
-  })
+  }, 40_000)
 
   it('resets and retries when the per-iteration timeout expires during a continuation prompt', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()

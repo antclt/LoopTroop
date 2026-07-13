@@ -100,7 +100,7 @@ ticketState:
 
 ### Manual QA generation contract
 
-Manual QA checklist generation uses a dedicated focused builder rather than inheriting the entire generic ticket state. It supplies only ticket details, the frozen approved PRD, selected bead fields, the **current** final-test report, the latest previous QA artifacts, and targeted diff metadata. Read-only focused diff inspection is permitted, but raw whole-repository dumps are prohibited. Coverage comes from PRD refs in the same strict response and is computed in code—there is no second coverage model call.
+Manual QA checklist generation uses a dedicated focused builder rather than inheriting the entire generic ticket state. It supplies the ticket title/description, frozen approved PRD, selected bead behavior and verification fields, the **current** final-test report, the latest previous checklist/results/coverage/summary, and targeted metadata spanning the complete merge-base-to-clean-checkpoint candidate range. Read-only focused diff inspection is permitted, but raw whole-repository dumps are prohibited. Coverage and source-category counts come from the same strict response and are computed in code—there is no second coverage model call. Later-round output must keep stable lineage for referenced prior items, retain every failed item as `pending_recheck`, and may mark only prior passes as `previously_passed`.
 
 Checklist items receive app-assigned version IDs and stable cross-round `lineageId` values. A failed round archives its attempts; after normal fix-bead execution, generation receives a fresh final-test report instead of old round reports or retry notes.
 

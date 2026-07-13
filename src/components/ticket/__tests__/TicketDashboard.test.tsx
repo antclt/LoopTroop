@@ -768,6 +768,60 @@ describe('TicketDashboard', () => {
     })
   })
 
+  it('uses monotonic revisions when Manual QA transitions backward to Coding', async () => {
+    const initialTicket = makeTicket({
+      status: 'WAITING_MANUAL_QA',
+      id: selectedTicketId,
+      workflowRevision: 10,
+    })
+    queryClient.setQueryData(['ticket', selectedTicketId], initialTicket)
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${selectedTicketId}/logs`)) return createJsonResponse([])
+      if (url.endsWith(`/api/tickets/${selectedTicketId}/artifacts`)) return createJsonResponse([])
+      if (url.endsWith(`/api/tickets/${selectedTicketId}`)) return createJsonResponse(initialTicket)
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    renderDashboard()
+    await waitFor(() => expect(latestSSEOptions?.ticketId).toBe(selectedTicketId))
+
+    await act(async () => {
+      latestSSEOptions?.onEvent?.({
+        type: 'state_change',
+        data: {
+          ticketId: selectedTicketId,
+          from: 'WAITING_MANUAL_QA',
+          to: 'CODING',
+          workflowRevision: 11,
+        },
+      })
+    })
+    expect(screen.getByTestId('dashboard-header')).toHaveTextContent('CODING')
+
+    await act(async () => {
+      latestSSEOptions?.onEvent?.({
+        type: 'state_change',
+        data: {
+          ticketId: selectedTicketId,
+          from: 'WAITING_MANUAL_QA',
+          to: 'INTEGRATING_CHANGES',
+          workflowRevision: 10,
+        },
+      })
+    })
+    expect(screen.getByTestId('dashboard-header')).toHaveTextContent('CODING')
+
+    await act(async () => {
+      queryClient.setQueryData(['ticket', selectedTicketId], {
+        ...initialTicket,
+        status: 'RUNNING_FINAL_TEST',
+        workflowRevision: 12,
+      })
+    })
+    await waitFor(() => expect(screen.getByTestId('dashboard-header')).toHaveTextContent('RUNNING_FINAL_TEST'))
+  })
+
   it('lets users reselect backlog after start and keeps the backlog log viewer visible', async () => {
     const initialTicket = makeTicket({ status: 'DRAFT', id: selectedTicketId })
 

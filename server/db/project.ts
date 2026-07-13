@@ -127,6 +127,14 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS manual_qa_improvement_tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      origin_id TEXT NOT NULL UNIQUE,
+      destination_ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      action_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS opencode_sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       session_id TEXT NOT NULL,

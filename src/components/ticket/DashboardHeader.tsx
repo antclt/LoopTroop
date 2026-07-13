@@ -251,12 +251,14 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
     sourceTicketExternalId?: string
     version?: number
     sourceVersion?: number
+    sourceItemIds?: string[]
+    sourceItemTitles?: string[]
     itemId?: string
     sourceItemId?: string
     itemTitle?: string
     sourceItemTitle?: string
     evidenceRefs?: Array<{ id?: string; name?: string } | string>
-    omittedEvidence?: string[]
+    omittedEvidence?: Array<string | { id: string; reason: string }>
   } | null }).manualQaOrigin ?? null
 
   const [isCalculatingSize, setIsCalculatingSize] = useState(false)
@@ -891,7 +893,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                 </div>
                 <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
                   <dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{manualQaOrigin.sourceTicketExternalId ?? manualQaOrigin.sourceTicketId ?? 'Unknown'}</dd>
-                  <dt className="text-muted-foreground">Checklist item</dt><dd>{manualQaOrigin.sourceItemTitle ?? manualQaOrigin.itemTitle ?? manualQaOrigin.sourceItemId ?? manualQaOrigin.itemId ?? 'Unknown'}</dd>
+                  <dt className="text-muted-foreground">Checklist item{(manualQaOrigin.sourceItemTitles?.length ?? 0) > 1 ? 's' : ''}</dt><dd>{manualQaOrigin.sourceItemTitles?.join(', ') ?? manualQaOrigin.sourceItemIds?.join(', ') ?? manualQaOrigin.sourceItemTitle ?? manualQaOrigin.itemTitle ?? manualQaOrigin.sourceItemId ?? manualQaOrigin.itemId ?? 'Unknown'}</dd>
                   <dt className="text-muted-foreground">Evidence</dt><dd>{manualQaOrigin.evidenceRefs?.length ?? 0} copied reference(s){(manualQaOrigin.omittedEvidence?.length ?? 0) > 0 ? `, ${manualQaOrigin.omittedEvidence?.length} omitted` : ''}</dd>
                 </dl>
                 <p className="mt-2 text-[11px] text-muted-foreground">This provenance is shown for audit only. Future implementation prompts use this ticket&apos;s saved title and description.</p>

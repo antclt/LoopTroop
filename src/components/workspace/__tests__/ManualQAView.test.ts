@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildCanonicalManualQaDraft, validateManualQaItem } from '@/lib/manualQaDraft'
+import { buildCanonicalManualQaDraft, buildManualQaImprovementContextPreview, validateManualQaItem } from '@/lib/manualQaDraft'
 import type { ManualQaChecklistItem, ManualQaItemResult, ManualQaRound } from '@/hooks/useManualQA'
 
 const item: ManualQaChecklistItem = {
@@ -66,5 +66,23 @@ describe('Manual QA result validation', () => {
       }],
     })
     expect(uiDraft.results[item.id]).not.toHaveProperty('outcome')
+  })
+
+  it('previews the human-readable context that future planning receives', () => {
+    const preview = buildManualQaImprovementContextPreview(
+      { ...item, required: false },
+      result('improvement', {
+        note: 'The confirmation could be clearer.',
+        evidenceIds: ['evidence-1'],
+        links: [{ id: 'link-1', url: 'https://example.com/notes', label: 'Research notes' }],
+        improvement: { title: 'Clarify confirmation', description: 'Use a more explicit confirmation message.' },
+      }),
+    )
+
+    expect(preview).toContain('## Manual QA Context')
+    expect(preview).toContain('### User Note\nThe confirmation could be clearer.')
+    expect(preview).toContain('### Improvement Request\nClarify confirmation\nExpected result: The order is confirmed once.')
+    expect(preview).toContain('- Research notes: https://example.com/notes')
+    expect(preview).not.toContain('evidence-1')
   })
 })

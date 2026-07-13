@@ -1,4 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// This suite exercises the real prompt runner with MockOpenCodeAdapter. Some
+// workflow suites replace the shared runner; explicitly unmock it so non-
+// isolated/full-suite execution cannot inherit a zero-implementation mock.
+vi.unmock('../../workflow/runOpenCodePrompt')
+
 import { MockOpenCodeAdapter } from '../../opencode/adapter'
 import { runCouncilPipeline } from '../pipeline'
 import { generateDrafts } from '../drafter'

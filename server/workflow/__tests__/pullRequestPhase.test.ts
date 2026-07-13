@@ -213,6 +213,22 @@ describe('pull request drafting context', () => {
     expect(section).not.toContain('video.mp4')
   })
 
+  it('renders legacy append-only Manual QA artifact envelopes', () => {
+    const section = buildManualQaPullRequestSection(JSON.stringify({
+      idempotencyKey: '2:created_fixes',
+      value: {
+        version: 2,
+        outcome: 'created_fixes',
+        createdFixBeadIds: ['qa-v2-fix'],
+        improvementTicketIds: [],
+        waivedItemIds: [],
+      },
+    }))
+
+    expect(section).toContain('Outcome: created fixes')
+    expect(section).toContain('Created fix beads: qa-v2-fix')
+  })
+
   it('retries malformed PR drafts before push and PR side effects', async () => {
     resetTestDb()
     const { ticket, context, project } = createPullRequestReadyTicket({ structuredRetryCount: 1 })

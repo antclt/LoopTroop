@@ -23,7 +23,7 @@ function logCmd(
   }
 }
 import { getProjectContextById } from './projects'
-import { opencodeSessions, phaseArtifacts, projects, ticketErrorOccurrences, ticketPhaseAttempts, ticketStatusHistory, tickets } from '../db/schema'
+import { manualQaImprovementTickets, opencodeSessions, phaseArtifacts, projects, ticketErrorOccurrences, ticketPhaseAttempts, ticketStatusHistory, tickets } from '../db/schema'
 import { getTicketAiLogPath, getTicketDebugLogPath, getTicketDir, getTicketExecutionLogPath, getTicketWorktreePath } from './paths'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { lockTicketModelSelection, resolveTicketBaseBranch } from '../ticket/metadata'
@@ -415,6 +415,94 @@ export function createTicket(input: {
   const publicTicket = toPublicTicket(validatedInput.projectId, ticket)
   syncTicketRuntimeProjection(publicTicket)
   return publicTicket
+}
+
+/**
+ * Atomically reserves an improvement origin and creates its Draft ticket.
+ * The database mapping is the recovery source of truth if the process exits
+ * before ticket-owned origin/evidence files are written.
+ */
+export function createManualQaImprovementTicket(input: {
+  projectId: number
+  originId: string
+  actionId: string
+  title: string
+  description: string
+  priority?: number
+}): PublicTicket {
+  if (!input.originId.trim() || !input.actionId.trim()) {
+    throw new Error('Manual QA improvement creation requires origin and action IDs.')
+  }
+  const parsedInput = CreateTicketInputSchema.safeParse({
+    projectId: input.projectId,
+    title: input.title,
+    description: input.description,
+    priority: input.priority ?? 3,
+    manualQaOverride: null,
+  })
+  if (!parsedInput.success) throw new Error(`Invalid Manual QA improvement ticket: ${parsedInput.error.message}`)
+  const project = getProjectContextById(input.projectId)
+  if (!project) throw new Error('Project not found')
+
+  const materializeTicketFiles = (row: typeof tickets.$inferSelect): PublicTicket => {
+    const metaDir = resolve(getTicketDir(project.projectRoot, row.externalId), 'meta')
+    mkdirSync(metaDir, { recursive: true })
+    const metaPath = resolve(metaDir, 'ticket.meta.json')
+    if (!existsSync(metaPath)) {
+      safeAtomicWrite(metaPath, JSON.stringify({
+        externalId: row.externalId,
+        title: row.title,
+        createdAt: row.createdAt,
+      }, null, 2))
+    }
+    const publicTicket = toPublicTicket(input.projectId, row)
+    syncTicketRuntimeProjection(publicTicket)
+    return publicTicket
+  }
+
+  const resolveExisting = (): PublicTicket | null => {
+    const mapping = project.projectDb.select().from(manualQaImprovementTickets)
+      .where(eq(manualQaImprovementTickets.originId, input.originId)).get()
+    if (!mapping) return null
+    const row = project.projectDb.select().from(tickets).where(eq(tickets.id, mapping.destinationTicketId)).get()
+    if (!row) throw new Error(`Manual QA improvement mapping has no destination ticket: ${input.originId}`)
+    return materializeTicketFiles(row)
+  }
+  const existing = resolveExisting()
+  if (existing) return existing
+
+  let created: typeof tickets.$inferSelect
+  try {
+    created = project.projectDb.transaction((tx) => {
+      const currentProject = tx.select().from(projects).where(eq(projects.id, project.project.id)).get()
+      if (!currentProject) throw new Error('Project not found while creating Manual QA improvement.')
+      const newCounter = (currentProject.ticketCounter ?? 0) + 1
+      const externalId = `${currentProject.shortname}-${newCounter}`
+      tx.update(projects).set({ ticketCounter: newCounter, updatedAt: new Date().toISOString() })
+        .where(eq(projects.id, currentProject.id)).run()
+      const inserted = tx.insert(tickets).values({
+        externalId,
+        projectId: currentProject.id,
+        title: parsedInput.data.title,
+        description: parsedInput.data.description ?? null,
+        priority: parsedInput.data.priority ?? 3,
+        manualQaOverride: null,
+        status: 'DRAFT',
+      }).returning().get() ?? null
+      if (!inserted) throw new Error(`Failed to create Manual QA improvement ticket: ${externalId}`)
+      tx.insert(manualQaImprovementTickets).values({
+        originId: input.originId,
+        destinationTicketId: inserted.id,
+        actionId: input.actionId,
+      }).run()
+      return inserted
+    })
+  } catch (error) {
+    const raced = resolveExisting()
+    if (raced) return raced
+    throw error
+  }
+  return materializeTicketFiles(created)
 }
 
 export function updateTicket(ticketRef: string, patch: Partial<Pick<LocalTicketRow, 'title' | 'description' | 'priority' | 'manualQaOverride'>>): PublicTicket | undefined {

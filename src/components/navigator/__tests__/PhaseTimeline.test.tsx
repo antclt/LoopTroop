@@ -67,8 +67,34 @@ describe('PhaseTimeline', () => {
     })
     renderWithProviders(<PhaseTimeline currentStatus="CODING" ticket={ticket} onSelectPhase={onSelect} />)
 
-    fireEvent.click(screen.getByText('Post-Implementation'))
+    const postImplementationGroup = screen.getByText('Post-Implementation').closest('button')
+    expect(postImplementationGroup).toHaveClass('text-green-600')
+    expect(postImplementationGroup).not.toHaveClass('text-primary')
+    fireEvent.click(postImplementationGroup!)
     const qaButton = screen.getByText(/^Manual QA \(v1\)$/).closest('button')
+    expect(qaButton).not.toBeDisabled()
+    fireEvent.click(qaButton!)
+    expect(onSelect).toHaveBeenCalledWith('WAITING_MANUAL_QA')
+  })
+
+  it('keeps visited Manual QA selectable when a later coding round blocks', () => {
+    const onSelect = vi.fn()
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      visitedStatuses: ['GENERATING_QA_CHECKLIST', 'WAITING_MANUAL_QA', 'CODING'],
+    })
+    renderWithProviders(
+      <PhaseTimeline
+        currentStatus="BLOCKED_ERROR"
+        previousStatus="CODING"
+        reviewCutoffStatus="CODING"
+        ticket={ticket}
+        onSelectPhase={onSelect}
+      />,
+    )
+
+    fireEvent.click(screen.getByText('Post-Implementation'))
+    const qaButton = screen.getByText(/^Manual QA/).closest('button')
     expect(qaButton).not.toBeDisabled()
     fireEvent.click(qaButton!)
     expect(onSelect).toHaveBeenCalledWith('WAITING_MANUAL_QA')

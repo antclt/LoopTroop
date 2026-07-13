@@ -79,9 +79,20 @@ describe.concurrent('workflow metadata', () => {
 
   it('documents safe resume behavior in every phase summary and details', () => {
     for (const phase of WORKFLOW_PHASES) {
-      expect(phase.description).toContain('Safe resume:')
+      if (phase.id !== 'GENERATING_QA_CHECKLIST' && phase.id !== 'WAITING_MANUAL_QA') {
+        expect(phase.description).toContain('Safe resume:')
+      }
       expect(phase.details.notes?.some((note) => note.includes('Safe resume:'))).toBe(true)
     }
+  })
+
+  it('preserves the requested Manual QA status descriptions verbatim', () => {
+    expect(WORKFLOW_PHASES.find((phase) => phase.id === 'GENERATING_QA_CHECKLIST')?.description).toBe(
+      'LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.',
+    )
+    expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.description).toBe(
+      'LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.',
+    )
   })
 
   it('shows only ticket details as allowed context while scanning relevant files', () => {

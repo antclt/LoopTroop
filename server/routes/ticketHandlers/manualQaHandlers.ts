@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createReadStream, existsSync, readFileSync } from 'node:fs'
 import { Readable } from 'node:stream'
 import type { Context } from 'hono'
@@ -6,6 +6,7 @@ import { ensureActorForTicket, sendTicketEvent } from '../../machines/persistenc
 import { getTicketByRef, getTicketPaths } from '../../storage/tickets'
 import {
   MAX_MANUAL_QA_EVIDENCE_BYTES,
+  appendManualQaEvent,
   ManualQaDraftSchema,
   buildManualQaProjection,
   detectManualQaWorkspaceDrift,
@@ -23,6 +24,7 @@ import {
   getManualQaStoragePaths,
   readManualQaEvidenceActionReceipt,
   persistManualQaEvidenceActionReceipt,
+  sanitizeEvidenceName,
 } from '../../phases/manualQa'
 import { readTicketUiState } from './uiStateHandlers'
 import { getRequiredRouteParam, getTicketParam } from './routeUtils'
@@ -129,7 +131,17 @@ function parseMutationHeaders(c: Context) {
   const expectedChecklistHash = c.req.header('X-Checklist-Hash')?.trim() ?? c.req.query('expectedChecklistHash')?.trim() ?? ''
   const revisionRaw = c.req.header('X-Draft-Revision') ?? c.req.query('expectedDraftRevision')
   const expectedDraftRevision = Number(revisionRaw)
-  if (!actionId || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(actionId)) throw new Error('A valid action ID is required.')
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(actionId)) throw new Error('A valid action ID is required.')
+  if (!/^[a-f0-9]{64}$/.test(expectedChecklistHash)) throw new Error('A valid expected checklist hash is required.')
+  if (!Number.isInteger(expectedDraftRevision) || expectedDraftRevision < 0) throw new Error('A valid expected draft revision is required.')
+  return { actionId, expectedChecklistHash, expectedDraftRevision }
+}
+
+function parseMutationBody(body: Record<string, unknown>) {
+  const actionId = String(body.actionId ?? '')
+  const expectedChecklistHash = String(body.expectedChecklistHash ?? '')
+  const expectedDraftRevision = Number(body.expectedDraftRevision)
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$/.test(actionId)) throw new Error('A valid action ID is required.')
   if (!/^[a-f0-9]{64}$/.test(expectedChecklistHash)) throw new Error('A valid expected checklist hash is required.')
   if (!Number.isInteger(expectedDraftRevision) || expectedDraftRevision < 0) throw new Error('A valid expected draft revision is required.')
   return { actionId, expectedChecklistHash, expectedDraftRevision }
@@ -139,6 +151,29 @@ function assertChecklistHash(ticketDir: string, version: number, expected: strin
   if (getManualQaChecklistHash(ticketDir, version) !== expected) {
     throw new Error('Manual QA checklist changed; reload before mutating evidence.')
   }
+}
+
+function appendEvidenceEvent(input: {
+  ticketDir: string
+  ticketExternalId: string
+  version: number
+  actionId: string
+  operation: 'upload' | 'remove'
+  itemId: string
+  evidenceId: string
+  createdAt: string
+}): void {
+  const eventType = input.operation === 'upload' ? 'evidence_uploaded' : 'evidence_removed'
+  appendManualQaEvent(input.ticketDir, {
+    schemaVersion: 1,
+    eventId: `evidence-${input.operation === 'upload' ? 'uploaded' : 'removed'}-${createHash('sha256').update(input.actionId).digest('hex').slice(0, 24)}`,
+    eventType,
+    ticketId: input.ticketExternalId,
+    version: input.version,
+    actionId: input.actionId,
+    createdAt: input.createdAt,
+    data: { itemId: input.itemId, evidenceId: input.evidenceId },
+  })
 }
 
 function manualQaError(c: Context, error: unknown) {
@@ -179,13 +214,14 @@ export function handleGetManualQaVersion(c: Context) {
       : null
     const operationPath = getManualQaStoragePaths(resolved.paths.ticketDir, version).operationPath
     const operation = existsSync(operationPath) ? JSON.parse(readFileSync(operationPath, 'utf8')) : null
+    const roundComplete = Boolean(detail.summary && detail.summary.outcome !== 'failed')
     return c.json({
       ...detail,
       version,
-      status: detail.summary ? 'completed' : resolved.ticket.status === 'GENERATING_QA_CHECKLIST' ? 'generating' : 'waiting',
+      status: roundComplete ? 'completed' : resolved.ticket.status === 'GENERATING_QA_CHECKLIST' ? 'generating' : 'waiting',
       draft: draftState?.data ?? detail.results,
       draftRevision: draftState?.revision ?? detail.results?.draftRevision ?? 0,
-      readOnly: Boolean(detail.summary) || resolved.ticket.status !== 'WAITING_MANUAL_QA',
+      readOnly: roundComplete || resolved.ticket.status !== 'WAITING_MANUAL_QA',
       workspaceDrift: workspaceDrift ? { detected: workspaceDrift.drifted, decisionRequired: workspaceDrift.drifted, files: workspaceDrift.files } : null,
       operation,
     })
@@ -204,13 +240,61 @@ export async function handleUploadManualQaEvidence(c: Context) {
     const guard = parseMutationHeaders(c)
     assertChecklistHash(resolved.paths.ticketDir, version, guard.expectedChecklistHash)
     assertServerDraftRevision(resolved.ticketId, version, guard.expectedDraftRevision)
-    const previousReceipt = readManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId)
-    if (previousReceipt) return c.json({ evidence: previousReceipt.evidence, expectedDraftRevision: guard.expectedDraftRevision }, 200)
     const itemId = c.req.query('itemId')?.trim() ?? c.req.header('X-Checklist-Item-Id')?.trim() ?? ''
+    const requestedEvidenceId = c.req.header('X-Evidence-Id')?.trim() ?? ''
+    const previousReceipt = readManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId)
+    if (previousReceipt) {
+      if (
+        previousReceipt.operation !== 'upload'
+        || previousReceipt.evidence.itemId !== itemId
+        || (requestedEvidenceId && previousReceipt.evidence.id !== requestedEvidenceId)
+      ) {
+        throw new Error('Evidence action ID was already used for another operation or checklist item.')
+      }
+      appendEvidenceEvent({
+        ticketDir: resolved.paths.ticketDir,
+        ticketExternalId: resolved.ticket.externalId,
+        version,
+        actionId: guard.actionId,
+        operation: 'upload',
+        itemId: previousReceipt.evidence.itemId,
+        evidenceId: previousReceipt.evidence.id,
+        createdAt: previousReceipt.createdAt,
+      })
+      return c.json({ evidence: previousReceipt.evidence, expectedDraftRevision: guard.expectedDraftRevision }, 200)
+    }
     const encodedName = c.req.header('X-File-Name') ?? c.req.query('fileName') ?? 'evidence'
     let originalName = encodedName
     try { originalName = decodeURIComponent(encodedName) } catch { /* keep the sanitized raw header */ }
-    const evidenceId = c.req.header('X-Evidence-Id')?.trim() || randomUUID()
+    const evidenceId = requestedEvidenceId || randomUUID()
+    const existingEvidence = readManualQaEvidenceIndex(resolved.paths.ticketDir, version)
+      .find((entry) => entry.id === evidenceId)
+    if (existingEvidence) {
+      const requestedMediaType = (c.req.header('Content-Type') ?? 'application/octet-stream').trim().toLowerCase()
+      if (
+        existingEvidence.itemId !== itemId
+        || existingEvidence.originalName !== sanitizeEvidenceName(originalName)
+        || existingEvidence.mediaType !== requestedMediaType
+      ) throw new Error('Existing evidence does not match this upload retry.')
+      const recovered = persistManualQaEvidenceActionReceipt(
+        resolved.paths.ticketDir,
+        version,
+        guard.actionId,
+        'upload',
+        existingEvidence,
+      )
+      appendEvidenceEvent({
+        ticketDir: resolved.paths.ticketDir,
+        ticketExternalId: resolved.ticket.externalId,
+        version,
+        actionId: guard.actionId,
+        operation: 'upload',
+        itemId: existingEvidence.itemId,
+        evidenceId: existingEvidence.id,
+        createdAt: recovered.createdAt,
+      })
+      return c.json({ evidence: existingEvidence, expectedDraftRevision: guard.expectedDraftRevision }, 200)
+    }
     const contentLength = Number(c.req.header('Content-Length') ?? '0')
     if (Number.isFinite(contentLength) && contentLength > MAX_MANUAL_QA_EVIDENCE_BYTES) {
       return c.json({ error: `Evidence file exceeds ${MAX_MANUAL_QA_EVIDENCE_BYTES} bytes.` }, 413)
@@ -225,6 +309,17 @@ export async function handleUploadManualQaEvidence(c: Context) {
       body: c.req.raw.body,
     })
     persistManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId, 'upload', metadata)
+    const receipt = readManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId)!
+    appendEvidenceEvent({
+      ticketDir: resolved.paths.ticketDir,
+      ticketExternalId: resolved.ticket.externalId,
+      version,
+      actionId: guard.actionId,
+      operation: 'upload',
+      itemId: metadata.itemId,
+      evidenceId: metadata.id,
+      createdAt: receipt.createdAt,
+    })
     return c.json({ evidence: metadata, expectedDraftRevision: guard.expectedDraftRevision }, 201)
   } catch (error) {
     if (error instanceof Error && error.message.includes('exceeds')) return c.json({ error: error.message }, 413)
@@ -242,7 +337,9 @@ export function handleReadManualQaEvidence(c: Context) {
       itemId: getRequiredRouteParam(c, 'itemId'),
       evidenceId: getRequiredRouteParam(c, 'evidenceId'),
     })
-    const inline = c.req.query('inline') === 'true' && isSafeRasterMediaType(found.metadata.mediaType)
+    const inline = c.req.query('inline') === 'true'
+      && found.metadata.inlinePreview
+      && isSafeRasterMediaType(found.metadata.mediaType)
     const filename = found.metadata.originalName.replace(/["\r\n]/g, '_')
     const body = Readable.toWeb(createReadStream(found.path)) as ReadableStream<Uint8Array>
     return new Response(body, {
@@ -267,22 +364,65 @@ export async function handleRemoveManualQaEvidence(c: Context) {
   try {
     const version = parseVersion(c)
     const body = await c.req.json().catch(() => ({})) as Record<string, unknown>
-    const guard = Object.keys(body).length > 0 ? {
-      actionId: String(body.actionId ?? ''),
-      expectedChecklistHash: String(body.expectedChecklistHash ?? ''),
-      expectedDraftRevision: Number(body.expectedDraftRevision),
-    } : parseMutationHeaders(c)
+    const guard = Object.keys(body).length > 0 ? parseMutationBody(body) : parseMutationHeaders(c)
     assertChecklistHash(resolved.paths.ticketDir, version, guard.expectedChecklistHash)
     assertServerDraftRevision(resolved.ticketId, version, guard.expectedDraftRevision)
+    const itemId = getRequiredRouteParam(c, 'itemId')
+    const evidenceId = getRequiredRouteParam(c, 'evidenceId')
     const previousReceipt = readManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId)
-    if (previousReceipt) return c.json({ success: true, removed: previousReceipt.evidence, expectedDraftRevision: guard.expectedDraftRevision })
-    const evidence = removeManualQaEvidence({
+    if (previousReceipt) {
+      if (
+        previousReceipt.operation !== 'remove'
+        || previousReceipt.evidence.itemId !== itemId
+        || previousReceipt.evidence.id !== evidenceId
+      ) throw new Error('Evidence action ID was already used for another operation or evidence item.')
+      if (previousReceipt.state === 'staged') {
+        const stillPresent = readManualQaEvidenceIndex(resolved.paths.ticketDir, version)
+          .some((entry) => entry.id === evidenceId && entry.itemId === itemId)
+        if (stillPresent) {
+          removeManualQaEvidence({ ticketDir: resolved.paths.ticketDir, version, itemId, evidenceId })
+        }
+        persistManualQaEvidenceActionReceipt(
+          resolved.paths.ticketDir,
+          version,
+          guard.actionId,
+          'remove',
+          previousReceipt.evidence,
+          'complete',
+        )
+      }
+      appendEvidenceEvent({
+        ticketDir: resolved.paths.ticketDir,
+        ticketExternalId: resolved.ticket.externalId,
+        version,
+        actionId: guard.actionId,
+        operation: 'remove',
+        itemId: previousReceipt.evidence.itemId,
+        evidenceId: previousReceipt.evidence.id,
+        createdAt: previousReceipt.createdAt,
+      })
+      return c.json({ success: true, removed: previousReceipt.evidence, expectedDraftRevision: guard.expectedDraftRevision })
+    }
+    const evidence = resolveManualQaEvidence({
       ticketDir: resolved.paths.ticketDir,
       version,
-      itemId: getRequiredRouteParam(c, 'itemId'),
-      evidenceId: getRequiredRouteParam(c, 'evidenceId'),
+      itemId,
+      evidenceId,
+    }).metadata
+    persistManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId, 'remove', evidence, 'staged')
+    removeManualQaEvidence({ ticketDir: resolved.paths.ticketDir, version, itemId, evidenceId })
+    persistManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId, 'remove', evidence, 'complete')
+    const receipt = readManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId)!
+    appendEvidenceEvent({
+      ticketDir: resolved.paths.ticketDir,
+      ticketExternalId: resolved.ticket.externalId,
+      version,
+      actionId: guard.actionId,
+      operation: 'remove',
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+      createdAt: receipt.createdAt,
     })
-    persistManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId, 'remove', evidence)
     return c.json({ success: true, removed: evidence, expectedDraftRevision: guard.expectedDraftRevision })
   } catch (error) {
     return manualQaError(c, error)
@@ -298,9 +438,8 @@ export async function handleSubmitManualQa(c: Context) {
     const body = await c.req.json() as Record<string, unknown>
     const version = Number(body.version)
     const guard = {
-      actionId: String(body.actionId ?? ''),
-      expectedChecklistHash: String(body.expectedChecklistHash ?? ''),
-      expectedDraftRevision: Number(body.expectedDraftRevision),
+      ...parseMutationBody(body),
+      operationType: 'submit' as const,
     }
     const latest = assertServerDraftRevision(resolved.ticketId, version, guard.expectedDraftRevision)
     const draft = toCanonicalDraft({
@@ -335,8 +474,8 @@ export async function handleSkipManualQa(c: Context) {
   try {
     const body = await c.req.json() as Record<string, unknown>
     const version = Number(body.version)
-    const expectedChecklistHash = String(body.expectedChecklistHash ?? '')
-    const expectedDraftRevision = Number(body.expectedDraftRevision)
+    const mutation = parseMutationBody(body)
+    const { expectedChecklistHash, expectedDraftRevision } = mutation
     const latest = assertServerDraftRevision(resolved.ticketId, version, expectedDraftRevision)
     const savedDraft = latest?.data && typeof latest.data === 'object' && !Array.isArray(latest.data)
       ? latest.data as Record<string, unknown>
@@ -355,7 +494,8 @@ export async function handleSkipManualQa(c: Context) {
       version,
       draft,
       guard: {
-        actionId: String(body.actionId ?? ''),
+        actionId: mutation.actionId,
+        operationType: 'skip',
         expectedChecklistHash,
         expectedDraftRevision,
       },
@@ -378,10 +518,7 @@ async function handleManualQaDriftDecision(c: Context, decision: 'include' | 'di
   try {
     const body = await c.req.json() as Record<string, unknown>
     const version = Number(body.version)
-    const actionId = String(body.actionId ?? '')
-    const expectedChecklistHash = String(body.expectedChecklistHash ?? '')
-    const expectedDraftRevision = Number(body.expectedDraftRevision)
-    if (!Number.isInteger(expectedDraftRevision) || expectedDraftRevision < 0) throw new Error('A valid expected draft revision is required.')
+    const { actionId, expectedChecklistHash, expectedDraftRevision } = parseMutationBody(body)
     assertChecklistHash(resolved.paths.ticketDir, version, expectedChecklistHash)
     assertServerDraftRevision(resolved.ticketId, version, expectedDraftRevision)
     const currentDrift = detectManualQaWorkspaceDrift(resolved.ticketId, version)

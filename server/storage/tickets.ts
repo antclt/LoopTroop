@@ -27,6 +27,7 @@ export {
 
 export {
   createTicket,
+  createManualQaImprovementTicket,
   updateTicket,
   patchTicket,
   recordTicketErrorOccurrence,

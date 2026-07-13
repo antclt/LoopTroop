@@ -35,6 +35,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed Manual QA recovery end to end: strict action guards run before reservation, immutable results and incomplete journals resume safely, submit/skip and evidence mutations reuse durable identities without duplicate work, exact checkpoint files exclude staged residue, model image file parts reach coding sessions, and reverse-loop history remains reviewable through later errors or cancellation.
 
 #### Removed
 

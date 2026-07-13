@@ -16,6 +16,7 @@ export const ManualQaChecklistItemSchema = z.object({
   id: IdString,
   lineageId: IdString,
   priorItemIds: z.array(IdString).default([]),
+  title: NonEmptyString.max(500),
   source: z.enum(['prd', 'bead', 'final_test', 'previous_qa', 'implementation']),
   behavior: NonEmptyString,
   severity: z.enum(['critical', 'high', 'medium', 'low']),
@@ -138,6 +139,40 @@ export const ManualQaCoverageSchema = z.object({
   coveredCount: z.number().int().nonnegative(),
   partiallyCoveredCount: z.number().int().nonnegative(),
   uncoveredCount: z.number().int().nonnegative(),
+  sourceItemCounts: z.object({
+    prd: z.number().int().nonnegative(),
+    bead: z.number().int().nonnegative(),
+    finalTest: z.number().int().nonnegative(),
+    previousQa: z.number().int().nonnegative(),
+    implementationDiff: z.number().int().nonnegative(),
+  }).strict(),
+}).strict()
+
+export const ManualQaModelCapabilitySnapshotSchema = z.object({
+  schemaVersion: z.literal(MANUAL_QA_SCHEMA_VERSION),
+  artifact: z.literal('manual_qa_model_capability'),
+  ticketId: NonEmptyString,
+  version: z.number().int().positive(),
+  modelId: NonEmptyString.nullable(),
+  modelVariant: NonEmptyString.nullable(),
+  capabilityLookup: z.enum(['available', 'unavailable']),
+  supportsImages: z.boolean().nullable(),
+  imageEvidenceMode: z.enum(['attached', 'references_only']),
+  capturedAt: z.string().datetime(),
+}).strict()
+
+export const ManualQaItemCountsSchema = z.object({
+  pass: z.number().int().nonnegative(),
+  fail: z.number().int().nonnegative(),
+  waive: z.number().int().nonnegative(),
+  improvement: z.number().int().nonnegative(),
+  pending: z.number().int().nonnegative(),
+}).strict()
+
+export const ManualQaSummaryCoverageSchema = z.object({
+  covered: z.number().int().nonnegative(),
+  partiallyCovered: z.number().int().nonnegative(),
+  uncovered: z.number().int().nonnegative(),
 }).strict()
 
 export const ManualQaSummarySchema = z.object({
@@ -149,8 +184,71 @@ export const ManualQaSummarySchema = z.object({
   createdFixBeadIds: z.array(IdString),
   improvementTicketIds: z.array(NonEmptyString),
   waivedItemIds: z.array(IdString),
+  waivedItems: z.array(z.object({ itemId: IdString, reason: NonEmptyString }).strict()),
   skipReason: z.string().max(20_000).optional(),
+  startedAt: z.string().datetime(),
   completedAt: z.string().datetime(),
+  durationMs: z.number().int().nonnegative(),
+  itemCounts: ManualQaItemCountsSchema,
+  requiredItemCount: z.number().int().nonnegative(),
+  optionalItemCount: z.number().int().nonnegative(),
+  evidenceCount: z.number().int().nonnegative(),
+  nextAction: z.enum(['integrate', 'return_to_coding']),
+  coverage: ManualQaSummaryCoverageSchema,
+  modelCapability: ManualQaModelCapabilitySnapshotSchema.nullable(),
+}).strict()
+
+export const ManualQaImprovementOriginSchema = z.object({
+  schemaVersion: z.literal(MANUAL_QA_SCHEMA_VERSION),
+  source: z.literal('manual_qa_improvement'),
+  originId: NonEmptyString,
+  actionId: NonEmptyString,
+  sourceTicketId: NonEmptyString,
+  sourceTicketExternalId: NonEmptyString,
+  sourceProjectId: z.number().int().positive(),
+  sourceVersion: z.number().int().positive(),
+  sourceItemIds: z.array(IdString).min(1),
+  sourceItemTitles: z.array(NonEmptyString).min(1),
+  resultType: z.literal('improvement'),
+  relatedPrdRefs: z.array(NonEmptyString),
+  relatedBeadRefs: z.array(NonEmptyString),
+  evidenceRefs: z.array(z.object({
+    id: IdString,
+    originalName: NonEmptyString,
+    mediaType: NonEmptyString,
+    size: z.number().int().nonnegative(),
+    sha256: Sha256,
+    relativePath: NonEmptyString,
+  }).strict()),
+  omittedEvidence: z.array(z.object({ id: IdString, reason: NonEmptyString }).strict()),
+  titleSha256: Sha256,
+  descriptionSha256: Sha256,
+  omittedFields: z.array(NonEmptyString),
+  imageEvidenceMode: z.enum(['attached', 'references_only']),
+  createdAt: z.string().datetime(),
+}).strict()
+
+export const ManualQaEventSchema = z.object({
+  schemaVersion: z.literal(MANUAL_QA_SCHEMA_VERSION),
+  eventId: IdString,
+  eventType: z.enum([
+    'generation_reserved',
+    'checklist_ready',
+    'draft_submitted',
+    'improvement_created',
+    'fixes_created',
+    'completed',
+    'skipped',
+    'evidence_uploaded',
+    'evidence_removed',
+    'drift_included',
+    'drift_discarded',
+  ]),
+  ticketId: NonEmptyString,
+  version: z.number().int().positive(),
+  actionId: NonEmptyString.optional(),
+  createdAt: z.string().datetime(),
+  data: z.record(z.string(), z.unknown()).default({}),
 }).strict()
 
 export type ManualQaPrdReference = z.infer<typeof ManualQaPrdReferenceSchema>
@@ -163,7 +261,10 @@ export type ManualQaItemResult = z.infer<typeof ManualQaItemResultSchema>
 export type ManualQaDraft = z.infer<typeof ManualQaDraftSchema>
 export type ManualQaResults = z.infer<typeof ManualQaResultsSchema>
 export type ManualQaCoverage = z.infer<typeof ManualQaCoverageSchema>
+export type ManualQaModelCapabilitySnapshot = z.infer<typeof ManualQaModelCapabilitySnapshotSchema>
 export type ManualQaSummary = z.infer<typeof ManualQaSummarySchema>
+export type ManualQaImprovementOrigin = z.infer<typeof ManualQaImprovementOriginSchema>
+export type ManualQaEvent = z.infer<typeof ManualQaEventSchema>
 
 export interface ManualQaPrdCriterion {
   ref: string

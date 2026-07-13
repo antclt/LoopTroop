@@ -14,6 +14,7 @@ summary: Verify the saved form behavior
 items:
   - lineage_id: save-form
     prior_item_ids: []
+    title: Save valid form values
     source: prd
     behavior: Saving a valid form persists the values
     severity: high
@@ -30,6 +31,7 @@ items:
       - ref: ${ref}
         coverage: full
   - lineage_id: form-errors
+    title: Show actionable validation errors
     source: implementation
     behavior: Invalid values show an actionable error
     severity: medium
@@ -67,6 +69,13 @@ describe('Manual QA checklist parser and coverage', () => {
       'partially_covered',
       'uncovered',
     ])
+    expect(coverage.sourceItemCounts).toEqual({
+      prd: 1,
+      bead: 0,
+      finalTest: 0,
+      previousQa: 0,
+      implementationDiff: 1,
+    })
   })
 
   it('rejects invalid PRD references so structured retry can correct them', () => {
@@ -87,5 +96,79 @@ describe('Manual QA checklist parser and coverage', () => {
       prdCriteria: criteria,
     })
     expect(result.ok).toBe(false)
+  })
+
+  it('requires failed prior items to retain stable lineage and become pending rechecks', () => {
+    const priorResult = parseManualQaChecklistOutput(output(), {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+      generatedAt: '2026-07-13T00:00:00.000Z',
+    })
+    expect(priorResult.ok).toBe(true)
+    if (!priorResult.ok) return
+    const nextOutput = output()
+      .replace('prior_item_ids: []', 'prior_item_ids: [qa-v1-001]')
+      .replace('recheck_state: pending', 'recheck_state: pending_recheck')
+    const nextResult = parseManualQaChecklistOutput(nextOutput, {
+      ticketId: 'DEMO-1',
+      version: 2,
+      prdCriteria: criteria,
+      previousChecklist: priorResult.value,
+      previousResults: {
+        schemaVersion: 1,
+        artifact: 'manual_qa_results',
+        ticketId: 'DEMO-1',
+        version: 1,
+        checklistHash: 'a'.repeat(64),
+        draftRevision: 1,
+        results: [{
+          itemId: 'qa-v1-001',
+          outcome: 'fail',
+          note: '',
+          observation: 'Values disappeared',
+          reason: '',
+          evidenceIds: [],
+          links: [],
+        }],
+        improvements: [],
+        evidence: [],
+        updatedAt: '2026-07-13T00:00:00.000Z',
+        actionId: 'submit-one',
+        submittedAt: '2026-07-13T00:01:00.000Z',
+      },
+    })
+    expect(nextResult.ok).toBe(true)
+  })
+
+  it('rejects changed lineage and dropped failed items on later rounds', () => {
+    const priorResult = parseManualQaChecklistOutput(output(), {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+    })
+    expect(priorResult.ok).toBe(true)
+    if (!priorResult.ok) return
+    const nextResult = parseManualQaChecklistOutput(output(), {
+      ticketId: 'DEMO-1',
+      version: 2,
+      prdCriteria: criteria,
+      previousChecklist: priorResult.value,
+      previousResults: {
+        schemaVersion: 1,
+        artifact: 'manual_qa_results',
+        ticketId: 'DEMO-1',
+        version: 1,
+        checklistHash: 'a'.repeat(64),
+        draftRevision: 1,
+        results: [{
+          itemId: 'qa-v1-001', outcome: 'fail', note: '', observation: 'Still broken', reason: '', evidenceIds: [], links: [],
+        }],
+        improvements: [], evidence: [], updatedAt: new Date().toISOString(), actionId: 'submit-one', submittedAt: new Date().toISOString(),
+      },
+    })
+    expect(nextResult.ok).toBe(false)
+    if (nextResult.ok) return
+    expect(nextResult.error).toContain('Previously failed item qa-v1-001 must remain')
   })
 })

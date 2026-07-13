@@ -121,6 +121,14 @@ export const manualQaOperations = sqliteTable('manual_qa_operations', {
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
 })
 
+export const manualQaImprovementTickets = sqliteTable('manual_qa_improvement_tickets', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  originId: text('origin_id').notNull().unique(),
+  destinationTicketId: integer('destination_ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  actionId: text('action_id').notNull(),
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+})
+
 export const ticketPhaseAttempts = sqliteTable('ticket_phase_attempts', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
