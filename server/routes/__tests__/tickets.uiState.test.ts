@@ -44,30 +44,103 @@ describe('ticketRouter UI state revisions', () => {
     repoManager.cleanup()
   })
 
-  it('ignores stale client revisions so old autosaves cannot overwrite newer state', async () => {
+  it('rejects stale compare-and-set revisions and returns the latest state', async () => {
     const ticket = createUiStateTicket()
     const path = `/api/tickets/${encodeURIComponent(ticket.id)}/ui-state`
 
     const newer = await app.request(path, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'workspace', data: { selected: 'newer' }, clientRevision: 2 }),
+      body: JSON.stringify({
+        scope: 'workspace',
+        data: { selected: 'newer' },
+        expectedRevision: 0,
+        actionId: 'save-newer',
+      }),
     })
     expect(newer.status).toBe(200)
 
     const stale = await app.request(path, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scope: 'workspace', data: { selected: 'stale' }, clientRevision: 1 }),
+      body: JSON.stringify({
+        scope: 'workspace',
+        data: { selected: 'stale' },
+        expectedRevision: 0,
+        actionId: 'save-stale',
+      }),
     })
-    expect(stale.status).toBe(200)
-    expect(await stale.json()).toMatchObject({ ignored: true, clientRevision: 2 })
+    expect(stale.status).toBe(409)
+    expect(await stale.json()).toMatchObject({
+      conflict: true,
+      data: { selected: 'newer' },
+      revision: 1,
+    })
 
     const response = await app.request(`${path}?scope=workspace`)
     expect(response.status).toBe(200)
     expect(await response.json()).toMatchObject({
       data: { selected: 'newer' },
-      clientRevision: 2,
+      revision: 1,
+      clientRevision: 1,
+    })
+  })
+
+  it('treats a repeated action ID as an idempotent retry', async () => {
+    const ticket = createUiStateTicket()
+    const path = `/api/tickets/${encodeURIComponent(ticket.id)}/ui-state`
+    const payload = {
+      scope: 'workspace',
+      data: { selected: 'same' },
+      expectedRevision: 0,
+      actionId: 'save-once',
+    }
+
+    expect((await app.request(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })).status).toBe(200)
+
+    const retry = await app.request(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    expect(retry.status).toBe(200)
+    expect(await retry.json()).toMatchObject({ conflict: false, revision: 1 })
+  })
+
+  it('rejects a repeated action ID when its content differs', async () => {
+    const ticket = createUiStateTicket()
+    const path = `/api/tickets/${encodeURIComponent(ticket.id)}/ui-state`
+
+    expect((await app.request(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'workspace',
+        data: { selected: 'original' },
+        expectedRevision: 0,
+        actionId: 'save-once',
+      }),
+    })).status).toBe(200)
+
+    const conflictingReplay = await app.request(path, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scope: 'workspace',
+        data: { selected: 'different' },
+        expectedRevision: 0,
+        actionId: 'save-once',
+      }),
+    })
+    expect(conflictingReplay.status).toBe(409)
+    expect(await conflictingReplay.json()).toMatchObject({
+      conflict: true,
+      data: { selected: 'original' },
+      revision: 1,
     })
   })
 

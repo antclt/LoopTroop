@@ -5,8 +5,8 @@ import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { broadcaster } from '../../sse/broadcaster'
-import { attachProject } from '../../storage/projects'
-import { createTicket, DISPLAY_ONLY_MOCK_BRANCH_NAME, getTicketByRef, getTicketPaths, patchTicket } from '../../storage/tickets'
+import { attachProject, updateProject } from '../../storage/projects'
+import { createTicket, DISPLAY_ONLY_MOCK_BRANCH_NAME, getTicketByRef, getTicketPaths, patchTicket, updateTicket } from '../../storage/tickets'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 
 vi.mock('../../machines/persistence', async () => {
@@ -87,7 +87,7 @@ function setupStartTicketApp() {
   const app = new Hono()
   app.route('/api', ticketRouter)
 
-  return { app, ticket }
+  return { app, project, ticket }
 }
 
 function readPersistedLogEvents(ticketId: string): PersistedLogEvent[] {
@@ -224,6 +224,40 @@ describe('ticketRouter POST /tickets/:id/start', () => {
     expect(getTicketByRef(ticket.id)?.lockedStructuredRetryCount).toBe(4)
 
     broadcaster.clearTicket(ticket.id)
+  })
+
+  it('freezes the effective Manual QA value and its inheritance source at start', async () => {
+    sqlite.exec(`
+      INSERT INTO profiles (main_implementer, council_members, manual_qa_enabled)
+      VALUES ('openai/codex-mini-latest', '["openai/codex-mini-latest"]', 1);
+    `)
+    const inherited = setupStartTicketApp()
+    expect((await inherited.app.request(`/api/tickets/${inherited.ticket.id}/start`, { method: 'POST' })).status).toBe(200)
+    expect(getTicketByRef(inherited.ticket.id)).toMatchObject({
+      lockedManualQaEnabled: true,
+      lockedManualQaSource: 'profile',
+    })
+
+    const projectOverride = setupStartTicketApp()
+    updateProject(projectOverride.project.id, { manualQaOverride: false })
+    expect((await projectOverride.app.request(`/api/tickets/${projectOverride.ticket.id}/start`, { method: 'POST' })).status).toBe(200)
+    expect(getTicketByRef(projectOverride.ticket.id)).toMatchObject({
+      lockedManualQaEnabled: false,
+      lockedManualQaSource: 'project',
+    })
+
+    const overridden = setupStartTicketApp()
+    updateProject(overridden.project.id, { manualQaOverride: false })
+    updateTicket(overridden.ticket.id, { manualQaOverride: true })
+    expect((await overridden.app.request(`/api/tickets/${overridden.ticket.id}/start`, { method: 'POST' })).status).toBe(200)
+    expect(getTicketByRef(overridden.ticket.id)).toMatchObject({
+      lockedManualQaEnabled: true,
+      lockedManualQaSource: 'ticket',
+    })
+
+    broadcaster.clearTicket(inherited.ticket.id)
+    broadcaster.clearTicket(projectOverride.ticket.id)
+    broadcaster.clearTicket(overridden.ticket.id)
   })
 
   it('writes a DRAFT error log when model validation fails and leaves the ticket in DRAFT', async () => {

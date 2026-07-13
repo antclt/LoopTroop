@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction, type MutableRefObject } from 'react'
-import { nextTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
+import { createTicketUiStateActionId, getTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
 
 interface SaveTicketUiStateInput<T> {
   ticketId: string
@@ -20,8 +20,8 @@ interface UseDebouncedApprovalUiStateOptions<T> {
 }
 
 export function flushTicketUiStateSnapshot<T>(ticketId: string, scope: string, data: T): boolean {
-  const clientRevision = nextTicketUiStateRevision(ticketId, scope)
-  const payload = JSON.stringify({ scope, data, clientRevision })
+  const expectedRevision = getTicketUiStateRevision(ticketId, scope)
+  const payload = JSON.stringify({ scope, data, expectedRevision, actionId: createTicketUiStateActionId() })
 
   if (typeof fetch === 'function') {
     try {
@@ -85,7 +85,7 @@ export function useDebouncedApprovalUiState<T>({
   scope,
   saveUiState,
   lastSavedSnapshotRef,
-  delayMs = 350,
+  delayMs = 5_000,
 }: UseDebouncedApprovalUiStateOptions<T>) {
   const latestSnapshotRef = useRef<{
     enabled: boolean
@@ -119,8 +119,8 @@ export function useDebouncedApprovalUiState<T>({
         data: snapshot,
       })
       void Promise.resolve(result).then((saved) => {
-        const isIgnored = saved && typeof saved === 'object' && 'ignored' in saved && saved.ignored === true
-        if (!canceled && !isIgnored && latestSnapshotRef.current?.serialized === serialized) {
+        const isConflict = saved && typeof saved === 'object' && 'conflict' in saved && saved.conflict === true
+        if (!canceled && !isConflict && latestSnapshotRef.current?.serialized === serialized) {
           lastSavedSnapshotRef.current = serialized
         }
       }).catch(() => undefined)

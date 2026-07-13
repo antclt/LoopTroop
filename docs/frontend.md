@@ -61,6 +61,7 @@ Most modal routes and workspace views are also lazy-loaded through `lazyWithChun
 | `interview_qa` | `InterviewQAView` |
 | `approval` | `ApprovalView` |
 | `coding` | `CodingView` |
+| `manual_qa` | lazy-loaded `ManualQAView` |
 | `error` | `ErrorView` |
 | `done` | `CodingView` |
 | `canceled` | `CanceledView` |
@@ -94,6 +95,7 @@ That split matters because the workspace is designed for both live work and hist
 | `InterviewQAView` | Interactive interview batches, draft persistence, skip flow |
 | `ApprovalView` | Review and edit interview, PRD, beads, and execution setup artifacts; PRD approval also exposes the winning model's Full Answers as compact read-only context, and execution setup approval keeps live logs expanded until the setup plan is ready |
 | `CodingView` | Active bead execution, bead list, logs, diffs, verification actions |
+| `ManualQAView` | Checklist generation, live verification draft, evidence, submission/drift recovery, and read-only round history |
 | `ErrorView` | Live blocked state or historical error occurrence review |
 | `PhaseReviewView` | Historical artifact review for completed phases |
 | `FullLogView` | Full folded execution log stream |
@@ -113,6 +115,18 @@ Current `CodingView` composes:
 - `CollapsiblePhaseLogSection`
 
 It also merges persisted bead artifacts with runtime bead overlays from the live ticket payload so the UI can show in-progress status and notes without waiting for a full artifact refresh.
+
+QA-origin beads receive a **Manual QA Fix** badge and keep their version, source items, observations, expected behavior, and evidence thumbnails/references visible across Coding, Details, selected-bead, artifact, and log surfaces. Normal retry notes are presented separately.
+
+### Manual QA workspace
+
+`ManualQAView` is lazy-loaded for both `GENERATING_QA_CHECKLIST` and `WAITING_MANUAL_QA`. During generation it explains that automation is preparing the checklist and that no user action—or application control—is taking place. During the gate it renders prerequisites, actions, expected results, watch notes, advisory PRD coverage, Pass/Fail/Waive/Improvement/Pending controls, validation, failure merge groups, and arbitrary evidence upload/download/removal.
+
+Only safe raster evidence uses inline previews; SVG, HTML, executables, unknown types, and other files remain downloads. The Improvement modal lets the user review/edit one title and description per ticket, preview the deterministic Manual QA context/provenance appendix, inspect copied/omitted evidence, and see the 10,000-character retention warning before final submission.
+
+The view distinguishes autosaving, submission, child creation/resume, workspace-drift decisions, and skip states. Live drafts save only to `manual_qa_draft:vN` after the standard five-second debounce, use server compare-and-set revisions/action IDs, and flush with keepalive on `pagehide`/`beforeunload`. A `409` conflict returns the latest server draft for reconciliation. The version selector keeps earlier rounds read-only after a failure returns the live ticket to Coding or after delivery continues.
+
+The timeline is visit-aware rather than solely status-index based. Ticket payloads combine `visitedStatuses` with monotonic `workflowRevision`; SSE and polling prefer the higher revision, so a valid reverse transition from Manual QA to Coding cannot leave a newer-indexed stale screen mounted. Manual QA also participates in needs-input attention, context trees, status summaries, artifact viewers, cancellation/retry surfaces, progress labels, and completed-ticket review.
 
 ## 6. Data Hooks
 
@@ -305,6 +319,12 @@ All numeric fields are validated against min/max bounds defined in `numericField
 > Timeout and delay fields are stored in **milliseconds**. `ProfileSetup` converts those stored milliseconds to seconds for display and back to milliseconds on save. Count-style fields such as `OpenCode Max Steps` remain raw integers in both storage and UI.
 
 Profile settings are inherited by new tickets at start time. The locked copies in the ticket record are what the workflow actually uses for that run.
+
+### Manual QA Settings
+
+Configuration exposes the global Manual QA boolean (off by default). Project settings and the ticket form's collapsed **Advanced** section expose `Inherit / Enabled / Disabled`, and the Draft workspace mirrors the ticket control until Start. The ticket surface shows the effective value and source. Once started, the override becomes read-only because the backend has frozen the effective value/source for the run.
+
+Improvement ticket Details/audit UI reads `.ticket/meta/manual-qa-origin.json` provenance, while later planning still uses only the saved title/description as prompt context; the structured origin record is not injected into future implementation prompts.
 
 ### Project Attachment And Maintenance
 

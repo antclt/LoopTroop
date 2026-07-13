@@ -16,6 +16,7 @@ import {
   patchTicket,
   recordTicketErrorOccurrence,
   resolveLatestTicketErrorOccurrence,
+  updateTicket,
 } from '../tickets'
 import { getTicketAiLogPath, getTicketDebugLogPath } from '../paths'
 
@@ -89,6 +90,8 @@ describe('ticket start configuration locking', () => {
     expect(lockedTicket?.lockedMaxPrdCoveragePasses).toBe(5)
     expect(lockedTicket?.lockedMaxBeadsCoveragePasses).toBe(5)
     expect(lockedTicket?.lockedStructuredRetryCount).toBe(3)
+    expect(lockedTicket?.lockedManualQaEnabled).toBe(false)
+    expect(lockedTicket?.lockedManualQaSource).toBe('profile')
     expect(lockedTicket?.startedAt).toBe(startedAt)
 
     const meta = readTicketMeta(repoDir, ticket.externalId)
@@ -112,6 +115,21 @@ describe('ticket start configuration locking', () => {
     expect(repeatedLock?.startedAt).toBe(startedAt)
     expect(readTicketMeta(repoDir, ticket.externalId).startedAt).toBe(startedAt)
 
+    expect(() => lockTicketStartConfiguration(ticket.id, {
+      branchName: ticket.externalId,
+      startedAt,
+      lockedMainImplementer,
+      lockedCouncilMembers,
+      lockedInterviewQuestions: 50,
+      lockedCoverageFollowUpBudgetPercent: 20,
+      lockedMaxCoveragePasses: 2,
+      lockedMaxPrdCoveragePasses: 5,
+      lockedMaxBeadsCoveragePasses: 5,
+      lockedStructuredRetryCount: 3,
+      lockedManualQaEnabled: true,
+      lockedManualQaSource: 'ticket',
+    })).toThrow(/Manual QA configuration is immutable after start/i)
+
     expect(() => patchTicket(ticket.id, {
       lockedMainImplementer: 'anthropic/claude-sonnet-4',
     })).toThrow(/immutable after start/i)
@@ -119,6 +137,10 @@ describe('ticket start configuration locking', () => {
     expect(() => patchTicket(ticket.id, {
       lockedCouncilMembers: JSON.stringify(['openai/gpt-5-codex', 'anthropic/claude-sonnet-4']),
     })).toThrow(/immutable after start/i)
+
+    expect(() => patchTicket(ticket.id, {
+      lockedManualQaEnabled: true,
+    })).toThrow(/Manual QA configuration is immutable after start/i)
 
     const progressUpdate = patchTicket(ticket.id, {
       percentComplete: 25,
@@ -128,6 +150,59 @@ describe('ticket start configuration locking', () => {
     expect(getTicketByRef(ticket.id)?.lockedCouncilMembers).toEqual(lockedCouncilMembers)
     expect(getTicketPaths(ticket.id)?.debugLogPath).toBe(getTicketDebugLogPath(repoDir, ticket.externalId))
     expect(getTicketPaths(ticket.id)?.aiLogPath).toBe(getTicketAiLogPath(repoDir, ticket.externalId))
+  })
+
+  it('projects loop-aware visited statuses with a monotonic workflow revision', () => {
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'LoopTroop', shortname: 'VIS' })
+    const ticket = createTicket({ projectId: project.id, title: 'Visit Manual QA twice' })
+
+    patchTicket(ticket.id, { status: 'RUNNING_FINAL_TEST' })
+    patchTicket(ticket.id, { status: 'GENERATING_QA_CHECKLIST' })
+    patchTicket(ticket.id, { status: 'WAITING_MANUAL_QA' })
+    const waiting = getTicketByRef(ticket.id)
+    patchTicket(ticket.id, { status: 'CODING' })
+    const looped = getTicketByRef(ticket.id)
+
+    expect(waiting?.workflowRevision).toBe(3)
+    expect(looped?.workflowRevision).toBe(4)
+    expect(looped?.visitedStatuses).toEqual([
+      'DRAFT',
+      'RUNNING_FINAL_TEST',
+      'GENERATING_QA_CHECKLIST',
+      'WAITING_MANUAL_QA',
+      'CODING',
+    ])
+  })
+
+  it('allows ticket Manual QA overrides only while Draft', () => {
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'LoopTroop', shortname: 'OVR' })
+    const ticket = createTicket({ projectId: project.id, title: 'Draft override', manualQaOverride: null })
+
+    expect(updateTicket(ticket.id, { manualQaOverride: true })?.manualQaOverride).toBe(true)
+    patchTicket(ticket.id, { status: 'SCANNING_RELEVANT_FILES' })
+    expect(() => updateTicket(ticket.id, { manualQaOverride: false })).toThrow(/DRAFT status/)
+    expect(() => patchTicket(ticket.id, { manualQaOverride: null })).toThrow(/DRAFT status/)
+    expect(getTicketByRef(ticket.id)?.manualQaOverride).toBe(true)
+  })
+
+  it('keeps already-started tickets with missing Manual QA locks disabled', () => {
+    sqlite.exec('INSERT INTO profiles (manual_qa_enabled) VALUES (1)')
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'LoopTroop', shortname: 'LEG' })
+    const ticket = createTicket({ projectId: project.id, title: 'Legacy active ticket' })
+    patchTicket(ticket.id, {
+      status: 'CODING',
+      startedAt: '2026-07-01T00:00:00.000Z',
+      lockedManualQaEnabled: null,
+      lockedManualQaSource: null,
+    })
+
+    expect(getTicketByRef(ticket.id)).toMatchObject({
+      effectiveManualQaEnabled: false,
+      effectiveManualQaSource: 'profile',
+    })
   })
 })
 

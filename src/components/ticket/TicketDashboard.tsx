@@ -43,7 +43,7 @@ function SSELogConnector({
 }: {
   ticketId: string | null
   currentStatus: string
-  onStateChange?: (payload: { status: string; previousStatus?: string }) => void
+  onStateChange?: (payload: { status: string; previousStatus?: string; workflowRevision?: number }) => void
   onConnectionStateChange?: (state: SSEConnectionState) => void
 }) {
   const logCtx = useLogs()
@@ -55,10 +55,15 @@ function SSELogConnector({
       const phaseAttempt = typeof event.data.phaseAttempt === 'number' && Number.isFinite(event.data.phaseAttempt)
         ? event.data.phaseAttempt
         : undefined
+      const rawWorkflowRevision = [event.data.workflowRevision, event.data.transitionId, event.data.revision]
+        .find((value) => (typeof value === 'number' && Number.isFinite(value)) || (typeof value === 'string' && value.trim().length > 0))
+      const parsedWorkflowRevision = Number(rawWorkflowRevision)
+      const workflowRevision = Number.isFinite(parsedWorkflowRevision) ? parsedWorkflowRevision : undefined
       if (to) {
         onStateChange?.({
           status: to,
           ...(from ? { previousStatus: from } : {}),
+          ...(workflowRevision !== undefined ? { workflowRevision } : {}),
         })
         logCtx?.setActivePhase(to)
         logCtx?.addLog(
@@ -198,11 +203,13 @@ export function TicketDashboard() {
     phase: string | null
     previousStatus: string | null
     reviewCutoffStatus: string | null
+    workflowRevision: number | null
   }>({
     ticketId: null,
     phase: null,
     previousStatus: null,
     reviewCutoffStatus: null,
+    workflowRevision: null,
   })
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [liveUpdatesState, setLiveUpdatesState] = useState<SSEConnectionState>('connecting')
@@ -232,6 +239,21 @@ export function TicketDashboard() {
     if (livePhase.ticketId !== ticketId || !livePhase.phase) return null
     if (!dbStatus || livePhase.phase === dbStatus) return livePhase
 
+    const liveRevision = livePhase.workflowRevision
+    const dbRevision = ticket?.workflowRevision
+    if (typeof liveRevision === 'number' && typeof dbRevision === 'number') {
+      if (dbRevision >= liveRevision) {
+        return {
+          ...livePhase,
+          phase: dbStatus,
+          workflowRevision: dbRevision,
+          previousStatus: snapshotPreviousStatus ?? livePhase.previousStatus,
+          reviewCutoffStatus: snapshotReviewCutoffStatus ?? livePhase.reviewCutoffStatus,
+        }
+      }
+      return livePhase
+    }
+
     const liveIdx = WORKFLOW_PHASE_IDS.indexOf(livePhase.phase)
     const dbIdx = WORKFLOW_PHASE_IDS.indexOf(dbStatus)
     if (liveIdx >= 0 && dbIdx >= 0 && dbIdx > liveIdx) {
@@ -244,7 +266,7 @@ export function TicketDashboard() {
     }
 
     return livePhase
-  }, [dbStatus, livePhase, snapshotPreviousStatus, snapshotReviewCutoffStatus, ticketId])
+  }, [dbStatus, livePhase, snapshotPreviousStatus, snapshotReviewCutoffStatus, ticket?.workflowRevision, ticketId])
 
   const liveStatus = effectiveLivePhase && effectiveLivePhase.phase !== ticket?.status
     ? effectiveLivePhase.phase
@@ -308,8 +330,16 @@ export function TicketDashboard() {
       setIsFullLogOpen(false)
     }
   }, [ticketId])
-  const handleLiveStatusChange = useCallback(({ status, previousStatus }: { status: string; previousStatus?: string }) => {
+  const handleLiveStatusChange = useCallback(({ status, previousStatus, workflowRevision }: { status: string; previousStatus?: string; workflowRevision?: number }) => {
     setLivePhase((current) => {
+      if (
+        typeof workflowRevision === 'number'
+        && typeof current.workflowRevision === 'number'
+        && workflowRevision <= current.workflowRevision
+        && current.ticketId === ticketId
+      ) {
+        return current
+      }
       const nextPreviousStatus = previousStatus ?? null
       let nextReviewCutoffStatus: string | null = null
 
@@ -335,6 +365,7 @@ export function TicketDashboard() {
         && current.phase === status
         && current.previousStatus === nextPreviousStatus
         && current.reviewCutoffStatus === nextReviewCutoffStatus
+        && current.workflowRevision === (workflowRevision ?? current.workflowRevision)
       ) {
         return current
       }
@@ -344,6 +375,7 @@ export function TicketDashboard() {
         phase: status,
         previousStatus: nextPreviousStatus,
         reviewCutoffStatus: nextReviewCutoffStatus,
+        workflowRevision: workflowRevision ?? null,
       }
     })
     setPhaseSelection((current) => {

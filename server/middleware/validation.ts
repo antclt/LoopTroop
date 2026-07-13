@@ -40,6 +40,12 @@ async function readBodyWithinLimit(request: Request, maxBytes: number): Promise<
 
 export async function validateJson(c: Context, next: Next) {
   if (['POST', 'PUT', 'PATCH'].includes(c.req.method)) {
+    // Manual QA evidence is intentionally streamed and may be any file type up
+    // to its route-owned 250 MiB limit. Do not buffer it in the JSON middleware.
+    if (/\/tickets\/[^/]+\/manual-qa\/versions\/\d+\/evidence\/?$/.test(new URL(c.req.url).pathname)) {
+      await next()
+      return
+    }
     const contentType = c.req.header('content-type')
     if (contentType && !contentType.includes('application/json') && !contentType.includes('text/event-stream')) {
       return c.json({ error: 'Content-Type must be application/json' }, 415)

@@ -1,7 +1,7 @@
 # Ticket Flow
 
 > [!IMPORTANT]
-> **TL;DR** — A ticket flows through: scanning → interview → PRD → beads planning → execution setup → bead-by-bead coding → final test → integration → PR → cleanup (interview, PRD and beads are planning loops with LLM council drafting, voting, and refinement stages).
+> **TL;DR** — A ticket flows through: scanning → interview → PRD → beads planning → execution setup → bead-by-bead coding → final test → optional Manual QA → integration → PR → cleanup. Manual QA failures create fix beads and loop through coding plus fresh final tests.
 
 LoopTroop does not move a ticket through a tiny backlog -> coding -> done list. It runs a staged lifecycle with planning loops, approval gates, execution setup, bead-scoped coding, PR delivery, and explicit error recovery.
 
@@ -22,6 +22,8 @@ DRAFT
   -> PREPARING_EXECUTION_ENV
   -> CODING bead loop
   -> RUNNING_FINAL_TEST
+  -> GENERATING_QA_CHECKLIST (when the start-time Manual QA lock is enabled)
+  -> WAITING_MANUAL_QA
   -> INTEGRATING_CHANGES
   -> CREATING_PULL_REQUEST
   -> WAITING_PR_REVIEW
@@ -33,6 +35,7 @@ BLOCKED_ERROR -> RETRY -> previousStatus
 BLOCKED_ERROR -> CONTINUE -> previousStatus (eligible preserved OpenCode sessions only)
 Any non-terminal phase -> CANCELED
 WAITING_PR_REVIEW -> merge or close-unmerged -> CLEANING_ENV
+WAITING_MANUAL_QA -> failed submission -> CODING -> fresh RUNNING_FINAL_TEST -> next QA version
 ```
 
 Useful mental model:
@@ -57,6 +60,7 @@ Loop semantics are omitted from the high-level chart to keep it readable:
 - `VERIFYING_PRD_COVERAGE` can send the ticket back to `REFINING_PRD` until the spec is clean or the revision cap is reached.
 - `VERIFYING_BEADS_COVERAGE` can send the ticket back to `REFINING_BEADS` until the blueprint is clean or the revision cap is reached.
 - `CODING` repeats bead-by-bead until all executable beads are complete.
+- Enabled tickets enter `GENERATING_QA_CHECKLIST` after each passing final test. `WAITING_MANUAL_QA` advances on pass/waive/skip or returns to `CODING` after deterministic QA-fix bead creation.
 - `BLOCKED_ERROR` stores `previousStatus`, so `retry` and eligible `continue` actions both return to the interrupted phase.
 
 ---
@@ -100,6 +104,8 @@ The underlying state machine enforces valid state transitions and recovery hooks
 - `CONTINUE`: Appears only when a preserved OpenCode session is still live and eligible; LoopTroop re-enters the interrupted phase and sends exactly `continue please`.
 - `CANCEL`: Available from every non-terminal workflow state and moves the ticket to the terminal canceled state after aborting active work.
 
+Manual QA adds a deliberate reverse transition rather than an error transition. Any explicit Fail—required or optional—creates pending `qa-fix` beads, archives the current final-test/generation/waiting attempts, and returns to `CODING`. Improvements from the same submission are independent Draft tickets. After fixes, LoopTroop creates a fresh final-test attempt and allocates the next checklist version; it never reuses the prior round's report or retry notes.
+
 ### 3.7 Coverage Control
 
 Interview, PRD, and beads coverage loops are managed by `server/workflow/coverageControl.ts`. Each phase uses a shared `resolveCoverageRunState()` mechanism that tracks:
@@ -121,7 +127,8 @@ The execution band (`server/workflow/executionBand.ts`) is the set of statuses b
 
 ```
 PRE_FLIGHT_CHECK → WAITING_EXECUTION_SETUP_APPROVAL → PREPARING_EXECUTION_ENV
-  → CODING → RUNNING_FINAL_TEST → INTEGRATING_CHANGES
+  → CODING → RUNNING_FINAL_TEST → GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA
+  → INTEGRATING_CHANGES
   → CREATING_PULL_REQUEST → WAITING_PR_REVIEW → CLEANING_ENV
 ```
 
@@ -138,6 +145,7 @@ The transition model enforces these invariants:
 - **`BLOCKED_ERROR`** stores `previousStatus` in its context to allow precise, phase-scoped recovery.
 - **Cancellation** is a workflow-wide safety valve for every non-terminal state, even though the most visible decision points remain approvals, blocked errors, and PR review.
 - **Archived phase attempts** preserve non-implementation retries, regenerations, and planning restarts as read-only history instead of overwriting the last run.
+- **Visited status history + monotonic workflow revisions** preserve Manual QA rounds and reconcile reverse transitions without relying on linear status indexes.
 - **Execution-time human input** can happen without a status change when OpenCode asks a question during runtime setup or coding.
 
 ---
@@ -204,6 +212,8 @@ The canonical properties for every workflow phase are detailed in the inventory 
 | `PREPARING_EXECUTION_ENV` | Preparing Runtime | `pre_implementation` | `coding` | `in_progress` | — | no | no | — |
 | `CODING` | Implementing | `implementation` | `coding` | `in_progress` | — | no | no | `beads` |
 | `RUNNING_FINAL_TEST` | Testing | `post_implementation` | `coding` | `in_progress` | — | no | no | — |
+| `GENERATING_QA_CHECKLIST` | Preparing Manual QA | `post_implementation` | `manual_qa` | `in_progress` | `manual_qa_checklist` | no | no | — |
+| `WAITING_MANUAL_QA` | Manual QA | `post_implementation` | `manual_qa` | `needs_input` | `manual_qa_checklist` | no | no | — |
 | `INTEGRATING_CHANGES` | Squashing Commits | `post_implementation` | `coding` | `in_progress` | — | no | no | — |
 | `CREATING_PULL_REQUEST` | Creating PR | `post_implementation` | `coding` | `in_progress` | — | no | no | — |
 | `WAITING_PR_REVIEW` | Reviewing PR | `post_implementation` | `coding` | `needs_input` | — | no | no | — |
@@ -267,6 +277,8 @@ The state machine metadata directly drives the React user interface. Developers 
 
 ### Post-Implementation & Delivery
 - **`RUNNING_FINAL_TEST`:** The implementer constructs a whole-ticket test plan, executes it with the approved runtime profile, and records a final-test file-effects audit alongside the test outputs.
+- **`GENERATING_QA_CHECKLIST`:** “LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.” It is automation-only: LoopTroop resolves final-test effects, creates a clean local checkpoint/baseline, reserves `vN`, generates one strict tagged YAML checklist with the locked implementer, validates stable PRD refs, computes advisory coverage in code, and advances automatically. It never starts or controls the application. Generation, validation, or checkpoint failure enters recoverable `BLOCKED_ERROR` and retry reuses the reservation/valid artifacts.
+- **`WAITING_MANUAL_QA`:** “LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.” The user runs and controls the app, while results/evidence autosave. Required items need Pass, Fail, or Waive; optional items may remain Pending; Fail needs an observation and Waive a reason. Submit creates reviewed improvements and grouped/ungrouped fix beads together through an idempotent journal. Pass, required waiver, or skip integrates; any Fail returns to Coding. Before submit/skip, audited workspace drift must be included in a checkpoint or discarded. Historical rounds stay selectable read-only.
 - **`INTEGRATING_CHANGES`:** Squashes bead-level changes and audited candidate files into a clean candidate commit on the main ticket branch. If final testing produced unclassified files, integration blocks for a human include/discard decision.
 - **`CREATING_PULL_REQUEST`:** Performs a final candidate audit (reconciling inclusions/exclusions) before pushing the branch and drafting the PR title/description.
 - **`WAITING_PR_REVIEW`:** Review window. Exits successfully via `merge` (which locks, checks, and finishes) or `close_unmerged`.
@@ -290,6 +302,7 @@ The state machine metadata directly drives the React user interface. Developers 
 | Approval gates | `approve`, `cancel` | Interview, PRD, beads, and setup-plan approvals require `expectedContentSha256`; stale approvals return `409` instead of advancing. |
 | `WAITING_EXECUTION_SETUP_APPROVAL` / `PREPARING_EXECUTION_ENV` | edit, regenerate, approve/rewind | Setup-plan saves or regenerations during runtime setup stop the active setup session, archive the current setup/runtime attempts, preserve the tool cache, and require approval again. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | Review resolution decides whether the ticket exits with a merged PR or a closed unmerged branch. |
+| `WAITING_MANUAL_QA` | autosave, evidence upload/remove, submit, skip, include/discard drift, `cancel` | Every mutation uses an action id, expected checklist hash, and expected draft revision. Skip snapshots the draft but creates no drafted improvement/fix work. |
 | `BLOCKED_ERROR` | `retry`, optional `continue`, optional file-effects overrides, `cancel` | `continue` appears only when a preserved OpenCode session is still live. `include-final-test-files` / `discard-final-test-files` appear only for `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED`. |
 | Any other non-terminal status | `cancel` | Cancellation is not limited to gates; the route accepts it from every non-terminal workflow state. |
 | `PREPARING_EXECUTION_ENV` / `CODING` | reply/reject OpenCode questions | OpenCode can request human input mid-session without changing the main ticket status; answering or rejecting the request unblocks that live session in place. |
@@ -323,6 +336,7 @@ When a phase encounters a fatal block, it routes to `BLOCKED_ERROR` while storin
 - Every non-implementation manual retry archives the failed phase attempt and creates a fresh active attempt; artifacts and logs can later be inspected through `phaseAttempt`-scoped history.
 - Setup-plan regenerations and post-approval planning edits follow the same versioned-history model instead of overwriting the last approved generation.
 - `CODING` is the exception: recovery stays bead-scoped (`bead_execution:*` artifacts, checkpoint finalization, and worktree reset) rather than creating phase-attempt versions.
+- A failed Manual QA round also archives its current final-test, generation, and waiting attempts before returning to the normal Coding scheduler. The next pass gets a fresh test attempt and new `vN`; lineage links related checklist items across rounds.
 
 ---
 

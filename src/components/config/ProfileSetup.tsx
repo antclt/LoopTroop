@@ -16,6 +16,7 @@ import { numericFields, hasNumericErrors, buildInitialRawNumeric } from './numer
 import { NumericField } from './profileNumericUtils'
 import { ConfigurationDocsLink } from './ConfigurationDocsLink'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
+import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
 
 interface ProfileSetupProps {
   onClose: () => void
@@ -53,6 +54,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
     toolInputMaxChars: profile?.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
     toolOutputMaxChars: profile?.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
     toolErrorMaxChars: profile?.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
+    manualQaEnabled: profile?.manualQaEnabled ?? false,
   })
 
   const [rawNumeric, setRawNumeric] = useState<Record<string, string>>(() => buildInitialRawNumeric({ ...formData }))
@@ -105,6 +107,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
       toolInputMaxChars: profile.toolInputMaxChars ?? PROFILE_DEFAULTS.toolInputMaxChars,
       toolOutputMaxChars: profile.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
       toolErrorMaxChars: profile.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
+      manualQaEnabled: profile.manualQaEnabled ?? false,
     })
     setRawNumeric(buildInitialRawNumeric({
       perIterationTimeout: profile.perIterationTimeout ?? PROFILE_DEFAULTS.perIterationTimeout,
@@ -442,6 +445,25 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
               onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))}
               hint="Timeout for the one-time execution setup phase before coding starts (0–3600s)."
               tooltip="Runs a one-time setup step after pre-flight and before coding. It can install toolchains, warm caches, and prepare repository-local runtime artifacts when the approved setup plan requires them."
+            />
+          </div>
+
+          <Separator />
+
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Manual QA</div>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <label className="text-sm font-medium">Manual QA checkpoint</label>
+              <p className="mt-1 text-xs text-muted-foreground">
+                When enabled, new tickets pause after final tests with a generated checklist. LoopTroop never starts or controls your application.
+              </p>
+            </div>
+            <ManualQaSetting
+              idPrefix="profile-manual-qa"
+              value={formData.manualQaEnabled ? true : false}
+              onChange={(value) => updateField('manualQaEnabled', value === true)}
+              compact
+              allowInherit={false}
             />
           </div>
 

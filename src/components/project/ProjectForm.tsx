@@ -11,6 +11,9 @@ import { EmojiPickerSection, ColorPickerSection } from './AppearancePickers'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { DeleteWorktreesDialog } from './DeleteWorktreesDialog'
 import { PROJECT_GIT_CHECK_DEBOUNCE_MS, SECONDS_PER_HOUR, SECONDS_PER_DAY } from '@/lib/constants'
+import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
+import type { ManualQaOverride } from '@/lib/manualQaSetting'
+import { useProfile } from '@/hooks/useProfile'
 
 interface ProjectFormProps {
   onClose: () => void
@@ -48,12 +51,14 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
   const updateProject = useUpdateProject()
   const deleteProject = useDeleteProject()
   const { addToast } = useToast()
+  const { data: profile } = useProfile()
   const isEditing = !!project
   const [name, setName] = useState(project?.name ?? '')
   const [shortname, setShortname] = useState(project?.shortname ?? '')
   const [folder, setFolder] = useState(project?.folderPath ?? '')
   const [icon, setIcon] = useState(project?.icon ?? '📦')
   const [color, setColor] = useState(project?.color ?? '#3b82f6')
+  const [manualQaOverride, setManualQaOverride] = useState<ManualQaOverride>(project?.manualQaOverride ?? null)
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false)
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false)
   const [gitInfo, setGitInfo] = useState<GitCheckResponse>({ isGit: false, status: 'none' })
@@ -124,7 +129,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
     e.preventDefault()
     if (isEditing) {
       updateProject.mutate(
-        { id: project.id, name, icon, color },
+        { id: project.id, name, icon, color, manualQaOverride },
         {
           onSuccess: () => {
             addToast('success', 'Project updated.')
@@ -134,7 +139,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
       )
     } else {
       createProject.mutate(
-        { name, shortname, folderPath: folder, icon, color },
+        { name, shortname, folderPath: folder, icon, color, manualQaOverride },
         {
           onSuccess: () => {
             addToast('success', restoreMode ? 'Project restored from existing LoopTroop data.' : 'Project created.')
@@ -247,6 +252,22 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
                   {icon?.startsWith('data:') ? <img src={icon} className="h-5 w-5 rounded" alt="icon" /> : icon}
                 </div>
               </div>
+            </div>
+          </div>
+          <div className="rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <label className="text-sm font-medium">Manual QA checkpoint</label>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Choose whether newly started tickets in this project pause for a user-run QA checklist after final tests.
+                </p>
+              </div>
+              <ManualQaSetting
+                idPrefix="project-manual-qa"
+                value={manualQaOverride}
+                onChange={setManualQaOverride}
+                inheritedEnabled={profile?.manualQaEnabled ?? false}
+              />
             </div>
           </div>
           {isEditing ? (

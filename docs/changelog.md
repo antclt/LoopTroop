@@ -12,15 +12,27 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added an optional, ticket-locked Manual QA checkpoint that turns post-test failures into fix beads and reviewed improvements into independent backlog tickets without controlling the user's application.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
 
 ### Detailed Changes
 
 #### Added
+- Added the `GENERATING_QA_CHECKLIST` and `WAITING_MANUAL_QA` post-implementation statuses, versioned strict checklist/results/coverage schemas, stable item lineage, code-computed approved-PRD criterion coverage, and restart-safe generation reservations.
+- Added profile-level Manual QA enablement (off by default), project/ticket `Inherit / Enabled / Disabled` overrides, Draft-only ticket editing, and frozen effective value/source fields at ticket Start.
+- Added a lazy Manual QA workspace with generation guidance, required/optional result validation, pass/fail/waive/improvement/pending controls, five-second revision-checked autosave, evidence management, failure merge groups, improvement review, drift recovery, skip, and read-only historical rounds.
+- Added contained streaming evidence storage with a 250 MiB per-file limit and no count/round cap, SHA-256/size verification, sanitized paths, symlink/traversal protection, atomic publication, safe-raster inline previews, attachment-only unsafe/unknown content, and HTTP(S)-only evidence links.
+- Added restart-idempotent Manual QA submission journaling that creates deterministic `qa-fix` beads and one Normal-priority Draft ticket per reviewed Improvement, copies selected evidence/provenance to child ticket storage, and resumes partial creation without duplicates.
+- Added loop-aware public ticket projections (`visitedStatuses`, monotonic `workflowRevision`, and Manual QA round/outcome/artifact availability) plus Manual QA REST routes for rounds, evidence, submit/skip, and workspace-drift include/discard decisions.
+- Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
 - Updated the Kanban triage control bar to support showing or hiding mock tickets (marked with `(M)`). This setting can be persisted in Kanban filter presets and defaults to showing mocks.
+- Changed `TESTS_PASSED` routing to use the ticket's frozen Manual QA value: disabled/missing locks retain direct integration, while enabled tickets checkpoint final-test effects and enter the generated QA loop.
+- Strengthened generic ticket UI state to serialized server-owned compare-and-set revisions with idempotent action IDs and latest-state `409` conflicts; existing approval autosave consumers retain debounce and unload keepalive behavior.
+- Changed post-QA failure recovery to archive the current final-test/generation/wait attempts, schedule normal QA-fix beads, run fresh final tests, and allocate a new checklist version before integration.
+- Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
 
@@ -29,6 +41,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 #### Maintenance
 
 #### Documentation
+- Documented Manual QA configuration/inheritance, storage/schema, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, QA beads/file parts, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.
 - Added **Skip Reason Auditability** to the [High Priority roadmap](roadmap.md#high-priority): users can provide an optional reason when skipping any step, prompt, or approval gate, and the reason is persisted in the relevant ticket artifact.
 
 :::

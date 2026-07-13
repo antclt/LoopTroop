@@ -28,6 +28,7 @@ function getPhaseIndicatorStatus(
   phaseOrder: string[],
   reviewCutoffStatus?: string,
   previousStatus?: string,
+  visitedStatuses: string[] = [],
 ): PhaseIndicatorStatus {
   if (currentStatus === 'BLOCKED_ERROR') {
     if (phaseId === 'BLOCKED_ERROR') return 'error'
@@ -75,6 +76,8 @@ function getPhaseIndicatorStatus(
     return STATUS_TO_PHASE[currentStatus] === 'needs_input' ? 'waiting' : 'active'
   }
 
+  if (visitedStatuses.includes(phaseId)) return 'completed'
+
   const currentIndex = phaseOrder.indexOf(currentStatus)
   const phaseIndex = phaseOrder.indexOf(phaseId)
 
@@ -88,8 +91,9 @@ function getGroupStatus(
   phaseOrder: string[],
   reviewCutoffStatus?: string,
   previousStatus?: string,
+  visitedStatuses: string[] = [],
 ): PhaseIndicatorStatus {
-  const statuses = group.phases.map(p => getPhaseIndicatorStatus(p.id, currentStatus, phaseOrder, reviewCutoffStatus, previousStatus))
+  const statuses = group.phases.map(p => getPhaseIndicatorStatus(p.id, currentStatus, phaseOrder, reviewCutoffStatus, previousStatus, visitedStatuses))
 
   if (group.id === 'todo' && currentStatus === 'DRAFT') {
     return 'pending'
@@ -141,6 +145,12 @@ function getPhaseLabel(phaseId: string, ticket?: Ticket): string {
       currentBead: beadProgress?.current ?? null,
       totalBeads: beadProgress?.total ?? null,
     })
+  }
+
+  if (phaseId === 'GENERATING_QA_CHECKLIST' || phaseId === 'WAITING_MANUAL_QA') {
+    const version = ticket?.manualQa?.activeVersion
+    const base = getStatusUserLabel(phaseId)
+    return version ? `${base} (v${version})` : base
   }
 
   return getStatusUserLabel(phaseId)
@@ -207,7 +217,7 @@ export function PhaseTimeline({
     <ScrollArea className="h-full">
       <div className="p-2 space-y-1">
         {phaseGroups.map((group, gi) => {
-          const groupStatus = getGroupStatus(group, currentStatus, phaseOrder, reviewCutoffStatus, previousStatus)
+          const groupStatus = getGroupStatus(group, currentStatus, phaseOrder, reviewCutoffStatus, previousStatus, ticket?.visitedStatuses ?? [])
           const isExpanded = expandedGroups.has(gi)
 
           return (
@@ -237,7 +247,7 @@ export function PhaseTimeline({
               {isExpanded && (
                 <div className="ml-3 space-y-0.5 mt-0.5">
                   {group.phases.map(phase => {
-                    const indicatorStatus = getPhaseIndicatorStatus(phase.id, currentStatus, phaseOrder, reviewCutoffStatus, previousStatus)
+                    const indicatorStatus = getPhaseIndicatorStatus(phase.id, currentStatus, phaseOrder, reviewCutoffStatus, previousStatus, ticket?.visitedStatuses ?? [])
                     const isSelected = selectedPhase === phase.id
                     const isPast = indicatorStatus === 'completed'
                     const isFuture = indicatorStatus === 'pending'

@@ -12,6 +12,8 @@ import { EffortBadge } from '@/components/shared/EffortBadge'
 import { CollapsiblePhaseLogSection } from '@/components/workspace/CollapsiblePhaseLogSection'
 import { TicketDescriptionTabs, type TicketDescriptionMode } from '@/components/ticket/TicketDescriptionTabs'
 import { TicketDescriptionViewer } from '@/components/ticket/TicketDescriptionViewer'
+import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
+import { resolveManualQaSettingLabel, type ManualQaOverride } from '@/lib/manualQaSetting'
 
 const PRIORITY_LABELS: Record<number, string> = { 1: 'Very High', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Very Low' }
 const PRIORITY_COLORS: Record<number, string> = {
@@ -92,6 +94,8 @@ export function DraftView({ ticket }: DraftViewProps) {
   const [descriptionError, setDescriptionError] = useState<string | null>(null)
   const [lastSyncedDescription, setLastSyncedDescription] = useState(ticket.description ?? '')
   const [shouldSkipNextSync, setShouldSkipNextSync] = useState(false)
+  const [manualQaOverride, setManualQaOverride] = useState<ManualQaOverride>(ticket.manualQaOverride ?? null)
+  const [manualQaError, setManualQaError] = useState<string | null>(null)
   const project = projects.find(p => p.id === ticket.projectId)
   const mainImplementer = typeof profile?.mainImplementer === 'string'
     ? profile.mainImplementer.trim()
@@ -109,6 +113,11 @@ export function DraftView({ ticket }: DraftViewProps) {
   const savedDescription = ticket.description ?? ''
   const hasDescription = descriptionDraft.length > 0
   const hasDescriptionChanges = descriptionDraft !== savedDescription
+  const effectiveManualQa = resolveManualQaSettingLabel(
+    manualQaOverride,
+    project?.manualQaOverride ?? null,
+    profile?.manualQaEnabled ?? false,
+  )
 
   // Sync draft from prop — use useEffect to avoid setting state during render
   // which can cause issues with React StrictMode double-rendering.
@@ -124,6 +133,10 @@ export function DraftView({ ticket }: DraftViewProps) {
       }
     }
   }, [savedDescription, lastSyncedDescription, isEditingDescription, shouldSkipNextSync])
+
+  useEffect(() => {
+    setManualQaOverride(ticket.manualQaOverride ?? null)
+  }, [ticket.manualQaOverride])
 
   const handleStart = () => {
     setIsStartAttemptActive(true)
@@ -170,6 +183,18 @@ export function DraftView({ ticket }: DraftViewProps) {
       setIsEditingDescription(false)
     } catch (error) {
       setDescriptionError(error instanceof Error ? error.message : 'Failed to save description.')
+    }
+  }
+
+  const handleManualQaChange = async (value: ManualQaOverride) => {
+    const previous = manualQaOverride
+    setManualQaOverride(value)
+    setManualQaError(null)
+    try {
+      await updateTicket({ id: ticket.id, manualQaOverride: value })
+    } catch (error) {
+      setManualQaOverride(previous)
+      setManualQaError(error instanceof Error ? error.message : 'Failed to update Manual QA setting.')
     }
   }
 
@@ -259,6 +284,25 @@ export function DraftView({ ticket }: DraftViewProps) {
               </div>
             </div>
           )}
+
+          <div className="w-full rounded-md border border-border p-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <h4 className="text-xs font-medium">Manual QA checkpoint</h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Effective setting: <span className="font-medium text-foreground">{effectiveManualQa.enabled ? 'Enabled' : 'Disabled'}</span> from {effectiveManualQa.source === 'profile' ? 'global configuration' : effectiveManualQa.source}. This value is frozen when the ticket starts.
+                </p>
+              </div>
+              <ManualQaSetting
+                idPrefix="draft-manual-qa"
+                value={manualQaOverride}
+                onChange={(value) => { void handleManualQaChange(value) }}
+                inheritedEnabled={effectiveManualQa.enabled}
+                disabled={isSavingDescription}
+              />
+            </div>
+            {manualQaError && <p role="alert" className="mt-2 text-xs text-destructive">{manualQaError}</p>}
+          </div>
 
           <div className="w-full rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-2">

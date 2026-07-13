@@ -42,6 +42,10 @@ vi.mock('@/components/shared/useToast', () => ({
   useToast: () => ({ addToast: vi.fn() }),
 }))
 
+vi.mock('@/hooks/useProfile', () => ({
+  useProfile: () => ({ data: { manualQaEnabled: false } }),
+}))
+
 vi.mock('../FolderPicker', () => ({
   FolderPicker: ({ open }: { open: boolean }) => (open ? <div>Folder Picker</div> : null),
 }))

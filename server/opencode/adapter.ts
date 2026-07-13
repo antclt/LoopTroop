@@ -23,6 +23,9 @@ import type {
 import { parseModelRef } from './types'
 import type { TicketState } from './contextBuilder'
 import { resolve } from 'path'
+import { relative, sep } from 'path'
+import { existsSync, lstatSync, readFileSync } from 'fs'
+import { pathToFileURL } from 'url'
 import { logIfVerbose, warnIfVerbose } from '../runtime'
 import { getOpenCodeBaseUrl } from './runtimeConfig'
 import type { Bead } from '../phases/beads/types'
@@ -89,6 +92,23 @@ function formatContextGuidance(guidance: Bead['contextGuidance']): string {
 
 function formatBeadContext(bead: Bead): string {
   const blockedBy = bead.dependencies.blocked_by
+  const manualQa = bead.qaOrigin
+    ? [
+        '',
+        '## Manual QA Fix Origin',
+        `Round: v${bead.qaOrigin.version}`,
+        ...bead.qaOrigin.sourceItems.flatMap((item) => [
+          `- Item ${item.itemId}: ${item.behavior}`,
+          `  Observation: ${item.observation}`,
+          `  Expected: ${item.expectedResult}`,
+          ...(item.evidence.length > 0
+            ? item.evidence.map((evidence) => `  Evidence: ${evidence.originalName} (${evidence.mediaType}, sha256 ${evidence.sha256}, ${evidence.relativePath})`)
+            : ['  Evidence: none']),
+          ...item.links.map((link) => `  Evidence link: ${link.label ? `${link.label}: ` : ''}${link.url}`),
+        ]),
+        'Retry notes are separate from this Manual QA origin.',
+      ]
+    : []
   return [
     `# Active Bead`,
     `ID: ${bead.id}`,
@@ -114,6 +134,7 @@ function formatBeadContext(bead: Bead): string {
     '',
     `## Dependencies (blocked by)`,
     ...(blockedBy.length > 0 ? blockedBy.map((item) => `- ${item}`) : ['- None']),
+    ...manualQa,
   ].join('\n')
 }
 
@@ -184,7 +205,9 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     const model = promptOptions.model ?? parseModelRef(promptOptions.modelRef)
 
     const directory = await this.resolveSessionDirectory(sessionId, promptSignal)
-    const { systemText, promptParts } = this.partitionPromptParts(parts, promptOptions.system)
+    // Manual QA file parts carry a creation-time model-capability snapshot.
+    // If present, forward every part; provider/context failures must surface.
+    const { systemText, promptParts } = this.partitionPromptParts(parts, promptOptions.system, true)
     const streamAbortController = new AbortController()
     const streamSignal = promptSignal
       ? AbortSignal.any([promptSignal, streamAbortController.signal])
@@ -560,7 +583,8 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     const { buildMinimalContext } = await import('./contextBuilder')
     const ticketState = await this.loadTicketState(ticketId, beadId)
     logIfVerbose(`[adapter] assembleBeadContext ticket=${ticketId} bead=${beadId} hasDescription=${!!ticketState.description}`)
-    return buildMinimalContext('coding', ticketState)
+    const context = buildMinimalContext('coding', ticketState)
+    return [...context, ...await this.loadQaEvidenceFileParts(ticketId, beadId)]
   }
 
   async assembleCouncilContext(ticketId: string, phase: string): Promise<PromptPart[]> {
@@ -715,20 +739,80 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
     }
   }
 
-  private partitionPromptParts(parts: PromptPart[], fallbackSystem?: string) {
+  private partitionPromptParts(parts: PromptPart[], fallbackSystem?: string, includeImageFiles = false) {
     const systemParts = parts
       .filter(part => part.type === 'system')
       .map(part => part.content.trim())
       .filter(Boolean)
 
-    const promptParts = parts
-      .filter(part => part.type !== 'system')
-      .map(part => ({ type: 'text' as const, text: part.content }))
+    const promptParts: Array<
+      | { type: 'text'; text: string }
+      | { type: 'file'; mime: string; filename?: string; url: string }
+    > = []
+    for (const part of parts) {
+      if (part.type === 'system') continue
+      if (part.type === 'file') {
+        if (!includeImageFiles || !part.url || !part.mime?.toLowerCase().startsWith('image/')) continue
+        promptParts.push({
+          type: 'file',
+          mime: part.mime,
+          ...(part.filename ? { filename: part.filename } : {}),
+          url: part.url,
+        })
+        continue
+      }
+      promptParts.push({ type: 'text', text: part.content })
+    }
 
     return {
       systemText: [fallbackSystem?.trim(), ...systemParts].filter(Boolean).join('\n\n'),
       promptParts: promptParts.length > 0 ? promptParts : [{ type: 'text' as const, text: '' }],
     }
+  }
+
+  private async loadQaEvidenceFileParts(ticketId: string, beadId: string): Promise<PromptPart[]> {
+    const { getTicketPaths } = await import('../storage/tickets')
+    const paths = getTicketPaths(ticketId)
+    if (!paths || !existsSync(paths.beadsPath)) return []
+    let bead: Bead | undefined
+    try {
+      bead = readFileSync(paths.beadsPath, 'utf8')
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Bead)
+        .find((entry) => entry.id === beadId)
+    } catch (error) {
+      throw new Error(`Failed to load Manual QA evidence manifest for bead ${beadId}: ${getErrorMessage(error)}`)
+    }
+    if (!bead?.qaOrigin || bead.qaOrigin.imageDelivery !== 'attached') return []
+    return bead.qaOrigin.sourceItems.flatMap((item) => item.evidence.flatMap((evidence) => {
+      if (!evidence.mediaType.toLowerCase().startsWith('image/')) return []
+      const localPath = resolve(paths.ticketDir, evidence.relativePath)
+      const rel = relative(paths.ticketDir, localPath)
+      let safeFile = false
+      try {
+        const stats = lstatSync(localPath)
+        safeFile = rel !== '..'
+          && !rel.startsWith(`..${sep}`)
+          && existsSync(localPath)
+          && !stats.isSymbolicLink()
+          && stats.isFile()
+      } catch {
+        safeFile = false
+      }
+      if (!safeFile) {
+        throw new Error(`Manual QA image evidence ${evidence.id} for bead ${beadId} is missing or unsafe: ${evidence.relativePath}`)
+      }
+      return [{
+        type: 'file' as const,
+        content: '',
+        source: `manual_qa_evidence:${item.itemId}:${evidence.id}`,
+        url: pathToFileURL(localPath).href,
+        mime: evidence.mediaType,
+        filename: evidence.originalName,
+      }]
+    }))
   }
 
   private async readAssistantSnapshotWithRetry(

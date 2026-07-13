@@ -12,6 +12,10 @@ vi.mock('@/hooks/useProjects', () => ({
   useProjects: () => mockUseProjects(),
 }))
 
+vi.mock('@/hooks/useProfile', () => ({
+  useProfile: () => ({ data: { manualQaEnabled: false } }),
+}))
+
 vi.mock('@/hooks/useTickets', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTickets')>('@/hooks/useTickets')
   return {
@@ -69,6 +73,7 @@ describe('TicketForm', () => {
         councilResponseTimeout: null,
         minCouncilQuorum: null,
         interviewQuestions: null,
+        manualQaOverride: true,
         ticketCounter: 1,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
@@ -93,5 +98,17 @@ describe('TicketForm', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Markdown' }))
     expect(screen.getByRole('heading', { name: 'Scope' })).toBeInTheDocument()
     expect(screen.getByText('bold').tagName).toBe('STRONG')
+  })
+
+  it('shows the ticket override and inherited project source in Advanced settings', () => {
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue()}>
+        <TicketForm onClose={vi.fn()} />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    expect(screen.getByText(/Effective setting:/)).toHaveTextContent('Enabled from project')
+    expect(screen.getByRole('radio', { name: 'Inherit' })).toHaveAttribute('aria-checked', 'true')
   })
 })

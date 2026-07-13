@@ -3,6 +3,47 @@ import { createActor } from 'xstate'
 import { ticketMachine } from '../ticketMachine'
 
 describe('ticketMachine execution setup flow', () => {
+  it('routes passed final tests through Manual QA only when the started ticket locked it on', () => {
+    const makeActor = (enabled: boolean | null) => createActor(ticketMachine, {
+      snapshot: {
+        status: 'active',
+        value: 'RUNNING_FINAL_TEST',
+        historyValue: {},
+        context: {
+          ticketId: '1:T-1', projectId: 1, externalId: 'T-1', title: 'Manual QA gate', status: 'RUNNING_FINAL_TEST',
+          lockedMainImplementer: 'model-a', lockedMainImplementerVariant: null,
+          lockedCouncilMembers: ['model-a'], lockedCouncilMemberVariants: null,
+          lockedInterviewQuestions: null, lockedCoverageFollowUpBudgetPercent: null,
+          lockedMaxCoveragePasses: null, lockedMaxPrdCoveragePasses: null,
+          lockedMaxBeadsCoveragePasses: null, lockedStructuredRetryCount: null,
+          lockedManualQaEnabled: enabled, lockedManualQaSource: enabled === null ? null : 'profile',
+          previousStatus: 'CODING', error: null, errorCodes: [], errorDiagnostics: null,
+          blockedErrorResolution: null, beadProgress: { total: 1, completed: 1, current: null },
+          iterationCount: 0, maxIterations: 5, councilResults: null,
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        },
+        children: {},
+      } as unknown as never,
+      input: {},
+    })
+
+    const enabled = makeActor(true)
+    enabled.start()
+    enabled.send({ type: 'TESTS_PASSED' })
+    expect(enabled.getSnapshot().value).toBe('GENERATING_QA_CHECKLIST')
+    enabled.send({ type: 'QA_CHECKLIST_READY' })
+    expect(enabled.getSnapshot().value).toBe('WAITING_MANUAL_QA')
+    enabled.send({ type: 'MANUAL_QA_FIXES_CREATED' })
+    expect(enabled.getSnapshot().value).toBe('CODING')
+
+    for (const lockedValue of [false, null] as const) {
+      const disabled = makeActor(lockedValue)
+      disabled.start()
+      disabled.send({ type: 'TESTS_PASSED' })
+      expect(disabled.getSnapshot().value).toBe('INTEGRATING_CHANGES')
+    }
+  })
+
   it('records and clears structured diagnostics for blocked ERROR events', () => {
     const actor = createActor(ticketMachine, {
       input: {

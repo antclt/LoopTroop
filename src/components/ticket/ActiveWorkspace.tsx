@@ -14,6 +14,7 @@ const ErrorView = lazyWithChunkReload('ErrorView', () => import('@/components/wo
 const CanceledView = lazyWithChunkReload('CanceledView', () => import('@/components/workspace/CanceledView').then(m => ({ default: m.CanceledView })))
 const PhaseReviewView = lazyWithChunkReload('PhaseReviewView', () => import('@/components/workspace/PhaseReviewView').then(m => ({ default: m.PhaseReviewView })))
 const FullLogView = lazyWithChunkReload('FullLogView', () => import('@/components/workspace/FullLogView').then(m => ({ default: m.FullLogView })))
+const ManualQAView = lazyWithChunkReload('ManualQAView', () => import('@/components/workspace/ManualQAView').then(m => ({ default: m.ManualQAView })))
 
 interface ActiveWorkspaceProps {
   ticket: Ticket
@@ -29,6 +30,7 @@ function isReviewablePhase(
   currentStatus: string,
   phaseOrder: string[],
   reviewCutoffStatus?: string,
+  visitedStatuses: string[] = [],
 ): boolean {
   const phaseIndex = phaseOrder.indexOf(phase)
   if (currentStatus === 'CANCELED') {
@@ -37,7 +39,7 @@ function isReviewablePhase(
     return phaseIndex >= 0 && cutoffIndex >= 0 && phaseIndex <= cutoffIndex
   }
   const currentIndex = phaseOrder.indexOf(currentStatus)
-  return phaseIndex >= 0 && currentIndex >= 0 && phaseIndex < currentIndex
+  return phaseIndex >= 0 && currentIndex >= 0 && (phaseIndex < currentIndex || (phase !== currentStatus && visitedStatuses.includes(phase)))
 }
 
 export function ActiveWorkspace({ ticket, selectedPhase, selectedErrorOccurrenceId, previousStatus, reviewCutoffStatus, fullLogOpen }: ActiveWorkspaceProps) {
@@ -52,7 +54,7 @@ export function ActiveWorkspace({ ticket, selectedPhase, selectedErrorOccurrence
     ? getActiveErrorOccurrence(ticket)
     : null
   const activeErrorOccurrence = explicitErrorOccurrence ?? liveErrorOccurrence
-  const isViewingPast = isReviewablePhase(selectedPhase, ticket.status, phaseOrder, reviewCutoffStatus)
+  const isViewingPast = isReviewablePhase(selectedPhase, ticket.status, phaseOrder, reviewCutoffStatus, ticket.visitedStatuses ?? [])
   const isLiveErrorOccurrence = Boolean(
     activeErrorOccurrence
     && liveErrorOccurrence
@@ -69,22 +71,27 @@ export function ActiveWorkspace({ ticket, selectedPhase, selectedErrorOccurrence
     const pastPhaseMeta = phaseMap[selectedPhase]
     if (selectedPhase === 'CODING') {
       content = <CodingView ticket={ticket} readOnly />
+    } else if (pastPhaseMeta?.uiView === 'manual_qa') {
+      content = <ManualQAView ticket={ticket} readOnly />
     } else if (
       selectedPhase === 'WAITING_EXECUTION_SETUP_APPROVAL'
       && ticket.status === 'PREPARING_EXECUTION_ENV'
       && pastPhaseMeta?.uiView === 'approval'
       && pastPhaseMeta.reviewArtifactType
+      && pastPhaseMeta.reviewArtifactType !== 'manual_qa_checklist'
     ) {
       content = <ApprovalView ticket={ticket} phase={selectedPhase} artifactType={pastPhaseMeta.reviewArtifactType} />
     } else if (
       selectedPhase === 'WAITING_EXECUTION_SETUP_APPROVAL'
       && pastPhaseMeta?.uiView === 'approval'
       && pastPhaseMeta.reviewArtifactType
+      && pastPhaseMeta.reviewArtifactType !== 'manual_qa_checklist'
     ) {
       content = <ApprovalView ticket={ticket} phase={selectedPhase} artifactType={pastPhaseMeta.reviewArtifactType} readOnly />
     } else if (
       pastPhaseMeta?.uiView === 'approval'
       && pastPhaseMeta.reviewArtifactType
+      && pastPhaseMeta.reviewArtifactType !== 'manual_qa_checklist'
       && isBeforeExecution(ticket.status, previousStatus)
     ) {
       content = <ApprovalView ticket={ticket} phase={selectedPhase} artifactType={pastPhaseMeta.reviewArtifactType} />
@@ -100,12 +107,15 @@ export function ActiveWorkspace({ ticket, selectedPhase, selectedErrorOccurrence
         content = <InterviewQAView ticket={ticket} />
         break
       case 'approval':
-        content = phaseMeta.reviewArtifactType
+        content = phaseMeta.reviewArtifactType && phaseMeta.reviewArtifactType !== 'manual_qa_checklist'
           ? <ApprovalView ticket={ticket} phase={selectedPhase} artifactType={phaseMeta.reviewArtifactType} />
           : <PhaseReviewView phase={selectedPhase} ticket={ticket} />
         break
       case 'coding':
         content = <CodingView ticket={ticket} />
+        break
+      case 'manual_qa':
+        content = <ManualQAView ticket={ticket} />
         break
       case 'error':
         content = <ErrorView ticket={ticket} />

@@ -10,6 +10,7 @@ import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage
 import { updateProject } from '../../storage/projects'
 import {
   buildPullRequestContext,
+  buildManualQaPullRequestSection,
   buildPullRequestPrompt,
   completeMergedPullRequest,
   handleCreatePullRequest,
@@ -193,6 +194,23 @@ describe('pull request drafting context', () => {
     expect(prompt).toContain('### final_diff_patch')
     expect(prompt).not.toContain('artifact: interview')
     expect(prompt).not.toContain('beads:')
+  })
+
+  it('renders the compact Manual QA outcome without embedding evidence', () => {
+    const section = buildManualQaPullRequestSection(JSON.stringify({
+      version: 2,
+      outcome: 'waived_through',
+      createdFixBeadIds: ['QA-v1-1'],
+      improvementTicketIds: ['TEST-9'],
+      waivedItemIds: ['v2-item-3'],
+      evidence: [{ path: '/private/evidence/video.mp4' }],
+    }))
+
+    expect(section).toContain('Outcome: waived through')
+    expect(section).toContain('Created fix beads: QA-v1-1')
+    expect(section).toContain('Created improvement tickets: TEST-9')
+    expect(section).toContain('Waived checklist items: v2-item-3')
+    expect(section).not.toContain('video.mp4')
   })
 
   it('retries malformed PR drafts before push and PR side effects', async () => {

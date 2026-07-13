@@ -44,6 +44,10 @@ vi.mock('@/components/workspace/PhaseReviewView', () => ({
   PhaseReviewView: ({ phase }: { phase: string }) => <div>review:{phase}</div>,
 }))
 
+vi.mock('@/components/workspace/ManualQAView', () => ({
+  ManualQAView: ({ readOnly }: { readOnly?: boolean }) => <div>manual qa view:{readOnly ? 'readonly' : 'live'}</div>,
+}))
+
 vi.mock('@/hooks/useTicketArtifacts', async () => {
   const actual = await vi.importActual<typeof import('@/hooks/useTicketArtifacts')>('@/hooks/useTicketArtifacts')
   return {
@@ -160,5 +164,27 @@ describe('ActiveWorkspace', () => {
     )
 
     expect(await screen.findByText(/error view:err-1(:live|:readonly)?|Error Review/)).toBeInTheDocument()
+  })
+
+  it('renders the live Manual QA workspace', async () => {
+    renderWithProviders(
+      <ActiveWorkspace
+        ticket={makeTicket({ status: 'WAITING_MANUAL_QA' })}
+        selectedPhase="WAITING_MANUAL_QA"
+      />,
+    )
+
+    expect(await screen.findByText('manual qa view:live')).toBeInTheDocument()
+  })
+
+  it('keeps a visited Manual QA round selectable after failures return to coding', async () => {
+    renderWithProviders(
+      <ActiveWorkspace
+        ticket={makeTicket({ status: 'CODING', visitedStatuses: ['WAITING_MANUAL_QA'] })}
+        selectedPhase="WAITING_MANUAL_QA"
+      />,
+    )
+
+    expect(await screen.findByText('manual qa view:readonly')).toBeInTheDocument()
   })
 })

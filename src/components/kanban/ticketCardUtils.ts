@@ -15,6 +15,7 @@ export function getStatusColor(status: string): string {
     case 'WAITING_PRD_APPROVAL':
     case 'WAITING_BEADS_APPROVAL':
     case 'WAITING_EXECUTION_SETUP_APPROVAL':
+    case 'WAITING_MANUAL_QA':
     case 'WAITING_PR_REVIEW':
       return 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
     case 'DRAFTING_PRD':
@@ -32,6 +33,7 @@ export function getStatusColor(status: string): string {
     case 'PREPARING_EXECUTION_ENV':
       return 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900 dark:text-cyan-300'
     case 'RUNNING_FINAL_TEST':
+    case 'GENERATING_QA_CHECKLIST':
       return 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300'
     case 'INTEGRATING_CHANGES':
     case 'CREATING_PULL_REQUEST':
@@ -115,6 +117,7 @@ export function getStatusRingColor(status: string): string {
     case 'WAITING_PRD_APPROVAL':
     case 'WAITING_BEADS_APPROVAL':
     case 'WAITING_EXECUTION_SETUP_APPROVAL':
+    case 'WAITING_MANUAL_QA':
     case 'WAITING_PR_REVIEW':
       return 'text-yellow-500'
     case 'DRAFTING_PRD':
@@ -132,6 +135,7 @@ export function getStatusRingColor(status: string): string {
     case 'PREPARING_EXECUTION_ENV':
       return 'text-cyan-500'
     case 'RUNNING_FINAL_TEST':
+    case 'GENERATING_QA_CHECKLIST':
       return 'text-teal-500'
     case 'INTEGRATING_CHANGES':
     case 'CREATING_PULL_REQUEST':

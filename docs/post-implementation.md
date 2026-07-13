@@ -7,6 +7,8 @@ This stage is intentionally conservative: final testing can still block delivery
 | Status | Purpose | Main outputs |
 | --- | --- | --- |
 | `RUNNING_FINAL_TEST` | Generate and run ticket-level verification against the completed implementation. | `final_test_report`, `final_test_retry_notes`, `final_test_file_effects_audit` |
+| `GENERATING_QA_CHECKLIST` | Prepare a clean checkpoint and versioned human checklist when Manual QA is locked on. | `manual_qa_checklist`, coverage, reservation, workspace baseline |
+| `WAITING_MANUAL_QA` | Wait for user-run verification, evidence, submit/skip, and any drift decision. | draft/results/summary, evidence refs, fix beads, improvement tickets |
 | `INTEGRATING_CHANGES` | Turn bead-level commits into one local candidate commit. | `integration_report` |
 | `CREATING_PULL_REQUEST` | Audit the final candidate files, push the candidate SHA, and create or update the draft PR. | `candidate_file_audit`, `candidate_diff`, `pull_request_report`, optional `git_recovery_receipt` on failure |
 | `WAITING_PR_REVIEW` | Pause automation for the final human review and merge/finish decision. | `merge_report` |
@@ -62,6 +64,45 @@ When a final-test attempt passes, LoopTroop compares git-visible dirty files fro
 - any `unclassified` files that still need a human decision
 
 Integration only carries forward **audited candidate files** from this pass. If final testing leaves dirty files that were not declared, integration blocks with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` until the user explicitly includes or discards those files.
+
+### 1.5 Optional Manual QA route
+
+`TESTS_PASSED` branches on the value frozen when the ticket started. Disabled or missing locks keep the direct integration path. Enabled tickets enter:
+
+```text
+RUNNING_FINAL_TEST → GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA
+  pass / waive / skip → INTEGRATING_CHANGES
+  any fail → CODING → fresh RUNNING_FINAL_TEST → next Manual QA version
+```
+
+#### `GENERATING_QA_CHECKLIST`
+
+“LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.”
+
+No user action is needed. LoopTroop first resolves the current final-test audit, commits accepted candidate effects into a dedicated local checkpoint, quarantines ticket-owned temporary/unexpected or prior residue, and records HEAD/status/file signatures. Generation requires a clean Git-visible worktree so the first QA-fix bead cannot accidentally commit test or application-runtime residue.
+
+Before the model call, `vN` is reserved. A restart or retry reuses that incomplete version, and already-valid checklist/coverage files advance without another call. The locked main implementer and variant receive only ticket details, the frozen approved PRD, selected bead fields, the current final-test report, latest previous QA artifacts, and targeted diff metadata. Focused read-only diff inspection is allowed; whole-repository dumps are not.
+
+One strict tagged YAML response supplies the checklist and `full | partial` PRD references. Formatting repairs may normalize envelopes, YAML syntax, or known aliases, but never invent behavior, actions, observations, or expected results. Invalid criterion refs fail validation and use normal structured retries. LoopTroop derives refs as `<epic-id>/<story-id>/AC-<1-based-index>` and computes coverage in code: any valid full ref covers a criterion, partial-only refs make it partially covered, and no valid refs leave it uncovered. Gaps are advisory.
+
+#### `WAITING_MANUAL_QA`
+
+“LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.”
+
+The user—not LoopTroop—starts and controls the application, follows prerequisites/actions, and records results. Required items must be Pass, Fail, or Waive; optional items may stay Pending. Any Fail blocks integration, including an optional item, and requires an observation. Waive requires a reason; Pass notes are optional. Improvements require a reviewed title/description and each produces exactly one Normal-priority Draft ticket in the same project on final Submit.
+
+The five-second autosave uses compare-and-set `ui_state:manual_qa_draft:vN`, while final Submit snapshots it as immutable `manual_qa_draft`. Evidence may be any file type up to 250 MiB per file, with no count/round cap. Uploads are streamed into contained temporary files, hashed and size-checked, then atomically renamed; only safe rasters preview inline. Links must be HTTP(S), and binaries remain disk-only.
+
+Before Submit or Skip, the worktree is compared with the QA baseline. If running the app caused drift, the gate stays open until the user includes exactly audited files in a checkpoint or discards exactly those changes. Submission then uses an operation journal with deterministic origins/action IDs so partial restarts cannot duplicate beads or improvement tickets.
+
+Outcomes are:
+
+- `passed`: no failures and no required waivers; continue to integration.
+- `waived_through`: required items were explicitly waived; continue to integration.
+- `skipped`: archive the partial draft and optional reason, create no drafted work, continue to integration.
+- `created_fixes`: create grouped or individual `qa-fix` beads plus all submitted improvement tickets, archive the round attempts, and return to Coding.
+
+Later checklists preserve lineage and relevant structure. Fixed/failed or affected passed/waived items become `pending_recheck`; unaffected passed items may remain visible as `previously_passed`, while unaffected waivers remain only in history. New items are limited to newly affected user-facing behavior.
 
 ---
 
@@ -223,6 +264,9 @@ Cleanup writes a `cleanup_report` with `status: clean` or `status: warning`. A w
 | `final_test_retry_notes` | `RUNNING_FINAL_TEST` | Notes passed into later final-test attempts after failures |
 | `final_test_file_effects_audit` | `RUNNING_FINAL_TEST` | Audit of files produced or changed by the passing final-test attempt |
 | `final_test_file_effects_override` | `INTEGRATING_CHANGES` | Explicit user decision to include or discard unresolved final-test byproducts |
+| `manual_qa_checklist` / `manual_qa_coverage` | `GENERATING_QA_CHECKLIST` | Versioned instructions and advisory approved-PRD coverage |
+| `manual_qa_draft` / `manual_qa_results` / `manual_qa_summary` | `WAITING_MANUAL_QA` | Immutable submission snapshot, results, and pass/waive/skip/fix outcome |
+| Manual QA reservation/baseline/drift/submission receipts | Both Manual QA statuses | Restart idempotency, clean-workspace proof, and include/discard/create audit |
 | `integration_report` | `INTEGRATING_CHANGES` | Candidate commit metadata used by PR creation |
 | `candidate_file_audit` | `CREATING_PULL_REQUEST` | Include/exclude/review decisions for the final diff before push |
 | `candidate_diff` | `CREATING_PULL_REQUEST` | Net diff for the final candidate after any audit rewrite |

@@ -227,7 +227,8 @@ Example ticket creation payload:
   "projectId": 1,
   "title": "Implement refresh-token rotation",
   "description": "Rotate refresh tokens and invalidate the family on reuse.",
-  "priority": 2
+  "priority": 2,
+  "manualQaOverride": null
 }
 ```
 
@@ -271,7 +272,8 @@ Example UI-state payload:
 ```json
 {
   "scope": "interview-drafts",
-  "clientRevision": 12,
+  "expectedRevision": 12,
+  "actionId": "autosave:manual-qa-v2:9f5c",
   "data": {
     "draftAnswers": {},
     "skippedQuestions": {},
@@ -292,13 +294,36 @@ Example UI-state response:
     "selectedOptions": {}
   },
   "updatedAt": "2026-04-23T09:00:00.000Z",
+  "revision": 12,
   "clientRevision": 12
 }
 ```
 
-`clientRevision` is optional for direct callers but recommended. When present, stale lower revisions are ignored so delayed autosaves cannot overwrite newer UI state.
+The UI-state channel is server-owned compare-and-set storage. Each mutation supplies an `expectedRevision` and unique `actionId`. Saves are serialized per ticket/scope; an exact revision match increments the server revision, while stale, equal-but-conflicting, or otherwise mismatched writes return `409` with the latest state and revision. Reusing the same action id is idempotent. `clientRevision` remains as a response compatibility alias for `revision`.
 
-UI-state `scope` must match `^[a-zA-Z0-9:_-]+$` and be at most 80 characters. Stored UI-state payloads are capped at 1 MiB. Successful `PUT` responses include `ignored`; when the supplied `clientRevision` is older than the currently stored revision, the server keeps the newer state and returns `ignored: true` instead of overwriting it.
+UI-state `scope` must match `^[a-zA-Z0-9:_-]+$` and be at most 80 characters. Stored UI-state payloads are capped at 2 MiB. A successful `PUT` returns the incremented revision; a conflict response includes `conflict: true`, the latest `data`, and the current revision so the caller can reconcile before retrying.
+
+Manual QA live drafts use the sole scope `manual_qa_draft:vN`; only evidence metadata/references enter that state. The frontend keeps the five-second debounce and flushes pending state with keepalive on `pagehide`/`beforeunload`.
+
+### Manual QA Routes
+
+| Method | Route | Notes |
+| --- | --- | --- |
+| `GET` | `/api/tickets/:id/manual-qa` | Round index/current projection: active version, completed rounds, latest outcome, and artifact availability |
+| `GET` | `/api/tickets/:id/manual-qa/versions/:version` | Checklist, coverage, results, summary, evidence metadata, hash, and read-only historical detail |
+| `PUT` | `/api/tickets/:id/manual-qa/versions/:version/evidence?itemId=...` | Stream one evidence file; filename/media metadata use headers/query fields; 250 MiB per-file limit |
+| `GET` | `/api/tickets/:id/manual-qa/versions/:version/evidence/:itemId/:evidenceId` | Secure read/download; `?inline=true` works only for safe raster media types |
+| `DELETE` | `/api/tickets/:id/manual-qa/versions/:version/evidence/:itemId/:evidenceId` | Remove one evidence file and metadata record while waiting |
+| `POST` | `/api/tickets/:id/manual-qa/submit` | Validate and submit the complete round; creates requested improvements and failure beads idempotently |
+| `POST` | `/api/tickets/:id/manual-qa/skip` | Preserve an immutable draft and optional reason, create no drafted work, then integrate |
+| `POST` | `/api/tickets/:id/manual-qa/workspace-drift/include` | Commit only the selected audited drift files into the QA checkpoint |
+| `POST` | `/api/tickets/:id/manual-qa/workspace-drift/discard` | Discard only the selected audited drift files |
+
+Evidence upload/remove calls carry `X-Action-Id`, `X-Checklist-Hash`, and `X-Draft-Revision` (query equivalents are supported). The raw upload body is streamed; `X-Checklist-Item-Id`, `X-File-Name`, and optional `X-Evidence-Id` identify it. Submit, skip, and drift decisions carry `actionId`, `expectedChecklistHash`, and `expectedDraftRevision` in JSON. Mutations are allowed only during `WAITING_MANUAL_QA` and return `409` for stale guards or detected workspace drift.
+
+Only PNG, JPEG, GIF, WebP, and AVIF may be served inline. SVG, HTML, executable/unknown content, and all other files are sent with `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, and `Cache-Control: private, no-store`. Evidence links in results accept HTTP or HTTPS only.
+
+Ticket projections expose `visitedStatuses`, monotonic `workflowRevision`, and `manualQa`. These fields let SSE and polling clients reconcile a deliberate reverse transition (`WAITING_MANUAL_QA → CODING`) without comparing status positions in a linear list.
 
 ### Workflow Actions
 

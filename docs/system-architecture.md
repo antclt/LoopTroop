@@ -54,6 +54,7 @@ LoopTroop deliberately splits state across several storage layers. Each layer ow
 | `.ticket/runtime/state.yaml` | Derived runtime projection for the active non-terminal ticket | Rebuilt from ticket state on startup; convenient to inspect, but not the only source of truth |
 | `.ticket/runtime/execution-setup-profile.json` | Concrete execution environment profile produced after approved setup runs | Separate from the reviewable execution setup plan artifact |
 | `.ticket/runtime/execution-setup/**`, especially `tool-cache/` | Ticket-owned temp roots, wrapper outputs, execution-only toolchains, and reusable caches | Preserved across setup-plan rewinds when safe so retries do not throw away valid tool caches |
+| `.ticket/manual-qa/**` | Versioned checklists/results/coverage, evidence binaries, generation/operation receipts, clean baselines, and workspace-drift decisions | Preserved during cleanup and excluded from bead commits, candidate diffs, and PRs |
 | `phase_artifacts` table | Structured snapshots used by the API and UI | Holds artifact content, phase, attempt number, timestamps, approval receipts, edit receipts, cleanup/integration reports, and content hashes |
 
 > Note
@@ -76,7 +77,8 @@ For the per-table breakdown of which database owns what, see the [Database Schem
 7. The beads council drafts, votes, refines, expands, and coverage-checks the execution plan.
 8. The user approves the beads artifact and then reviews the pre-implementation execution setup plan.
 9. Implementation runs bead by bead in an isolated ticket worktree, with bounded retry per bead.
-10. Post-implementation final testing, file-effects auditing, integration, PR creation, review follow-up, and cleanup drive the ticket to `COMPLETED`, `CANCELED`, or `BLOCKED_ERROR`.
+10. Post-implementation final testing routes either directly to integration or through the start-locked optional `GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA` loop. QA failures become fix beads and return to coding/fresh tests; pass, waiver, or skip continues.
+11. Integration, PR creation, review follow-up, and cleanup drive the ticket to `COMPLETED`, `CANCELED`, or `BLOCKED_ERROR`.
 
 The full phase map lives in [Ticket Flow & State Machine](ticket-flow.md).
 
@@ -112,7 +114,7 @@ Execution is built around beads, not around one monolithic coding prompt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path instead of silently progressing.
 7. If the attempt stalls or fails, LoopTroop generates a context wipe note, resets the worktree to the bead start commit, and retries in fresh context.
 8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
-9. `RUNNING_FINAL_TEST`, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper and PR creation auditing the final candidate files before anything is pushed.
+9. `RUNNING_FINAL_TEST`, optional Manual QA, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper and PR creation auditing the final candidate files before anything is pushed.
 10. During all non-terminal execution states, runtime projections and execution logs are updated so a restarted backend or reloaded browser can restore the ticket from durable state rather than from memory.
 
 See [Beads & Execution](beads.md).
@@ -125,6 +127,7 @@ Recovery is a first-class architectural concern.
 | --- | --- |
 | Browser reload, close, or reconnect gap | REST state remains canonical; the browser keeps the last SSE event id, restores best-effort log cache detail, replays buffered live events, and then refetches tickets, artifacts, bead state, interview state, and matching server logs |
 | Frontend crash or tab close | Interview drafts, approval drafts, and browser-cached logs are persisted locally and flushed on unload with best-effort keepalive behavior |
+| Concurrent/stale autosave | Server serializes each ticket/scope and compare-and-set rejects revision conflicts with the latest state; Manual QA keeps its five-second debounce and unload keepalive |
 | Crash during atomic write or append | Startup promotes orphan `.tmp` files, repairs trailing corrupt JSONL lines when safe, and rebuilds runtime projections |
 | Invalid model output | Retry with repair or explicit re-prompt, depending on phase |
 | Bead execution stall | Generate context wipe note, reset worktree, retry in fresh session |
@@ -133,6 +136,8 @@ Recovery is a first-class architectural concern.
 | User edits approved interview or PRD | Archive the active approved generation and downstream attempts, cancel downstream sessions intentionally, clear stale downstream artifacts/UI state, persist a `user_edit_receipt:*`, and restart from the next drafting phase |
 | User edits or regenerates setup plan during runtime setup | Stop active runtime setup, archive both setup-plan and runtime attempts, preserve the tool cache when safe, clear stale setup outputs, and return to `WAITING_EXECUTION_SETUP_APPROVAL` for fresh approval |
 | Stale approval | Return `409` with the expected and current SHA-256 hashes, keeping the ticket at the approval gate |
+| Manual QA generation/submission restart | Reuse the reserved checklist version or submission operation journal; deterministic action/origin/bead IDs prevent duplicate child work |
+| Application-created drift during QA | Stay in `WAITING_MANUAL_QA` and require include/discard for exactly audited paths before submit/skip |
 | Bead finalization failure | Keep the bead retryable, avoid `bead_complete`, send `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED`, and route to `BLOCKED_ERROR` |
 | Cleanup warning | Persist a `cleanup_report` with `status: warning`, expose the cleanup summary on the ticket, and still complete the ticket |
 | Terminal blockage | Enter `BLOCKED_ERROR` with persisted error occurrence history |
@@ -177,6 +182,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | App bootstrap and query client | `src/main.tsx`, `src/lib/queryClient.ts` |
 | App shell, modal routing, startup overlays | `src/App.tsx`, `src/components/layout/*`, `src/components/shared/StartupRestorePopup.tsx`, `src/components/shared/WelcomeDisclaimer.tsx` |
 | Ticket workspace and shared UI | `src/components/ticket/*`, `src/components/workspace/*`, `src/components/shared/*` |
+| Manual QA workspace and data | `src/components/manual-qa/*`, `src/components/workspace/ManualQAView.tsx`, `src/hooks/useManualQA.ts` |
 | Browser state providers | `src/context/UIContext.tsx`, `src/context/AIQuestionContext.tsx`, `src/context/LogContext.tsx` |
 | Data hooks and live updates | `src/hooks/useTickets.ts`, `useTicketArtifacts.ts`, `useTicketPhaseAttempts.ts`, `useWorkflowMeta.ts`, `useSSE.ts`, `useStartupStatus.ts`, `useRecoveryAutoReload.ts` |
 
@@ -198,7 +204,7 @@ Prompt acquisition is bounded by timeout and abort signals. OpenCode `create`, `
 | Actor persistence and restore | `server/machines/persistence.ts` |
 | Workflow runner and phase dispatch | `server/workflow/runner.ts`, `server/workflow/phases/*` |
 | Planning phases | `server/phases/interview/*`, `server/phases/prd/*`, `server/phases/beads/*`, `server/phases/executionSetupPlan/*` |
-| Execution and delivery phases | `server/phases/preflight/*`, `server/phases/executionSetup/*`, `server/phases/execution/*`, `server/phases/finalTest/*`, `server/phases/integration/*`, `server/phases/cleanup/*` |
+| Execution and delivery phases | `server/phases/preflight/*`, `server/phases/executionSetup/*`, `server/phases/execution/*`, `server/phases/finalTest/*`, `server/phases/manualQa/*`, `server/phases/integration/*`, `server/phases/cleanup/*` |
 | Ticket initialization and relevant-file preparation | `server/ticket/create.ts`, `server/ticket/initialize.ts`, `server/ticket/relevantFiles.ts`, `server/ticket/metadata.ts` |
 
 ### Council And Structured Output
@@ -447,6 +453,20 @@ OpenCode session status events are translated into normalized log entries by `se
 | `content` | Human-readable description of the status event |
 
 The log builder handles retry status events (rate limits, usage limits, timeouts, transport errors) and session phase transitions. These entries feed the normal execution log alongside phase log entries, while the separate AI-detail log keeps prompt/tool-call depth when that channel is needed.
+
+## 15. Optional Manual QA Architecture And Cross-Application Impact
+
+Manual QA is a ticket-locked branch of the execution band, not a browser-only form. Configuration resolves ticket → project → profile on Start and stores both the effective boolean and source. The public ticket read model adds `visitedStatuses`, monotonic `workflowRevision`, and a compact Manual QA projection so polling, SSE, the navigator, status summaries, completed review, and needs-input attention agree even when a failed round moves backward to Coding.
+
+The backend domain under `server/phases/manualQa/*` owns strict schemas, PRD ref/coverage validation, version reservation, checkpoint/baseline and drift audits, contained streaming evidence, checklist generation, submission journaling, child-ticket provenance, and deterministic QA beads. Canonical files live under `.ticket/manual-qa/vN/`; compact phase artifacts support indexed UI/history queries, while binary evidence remains filesystem-only. The generic UI-state channel is server-revisioned CAS storage, and `manual_qa_draft:vN` is the only live draft.
+
+The clean checkpoint is the boundary between final tests and user verification. Accepted candidate effects are committed locally, final-test/prior residue is quarantined or removed under ticket storage, and the worktree must be Git-clean. Before submit/skip the same baseline detects app-created drift. This design affects final-test audit/recovery, Git integration/squashing, normal cleanup preservation, candidate exclusions, and the first subsequent QA-fix commit.
+
+Submission stages results, fix beads, improvement tickets, origin/evidence copies, content hashes, receipts, and a database idempotency marker before any transition. Improvements use editable title/description plus a deterministic context section as their future implementation contract; structured Manual QA origin stays audit-only. The final delivery/PR summary includes the latest outcome, fix-bead IDs, improvement-ticket IDs, and skip/waiver state without embedding evidence binaries.
+
+OpenCode prompt transport now supports SDK text/system/file parts. A QA-fix bead attaches every detected image evidence file when its locked model advertises image input; other evidence remains referenced. Missing capability records `references_only`, and provider/context overflow routes through ordinary bead error recovery without silently altering the selected evidence set.
+
+Security boundaries are local-content containment rather than file-type trust: each upload is streamed, capped at 250 MiB per file, hash/size verified, name-sanitized, symlink/traversal checked, and atomically renamed. There is no count/round-total cap. Only safe raster types may be inline; everything else is `nosniff` attachment content. LoopTroop never launches, previews, stops, or controls the application under test.
 
 ## Related Docs
 

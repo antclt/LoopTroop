@@ -72,6 +72,8 @@ export function makeTicketContext(
     createdAt: TEST.timestamp,
     updatedAt: TEST.timestamp,
     ...overrides,
+    lockedManualQaEnabled: overrides.lockedManualQaEnabled ?? null,
+    lockedManualQaSource: overrides.lockedManualQaSource ?? null,
   }
 }
 

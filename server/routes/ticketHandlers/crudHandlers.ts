@@ -207,8 +207,15 @@ export async function handlePatchTicket(c: Context) {
   const existing = getTicketByRef(ticketId)
   if (!existing) return c.json({ error: 'Ticket not found' }, 404)
 
-  const result = updateTicket(ticketId, parsed.data)
-  return c.json(result ?? existing)
+  try {
+    const result = updateTicket(ticketId, parsed.data)
+    return c.json(result ?? existing)
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('only be changed while the ticket is in DRAFT')) {
+      return c.json({ error: err.message }, 409)
+    }
+    throw err
+  }
 }
 
 export async function handleDeleteTicket(c: Context) {

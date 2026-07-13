@@ -302,6 +302,8 @@ export const PHASE_LOG_DESCRIPTIONS: Record<string, string> = {
   PREPARING_EXECUTION_ENV: 'Verifying workspace readiness, provisioning missing required tooling in ticket-owned temp roots, using setup-scoped online lookup for unresolved launcher artifacts, validating setup wrappers/probes, recording provisioning-attempt evidence, and persisting a setup profile for later phases.',
   CODING: 'AI coding agent executes beads with retry loop (Ralph Wiggum loop) until all tasks + tests pass.',
   RUNNING_FINAL_TEST: 'Generating and running final tests from ticket details, PRD, beads, retry notes, and any validated setup wrapper.',
+  GENERATING_QA_CHECKLIST: 'Preparing a versioned Manual QA checklist and advisory PRD coverage from the final-test checkpoint. No user action or application control occurs in this phase.',
+  WAITING_MANUAL_QA: 'Waiting for user-run verification results, evidence, waivers, improvements, drift decisions, submission, or skip.',
   INTEGRATING_CHANGES: 'Squashing commits and preparing the final reviewable candidate commit.',
   CREATING_PULL_REQUEST: 'Pushing the final candidate branch and creating or updating the draft GitHub pull request.',
   WAITING_PR_REVIEW: 'Draft pull request ready for human review and finish decision.',

@@ -23,6 +23,7 @@ interface Profile {
   toolInputMaxChars: number
   toolOutputMaxChars: number
   toolErrorMaxChars: number
+  manualQaEnabled: boolean
   createdAt: string
   updatedAt: string
 }
@@ -49,6 +50,7 @@ interface CreateProfileInput {
   toolInputMaxChars?: number
   toolOutputMaxChars?: number
   toolErrorMaxChars?: number
+  manualQaEnabled?: boolean
 }
 
 async function fetchProfile(): Promise<Profile | null> {

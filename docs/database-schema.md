@@ -59,6 +59,7 @@ Important columns:
 - workflow budgets and limits: `min_council_quorum`, `interview_questions`, `max_iterations`, `structured_retry_count`
 - timeout settings in milliseconds: `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`
 - coverage controls: `coverage_follow_up_budget_percent`, `max_coverage_passes`, `max_prd_coverage_passes`, `max_beads_coverage_passes`
+- Manual QA baseline: `manual_qa_enabled` (non-null boolean, default `false`)
 - OpenCode retry controls: `opencode_retry_limit`, `opencode_retry_delay`, `opencode_steps`
 - tool log truncation limits: `tool_input_max_chars`, `tool_output_max_chars`, `tool_error_max_chars`
 
@@ -105,7 +106,7 @@ The project database is the operational store for one attached repository. LoopT
 Important columns:
 
 - display/identity: `name`, `shortname`, `icon`, `color`, `folder_path`
-- nullable overrides: `council_members`, `max_iterations`, `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`, `min_council_quorum`, `interview_questions`
+- nullable overrides: `council_members`, `max_iterations`, `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`, `min_council_quorum`, `interview_questions`, `manual_qa_override`
 - sequencing: `ticket_counter`
 - metadata: `profile_id`
 
@@ -126,6 +127,7 @@ Important columns:
 - persisted machine state: `xstate_snapshot`
 - execution progress: `branch_name`, `current_bead`, `total_beads`, `percent_complete`
 - failure surface: `error_message`
+- Manual QA and reconciliation: nullable Draft-only `manual_qa_override`, frozen `locked_manual_qa_enabled`, frozen `locked_manual_qa_source`, and monotonic `workflow_revision`
 - frozen-on-start settings: `locked_main_implementer`, `locked_main_implementer_variant`, `locked_council_members`, `locked_council_member_variants`, `locked_interview_questions`, `locked_coverage_follow_up_budget_percent`, `locked_max_coverage_passes`, `locked_max_prd_coverage_passes`, `locked_max_beads_coverage_passes`, `locked_structured_retry_count`
 - lifecycle times: `started_at`, `planned_date`, `created_at`, `updated_at`
 
@@ -134,6 +136,8 @@ Operational notes:
 - `xstate_snapshot` is a serialized XState snapshot used to restore non-terminal tickets on startup
 - `external_id` is the stable human-facing identifier; the API turns it into a public ticket ref by prefixing the public project id
 - locked configuration columns freeze the profile/project settings that were in force when the ticket started
+- `manual_qa_override` uses SQL `NULL` for Inherit and booleans for Enabled/Disabled; resolution order is ticket → project → profile, and missing locked values on older started tickets mean disabled
+- `workflow_revision` increases on status transitions and lets polling/SSE consumers reject stale state even when the workflow moves backward from Manual QA to Coding
 - `branch_name = '__looptroop_display_only_mock__'` is reserved for board-only mock/demo tickets; these rows are returned for display, projected through the API with `isDisplayOnlyMock: true`, excluded from startup hydration and runnable workflow actions, and expose only Cancel while non-terminal
 - runtime details shown in the UI are enriched from **both** this row and ticket-owned files under `.ticket/**`
 
@@ -157,6 +161,7 @@ Operational notes:
 - `phase_attempt` versions artifacts across retries, regenerations, and post-approval restarts for tracked phases
 - the database does **not** have a `file_path` column; API artifact payloads may expose `filePath`, but DB-backed artifacts currently return `null`
 - this table stores more than just final docs: examples include `interview`, `prd`, `beads`, `execution_setup_plan`, coverage artifacts, `approval_snapshot:*`, `ui_state:error_attention`, `cleanup_report`, `merge_report`, `final_test_report`, and `pull_request_report`
+- Manual QA keeps compact append-only checklist, coverage, results, draft snapshot, and summary artifacts here; live editing exists only as `ui_state:manual_qa_draft:vN` with a server-owned compare-and-set revision
 - council companion artifacts may embed draft/vote metadata and attempt diagnostics in `content`; malformed model text is intentionally kept out of structured fields
 
 ### `ticket_phase_attempts`
@@ -301,6 +306,14 @@ SQLite is not the whole system. Some ticket state is intentionally filesystem-ba
 | `.ticket/runtime/execution-log.ai.jsonl` | AI-detail log channel | Filesystem log |
 | `.ticket/runtime/execution-setup-profile.json` | Reusable execution-setup profile | Filesystem runtime artifact |
 | `.ticket/runtime/state.yaml` | UI-friendly runtime projection | **Rebuildable projection**, not the primary source of truth |
+| `.ticket/manual-qa/vN/checklist.yaml` | Immutable generated checklist for one round | Canonical versioned artifact |
+| `.ticket/manual-qa/vN/results.yaml` and `summary.yaml` | Submitted results and round outcome | Canonical submission records |
+| `.ticket/manual-qa/vN/coverage.yaml` | Code-computed PRD criterion coverage | Advisory canonical report |
+| `.ticket/manual-qa/vN/evidence/**` | Contained evidence binaries plus metadata index | Disk-only binaries; database/UI state stores refs only |
+| `.ticket/manual-qa/generation-reservation-vN.json` | Restart-safe version reservation | Reused after generation retry/restart |
+| `.ticket/manual-qa/workspace-baseline-vN.json` and drift receipts | Git baseline and audited include/discard decisions | Submission/skip safety records |
+
+Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks are rejected, bytes are streamed through contained temporary files, and the verified hash/size metadata is persisted before atomic rename. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
 
 The important split is:
 

@@ -7,6 +7,7 @@ export const profiles = sqliteTable('profiles', {
   mainImplementerVariant: text('main_implementer_variant'),
   councilMembers: text('council_members'), // JSON array of model IDs
   councilMemberVariants: text('council_member_variants'), // JSON map: { "provider/model": "variant" }
+  manualQaEnabled: integer('manual_qa_enabled', { mode: 'boolean' }).notNull().default(PROFILE_DEFAULTS.manualQaEnabled),
   minCouncilQuorum: integer('min_council_quorum').default(PROFILE_DEFAULTS.minCouncilQuorum),
   perIterationTimeout: integer('per_iteration_timeout').default(PROFILE_DEFAULTS.perIterationTimeout),
   executionSetupTimeout: integer('execution_setup_timeout').default(PROFILE_DEFAULTS.executionSetupTimeout),
@@ -50,6 +51,7 @@ export const projects = sqliteTable('projects', {
   folderPath: text('folder_path').notNull(),
   profileId: integer('profile_id'),
   councilMembers: text('council_members'), // JSON array, nullable override
+  manualQaOverride: integer('manual_qa_override', { mode: 'boolean' }),
   maxIterations: integer('max_iterations'),
   perIterationTimeout: integer('per_iteration_timeout'),
   executionSetupTimeout: integer('execution_setup_timeout'),
@@ -75,6 +77,7 @@ export const tickets = sqliteTable('tickets', {
   totalBeads: integer('total_beads'),
   percentComplete: real('percent_complete'),
   errorMessage: text('error_message'),
+  manualQaOverride: integer('manual_qa_override', { mode: 'boolean' }),
   lockedMainImplementer: text('locked_main_implementer'),
   lockedMainImplementerVariant: text('locked_main_implementer_variant'),
   lockedCouncilMembers: text('locked_council_members'), // JSON array of model IDs, frozen at start
@@ -85,6 +88,9 @@ export const tickets = sqliteTable('tickets', {
   lockedMaxPrdCoveragePasses: integer('locked_max_prd_coverage_passes'),
   lockedMaxBeadsCoveragePasses: integer('locked_max_beads_coverage_passes'),
   lockedStructuredRetryCount: integer('locked_structured_retry_count'),
+  lockedManualQaEnabled: integer('locked_manual_qa_enabled', { mode: 'boolean' }),
+  lockedManualQaSource: text('locked_manual_qa_source'),
+  workflowRevision: integer('workflow_revision').notNull().default(0),
   startedAt: text('started_at'),
   plannedDate: text('planned_date'),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
@@ -98,6 +104,19 @@ export const phaseArtifacts = sqliteTable('phase_artifacts', {
   phaseAttempt: integer('phase_attempt').notNull().default(1),
   artifactType: text('artifact_type'),
   content: text('content').notNull(), // JSON stringified artifact
+  createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
+})
+
+export const manualQaOperations = sqliteTable('manual_qa_operations', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  ticketId: integer('ticket_id').notNull().references(() => tickets.id, { onDelete: 'cascade' }),
+  actionId: text('action_id').notNull(),
+  version: integer('version').notNull(),
+  checklistHash: text('checklist_hash').notNull(),
+  draftRevision: integer('draft_revision').notNull(),
+  state: text('state').notNull().default('staged'),
+  payload: text('payload').notNull(),
   createdAt: text('created_at').notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text('updated_at').notNull().$defaultFn(() => new Date().toISOString()),
 })

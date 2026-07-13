@@ -10,9 +10,12 @@ export interface Session {
 }
 
 export interface PromptPart {
-  type: 'text' | 'system'
+  type: 'text' | 'system' | 'file'
   content: string
   source?: string
+  url?: string
+  mime?: string
+  filename?: string
 }
 
 export interface ModelSelection {

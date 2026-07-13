@@ -272,7 +272,7 @@ export function readLatestFinalTestFileEffectsAudit(ticketId: string): FinalTest
 }
 
 export function readLatestFinalTestFileEffectsOverride(ticketId: string): FinalTestFileEffectsOverride | null {
-  const artifact = getLatestPhaseArtifact(ticketId, FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT, 'INTEGRATING_CHANGES')
+  const artifact = getLatestPhaseArtifact(ticketId, FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT)
   const parsed = artifact ? parseJsonArtifact<FinalTestFileEffectsOverride>(artifact.content) : null
   return isFinalTestFileEffectsOverride(parsed) ? parsed : null
 }
@@ -281,6 +281,7 @@ export function writeFinalTestFileEffectsOverride(
   ticketId: string,
   decision: FinalTestFileEffectsOverride['decision'],
   files: string[],
+  phase: 'GENERATING_QA_CHECKLIST' | 'INTEGRATING_CHANGES' = 'INTEGRATING_CHANGES',
 ): FinalTestFileEffectsOverride {
   const override: FinalTestFileEffectsOverride = {
     decision,
@@ -289,7 +290,7 @@ export function writeFinalTestFileEffectsOverride(
     source: 'user',
   }
   insertPhaseArtifact(ticketId, {
-    phase: 'INTEGRATING_CHANGES',
+    phase,
     artifactType: FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT,
     content: JSON.stringify(override),
   })

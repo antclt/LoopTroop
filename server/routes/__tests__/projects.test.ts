@@ -7,7 +7,7 @@ import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { getProjectLoopTroopDir } from '../../storage/paths'
-import { attachExistingProject, attachProject, deleteProject, listProjects, resolveProjectState } from '../../storage/projects'
+import { attachExistingProject, attachProject, deleteProject, listProjects, resolveProjectState, updateProject } from '../../storage/projects'
 import { createTicket, patchTicket } from '../../storage/ticketMutations'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { projectRouter } from '../projects'
@@ -38,6 +38,15 @@ function addGithubOrigin(repoDir: string) {
 }
 
 describe('projectRouter project cleanup', () => {
+  it('persists all three project Manual QA override states', () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'QA project', shortname: 'MQA' })
+    expect(project.manualQaOverride).toBeNull()
+    expect(updateProject(project.id, { manualQaOverride: true })?.manualQaOverride).toBe(true)
+    expect(updateProject(project.id, { manualQaOverride: false })?.manualQaOverride).toBe(false)
+    expect(updateProject(project.id, { manualQaOverride: null })?.manualQaOverride).toBeNull()
+  })
+
   beforeEach(() => {
     clearProjectDatabaseCache()
     initializeDatabase()

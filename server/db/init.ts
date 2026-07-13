@@ -40,6 +40,7 @@ function migrateLegacyProfilesTable() {
       CREATE TABLE profiles_next (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         main_implementer TEXT,
+        manual_qa_enabled INTEGER NOT NULL DEFAULT 0,
         council_members TEXT,
         min_council_quorum INTEGER DEFAULT ${PROFILE_DEFAULTS.minCouncilQuorum},
         per_iteration_timeout INTEGER DEFAULT ${PROFILE_DEFAULTS.perIterationTimeout},
@@ -62,6 +63,7 @@ function migrateLegacyProfilesTable() {
       INSERT INTO profiles_next (
         id,
         main_implementer,
+        manual_qa_enabled,
         council_members,
         min_council_quorum,
         per_iteration_timeout,
@@ -83,6 +85,7 @@ function migrateLegacyProfilesTable() {
       SELECT
         id,
         ${selectLegacyProfileColumn(columnSet, 'main_implementer')},
+        ${selectLegacyProfileValue(columnSet, 'manual_qa_enabled', 0)},
         ${selectLegacyProfileColumn(columnSet, 'council_members')},
         ${selectLegacyProfileValue(columnSet, 'min_council_quorum', PROFILE_DEFAULTS.minCouncilQuorum)},
         ${selectLegacyProfileValue(columnSet, 'per_iteration_timeout', PROFILE_DEFAULTS.perIterationTimeout)},
@@ -115,6 +118,7 @@ export function initializeDatabase() {
     CREATE TABLE IF NOT EXISTS profiles (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       main_implementer TEXT,
+      manual_qa_enabled INTEGER NOT NULL DEFAULT 0,
       council_members TEXT,
       min_council_quorum INTEGER DEFAULT ${PROFILE_DEFAULTS.minCouncilQuorum},
       per_iteration_timeout INTEGER DEFAULT ${PROFILE_DEFAULTS.perIterationTimeout},
@@ -150,6 +154,7 @@ export function initializeDatabase() {
 
   migrateLegacyProfilesTable()
   ensureColumn('profiles', 'coverage_follow_up_budget_percent', `INTEGER DEFAULT ${PROFILE_DEFAULTS.coverageFollowUpBudgetPercent}`)
+  ensureColumn('profiles', 'manual_qa_enabled', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn('profiles', 'max_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxCoveragePasses}`)
   ensureColumn('profiles', 'max_prd_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxPrdCoveragePasses}`)
   ensureColumn('profiles', 'max_beads_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses}`)

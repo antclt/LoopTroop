@@ -79,12 +79,15 @@ flowchart LR
     B --> C["🏛️ LLM Council Planning<br/>(Interview, PRD & Beads)"]
     C --> D["🛑 Human Approval Gate<br/>(optional in future releases)"]
     D --> E["🧪 Isolated OpenCode Bead Execution<br/>(Git Worktree)"]
-    E --> F["✅ Final Tests & PR Review"]
+    E --> F["✅ Final Tests"]
+    F --> H["🧭 Optional Manual QA<br/>(user runs the app)"]
+    H --> I["📦 Integration & PR Review"]
+    H -.->|"Failures become QA fix beads"| E
     E -.->|"On Failure"| G["🔄 Ralph-Style Recovery Loop"]
     G -.->|"Retry"| E
 ```
 
-LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries.
+LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries. An optional Manual QA checkpoint can be enabled globally and overridden per project or Draft ticket. After final tests, LoopTroop generates a versioned checklist, then waits while **you** run and control the application. Passing, waiving, or skipping continues to integration; failures become normal QA-fix beads and return through coding and fresh final tests, while improvement observations become independent Draft backlog tickets.
 
 ## Core ideas
 
@@ -159,6 +162,8 @@ Read more: [System Architecture](https://www.looptroop.ovh/docs/system-architect
 ### Human approval gates
 
 LoopTroop keeps you in control of critical state transitions. You actively review and sign off on planning specs, execution blueprints, and final pull request deliverables. *(Note: Human approval gates will become optional in future releases).*
+
+For tickets with Manual QA enabled, the post-test gate is intentionally hands-off: LoopTroop prepares the checklist and stores evidence, but never launches, previews, stops, or otherwise controls your application. Checklist drafts autosave, historical rounds remain reviewable, and workspace changes caused while testing must be explicitly included or discarded before submission.
 
 Read more: [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow)
 

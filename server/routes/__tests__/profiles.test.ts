@@ -47,6 +47,7 @@ describe('profileRouter numeric validation', () => {
 
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toMatchObject({
+      manualQaEnabled: false,
       maxPrdCoveragePasses: 2,
       maxBeadsCoveragePasses: 20,
       structuredRetryCount: 5,
@@ -80,8 +81,24 @@ describe('profileRouter numeric validation', () => {
 
     const stored = db.select().from(profiles).get()
     expect(stored?.structuredRetryCount).toBe(1)
+    expect(stored?.manualQaEnabled).toBe(false)
     expect(stored?.opencodeRetryLimit).toBe(10)
     expect(stored?.opencodeRetryDelay).toBe(60_000)
+  })
+
+  it('persists the global Manual QA toggle', async () => {
+    db.insert(profiles).values({
+      mainImplementer: 'openai/gpt-5.4',
+      councilMembers: '["openai/gpt-5.4"]',
+    }).run()
+    const response = await createProfileApp().request('/api/profile', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manualQaEnabled: true }),
+    })
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toMatchObject({ manualQaEnabled: true })
+    expect(db.select().from(profiles).get()?.manualQaEnabled).toBe(true)
   })
 
   it('updates and reads retry settings through the profile API', async () => {

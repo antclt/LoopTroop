@@ -239,11 +239,52 @@ function truncateText(value: string, maxChars: number): string {
   return `${value.slice(0, Math.max(0, maxChars - 18))}\n\n[truncated by LoopTroop]`
 }
 
+export function buildManualQaPullRequestSection(rawSummary: string): string {
+  if (!rawSummary.trim()) return ''
+  let parsed: Record<string, unknown> | null = null
+  try {
+    const value = jsYaml.load(rawSummary)
+    parsed = value && typeof value === 'object' && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : null
+  } catch {
+    return ''
+  }
+  if (!parsed) return ''
+
+  const outcome = typeof parsed.outcome === 'string'
+    ? parsed.outcome
+    : typeof parsed.status === 'string'
+      ? parsed.status
+      : null
+  if (!outcome) return ''
+  const stringList = (value: unknown) => Array.isArray(value)
+    ? value.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    : []
+  const fixBeadIds = stringList(parsed.createdFixBeadIds ?? parsed.created_fix_bead_ids)
+  const improvementTicketIds = stringList(parsed.improvementTicketIds ?? parsed.improvement_ticket_ids)
+  const waivedItemIds = stringList(parsed.waivedItemIds ?? parsed.waived_item_ids)
+  const skipReason = typeof parsed.skipReason === 'string'
+    ? parsed.skipReason.trim()
+    : typeof parsed.skip_reason === 'string'
+      ? parsed.skip_reason.trim()
+      : ''
+  const bullets = [
+    `- Outcome: ${outcome.replaceAll('_', ' ')}`,
+    ...(fixBeadIds.length > 0 ? [`- Created fix beads: ${fixBeadIds.join(', ')}`] : []),
+    ...(improvementTicketIds.length > 0 ? [`- Created improvement tickets: ${improvementTicketIds.join(', ')}`] : []),
+    ...(waivedItemIds.length > 0 ? [`- Waived checklist items: ${waivedItemIds.join(', ')}`] : []),
+    ...(skipReason ? [`- Skip reason: ${skipReason}`] : []),
+  ]
+  return ['## Manual QA', ...bullets].join('\n')
+}
+
 export function buildPullRequestPrompt(input: {
   fallbackTitle: string
   contextParts: Array<{ source?: string; content: string }>
   integrationReport: string
   finalTestReport: string
+  manualQaSummary?: string
   diffStat: string
   diffNameStatus: string
   diffPatch: string
@@ -255,6 +296,7 @@ export function buildPullRequestPrompt(input: {
     'Use the final diff as the source of truth for what changed.',
     'Use the ticket details and PRD to explain why the change exists.',
     'Use the final test report to describe validation accurately.',
+    'Reflect the Manual QA outcome, waivers, skip state, created fix beads, and improvement tickets when supplied.',
     'Do not mention work that is not present in the final diff.',
     'Be concise, specific, and reviewer-friendly.',
     'Return strict YAML only with exactly these top-level keys:',
@@ -271,6 +313,9 @@ export function buildPullRequestPrompt(input: {
     '',
     '### final_test_report',
     input.finalTestReport.trim() || '[missing final test report]',
+    '',
+    '### manual_qa_summary',
+    input.manualQaSummary?.trim() || '[Manual QA disabled or no completed outcome]',
     '',
     '### final_diff_stat',
     input.diffStat.trim() || '[empty diff stat]',
@@ -536,6 +581,7 @@ export function buildPullRequestContext(ticketId: string, context: TicketContext
   ticketState: TicketState
   contextParts: Array<{ source?: string; content: string }>
   finalTestReport: string
+  manualQaSummary: string
 } {
   const { ticketDir } = loadTicketDirContext(context)
   const ticketState: TicketState = {
@@ -551,10 +597,12 @@ export function buildPullRequestContext(ticketId: string, context: TicketContext
   }
 
   const finalTestArtifact = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')
+  const manualQaArtifact = getLatestPhaseArtifact(ticketId, 'manual_qa_summary')
   return {
     ticketState,
     contextParts: buildMinimalContext('pull_request', ticketState),
     finalTestReport: finalTestArtifact?.content ?? '',
+    manualQaSummary: manualQaArtifact?.content ?? '',
   }
 }
 
@@ -586,7 +634,7 @@ export async function handleCreatePullRequest(
       const baseBranch = paths.baseBranch
       const integration = readIntegrationArtifact(ticketId)
       const fallbackTitle = `${context.externalId}: ${context.title}`
-      const { contextParts, finalTestReport } = buildPullRequestContext(
+      const { contextParts, finalTestReport, manualQaSummary } = buildPullRequestContext(
         ticketId,
         context,
         ticket?.description ?? '',
@@ -669,6 +717,7 @@ export async function handleCreatePullRequest(
         contextParts,
         integrationReport: integrationRaw,
         finalTestReport,
+        manualQaSummary,
         diffStat: diff.stat,
         diffNameStatus: diff.nameStatus,
         diffPatch: truncateText(diff.patch, MAX_DIFF_PATCH_LENGTH),
@@ -903,6 +952,14 @@ export async function handleCreatePullRequest(
       }
 
       throwIfAborted(signal, ticketId)
+
+      const manualQaSection = buildManualQaPullRequestSection(manualQaSummary)
+      if (manualQaSection) {
+        prDraft = {
+          ...prDraft,
+          body: `${prDraft.body}\n\n${manualQaSection}`,
+        }
+      }
 
       let pullRequest: PullRequestInfo | null = null
       let currentStep = 'push_candidate_branch'

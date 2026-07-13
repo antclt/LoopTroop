@@ -10,7 +10,11 @@ import {
 import type { InterviewSessionSnapshot, InterviewSessionView, PersistedInterviewBatch } from '@shared/interviewSession'
 import { clearErrorTicketSeen } from '@/lib/errorTicketSeen'
 import type { TicketErrorOccurrence } from '@/lib/errorOccurrences'
-import { nextTicketUiStateRevision, rememberTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
+import {
+  createTicketUiStateActionId,
+  getTicketUiStateRevision,
+  rememberTicketUiStateRevision,
+} from '@/lib/ticketUiStateRevision'
 
 async function parseErrorBody(res: Response, fallback: string): Promise<string> {
   let message = fallback
@@ -89,6 +93,24 @@ export interface Ticket {
     errorCount: number
     latestReportArtifactId: number | null
   }
+  manualQaOverride?: boolean | null
+  effectiveManualQaEnabled?: boolean
+  effectiveManualQaSource?: 'ticket' | 'project' | 'profile'
+  lockedManualQaEnabled?: boolean | null
+  lockedManualQaSource?: 'ticket' | 'project' | 'profile' | null
+  workflowRevision?: number
+  visitedStatuses?: string[]
+  manualQa?: {
+    activeVersion: number | null
+    completedRoundCount: number
+    latestOutcome: 'passed' | 'waived_through' | 'skipped' | 'failed' | 'created_fixes' | null
+    artifactAvailability: {
+      checklist: boolean
+      results: boolean
+      coverage: boolean
+      summary: boolean
+    }
+  }
   lockedMainImplementer: string | null
   lockedMainImplementerVariant?: string | null
   lockedInterviewQuestions?: number | null
@@ -114,6 +136,7 @@ interface CreateTicketInput {
   title: string
   description?: string
   priority?: number
+  manualQaOverride?: boolean | null
 }
 
 interface TicketActionResponse {
@@ -172,7 +195,7 @@ async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   return res.json()
 }
 
-async function updateTicket(id: string, input: Partial<Pick<Ticket, 'title' | 'description' | 'priority'>>): Promise<Ticket> {
+async function updateTicket(id: string, input: Partial<Pick<Ticket, 'title' | 'description' | 'priority' | 'manualQaOverride'>>): Promise<Ticket> {
   const res = await fetch(`/api/tickets/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -241,8 +264,22 @@ interface TicketUIStateResponse<T = unknown> {
   exists: boolean
   data: T | null
   updatedAt: string | null
+  revision: number
   clientRevision: number | null
 }
+
+interface SaveTicketUIStateResponse<T = unknown> {
+  success?: boolean
+  conflict: boolean
+  scope: string
+  exists?: boolean
+  data?: T | null
+  updatedAt: string | null
+  revision: number
+  clientRevision: number | null
+}
+
+const uiStateSaveQueues = new Map<string, Promise<SaveTicketUIStateResponse>>()
 
 async function fetchTicketUIState<T = unknown>(
   ticketId: string,
@@ -261,17 +298,40 @@ async function saveTicketUIState(
   scope: string,
   data: unknown,
   fetchImpl: typeof fetch = fetch,
-): Promise<{ success: boolean; ignored?: boolean; scope: string; updatedAt: string; clientRevision: number | null }> {
-  const clientRevision = nextTicketUiStateRevision(ticketId, scope)
+): Promise<SaveTicketUIStateResponse> {
+  const expectedRevision = getTicketUiStateRevision(ticketId, scope)
   const res = await fetchImpl(`/api/tickets/${ticketId}/ui-state`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scope, data, clientRevision }),
+    body: JSON.stringify({
+      scope,
+      data,
+      expectedRevision,
+      actionId: createTicketUiStateActionId(),
+    }),
   })
+  if (res.status === 409) return res.json()
   if (!res.ok) {
     throw new Error(await parseErrorBody(res, 'Failed to save ticket UI state'))
   }
   return res.json()
+}
+
+function enqueueTicketUIStateSave(
+  ticketId: string,
+  scope: string,
+  data: unknown,
+  fetchImpl: typeof fetch,
+): Promise<SaveTicketUIStateResponse> {
+  const key = `${ticketId}\u0000${scope}`
+  const previous = uiStateSaveQueues.get(key)
+  const pending = (previous ? previous.catch(() => undefined) : Promise.resolve())
+    .then(() => saveTicketUIState(ticketId, scope, data, fetchImpl))
+  uiStateSaveQueues.set(key, pending)
+  void pending.finally(() => {
+    if (uiStateSaveQueues.get(key) === pending) uiStateSaveQueues.delete(key)
+  }).catch(() => undefined)
+  return pending
 }
 
 export function useTickets(projectId?: number) {
@@ -317,7 +377,7 @@ export function useCreateTicket() {
 export function useUpdateTicket() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string } & Partial<Pick<Ticket, 'title' | 'description' | 'priority'>>) =>
+    mutationFn: ({ id, ...input }: { id: string } & Partial<Pick<Ticket, 'title' | 'description' | 'priority' | 'manualQaOverride'>>) =>
       updateTicket(id, input),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] })
@@ -404,7 +464,7 @@ export function useTicketUIState<T = unknown>(ticketId: string, scope: string, e
     queryFn: () => fetchTicketUIState<T>(ticketId, scope),
     enabled,
     select: (data) => {
-      rememberTicketUiStateRevision(ticketId, scope, data.clientRevision)
+      rememberTicketUiStateRevision(ticketId, scope, data.revision)
       return data
     },
   })
@@ -415,11 +475,21 @@ export function useSaveTicketUIState() {
   const fetchImpl = globalThis.fetch
   return useMutation({
     mutationFn: ({ ticketId, scope, data }: { ticketId: string; scope: string; data: unknown }) =>
-      saveTicketUIState(ticketId, scope, data, fetchImpl),
+      enqueueTicketUIStateSave(ticketId, scope, data, fetchImpl),
     onSuccess: (result, variables) => {
-      rememberTicketUiStateRevision(variables.ticketId, variables.scope, result.clientRevision)
-      if (result.ignored) {
-        queryClient.invalidateQueries({ queryKey: ['ticket-ui-state', variables.ticketId, variables.scope] })
+      rememberTicketUiStateRevision(variables.ticketId, variables.scope, result.revision)
+      if (result.conflict) {
+        queryClient.setQueryData<TicketUIStateResponse<unknown>>(
+          ['ticket-ui-state', variables.ticketId, variables.scope],
+          {
+            scope: variables.scope,
+            exists: result.exists ?? result.updatedAt !== null,
+            data: result.data ?? null,
+            updatedAt: result.updatedAt,
+            revision: result.revision,
+            clientRevision: result.revision,
+          },
+        )
         return
       }
       queryClient.setQueryData<TicketUIStateResponse<unknown>>(
@@ -429,6 +499,7 @@ export function useSaveTicketUIState() {
           exists: true,
           data: variables.data,
           updatedAt: result.updatedAt,
+          revision: result.revision,
           clientRevision: result.clientRevision,
         }),
       )

@@ -30,6 +30,7 @@ const existingProfile = {
   toolInputMaxChars: 4000,
   toolOutputMaxChars: 12000,
   toolErrorMaxChars: 6000,
+  manualQaEnabled: false,
   createdAt: '2026-03-08T14:28:53.309Z',
   updatedAt: '2026-03-11T10:49:38.623Z',
 }
@@ -127,6 +128,8 @@ describe('ProfileSetup', () => {
     expect(screen.getByText('Minimum council votes required (1–4)')).toBeInTheDocument()
     expect(screen.getByText('Coverage')).toBeInTheDocument()
     expect(screen.getByText('OpenCode Provider Recovery')).toBeInTheDocument()
+    expect(screen.getByText('Manual QA')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('Coverage Follow-Up Budget (%)')).toBeInTheDocument()
     expect(screen.getByText('Interview Coverage Passes')).toBeInTheDocument()
     expect(screen.getByText('Structured Output Retries')).toBeInTheDocument()

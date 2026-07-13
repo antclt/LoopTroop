@@ -5,12 +5,14 @@ export const createTicketSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(10000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
+  manualQaOverride: z.boolean().nullable().optional(),
 })
 
 export const updateTicketSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   description: z.string().max(10000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
+  manualQaOverride: z.boolean().nullable().optional(),
 })
 
 export const cancelTicketSchema = z.object({
@@ -25,7 +27,8 @@ export const uiStateScopeSchema = z.object({
 export const upsertUiStateSchema = z.object({
   scope: z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/),
   data: z.unknown(),
-  clientRevision: z.number().int().nonnegative().optional(),
+  expectedRevision: z.number().int().nonnegative().nullable(),
+  actionId: z.string().min(1).max(120),
 })
 
 export const interviewAnswerPayloadSchema = z.object({

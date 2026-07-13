@@ -63,7 +63,19 @@ app.use('/api/*', cors({
   origin: getFrontendOrigin(),
   allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   // Cache-Control is required for EventSource (browser sends Cache-Control: no-cache in CORS preflight)
-  allowHeaders: ['Content-Type', 'Last-Event-ID', 'Cache-Control', 'Authorization', API_TOKEN_HEADER],
+  allowHeaders: [
+    'Content-Type',
+    'Last-Event-ID',
+    'Cache-Control',
+    'Authorization',
+    API_TOKEN_HEADER,
+    'X-Action-Id',
+    'X-Checklist-Hash',
+    'X-Draft-Revision',
+    'X-Checklist-Item-Id',
+    'X-File-Name',
+    'X-Evidence-Id',
+  ],
 }))
 app.use('/api/*', createApiRateLimitMiddleware())
 app.use('/api/*', createApiAuthMiddleware())

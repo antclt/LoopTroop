@@ -663,6 +663,30 @@ Final test command plans use a `<FINAL_TEST_COMMANDS>…</FINAL_TEST_COMMANDS>` 
 
 ---
 
+### Manual QA Checklist Artifact
+
+Manual QA generation requires exactly one complete `<MANUAL_QA_CHECKLIST>…</MANUAL_QA_CHECKLIST>` envelope. Missing, duplicate, or incomplete envelopes fail validation. The model owns only `summary` and item content; LoopTroop assigns `schemaVersion`, ticket/version metadata, timestamps, and deterministic item IDs such as `qa-v2-001`.
+
+The parser applies the shared YAML/JSON formatting repairs and a deliberately small alias map:
+
+| Alias | Canonical key |
+| --- | --- |
+| `lineage_id` | `lineageId` |
+| `prior_item_ids` | `priorItemIds` |
+| `recheck_state` | `recheckState` |
+| `expected_result` | `expectedResult` |
+| `watch_notes` | `watchNotes` |
+| `bead_refs` | `beadRefs` |
+| `prd_refs` | `prdRefs` |
+
+Alias collisions fail instead of choosing one value. Repairs may restore YAML structure, normalize the strict envelope, or rename these fields, but may never invent a checklist summary, behavior, action, observation, prerequisite, or expected result. The result still must satisfy the versioned strict schema, unique active IDs/lineages, enum values, at least one action per item, and all other constraints.
+
+PRD criterion refs are validated against the frozen approved PRD after parsing. The canonical form is `<epic-id>/<story-id>/AC-<1-based-index>`, with a required `full | partial` level. Invalid refs use the normal structured-output retry path. After validation, coverage is deterministic code: any valid full reference means covered, partial-only means partially covered, and no valid references means uncovered. Gaps remain advisory and no second model response is requested.
+
+Later rounds reuse stable `lineageId` values and may reference prior item IDs. The version reservation is allocated before generation, so structured retries/restarts reuse the same `vN`; a valid existing checklist plus coverage advances idempotently without normalization or another model call.
+
+---
+
 ### Execution Setup Plan and Result Artifacts
 
 Execution setup artifacts use explicit XML envelopes:

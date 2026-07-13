@@ -1,5 +1,7 @@
 import type { BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 
+export type ManualQaConfigurationSource = 'profile' | 'project' | 'ticket'
+
 export interface TicketContext {
   ticketId: string
   projectId: number
@@ -16,6 +18,8 @@ export interface TicketContext {
   lockedMaxPrdCoveragePasses: number | null
   lockedMaxBeadsCoveragePasses: number | null
   lockedStructuredRetryCount: number | null
+  lockedManualQaEnabled: boolean | null
+  lockedManualQaSource: ManualQaConfigurationSource | null
   previousStatus: string | null
   error: string | null
   errorCodes: string[]
@@ -46,6 +50,8 @@ export type TicketEvent =
       lockedMaxPrdCoveragePasses?: number | null
       lockedMaxBeadsCoveragePasses?: number | null
       lockedStructuredRetryCount?: number | null
+      lockedManualQaEnabled?: boolean | null
+      lockedManualQaSource?: ManualQaConfigurationSource | null
     }
   | { type: 'INIT_FAILED'; message: string; codes?: string[] }
   | { type: 'QUESTIONS_READY'; result: Record<string, unknown> }
@@ -74,6 +80,10 @@ export type TicketEvent =
   | { type: 'ALL_BEADS_DONE' }
   | { type: 'TESTS_PASSED' }
   | { type: 'TESTS_FAILED' }
+  | { type: 'QA_CHECKLIST_READY' }
+  | { type: 'MANUAL_QA_COMPLETE' }
+  | { type: 'MANUAL_QA_SKIPPED' }
+  | { type: 'MANUAL_QA_FIXES_CREATED' }
   | { type: 'INTEGRATION_DONE' }
   | { type: 'PULL_REQUEST_READY' }
   | { type: 'MERGE_COMPLETE' }
@@ -113,6 +123,8 @@ export const STATUS_TO_PHASE: Record<string, KanbanPhase> = {
   PREPARING_EXECUTION_ENV: 'in_progress',
   CODING: 'in_progress',
   RUNNING_FINAL_TEST: 'in_progress',
+  GENERATING_QA_CHECKLIST: 'in_progress',
+  WAITING_MANUAL_QA: 'needs_input',
   INTEGRATING_CHANGES: 'in_progress',
   CREATING_PULL_REQUEST: 'in_progress',
   WAITING_PR_REVIEW: 'needs_input',

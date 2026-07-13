@@ -246,6 +246,18 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(ticket.title)
   const inputRef = useRef<HTMLInputElement>(null)
+  const manualQaOrigin = (ticket as unknown as { manualQaOrigin?: {
+    sourceTicketId?: string
+    sourceTicketExternalId?: string
+    version?: number
+    sourceVersion?: number
+    itemId?: string
+    sourceItemId?: string
+    itemTitle?: string
+    sourceItemTitle?: string
+    evidenceRefs?: Array<{ id?: string; name?: string } | string>
+    omittedEvidence?: string[]
+  } | null }).manualQaOrigin ?? null
 
   const [isCalculatingSize, setIsCalculatingSize] = useState(false)
   const [ticketSize, setTicketSize] = useState<number | null>(null)
@@ -869,6 +881,20 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                     </div>
                   )}
                 </div>
+              </div>
+            )}
+            {manualQaOrigin && (
+              <div className="col-span-2 rounded-md border border-blue-500/30 bg-blue-500/5 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="bg-blue-500/15 text-blue-700 hover:bg-blue-500/20 dark:text-blue-300">Manual QA Improvement</Badge>
+                  {(manualQaOrigin.sourceVersion ?? manualQaOrigin.version) && <span className="text-xs text-muted-foreground">Round v{manualQaOrigin.sourceVersion ?? manualQaOrigin.version}</span>}
+                </div>
+                <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+                  <dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{manualQaOrigin.sourceTicketExternalId ?? manualQaOrigin.sourceTicketId ?? 'Unknown'}</dd>
+                  <dt className="text-muted-foreground">Checklist item</dt><dd>{manualQaOrigin.sourceItemTitle ?? manualQaOrigin.itemTitle ?? manualQaOrigin.sourceItemId ?? manualQaOrigin.itemId ?? 'Unknown'}</dd>
+                  <dt className="text-muted-foreground">Evidence</dt><dd>{manualQaOrigin.evidenceRefs?.length ?? 0} copied reference(s){(manualQaOrigin.omittedEvidence?.length ?? 0) > 0 ? `, ${manualQaOrigin.omittedEvidence?.length} omitted` : ''}</dd>
+                </dl>
+                <p className="mt-2 text-[11px] text-muted-foreground">This provenance is shown for audit only. Future implementation prompts use this ticket&apos;s saved title and description.</p>
               </div>
             )}
             {ticket.description && (

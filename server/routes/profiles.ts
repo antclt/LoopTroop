@@ -10,6 +10,7 @@ const profileRouter = new Hono()
 const MAX_TIMEOUT_MS = 3_600_000
 
 const profileSchema = z.object({
+  manualQaEnabled: z.boolean().optional(),
   mainImplementer: z.string().optional(),
   mainImplementerVariant: z.string().optional(),
   councilMembers: z.string().optional(),

@@ -87,7 +87,8 @@ describe('useDebouncedApprovalUiState', () => {
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({
       scope: 'approval_prd',
       data: { value: 'leaving' },
-      clientRevision: expect.any(Number),
+      expectedRevision: expect.any(Number),
+      actionId: expect.any(String),
     })
   })
 })

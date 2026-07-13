@@ -79,6 +79,8 @@ import {
   // Cleanup phase
   handleCleanup,
 } from './phases'
+import { handleManualQaChecklistGeneration } from '../phases/manualQa'
+import { ManualQaCheckpointBlockedError } from '../phases/manualQa/checkpoint'
 
 // Re-export public API for external callers
 export {
@@ -157,6 +159,9 @@ async function handleMockLifecycleState(
       return
     case 'RUNNING_FINAL_TEST':
       await handleMockExecutionUnsupported(ticketId, context, 'RUNNING_FINAL_TEST', sendEvent)
+      return
+    case 'GENERATING_QA_CHECKLIST':
+      await handleMockExecutionUnsupported(ticketId, context, 'GENERATING_QA_CHECKLIST', sendEvent)
       return
     case 'INTEGRATING_CHANGES':
       await handleMockExecutionUnsupported(ticketId, context, 'INTEGRATING_CHANGES', sendEvent)
@@ -275,6 +280,7 @@ export function attachWorkflowRunner(
         'PREPARING_EXECUTION_ENV',
         'CODING',
         'RUNNING_FINAL_TEST',
+        'GENERATING_QA_CHECKLIST',
         'INTEGRATING_CHANGES',
         'CREATING_PULL_REQUEST',
         'CLEANING_ENV',
@@ -299,7 +305,7 @@ export function attachWorkflowRunner(
     if (state === 'SCANNING_RELEVANT_FILES') {
       runningPhases.add(key)
         handleRelevantFilesScan(ticketId, context, sendEvent, signal)
-        .catch(err => {
+        .catch((err: unknown) => {
           if (isCancellationError(err, signal)) return
           const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'SCANNING_RELEVANT_FILES', 'error', errMsg)
@@ -557,6 +563,24 @@ export function attachWorkflowRunner(
           const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'RUNNING_FINAL_TEST', 'error', errMsg)
           sendEvent(buildWorkflowErrorEvent(errMsg, ['TESTS_FAILED'], err))
+        })
+        .finally(() => {
+          runningPhases.delete(key)
+        })
+    } else if (state === 'GENERATING_QA_CHECKLIST') {
+      runningPhases.add(key)
+      handleManualQaChecklistGeneration(ticketId, context, sendEvent, signal)
+        .catch(err => {
+          if (isCancellationError(err, signal)) return
+          const errMsg = getErrorMessage(err)
+          emitPhaseLog(ticketId, context.externalId, 'GENERATING_QA_CHECKLIST', 'error', errMsg)
+          sendEvent(buildWorkflowErrorEvent(
+            errMsg,
+            err instanceof ManualQaCheckpointBlockedError
+              ? [err.code]
+              : ['MANUAL_QA_CHECKLIST_FAILED'],
+            err,
+          ))
         })
         .finally(() => {
           runningPhases.delete(key)

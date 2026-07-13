@@ -50,6 +50,12 @@ function buildMachineContextFromTicket(ticket: PublicTicket): TicketContext {
     lockedMaxPrdCoveragePasses: ticket.lockedMaxPrdCoveragePasses,
     lockedMaxBeadsCoveragePasses: ticket.lockedMaxBeadsCoveragePasses,
     lockedStructuredRetryCount: ticket.lockedStructuredRetryCount,
+    lockedManualQaEnabled: ticket.lockedManualQaEnabled,
+    lockedManualQaSource: ticket.lockedManualQaSource === 'profile'
+      || ticket.lockedManualQaSource === 'project'
+      || ticket.lockedManualQaSource === 'ticket'
+      ? ticket.lockedManualQaSource
+      : null,
     previousStatus: ticket.previousStatus,
     error: ticket.errorMessage,
     errorCodes: ticket.errorOccurrences.at(-1)?.errorCodes ?? [],

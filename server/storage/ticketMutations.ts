@@ -74,6 +74,7 @@ const CreateTicketInputSchema = z.object({
   title: z.string().min(1).max(500),
   description: z.string().max(10000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
+  manualQaOverride: z.boolean().nullable().optional(),
 })
 
 function truncateLoggedValue(value: string, maxLength = 200): string {
@@ -293,6 +294,24 @@ function assertLockedModelConfigurationMutable(
   }
 }
 
+function assertLockedManualQaConfigurationMutable(
+  ticket: LocalTicketRow,
+  patch: Partial<Omit<LocalTicketRow, 'id' | 'projectId' | 'externalId' | 'createdAt'>>,
+) {
+  const updatesLock = 'lockedManualQaEnabled' in patch || 'lockedManualQaSource' in patch
+  if (!updatesLock || ticket.startedAt === null || patch.startedAt === null) return
+
+  const nextEnabled = 'lockedManualQaEnabled' in patch
+    ? patch.lockedManualQaEnabled ?? null
+    : ticket.lockedManualQaEnabled
+  const nextSource = 'lockedManualQaSource' in patch
+    ? patch.lockedManualQaSource ?? null
+    : ticket.lockedManualQaSource
+  if (nextEnabled !== ticket.lockedManualQaEnabled || nextSource !== ticket.lockedManualQaSource) {
+    throw new Error(`Ticket Manual QA configuration is immutable after start: ${ticket.externalId}`)
+  }
+}
+
 function runGit(projectRoot: string, args: string[]) {
   const fullArgs = ['-C', projectRoot, ...args]
   const result = spawnSync('git', fullArgs, { encoding: 'utf8' })
@@ -343,6 +362,7 @@ export function createTicket(input: {
   title: string
   description?: string
   priority?: number
+  manualQaOverride?: boolean | null
 }): PublicTicket {
   const parsedInput = CreateTicketInputSchema.safeParse(input)
   if (!parsedInput.success) {
@@ -371,6 +391,7 @@ export function createTicket(input: {
       title: validatedInput.title,
       description: validatedInput.description ?? null,
       priority: validatedInput.priority ?? 3,
+      manualQaOverride: validatedInput.manualQaOverride ?? null,
       status: 'DRAFT',
     })
     .returning()
@@ -396,9 +417,12 @@ export function createTicket(input: {
   return publicTicket
 }
 
-export function updateTicket(ticketRef: string, patch: Partial<Pick<LocalTicketRow, 'title' | 'description' | 'priority'>>): PublicTicket | undefined {
+export function updateTicket(ticketRef: string, patch: Partial<Pick<LocalTicketRow, 'title' | 'description' | 'priority' | 'manualQaOverride'>>): PublicTicket | undefined {
   const context = getTicketContext(ticketRef)
   if (!context) return undefined
+  if ('manualQaOverride' in patch && context.localTicket.status !== 'DRAFT') {
+    throw new Error('Manual QA override can only be changed while the ticket is in DRAFT status.')
+  }
   context.projectDb.update(tickets)
     .set({ ...patch, updatedAt: new Date().toISOString() })
     .where(eq(tickets.id, context.localTicketId))
@@ -420,11 +444,23 @@ export function patchTicket(
   if (!context) return undefined
 
   const previousStatus = context.localTicket.status
+  if (
+    'manualQaOverride' in patch
+    && context.localTicket.status !== 'DRAFT'
+    && patch.manualQaOverride !== context.localTicket.manualQaOverride
+  ) {
+    throw new Error('Manual QA override can only be changed while the ticket is in DRAFT status.')
+  }
   assertLockedModelConfigurationMutable(context.localTicket, patch)
+  assertLockedManualQaConfigurationMutable(context.localTicket, patch)
+  const statusChanged = typeof patch.status === 'string' && patch.status !== previousStatus
 
   context.projectDb.update(tickets)
     .set({
       ...patch,
+      workflowRevision: statusChanged
+        ? context.localTicket.workflowRevision + 1
+        : context.localTicket.workflowRevision,
       updatedAt: new Date().toISOString(),
     })
     .where(eq(tickets.id, context.localTicketId))
@@ -435,12 +471,12 @@ export function patchTicket(
     throw new Error(`Ticket not found after patch: ${ticketRef}`)
   }
 
-  if (patch.status && patch.status !== previousStatus) {
+  if (statusChanged) {
     context.projectDb.insert(ticketStatusHistory)
       .values({
         ticketId: context.localTicketId,
         previousStatus,
-        newStatus: patch.status,
+        newStatus: patch.status!,
         reason: typeof patch.errorMessage === 'string' ? patch.errorMessage : null,
       })
       .run()
@@ -466,6 +502,8 @@ export function lockTicketStartConfiguration(
     lockedMaxPrdCoveragePasses: number
     lockedMaxBeadsCoveragePasses: number
     lockedStructuredRetryCount: number
+    lockedManualQaEnabled?: boolean
+    lockedManualQaSource?: 'profile' | 'project' | 'ticket'
   },
 ): PublicTicket | undefined {
   const context = getTicketContext(ticketRef)
@@ -491,6 +529,10 @@ export function lockTicketStartConfiguration(
     lockedCouncilMembers: lockedCouncilMembersRaw,
     lockedCouncilMemberVariants: lockedCouncilMemberVariantsRaw,
   })
+  assertLockedManualQaConfigurationMutable(context.localTicket, {
+    lockedManualQaEnabled: input.lockedManualQaEnabled ?? false,
+    lockedManualQaSource: input.lockedManualQaSource ?? 'profile',
+  })
 
   const meta = lockTicketModelSelection(context.projectRoot, context.externalId, {
     startedAt: input.startedAt,
@@ -511,6 +553,8 @@ export function lockTicketStartConfiguration(
       lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses,
       lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses,
       lockedStructuredRetryCount: input.lockedStructuredRetryCount,
+      lockedManualQaEnabled: input.lockedManualQaEnabled ?? false,
+      lockedManualQaSource: input.lockedManualQaSource ?? 'profile',
       startedAt: meta.startedAt ?? input.startedAt,
       updatedAt: new Date().toISOString(),
     })

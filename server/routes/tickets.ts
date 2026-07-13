@@ -40,6 +40,15 @@ import {
   handleRegenerateExecutionSetupPlan,
   handleGetArtifacts,
   handleListPhaseAttempts,
+  handleGetManualQa,
+  handleGetManualQaVersion,
+  handleUploadManualQaEvidence,
+  handleReadManualQaEvidence,
+  handleRemoveManualQaEvidence,
+  handleSubmitManualQa,
+  handleSkipManualQa,
+  handleIncludeManualQaDrift,
+  handleDiscardManualQaDrift,
 } from './ticketHandlers'
 
 const ticketRouter = new Hono()
@@ -84,5 +93,14 @@ ticketRouter.post('/tickets/:id/dev-event', async (c) => handleDevEvent(c))
 ticketRouter.get('/tickets/:id/interview', (c) => handleGetInterview(c))
 ticketRouter.get('/tickets/:id/artifacts', (c) => handleGetArtifacts(c))
 ticketRouter.get('/tickets/:id/phases/:phase/attempts', (c) => handleListPhaseAttempts(c))
+ticketRouter.get('/tickets/:id/manual-qa', (c) => handleGetManualQa(c))
+ticketRouter.get('/tickets/:id/manual-qa/versions/:version', (c) => handleGetManualQaVersion(c))
+ticketRouter.put('/tickets/:id/manual-qa/versions/:version/evidence', (c) => handleUploadManualQaEvidence(c))
+ticketRouter.get('/tickets/:id/manual-qa/versions/:version/evidence/:itemId/:evidenceId', (c) => handleReadManualQaEvidence(c))
+ticketRouter.delete('/tickets/:id/manual-qa/versions/:version/evidence/:itemId/:evidenceId', (c) => handleRemoveManualQaEvidence(c))
+ticketRouter.post('/tickets/:id/manual-qa/submit', (c) => handleSubmitManualQa(c))
+ticketRouter.post('/tickets/:id/manual-qa/skip', (c) => handleSkipManualQa(c))
+ticketRouter.post('/tickets/:id/manual-qa/workspace-drift/include', (c) => handleIncludeManualQaDrift(c))
+ticketRouter.post('/tickets/:id/manual-qa/workspace-drift/discard', (c) => handleDiscardManualQaDrift(c))
 
 export { ticketRouter }

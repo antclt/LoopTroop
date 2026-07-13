@@ -8,6 +8,35 @@ export interface BeadContextGuidance {
   anti_patterns: string[]
 }
 
+export interface QaOriginEvidenceRef {
+  id: string
+  originalName: string
+  mediaType: string
+  size: number
+  sha256: string
+  relativePath: string
+}
+
+export interface QaOriginSourceItem {
+  itemId: string
+  lineageId: string
+  behavior: string
+  observation: string
+  expectedResult: string
+  evidence: QaOriginEvidenceRef[]
+  links: Array<{ id: string; url: string; label?: string }>
+}
+
+export interface QaOrigin {
+  schemaVersion: 1
+  actionId: string
+  sourceTicketId: string
+  sourceTicketExternalId: string
+  version: number
+  sourceItems: QaOriginSourceItem[]
+  imageDelivery?: 'attached' | 'references_only'
+}
+
 export interface Bead {
   // Subset fields (draft phase — PROM20)
   id: string                              // Field 1 (draft uses simple kebab-case; PROM25 assigns hierarchical ID)
@@ -34,6 +63,7 @@ export interface Bead {
   completedAt: string                     // Field 20 — filled when status=done
   startedAt: string                       // Field 21 — set on first iteration, preserved across retries
   beadStartCommit: string | null          // Field 22 — git SHA for worktree reset
+  qaOrigin?: QaOrigin                     // Typed Manual QA provenance; retry notes remain in notes.
 }
 
 export type BeadSubset = Pick<Bead, 'id' | 'title' | 'prdRefs' | 'description' | 'contextGuidance' | 'acceptanceCriteria' | 'tests' | 'testCommands'>

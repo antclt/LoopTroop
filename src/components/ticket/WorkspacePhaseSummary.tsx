@@ -41,6 +41,9 @@ const CONTEXT_KEY_LABELS: Record<WorkflowContextKey, { label: string; descriptio
   execution_setup_profile: { label: 'Execution Setup Profile', description: 'A reusable runtime profile produced by the execution setup phase. It records setup roots, tooling probes, provisioning-attempt evidence when applicable, discovered command families, reusable artifacts, and the quality-gate policy; coding and final testing can reuse it when needed.' },
   execution_setup_notes: { label: 'Execution Setup Notes', description: 'Append-only retry notes from failed execution setup attempts. These help the next setup retry avoid repeating the same environment mistakes or policy violations.' },
   final_test_notes: { label: 'Final Test Notes', description: 'Append-only retry notes from failed final-test attempts. These help the next final-test generation avoid repeating the same verification mistakes.' },
+  manual_qa_previous: { label: 'Previous Manual QA', description: 'The latest completed Manual QA checklist and results used to preserve item lineage, recheck affected behavior, and retain unaffected historical passes across QA fix rounds.' },
+  manual_qa_checklist: { label: 'Manual QA Checklist', description: 'The immutable generated checklist for the active version, including user-run prerequisites, actions, expected results, advisory PRD coverage, and stable cross-round item lineage.' },
+  manual_qa_results: { label: 'Manual QA Results', description: 'The submitted pass, fail, waiver, improvement, evidence-reference, or skip outcomes. Evidence binaries remain in ticket-owned storage and are never embedded in prompt context.' },
   error_context: { label: 'Error Context', description: 'Failure context from the most recent blocked error, including the error message, error codes, the phase where the failure occurred, occurrence timing, and diagnostic details to help with retry decisions.' },
 }
 

@@ -75,6 +75,8 @@ function rollbackTicketStartToDraft(ticketId: string): void {
     lockedMaxPrdCoveragePasses: null,
     lockedMaxBeadsCoveragePasses: null,
     lockedStructuredRetryCount: null,
+    lockedManualQaEnabled: null,
+    lockedManualQaSource: null,
   })
   stopActor(ticketId)
 }
@@ -84,7 +86,7 @@ const startingTickets = new Set<string>()
 function getActiveFinalTestFileEffectsBlock(ticket: PublicTicket) {
   if (
     ticket.status !== 'BLOCKED_ERROR'
-    || ticket.previousStatus !== 'INTEGRATING_CHANGES'
+    || (ticket.previousStatus !== 'INTEGRATING_CHANGES' && ticket.previousStatus !== 'GENERATING_QA_CHECKLIST')
     || ticket.activeErrorOccurrenceId == null
   ) {
     return null
@@ -102,11 +104,14 @@ function getActiveFinalTestFileEffectsBlock(ticket: PublicTicket) {
   return occurrence
 }
 
-function prepareFreshIntegrationRetryAttempt(ticketId: string): void {
-  if (!isAttemptTrackedPhase('INTEGRATING_CHANGES')) return
-  ensureActivePhaseAttempt(ticketId, 'INTEGRATING_CHANGES')
-  archiveActivePhaseAttempts(ticketId, ['INTEGRATING_CHANGES'], 'manual_final_test_file_effects_recovery')
-  createFreshPhaseAttempts(ticketId, ['INTEGRATING_CHANGES'])
+function prepareFreshFinalTestFileEffectsRetryAttempt(
+  ticketId: string,
+  phase: 'GENERATING_QA_CHECKLIST' | 'INTEGRATING_CHANGES',
+): void {
+  if (!isAttemptTrackedPhase(phase)) return
+  ensureActivePhaseAttempt(ticketId, phase)
+  archiveActivePhaseAttempts(ticketId, [phase], 'manual_final_test_file_effects_recovery')
+  createFreshPhaseAttempts(ticketId, [phase])
 }
 
 function resumeIntegrationAfterFinalTestFileEffectsDecision(ticketId: string): void {
@@ -240,6 +245,11 @@ export async function handleStartTicket(c: Context) {
   const lockedMaxBeadsCoveragePasses = profile?.maxBeadsCoveragePasses
     ?? PROFILE_DEFAULTS.maxBeadsCoveragePasses
   const lockedStructuredRetryCount = normalizeStructuredRetryCount(profile?.structuredRetryCount)
+  const manualQaResolution = ticketContext.localTicket.manualQaOverride !== null
+    ? { enabled: ticketContext.localTicket.manualQaOverride, source: 'ticket' as const }
+    : ticketContext.localProject.manualQaOverride !== null
+      ? { enabled: ticketContext.localProject.manualQaOverride, source: 'project' as const }
+      : { enabled: profile?.manualQaEnabled ?? PROFILE_DEFAULTS.manualQaEnabled, source: 'profile' as const }
   const lockedMainImplementerVariant = profile?.mainImplementerVariant ?? null
   let lockedCouncilMemberVariants: Record<string, string> | null = null
   if (profile?.councilMemberVariants) {
@@ -272,6 +282,8 @@ export async function handleStartTicket(c: Context) {
       lockedMaxPrdCoveragePasses,
       lockedMaxBeadsCoveragePasses,
       lockedStructuredRetryCount,
+      lockedManualQaEnabled: manualQaResolution.enabled,
+      lockedManualQaSource: manualQaResolution.source,
     })
     if (!lockedTicket) {
       rollbackTicketStartToDraft(ticketId)
@@ -281,6 +293,8 @@ export async function handleStartTicket(c: Context) {
     emitRoutePhaseLog(ticketId, startPhase, 'info', '✓ Start Config: Configuration locked.', {
       branchName: init.branchName,
       startedAt,
+      manualQaEnabled: manualQaResolution.enabled,
+      manualQaSource: manualQaResolution.source,
     })
   } catch (err) {
     const details = getErrorMessage(err)
@@ -310,6 +324,8 @@ export async function handleStartTicket(c: Context) {
       lockedMaxPrdCoveragePasses,
       lockedMaxBeadsCoveragePasses,
       lockedStructuredRetryCount,
+      lockedManualQaEnabled: manualQaResolution.enabled,
+      lockedManualQaSource: manualQaResolution.source,
     })
   } catch (err) {
     rollbackTicketStartToDraft(ticketId)
@@ -603,7 +619,7 @@ export function handleIncludeFinalTestFilesTicket(c: Context) {
   const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
   if (mockResponse) return mockResponse
   if (!getActiveFinalTestFileEffectsBlock(ticket)) {
-    return c.json({ error: 'Include in PR is only available for unresolved final-test file effects blocks' }, 409)
+    return c.json({ error: 'Include is only available for unresolved final-test file effects blocks' }, 409)
   }
 
   const audit = readLatestFinalTestFileEffectsAudit(ticketId)
@@ -611,7 +627,10 @@ export function handleIncludeFinalTestFilesTicket(c: Context) {
     return c.json({ error: 'Final-test file effects audit is not blocked or could not be found' }, 409)
   }
 
-  if (isExecutionBandStatus('INTEGRATING_CHANGES')) {
+  const retryPhase = ticket.previousStatus === 'GENERATING_QA_CHECKLIST'
+    ? 'GENERATING_QA_CHECKLIST'
+    : 'INTEGRATING_CHANGES'
+  if (isExecutionBandStatus(retryPhase)) {
     const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
     if (executionConflict) {
       return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
@@ -619,21 +638,22 @@ export function handleIncludeFinalTestFilesTicket(c: Context) {
   }
 
   try {
-    prepareFreshIntegrationRetryAttempt(ticketId)
+    prepareFreshFinalTestFileEffectsRetryAttempt(ticketId, retryPhase)
     const override = writeFinalTestFileEffectsOverride(
       ticketId,
       'include_unclassified_as_candidate',
       audit.decisionRequiredFiles,
+      retryPhase,
     )
-    emitRoutePhaseLog(ticketId, 'INTEGRATING_CHANGES', 'info',
-      `User chose Include in PR for final-test-produced file(s): ${override.files.join(', ')}`)
+    emitRoutePhaseLog(ticketId, retryPhase, 'info',
+      `User chose to include final-test-produced file(s) in the candidate checkpoint: ${override.files.join(', ')}`)
     resumeIntegrationAfterFinalTestFileEffectsDecision(ticketId)
   } catch (err) {
     console.error(`[tickets] Failed to include final-test files for ticket ${ticketId}:`, err)
     return c.json({ error: 'Failed to include final-test files', details: getErrorMessage(err) }, 500)
   }
 
-  return respondWithState(c, ticketId, 'Include in PR action accepted')
+  return respondWithState(c, ticketId, 'Include final-test files action accepted')
 }
 
 export function handleDiscardFinalTestFilesTicket(c: Context) {
@@ -656,7 +676,10 @@ export function handleDiscardFinalTestFilesTicket(c: Context) {
     return c.json({ error: 'Final-test file effects audit is not blocked or could not be found' }, 409)
   }
 
-  if (isExecutionBandStatus('INTEGRATING_CHANGES')) {
+  const retryPhase = ticket.previousStatus === 'GENERATING_QA_CHECKLIST'
+    ? 'GENERATING_QA_CHECKLIST'
+    : 'INTEGRATING_CHANGES'
+  if (isExecutionBandStatus(retryPhase)) {
     const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
     if (executionConflict) {
       return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
@@ -665,13 +688,14 @@ export function handleDiscardFinalTestFilesTicket(c: Context) {
 
   try {
     discardFinalTestProducedFiles(paths.worktreePath, audit, audit.decisionRequiredFiles)
-    prepareFreshIntegrationRetryAttempt(ticketId)
+    prepareFreshFinalTestFileEffectsRetryAttempt(ticketId, retryPhase)
     const override = writeFinalTestFileEffectsOverride(
       ticketId,
       'discard_unclassified',
       audit.decisionRequiredFiles,
+      retryPhase,
     )
-    emitRoutePhaseLog(ticketId, 'INTEGRATING_CHANGES', 'info',
+    emitRoutePhaseLog(ticketId, retryPhase, 'info',
       `User chose Discard and Continue for final-test-produced file(s): ${override.files.join(', ')}`)
     resumeIntegrationAfterFinalTestFileEffectsDecision(ticketId)
   } catch (err) {

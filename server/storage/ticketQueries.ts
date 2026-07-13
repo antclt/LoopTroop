@@ -1,9 +1,11 @@
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { z } from 'zod'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { db as appDb } from '../db/index'
 import { PROFILE_DEFAULTS } from '../db/defaults'
 import { getProjectContextById, getProjectById, listProjects } from './projects'
-import { opencodeSessions, phaseArtifacts, profiles, projects, ticketErrorOccurrences, tickets } from '../db/schema'
+import { opencodeSessions, phaseArtifacts, profiles, projects, ticketErrorOccurrences, ticketStatusHistory, tickets } from '../db/schema'
 import {
   getTicketAiLogPath,
   getTicketDir,
@@ -82,12 +84,47 @@ export interface TicketErrorOccurrence {
 }
 
 /** Full public projection of a ticket row, enriched with runtime data, error history, and available actions. */
-export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncilMembers' | 'lockedCouncilMemberVariants'> {
+export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncilMembers' | 'lockedCouncilMemberVariants' | 'lockedManualQaSource'> {
   id: string
   projectId: number
   isDisplayOnlyMock: boolean
   lockedCouncilMembers: string[]
   lockedCouncilMemberVariants: Record<string, string> | null
+  lockedManualQaSource: 'ticket' | 'project' | 'profile' | null
+  effectiveManualQaEnabled: boolean
+  effectiveManualQaSource: 'ticket' | 'project' | 'profile'
+  visitedStatuses: string[]
+  manualQa: {
+    activeVersion: number | null
+    completedRoundCount: number
+    latestOutcome: 'passed' | 'waived_through' | 'skipped' | 'failed' | 'created_fixes' | null
+    artifactAvailability: {
+      checklist: boolean
+      results: boolean
+      coverage: boolean
+      summary: boolean
+    }
+  }
+  manualQaOrigin: {
+    schemaVersion: 1
+    originId: string
+    actionId: string
+    sourceTicketId: string
+    sourceTicketExternalId: string
+    sourceVersion: number
+    sourceItemId: string
+    sourceItemTitle: string
+    evidenceRefs: Array<{
+      id: string
+      originalName: string
+      mediaType: string
+      size: number
+      sha256: string
+      relativePath: string
+    }>
+    omittedEvidence: Array<{ id: string; reason: string }>
+    createdAt: string
+  } | null
   availableActions: string[]
   previousStatus: string | null
   reviewCutoffStatus: string | null
@@ -446,6 +483,114 @@ function readNeedsInputSeenSignature(projectContext: NonNullable<ReturnType<type
   return typeof parsed?.data?.seenSignature === 'string' ? parsed.data.seenSignature : null
 }
 
+function readVisitedStatuses(
+  projectContext: NonNullable<ReturnType<typeof getProjectContextById>> | null | undefined,
+  ticket: LocalTicketRow,
+): string[] {
+  const visited = new Set<string>(['DRAFT'])
+  if (projectContext) {
+    const history = projectContext.projectDb.select({ newStatus: ticketStatusHistory.newStatus })
+      .from(ticketStatusHistory)
+      .where(eq(ticketStatusHistory.ticketId, ticket.id))
+      .orderBy(asc(ticketStatusHistory.id))
+      .all()
+    for (const row of history) visited.add(row.newStatus)
+  }
+  visited.add(ticket.status)
+  return [...visited]
+}
+
+const MANUAL_QA_OUTCOMES = new Set(['passed', 'waived_through', 'skipped', 'failed', 'created_fixes'])
+
+function readManualQaProjection(
+  projectContext: NonNullable<ReturnType<typeof getProjectContextById>> | null | undefined,
+  localTicketId: number,
+): PublicTicket['manualQa'] {
+  const empty: PublicTicket['manualQa'] = {
+    activeVersion: null,
+    completedRoundCount: 0,
+    latestOutcome: null,
+    artifactAvailability: { checklist: false, results: false, coverage: false, summary: false },
+  }
+  if (!projectContext) return empty
+
+  const artifacts = projectContext.projectDb.select().from(phaseArtifacts)
+    .where(eq(phaseArtifacts.ticketId, localTicketId))
+    .orderBy(asc(phaseArtifacts.id))
+    .all()
+    .filter((artifact) => typeof artifact.artifactType === 'string' && artifact.artifactType.startsWith('manual_qa_'))
+  if (artifacts.length === 0) return empty
+
+  let activeVersion: number | null = null
+  let latestOutcome: PublicTicket['manualQa']['latestOutcome'] = null
+  const completedVersions = new Set<number>()
+  const types = new Set(artifacts.map((artifact) => artifact.artifactType))
+
+  for (const artifact of artifacts) {
+    const parsed = parseJsonObject<Record<string, unknown>>(artifact.content)
+    const rawVersion = parsed?.version ?? parsed?.checklistVersion ?? parsed?.activeVersion
+    const version = typeof rawVersion === 'number' && Number.isInteger(rawVersion) && rawVersion > 0
+      ? rawVersion
+      : null
+    if (version !== null && (activeVersion === null || version > activeVersion)) activeVersion = version
+
+    if (artifact.artifactType === 'manual_qa_summary') {
+      const rawOutcome = parsed?.outcome ?? parsed?.status
+      if (typeof rawOutcome === 'string' && MANUAL_QA_OUTCOMES.has(rawOutcome)) {
+        latestOutcome = rawOutcome as PublicTicket['manualQa']['latestOutcome']
+        if (version !== null && rawOutcome !== 'failed') completedVersions.add(version)
+      }
+    }
+  }
+
+  return {
+    activeVersion,
+    completedRoundCount: completedVersions.size,
+    latestOutcome,
+    artifactAvailability: {
+      checklist: types.has('manual_qa_checklist'),
+      results: types.has('manual_qa_results'),
+      coverage: types.has('manual_qa_coverage'),
+      summary: types.has('manual_qa_summary'),
+    },
+  }
+}
+
+const ManualQaOriginSchema = z.object({
+  schemaVersion: z.literal(1),
+  originId: z.string().min(1),
+  actionId: z.string().min(1),
+  sourceTicketId: z.string().min(1),
+  sourceTicketExternalId: z.string().min(1),
+  sourceVersion: z.number().int().positive(),
+  sourceItemId: z.string().min(1),
+  sourceItemTitle: z.string(),
+  evidenceRefs: z.array(z.object({
+    id: z.string().min(1),
+    originalName: z.string(),
+    mediaType: z.string(),
+    size: z.number().nonnegative(),
+    sha256: z.string(),
+    relativePath: z.string(),
+  })).default([]),
+  omittedEvidence: z.array(z.object({
+    id: z.string().min(1),
+    reason: z.string(),
+  })).default([]),
+  createdAt: z.string(),
+}).strict()
+
+function readManualQaOrigin(projectRoot: string | undefined, externalId: string): PublicTicket['manualQaOrigin'] {
+  if (!projectRoot) return null
+  try {
+    const content = readFileSync(resolve(getTicketDir(projectRoot, externalId), 'meta', 'manual-qa-origin.json'), 'utf8')
+    const parsed = ManualQaOriginSchema.safeParse(JSON.parse(content) as unknown)
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Determines the status a reviewer should scroll to when viewing a ticket’s
  * artifact history. For BLOCKED_ERROR it returns the phase that was active when
@@ -486,6 +631,7 @@ function readReviewCutoffStatus(
 /** Converts a raw database ticket row into a fully enriched public ticket with runtime data, actions, and error history. */
 export function toPublicTicket(projectId: number, ticket: LocalTicketRow): PublicTicket {
   const project = getProjectById(projectId)
+  const profile = appDb.select().from(profiles).get()
   const projectContext = getProjectContextById(projectId)
   const isMockTicket = isDisplayOnlyMockTicket(ticket)
   const baseBranch = project ? resolveTicketBaseBranch(project.folderPath, ticket.externalId) : 'unknown'
@@ -537,6 +683,21 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
   }
   const completionDisposition = readCompletionDisposition(projectContext, ticket.id)
   const cleanup = readCleanupSummary(projectContext, ticket.id)
+  const visitedStatuses = readVisitedStatuses(projectContext, ticket)
+  const manualQa = readManualQaProjection(projectContext, ticket.id)
+  const manualQaOrigin = readManualQaOrigin(project?.folderPath, ticket.externalId)
+  const manualQaResolution: { enabled: boolean; source: 'ticket' | 'project' | 'profile' } = ticket.startedAt !== null
+    ? {
+        enabled: ticket.lockedManualQaEnabled === true,
+        source: ticket.lockedManualQaSource === 'ticket' || ticket.lockedManualQaSource === 'project'
+          ? ticket.lockedManualQaSource
+          : 'profile',
+      }
+    : ticket.manualQaOverride !== null
+      ? { enabled: ticket.manualQaOverride, source: 'ticket' as const }
+      : project?.manualQaOverride !== null && project?.manualQaOverride !== undefined
+        ? { enabled: project.manualQaOverride, source: 'project' as const }
+        : { enabled: profile?.manualQaEnabled ?? PROFILE_DEFAULTS.manualQaEnabled, source: 'profile' as const }
 
   return {
     ...ticket,
@@ -545,6 +706,16 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     isDisplayOnlyMock: isMockTicket,
     lockedCouncilMembers,
     lockedCouncilMemberVariants,
+    lockedManualQaSource: ticket.lockedManualQaSource === 'ticket'
+      || ticket.lockedManualQaSource === 'project'
+      || ticket.lockedManualQaSource === 'profile'
+      ? ticket.lockedManualQaSource
+      : null,
+    effectiveManualQaEnabled: manualQaResolution.enabled,
+    effectiveManualQaSource: manualQaResolution.source,
+    visitedStatuses,
+    manualQa,
+    manualQaOrigin,
     availableActions: isMockTicket
       ? getDisplayOnlyMockTicketActions(ticket.status)
       : addFinalTestFileEffectActionsWhenAvailable(
@@ -651,6 +822,13 @@ function buildRuntime(
     ))
     .orderBy(desc(phaseArtifacts.id))
     .get()
+  const latestManualQaSummaryArtifact = projectContext?.projectDb.select().from(phaseArtifacts)
+    .where(and(
+      eq(phaseArtifacts.ticketId, ticket.id),
+      eq(phaseArtifacts.artifactType, 'manual_qa_summary'),
+    ))
+    .orderBy(desc(phaseArtifacts.id))
+    .get()
   const integrationArtifact = projectContext?.projectDb.select().from(phaseArtifacts)
     .where(and(
       eq(phaseArtifacts.ticketId, ticket.id),
@@ -666,6 +844,13 @@ function buildRuntime(
     .orderBy(desc(phaseArtifacts.id))
     .get()
   const finalTestReport = parseJsonObject<{ status?: 'passed' | 'failed'; passed?: boolean }>(finalTestArtifact?.content)
+  const latestManualQaSummary = parseJsonObject<{ outcome?: unknown; status?: unknown }>(latestManualQaSummaryArtifact?.content)
+  const latestManualQaOutcome = latestManualQaSummary?.outcome ?? latestManualQaSummary?.status
+  const qaFixesAreNewerThanFinalTest = (
+    (latestManualQaOutcome === 'created_fixes' || latestManualQaOutcome === 'failed')
+    && Boolean(latestManualQaSummaryArtifact)
+    && (!finalTestArtifact || latestManualQaSummaryArtifact!.id > finalTestArtifact.id)
+  )
   const integrationReport = parseJsonObject<{ candidateCommitSha?: string | null; preSquashHead?: string | null }>(integrationArtifact?.content)
   const pullRequestReport = parseJsonObject<{
     prNumber?: number | null
@@ -735,7 +920,9 @@ function buildRuntime(
     })),
     candidateCommitSha: integrationReport?.candidateCommitSha ?? null,
     preSquashHead: integrationReport?.preSquashHead ?? null,
-    finalTestStatus: finalTestReport?.status ?? (finalTestReport?.passed ? 'passed' : 'pending'),
+    finalTestStatus: qaFixesAreNewerThanFinalTest
+      ? 'pending'
+      : finalTestReport?.status ?? (finalTestReport?.passed ? 'passed' : 'pending'),
     prNumber: typeof pullRequestReport?.prNumber === 'number' ? pullRequestReport.prNumber : null,
     prUrl: typeof pullRequestReport?.prUrl === 'string' ? pullRequestReport.prUrl : null,
     prState: pullRequestReport?.prState ?? null,

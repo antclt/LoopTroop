@@ -30,6 +30,7 @@ import { isStatusAtOrPast } from '@shared/workflowMeta'
 import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
 import { CopyButton as RawCopyButton, RawDisplayPre, RawDisplayStats } from './RawTextDisplay'
+import { manualQaEvidenceUrl } from '@/hooks/useManualQA'
 import { normalizeRawAttempts, tryParseStructuredContent, type ArtifactRawAttemptData } from './phaseArtifactTypes'
 
 interface CodingViewProps {
@@ -60,6 +61,24 @@ interface TicketBead {
   completedAt: string
   startedAt: string
   beadStartCommit: string | null
+  qaOrigin?: {
+    schemaVersion?: 1
+    actionId?: string
+    version: number
+    sourceTicketId?: string
+    sourceTicketExternalId?: string
+    sourceItems: Array<{
+      itemId: string
+      lineageId?: string
+      title?: string
+      behavior?: string
+      observation: string
+      expectedResult: string
+      evidence?: Array<{ id?: string; name?: string; originalName?: string; url?: string; mediaType?: string; mimeType?: string; previewable?: boolean; inlinePreview?: boolean } | string>
+      evidenceRefs?: Array<{ id?: string; name?: string; url?: string; mediaType?: string; previewable?: boolean } | string>
+      links?: Array<{ id?: string; url: string; label?: string }>
+    }>
+  } | null
 }
 
 function resolveCodingReviewStatus(ticket: Pick<Ticket, 'status' | 'previousStatus' | 'reviewCutoffStatus'>): string | null {
@@ -172,6 +191,7 @@ function normalizeBead(input: {
   completedAt?: string
   startedAt?: string | null
   beadStartCommit?: string | null
+  qaOrigin?: TicketBead['qaOrigin']
 }): TicketBead {
   const STATUS_MAP: Record<string, TicketBead['status']> = {
     done: 'completed',
@@ -216,6 +236,7 @@ function normalizeBead(input: {
     completedAt: input.completedAt ?? '',
     startedAt: input.startedAt ?? '',
     beadStartCommit: input.beadStartCommit ?? null,
+    qaOrigin: input.qaOrigin ?? null,
   }
 }
 
@@ -294,6 +315,7 @@ async function fetchTicketBeads(ticketId: string): Promise<TicketBead[]> {
           completedAt?: string
           startedAt?: string | null
           beadStartCommit?: string | null
+          qaOrigin?: TicketBead['qaOrigin']
         } =>
           Boolean(item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string' && typeof (item as { title?: unknown }).title === 'string'),
         )
@@ -951,6 +973,7 @@ function BeadGrid({
                     >
                       {statusIcon(bead.status)}
                       <span>{bead.title || `Bead ${index + 1}`}</span>
+                      {bead.qaOrigin && <Badge variant="secondary" className="h-4 px-1 text-[9px]">Manual QA Fix</Badge>}
                       {bead.iteration > 0 && (
                         <Badge variant="outline" className="text-[10px] h-4 px-1">
                           {bead.iteration}x
@@ -1466,6 +1489,9 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                     {viewedBead.issueType && (
                       <Badge variant="outline" className="text-[10px] h-4 px-1.5">{viewedBead.issueType}</Badge>
                     )}
+                    {viewedBead.qaOrigin && (
+                      <Badge className="h-4 bg-amber-500/15 px-1.5 text-[10px] text-amber-700 hover:bg-amber-500/20 dark:text-amber-300">Manual QA Fix · v{viewedBead.qaOrigin.version}</Badge>
+                    )}
                     <Badge
                       variant="outline"
                       className={cn(
@@ -1485,6 +1511,42 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
 
                 {/* Description */}
                 <p className="text-sm whitespace-pre-wrap">{viewedBead.description || 'No bead description available.'}</p>
+
+                {viewedBead.qaOrigin && (
+                  <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3">
+                    <div className="text-[10px] font-semibold uppercase tracking-widest text-amber-700 dark:text-amber-300">Manual QA origin · Round v{viewedBead.qaOrigin.version}</div>
+                    <div className="mt-2 space-y-3">
+                      {viewedBead.qaOrigin.sourceItems.map((source) => (
+                        <div key={source.itemId} className="text-xs">
+                          <p className="font-medium">{source.title ?? source.behavior ?? source.itemId} <code className="ml-1 text-[10px] text-muted-foreground">{source.itemId}</code></p>
+                          <p className="mt-1"><span className="font-medium text-red-700 dark:text-red-300">Observed:</span> {source.observation}</p>
+                          <p className="mt-1"><span className="font-medium text-green-700 dark:text-green-300">Expected:</span> {source.expectedResult}</p>
+                          {((source.evidence ?? source.evidenceRefs)?.length ?? 0) > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {(source.evidence ?? source.evidenceRefs)?.map((reference, index) => {
+                                const evidence = typeof reference === 'string' ? { name: reference } : reference
+                                const evidenceName = String(evidence.name ?? ('originalName' in evidence ? evidence.originalName : '') ?? '') || 'Evidence'
+                                const evidenceType = String(evidence.mediaType ?? ('mimeType' in evidence ? evidence.mimeType : '') ?? '')
+                                const apiEvidenceUrl = viewedBead.qaOrigin?.sourceTicketId && evidence.id
+                                  ? manualQaEvidenceUrl(viewedBead.qaOrigin.sourceTicketId, viewedBead.qaOrigin.version, source.itemId, evidence.id)
+                                  : ''
+                                const evidenceUrl = typeof evidence.url === 'string' ? evidence.url : apiEvidenceUrl
+                                const safePreview = (evidence.previewable === true || ('inlinePreview' in evidence && evidence.inlinePreview === true)) && evidenceUrl && ['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'].includes(evidenceType)
+                                const previewUrl = apiEvidenceUrl ? `${apiEvidenceUrl}?inline=true` : evidenceUrl
+                                return evidenceUrl ? <a key={evidence.id ?? `${evidenceName}:${index}`} href={evidenceUrl} target="_blank" rel="noreferrer" className="rounded border border-border bg-background p-1 text-[10px] text-primary hover:underline">{safePreview && <img src={previewUrl} alt={evidenceName} className="mb-1 h-16 max-w-28 object-contain" />}{evidenceName}</a> : <Badge key={`${evidenceName}:${index}`} variant="outline" className="text-[10px]">{evidenceName}</Badge>
+                              })}
+                            </div>
+                          )}
+                          {(source.links?.length ?? 0) > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {source.links?.map((link, index) => <a key={link.id ?? `${link.url}:${index}`} href={link.url} target="_blank" rel="noreferrer" className="rounded border border-border bg-background px-2 py-1 text-[10px] text-primary hover:underline">{link.label || link.url}</a>)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Timestamps */}
                 {(viewedBead.createdAt || viewedBead.startedAt || viewedBead.updatedAt || viewedBead.completedAt) && (

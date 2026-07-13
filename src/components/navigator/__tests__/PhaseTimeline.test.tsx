@@ -53,6 +53,27 @@ describe('PhaseTimeline', () => {
     expect(screen.getByText('Testing Implementation')).toBeInTheDocument()
   })
 
+  it('keeps visited Manual QA phases selectable after the loop returns to coding', () => {
+    const onSelect = vi.fn()
+    const ticket = makeTicket({
+      status: 'CODING',
+      visitedStatuses: ['GENERATING_QA_CHECKLIST', 'WAITING_MANUAL_QA'],
+      manualQa: {
+        activeVersion: 1,
+        completedRoundCount: 0,
+        latestOutcome: 'failed',
+        artifactAvailability: { checklist: true, results: true, coverage: true, summary: true },
+      },
+    })
+    renderWithProviders(<PhaseTimeline currentStatus="CODING" ticket={ticket} onSelectPhase={onSelect} />)
+
+    fireEvent.click(screen.getByText('Post-Implementation'))
+    const qaButton = screen.getByText(/^Manual QA \(v1\)$/).closest('button')
+    expect(qaButton).not.toBeDisabled()
+    fireEvent.click(qaButton!)
+    expect(onSelect).toHaveBeenCalledWith('WAITING_MANUAL_QA')
+  })
+
   it('shows persisted bead progress for a historical CODING timeline row', () => {
     const ticket = makeTicket({
       status: 'COMPLETED',

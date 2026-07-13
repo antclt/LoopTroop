@@ -1,6 +1,6 @@
 import { createActor } from 'xstate'
 import { ticketMachine } from './ticketMachine'
-import { STATUS_TO_PHASE, TERMINAL_STATES, type TicketContext } from './types'
+import { STATUS_TO_PHASE, TERMINAL_STATES, type ManualQaConfigurationSource, type TicketContext } from './types'
 import { PROFILE_DEFAULTS } from '../db/defaults'
 import { attachWorkflowRunner } from '../workflow/runner'
 import { broadcaster } from '../sse/broadcaster'
@@ -39,10 +39,16 @@ type TicketActorInput = {
   lockedMaxPrdCoveragePasses?: number | null
   lockedMaxBeadsCoveragePasses?: number | null
   lockedStructuredRetryCount?: number | null
+  lockedManualQaEnabled?: boolean | null
+  lockedManualQaSource?: ManualQaConfigurationSource | null
 }
 
 function isKnownWorkflowState(status: string): boolean {
   return Object.prototype.hasOwnProperty.call(STATUS_TO_PHASE, status)
+}
+
+function normalizeManualQaSource(value: string | null | undefined): ManualQaConfigurationSource | null {
+  return value === 'profile' || value === 'project' || value === 'ticket' ? value : null
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -86,6 +92,8 @@ function buildMachineContext(
     lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
     lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
+    lockedManualQaEnabled: input.lockedManualQaEnabled ?? null,
+    lockedManualQaSource: input.lockedManualQaSource ?? null,
     previousStatus: options.previousStatus ?? null,
     error: options.error ?? null,
     errorCodes: options.errorCodes ?? [],
@@ -156,6 +164,8 @@ function reconcileSnapshotForTicket(
   context.lockedMaxPrdCoveragePasses = input.lockedMaxPrdCoveragePasses ?? null
   context.lockedMaxBeadsCoveragePasses = input.lockedMaxBeadsCoveragePasses ?? null
   context.lockedStructuredRetryCount = input.lockedStructuredRetryCount ?? null
+  context.lockedManualQaEnabled = input.lockedManualQaEnabled ?? null
+  context.lockedManualQaSource = input.lockedManualQaSource ?? null
 
   if (
     dbStatus === 'BLOCKED_ERROR'
@@ -352,6 +362,8 @@ export function ensureActorForTicket(ticketRef: string | number) {
     lockedMaxPrdCoveragePasses: ticket.localTicket.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: ticket.localTicket.lockedMaxBeadsCoveragePasses ?? null,
     lockedStructuredRetryCount: ticket.localTicket.lockedStructuredRetryCount ?? null,
+    lockedManualQaEnabled: ticket.localTicket.lockedManualQaEnabled ?? null,
+    lockedManualQaSource: normalizeManualQaSource(ticket.localTicket.lockedManualQaSource),
   }
 
   if (ticket.localTicket.xstateSnapshot) {
@@ -429,6 +441,7 @@ function persistSnapshot(
       to: stateValue,
       previousStatus: previousStatus ?? null,
       phaseAttempt,
+      workflowRevision: updated.workflowRevision,
     }
     broadcaster.broadcast(resolvedTicketRef, 'state_change', payload)
     appendLogEvent(
@@ -501,6 +514,8 @@ export function createTicketActor(
       lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
       lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
       lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
+      lockedManualQaEnabled: input.lockedManualQaEnabled ?? null,
+      lockedManualQaSource: input.lockedManualQaSource ?? null,
     },
   })
 
@@ -537,6 +552,8 @@ function hydrateTicketActor(
       lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
       lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
       lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
+      lockedManualQaEnabled: input.lockedManualQaEnabled ?? null,
+      lockedManualQaSource: input.lockedManualQaSource ?? null,
     },
   })
 
@@ -573,6 +590,8 @@ export function hydrateAllTickets() {
       lockedMaxPrdCoveragePasses: ticket.lockedMaxPrdCoveragePasses ?? null,
       lockedMaxBeadsCoveragePasses: ticket.lockedMaxBeadsCoveragePasses ?? null,
       lockedStructuredRetryCount: ticket.lockedStructuredRetryCount ?? null,
+      lockedManualQaEnabled: ticket.lockedManualQaEnabled ?? null,
+      lockedManualQaSource: normalizeManualQaSource(ticket.lockedManualQaSource),
     }
 
     try {
@@ -677,6 +696,8 @@ export function revertTicketToApprovalStatus(
     lockedMaxPrdCoveragePasses: ticket.localTicket.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: ticket.localTicket.lockedMaxBeadsCoveragePasses ?? null,
     lockedStructuredRetryCount: ticket.localTicket.lockedStructuredRetryCount ?? null,
+    lockedManualQaEnabled: ticket.localTicket.lockedManualQaEnabled ?? null,
+    lockedManualQaSource: normalizeManualQaSource(ticket.localTicket.lockedManualQaSource),
   }, {
     skipFirstPersist: false,
     skipInitialWorkflowRun: options?.skipInitialWorkflowRun,

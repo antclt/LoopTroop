@@ -30,6 +30,8 @@ const BLOCKED_ERROR_RESUME_STATUSES = [
   'PREPARING_EXECUTION_ENV',
   'CODING',
   'RUNNING_FINAL_TEST',
+  'GENERATING_QA_CHECKLIST',
+  'WAITING_MANUAL_QA',
   'INTEGRATING_CHANGES',
   'CREATING_PULL_REQUEST',
   'WAITING_PR_REVIEW',
@@ -105,6 +107,7 @@ export const ticketMachine = setup({
     allBeadsComplete: ({ context }) =>
       context.beadProgress.completed >= context.beadProgress.total &&
       context.beadProgress.total > 0,
+    manualQaEnabled: ({ context }) => context.lockedManualQaEnabled === true,
   },
 }).createMachine({
   id: 'ticket',
@@ -125,6 +128,8 @@ export const ticketMachine = setup({
     lockedMaxPrdCoveragePasses: input.lockedMaxPrdCoveragePasses ?? null,
     lockedMaxBeadsCoveragePasses: input.lockedMaxBeadsCoveragePasses ?? null,
     lockedStructuredRetryCount: input.lockedStructuredRetryCount ?? null,
+    lockedManualQaEnabled: input.lockedManualQaEnabled ?? null,
+    lockedManualQaSource: input.lockedManualQaSource ?? null,
     previousStatus: null,
     error: null,
     errorCodes: [],
@@ -156,6 +161,8 @@ export const ticketMachine = setup({
             lockedMaxPrdCoveragePasses: ({ event }) => event.lockedMaxPrdCoveragePasses ?? null,
             lockedMaxBeadsCoveragePasses: ({ event }) => event.lockedMaxBeadsCoveragePasses ?? null,
             lockedStructuredRetryCount: ({ event }) => event.lockedStructuredRetryCount ?? null,
+            lockedManualQaEnabled: ({ event }) => event.lockedManualQaEnabled ?? false,
+            lockedManualQaSource: ({ event }) => event.lockedManualQaSource ?? null,
           }),
         },
         INIT_FAILED: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
@@ -426,8 +433,33 @@ export const ticketMachine = setup({
         { type: 'updateStatus', params: { status: 'RUNNING_FINAL_TEST' } },
       ],
       on: {
-        TESTS_PASSED: { target: 'INTEGRATING_CHANGES' },
+        TESTS_PASSED: [
+          { guard: 'manualQaEnabled', target: 'GENERATING_QA_CHECKLIST' },
+          { target: 'INTEGRATING_CHANGES' },
+        ],
         TESTS_FAILED: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
+        ERROR: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
+        CANCEL: { target: 'CANCELED' },
+      },
+    },
+    GENERATING_QA_CHECKLIST: {
+      entry: [
+        { type: 'updateStatus', params: { status: 'GENERATING_QA_CHECKLIST' } },
+      ],
+      on: {
+        QA_CHECKLIST_READY: { target: 'WAITING_MANUAL_QA' },
+        ERROR: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
+        CANCEL: { target: 'CANCELED' },
+      },
+    },
+    WAITING_MANUAL_QA: {
+      entry: [
+        { type: 'updateStatus', params: { status: 'WAITING_MANUAL_QA' } },
+      ],
+      on: {
+        MANUAL_QA_COMPLETE: { target: 'INTEGRATING_CHANGES' },
+        MANUAL_QA_SKIPPED: { target: 'INTEGRATING_CHANGES' },
+        MANUAL_QA_FIXES_CREATED: { target: 'CODING' },
         ERROR: { target: 'BLOCKED_ERROR', actions: ['recordError'] },
         CANCEL: { target: 'CANCELED' },
       },

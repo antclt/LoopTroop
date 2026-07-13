@@ -45,6 +45,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       folder_path TEXT NOT NULL,
       profile_id INTEGER,
       council_members TEXT,
+      manual_qa_override INTEGER,
       max_iterations INTEGER,
       per_iteration_timeout INTEGER,
       execution_setup_timeout INTEGER,
@@ -70,6 +71,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       total_beads INTEGER,
       percent_complete REAL,
       error_message TEXT,
+      manual_qa_override INTEGER,
       locked_main_implementer TEXT,
       locked_main_implementer_variant TEXT,
       locked_council_members TEXT,
@@ -80,6 +82,9 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       locked_max_prd_coverage_passes INTEGER,
       locked_max_beads_coverage_passes INTEGER,
       locked_structured_retry_count INTEGER,
+      locked_manual_qa_enabled INTEGER,
+      locked_manual_qa_source TEXT,
+      workflow_revision INTEGER NOT NULL DEFAULT 0,
       started_at TEXT,
       planned_date TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -107,6 +112,19 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       archived_reason TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       archived_at TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS manual_qa_operations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ticket_id INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+      action_id TEXT NOT NULL,
+      version INTEGER NOT NULL,
+      checklist_hash TEXT NOT NULL,
+      draft_revision INTEGER NOT NULL,
+      state TEXT NOT NULL DEFAULT 'staged',
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS opencode_sessions (
@@ -168,6 +186,8 @@ function initializeProjectSqlite(sqlite: Database.Database) {
     CREATE INDEX IF NOT EXISTS idx_project_tickets_status ON tickets(status);
     CREATE INDEX IF NOT EXISTS idx_project_tickets_external_id ON tickets(external_id);
     CREATE INDEX IF NOT EXISTS idx_phase_artifacts_ticket ON phase_artifacts(ticket_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_manual_qa_operations_ticket_action
+      ON manual_qa_operations(ticket_id, action_id);
     CREATE INDEX IF NOT EXISTS idx_sessions_ticket_phase ON opencode_sessions(ticket_id, phase, state);
     CREATE INDEX IF NOT EXISTS idx_opencode_sessions_session_id ON opencode_sessions(session_id);
     CREATE UNIQUE INDEX IF NOT EXISTS idx_ticket_error_occurrences_ticket_sequence
@@ -186,12 +206,17 @@ function initializeProjectSqlite(sqlite: Database.Database) {
   ensureColumn(sqlite, 'tickets', 'locked_max_prd_coverage_passes', 'INTEGER')
   ensureColumn(sqlite, 'tickets', 'locked_max_beads_coverage_passes', 'INTEGER')
   ensureColumn(sqlite, 'tickets', 'locked_structured_retry_count', 'INTEGER')
+  ensureColumn(sqlite, 'tickets', 'manual_qa_override', 'INTEGER')
+  ensureColumn(sqlite, 'tickets', 'locked_manual_qa_enabled', 'INTEGER')
+  ensureColumn(sqlite, 'tickets', 'locked_manual_qa_source', 'TEXT')
+  ensureColumn(sqlite, 'tickets', 'workflow_revision', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(sqlite, 'tickets', 'locked_main_implementer_variant', 'TEXT')
   ensureColumn(sqlite, 'tickets', 'locked_council_member_variants', 'TEXT')
   ensureColumn(sqlite, 'opencode_sessions', 'phase_attempt', 'INTEGER DEFAULT 1')
   ensureColumn(sqlite, 'opencode_sessions', 'step', 'TEXT')
   ensureColumn(sqlite, 'ticket_error_occurrences', 'diagnostic_details', 'TEXT')
   ensureColumn(sqlite, 'projects', 'execution_setup_timeout', 'INTEGER')
+  ensureColumn(sqlite, 'projects', 'manual_qa_override', 'INTEGER')
   ensureColumn(sqlite, 'phase_artifacts', 'phase_attempt', 'INTEGER NOT NULL DEFAULT 1')
   ensureColumn(sqlite, 'phase_artifacts', 'updated_at', 'TEXT')
 
@@ -224,6 +249,10 @@ function cleanupProjectForeignKeyOrphans(sqlite: Database.Database) {
       OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
 
     DELETE FROM ticket_phase_attempts
+    WHERE ticket_id NOT IN (SELECT id FROM tickets)
+      OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
+
+    DELETE FROM manual_qa_operations
     WHERE ticket_id NOT IN (SELECT id FROM tickets)
       OR ticket_id IN (SELECT id FROM tickets WHERE project_id NOT IN (SELECT id FROM projects));
 

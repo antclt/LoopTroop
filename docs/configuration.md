@@ -12,7 +12,8 @@ LoopTroop applies configuration in three layers:
 | Layer | What it controls | When it applies |
 | --- | --- | --- |
 | Profile | App-wide baseline values | Used whenever no project override exists |
-| Project override | Optional overrides for a small execution/planning subset | Applied when a phase reads that setting |
+| Project override | Optional overrides for a small execution/planning subset, including Manual QA | Applied when the value is resolved |
+| Ticket override | Optional Draft-only Manual QA choice | Wins over project and profile when the ticket starts |
 | Ticket start lock | Frozen planning-critical values captured on **Start** | Stays fixed for that ticket run |
 
 The main UI edits the singleton profile. Project-level overrides are supported by the project API / local project state even though there is no full project-override editor in the main configuration modal. The overrideable fields are:
@@ -24,6 +25,7 @@ The main UI edits the singleton profile. Project-level overrides are supported b
 - `councilResponseTimeout` (`AI Response Timeout`)
 - `minCouncilQuorum`
 - `interviewQuestions`
+- `manualQaOverride`
 
 If a project override is set, it wins over the profile for that field. Fields without project-override support always come from the profile.
 
@@ -39,6 +41,7 @@ These values are captured before the ticket enters `SCANNING_RELEVANT_FILES` and
 | Coverage Follow-Up Budget | Interview follow-up budget is part of the approved planning envelope |
 | Interview / PRD / Beads Coverage Passes | Coverage-loop budgets must stay stable for that ticket |
 | Structured Output Retries | Repair behavior must stay stable across the ticket's structured phases |
+| Manual QA effective value + source | The post-test route must not change after work starts; missing locks on older/in-progress tickets mean disabled |
 
 ### What is read later instead of locked
 
@@ -101,12 +104,27 @@ This is meant to answer two quick questions without opening logs or artifacts:
 | [Interview Coverage Passes](#interview-coverage-passes) | 2 | 1–10 | Coverage | ticket start lock |
 | [PRD Coverage Passes](#prd-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
 | [Beads Coverage Passes](#beads-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
+| [Manual QA](#manual-qa) | disabled | enabled / disabled | Post-Implementation | ticket start lock |
 | [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Execution Phase | next coding/final-test attempt |
 | [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Execution Phase | next execution-setup attempt |
 | [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Execution Phase | next execution/final-test attempt |
 | [Tool Input Max Chars](#tool-input-max-chars) | 4,000 | 500–50,000 | Logging | live log formatting (cached briefly) |
 | [Tool Output Max Chars](#tool-output-max-chars) | 12,000 | 1,000–100,000 | Logging | live log formatting (cached briefly) |
 | [Tool Error Max Chars](#tool-error-max-chars) | 6,000 | 500–50,000 | Logging | live log formatting (cached briefly) |
+
+## Manual QA
+
+Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. The Project form and a ticket's collapsed **Advanced** section expose `Inherit / Enabled / Disabled`; the same ticket control remains available in the Draft workspace until **Start**.
+
+Resolution is deterministic:
+
+1. a non-null ticket `manualQaOverride` wins;
+2. otherwise a non-null project `manualQaOverride` wins;
+3. otherwise the profile `manualQaEnabled` boolean is used.
+
+On Start, LoopTroop persists both `lockedManualQaEnabled` and `lockedManualQaSource` (`ticket`, `project`, or `profile`). Only Draft tickets may change their override, and later profile/project edits cannot change the route of a started ticket. Existing in-progress tickets that do not have a locked value behave as disabled.
+
+When the lock is disabled, `TESTS_PASSED` keeps the direct `RUNNING_FINAL_TEST → INTEGRATING_CHANGES` route. When enabled, it enters `GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA`; a submitted failure creates QA-fix beads and loops through Coding and fresh final tests before the next checklist version.
 
 ---
 

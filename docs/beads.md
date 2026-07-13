@@ -481,6 +481,16 @@ LoopTroop's bead-and-execution model gives it:
 
 That combination is what makes the system durable at repository scale rather than just "a coding chat that ran for a long time."
 
+### Manual QA fix beads
+
+When an enabled Manual QA round is submitted with any explicit Fail, LoopTroop creates normal pending beads with `issueType: qa-fix` and the `manual-looptroop-qa` label. Related failures may share a user-selected merge group; every ungrouped failure gets its own deterministic bead. They are prioritized after existing beads, do not depend on already-completed work, carry affected target files where known, and include deterministic acceptance criteria/tests derived from the source checklist behavior and expected result.
+
+Each QA bead has typed `qaOrigin` containing the Manual QA version, all source item IDs/lineages, observations, expected behavior, evidence references, and its deterministic origin/action identity. This is displayed as a **Manual QA Fix** badge in Coding, bead Details, selected-bead, artifact, and log views. It is intentionally separate from ordinary retry `notes`: a provider/test retry must not overwrite or masquerade as the user's QA observation.
+
+Scheduling, execution, commits, metrics, retry/reset behavior, and final tests remain the standard bead pipeline. Before the first QA bead, Manual QA generation has already checkpointed accepted final-test effects and removed/quarantined residue from the Git-visible worktree, preventing a fix bead from sweeping unrelated runtime files into its commit. When all QA-fix beads finish, the ticket receives a fresh final-test attempt and, on success, a new checklist version.
+
+Image evidence is handled through OpenCode SDK file parts. If the locked model advertises image input, all detected image files for the bead are attached with no additional prompt-size cap; non-images remain referenced. A false/unavailable capability records `references_only`. Provider/context overflow follows normal bead error recovery—LoopTroop does not silently omit selected images.
+
 ---
 
 ## Related Docs

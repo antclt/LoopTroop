@@ -225,6 +225,13 @@ const PHASE_OUTPUTS: Record<string, ContextItem[]> = {
   RUNNING_FINAL_TEST: [
     outputItem('test-report', 'Test Report', 'tests', 'Final verification for integration.'),
   ],
+  GENERATING_QA_CHECKLIST: [
+    outputItem('manual-qa-checklist', 'Manual QA Checklist', 'manual_qa_checklist', 'Generated user-run checks and advisory PRD coverage.'),
+  ],
+  WAITING_MANUAL_QA: [
+    outputItem('manual-qa-checklist', 'Manual QA Checklist', 'manual_qa_checklist', 'Immutable checklist for the selected round.'),
+    outputItem('manual-qa-results', 'Manual QA Results', 'manual_qa_results', 'Autosaved or submitted results and evidence references.'),
+  ],
   INTEGRATING_CHANGES: [
     outputItem('candidate-commit', 'Candidate Commit', 'tests', 'Squashed commit for PR creation.'),
   ],

@@ -16,9 +16,10 @@ export type WorkflowGroupId =
   | 'post_implementation'
   | 'done'
   | 'errors'
-type WorkflowUIView = 'draft' | 'council' | 'interview_qa' | 'approval' | 'coding' | 'error' | 'done' | 'canceled'
+type WorkflowUIView = 'draft' | 'council' | 'interview_qa' | 'approval' | 'coding' | 'manual_qa' | 'error' | 'done' | 'canceled'
 /** Artifact types that support user editing from an approval gate. */
 export type EditableArtifactType = 'interview' | 'prd' | 'beads' | 'execution_setup_plan'
+export type ReviewArtifactType = EditableArtifactType | 'manual_qa_checklist'
 /**
  * Keys identifying the context data artifacts that each workflow phase receives.
  * Each key maps to a labeled description shown in the Details dialog.
@@ -42,6 +43,9 @@ export type WorkflowContextKey =
   | 'execution_setup_profile'
   | 'execution_setup_notes'
   | 'final_test_notes'
+  | 'manual_qa_previous'
+  | 'manual_qa_checklist'
+  | 'manual_qa_results'
   | 'error_context'
 
 /** Content shown in the "Details" dialog for a workflow phase — overview, steps, outputs, transitions, notes, and cross-references to equivalent steps. */
@@ -67,7 +71,7 @@ export interface WorkflowPhaseMeta {
   uiView: WorkflowUIView
   editable: boolean
   multiModelLogs: boolean
-  reviewArtifactType?: EditableArtifactType
+  reviewArtifactType?: ReviewArtifactType
   progressKind?: 'questions' | 'beads'
   /** Context keys whose descriptions are shown in the "Context" section of the Details dialog. */
   contextSummary: WorkflowContextKey[]
@@ -850,6 +854,62 @@ const WORKFLOW_PHASE_DETAILS = {
       'Why generate tests dynamically? The main implementer can create tests tailored to what was actually implemented, rather than relying on pre-written tests that might not exist for new features.',
     ],
   },
+  GENERATING_QA_CHECKLIST: {
+    overview: 'LoopTroop automatically prepares the next versioned Manual QA checklist after final tests pass. This is an automation-only checkpoint: no user action is requested, and LoopTroop never starts, stops, previews, or controls the user’s application.',
+    steps: [
+      'Clean Checkpoint Preparation: LoopTroop resolves the final-test file-effects audit, checkpoints accepted candidate changes, quarantines ticket-owned test residue, and records a clean workspace baseline for detecting later application drift.',
+      'Version Reservation: The next `vN` directory is reserved before model work. Restarts and structured-output retries reuse that reservation so a valid existing checklist advances idempotently without a duplicate model call.',
+      'Focused Context Assembly: The locked main implementer receives ticket details, the frozen approved PRD, selected bead fields, the current final-test report, the latest prior Manual QA artifacts, and targeted diff metadata. Repository-wide raw dumps are prohibited.',
+      'Checklist Generation and Validation: One strict tagged YAML response supplies checklist items and PRD references. Formatting-only repairs may normalize envelopes, YAML syntax, and aliases, but never invent checklist text, actions, observations, or expected results. Invalid PRD references use the normal structured-output retry policy.',
+      'Coverage Computation: LoopTroop derives stable acceptance-criterion references from the approved PRD and computes full, partial, or uncovered advisory coverage in code without a second model call.',
+      'Persistence: The canonical checklist, coverage, generation reservation, and workspace baseline are written under `.ticket/manual-qa/vN/`, with compact append-only copies stored as phase artifacts.',
+    ],
+    outputs: [
+      'A validated, immutable `manual_qa_checklist` artifact with app-assigned item/version ids, stable lineage, behavior and severity metadata, prerequisites, actions, expected results, watch notes, bead references, and PRD references.',
+      'Advisory PRD coverage showing covered, partially covered, and uncovered acceptance criteria.',
+      'A clean Manual QA workspace baseline and durable version reservation for restart-safe generation.',
+    ],
+    transitions: [
+      'Checklist Ready → Waiting for Manual QA: A valid durable checklist advances automatically to the user-run verification gate.',
+      'Generation, Validation, or Checkpoint Failure → Blocked Error: Failures pause in recoverable error handling. Retry reuses the reserved version and any already valid artifacts.',
+      'Cancel → Canceled: Cancellation stops workflow automation while preserving generated artifacts for audit.',
+    ],
+    notes: [
+      'No user action is required in this phase; the Manual QA screen presents a generation/loading explanation only.',
+      'LoopTroop does not launch or interact with the application being tested. The application remains entirely user-controlled.',
+      'Coverage gaps are advisory and do not by themselves block the checklist.',
+    ],
+  },
+  WAITING_MANUAL_QA: {
+    overview: 'LoopTroop waits while the user runs the application and verifies the generated checklist. Results and evidence autosave, but no integration, fix bead, or improvement ticket is created until the user explicitly submits or skips the round.',
+    steps: [
+      'User-Run Verification: The user starts and controls the application outside LoopTroop, follows each item’s prerequisites and actions, and compares observed behavior with the expected result and watch notes.',
+      'Autosaved Draft: Pass, Fail, Waive, Improvement, Pending, notes, merge groups, improvement drafts, and evidence references save through revision-checked UI state. The five-second debounce and page-unload keepalive preserve in-progress work.',
+      'Result Validation: Required items must be Pass, Fail, or Waive; optional items may remain Pending. Fail requires an observation, Waive requires a reason, and every Improvement requires a reviewed title and description draft.',
+      'Evidence Handling: Arbitrary local evidence can be uploaded and downloaded. Only safe raster formats preview inline; unsafe or unknown content is always served as an attachment and never rendered by the application.',
+      'Workspace Drift Gate: Before Submit or Skip, LoopTroop compares project files with the saved QA baseline. Audited application-created drift must be explicitly included in a checkpoint or discarded before the action can continue.',
+      'Submission Journal: Final submission durably stages results, receipts, deterministic QA fix beads, and one independent Draft backlog ticket per Improvement. Restart retries resume the same action without duplicating work.',
+      'Waiver and Skip Paths: Required waivers are recorded in a `waived_through` outcome. Skip preserves the current draft and optional reason but creates no drafted improvements or QA fix beads.',
+      'Loop Outcome: Passing, waived-through, or skipped rounds advance to integration. Any explicit Fail creates QA fix work, archives the current round attempts, and returns the ticket to Coding; successful fixes receive fresh final tests and a new checklist version.',
+    ],
+    outputs: [
+      'Autosaved live draft plus an immutable submission snapshot and canonical versioned results/summary receipts.',
+      'Secure evidence metadata and disk-only files, with copied provenance for any created improvement tickets or QA fix work.',
+      'A final outcome of `passed`, `waived_through`, `skipped`, or `created_fixes`, including created fix bead and improvement ticket ids.',
+    ],
+    transitions: [
+      'Pass or Optional-Pending Completion → Preparing Final Commit: With no failures and no required waivers, submission records `passed` and advances to integration.',
+      'Required Waivers → Preparing Final Commit: Submission records `waived_through` and advances to integration.',
+      'Skip → Preparing Final Commit: Skip archives the partial draft, records `skipped`, creates no work, and advances to integration.',
+      'Any Failure → Implementing: Submission creates deterministic Manual QA fix beads, records `created_fixes`, and returns to Coding. Improvements submitted in the same action remain independent backlog tickets.',
+      'System Failure → Stays Waiting or Blocked Error: Restart-safe creation failures remain in this gate for resumption; unrecoverable workflow errors use Blocked Error.',
+    ],
+    notes: [
+      'LoopTroop never starts, stops, previews, or otherwise controls the user’s application.',
+      'Retry notes for normal bead failures remain separate from typed Manual QA origin data.',
+      'Historical checklist versions remain selectable read-only after the ticket loops back to Coding or advances.',
+    ],
+  },
   INTEGRATING_CHANGES: {
     overview: 'LoopTroop turns the unsquashed ticket branch (which may contain many small commits from individual bead executions) into a single, clean candidate commit ready for pull-request creation. This produces one reviewable squash commit on the ticket branch while preserving the earlier bead-level history in the audit trail and respecting the final-test file effects audit.',
     steps: [
@@ -1410,6 +1470,32 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
     editable: false,
     multiModelLogs: false,
     contextSummary: ['ticket_details', 'prd', 'beads', 'final_test_notes'],
+  },
+  {
+    id: 'GENERATING_QA_CHECKLIST',
+    label: 'Preparing Manual QA',
+    description: 'LoopTroop is preparing a human-facing Manual QA checklist from the approved ticket context, final test result, previous QA rounds, and focused implementation evidence.',
+    details: WORKFLOW_PHASE_DETAILS.GENERATING_QA_CHECKLIST,
+    kanbanPhase: 'in_progress',
+    groupId: 'post_implementation',
+    uiView: 'manual_qa',
+    editable: false,
+    multiModelLogs: false,
+    reviewArtifactType: 'manual_qa_checklist',
+    contextSummary: ['ticket_details', 'prd', 'beads', 'tests', 'manual_qa_previous'],
+  },
+  {
+    id: 'WAITING_MANUAL_QA',
+    label: 'Manual QA',
+    description: 'LoopTroop is waiting for the user to complete, waive, skip, or submit the Manual QA checklist before final integration.',
+    details: WORKFLOW_PHASE_DETAILS.WAITING_MANUAL_QA,
+    kanbanPhase: 'needs_input',
+    groupId: 'post_implementation',
+    uiView: 'manual_qa',
+    editable: false,
+    multiModelLogs: false,
+    reviewArtifactType: 'manual_qa_checklist',
+    contextSummary: ['manual_qa_checklist', 'manual_qa_results'],
   },
   {
     id: 'INTEGRATING_CHANGES',

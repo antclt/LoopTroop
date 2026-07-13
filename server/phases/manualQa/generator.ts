@@ -1,0 +1,255 @@
+import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { resolve } from 'node:path'
+import { z } from 'zod'
+import type { TicketContext, TicketEvent } from '../../machines/types'
+import type { PrdDocument } from '../../structuredOutput/types'
+import { parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
+import { readJsonl } from '../../io/jsonl'
+import type { Bead } from '../beads/types'
+import { getLatestPhaseArtifact, getTicketPaths, insertPhaseArtifact, resolvePhaseAttempt } from '../../storage/tickets'
+import { runOpenCodePrompt } from '../../workflow/runOpenCodePrompt'
+import { adapter } from '../../workflow/phases/state'
+import {
+  resolveAiResponseRuntimeSettings,
+  resolveStructuredRetryRuntimeSettings,
+} from '../../workflow/phases/helpers'
+import { prepareManualQaCheckpoint } from './checkpoint'
+import { deriveManualQaPrdCriteria, computeManualQaCoverage } from './coverage'
+import { MANUAL_QA_CHECKLIST_TAG, parseManualQaChecklistOutput } from './parser'
+import {
+  allocateNextManualQaVersion,
+  completeManualQaReservation,
+  getManualQaChecklistHash,
+  listManualQaVersions,
+  persistManualQaChecklist,
+  persistManualQaCoverage,
+  readManualQaChecklist,
+  readManualQaCoverage,
+  readManualQaSummary,
+  reserveManualQaVersion,
+} from './storage'
+
+const PrdSchema = z.object({
+  epics: z.array(z.object({
+    id: z.string().trim().min(1),
+    user_stories: z.array(z.object({
+      id: z.string().trim().min(1),
+      acceptance_criteria: z.array(z.string()),
+    }).passthrough()),
+  }).passthrough()),
+}).passthrough()
+
+function resolveGenerationVersion(ticketDir: string): number {
+  const root = resolve(ticketDir, 'manual-qa')
+  if (existsSync(root)) {
+    const reserved = readdirSync(root)
+      .map((name) => name.match(/^generation-reservation-v([1-9]\d*)\.json$/)?.[1])
+      .filter((value): value is string => Boolean(value))
+      .map(Number)
+      .sort((left, right) => left - right)
+    for (const version of reserved) {
+      if (!readManualQaChecklist(ticketDir, version)) return version
+    }
+  }
+  return allocateNextManualQaVersion(ticketDir)
+}
+
+function readApprovedPrd(ticketDir: string): PrdDocument {
+  const path = resolve(ticketDir, 'prd.yaml')
+  if (!existsSync(path)) throw new Error('Approved PRD is required before Manual QA checklist generation.')
+  const parsed = PrdSchema.parse(parseYamlOrJsonCandidate(readFileSync(path, 'utf8')))
+  return parsed as unknown as PrdDocument
+}
+
+function focusedDiffMetadata(worktreePath: string): string {
+  const result = spawnSync('git', [
+    '-C', worktreePath,
+    'show', '--format=', '--name-status', '--stat=120,80', 'HEAD',
+    '--', '.', ':(top,exclude).ticket', ':(top,exclude).looptroop',
+  ], { encoding: 'utf8', timeout: 30_000 })
+  if (result.status !== 0) return 'Focused diff metadata unavailable.'
+  return (result.stdout ?? '').trim().slice(0, 80_000) || 'No candidate file metadata was reported.'
+}
+
+function compactBeads(beadsPath: string): Array<Pick<Bead, 'id' | 'title' | 'description' | 'prdRefs' | 'targetFiles' | 'acceptanceCriteria'>> {
+  return readJsonl<Bead>(beadsPath).map((bead) => ({
+    id: bead.id,
+    title: bead.title,
+    description: bead.description,
+    prdRefs: bead.prdRefs,
+    targetFiles: bead.targetFiles,
+    acceptanceCriteria: bead.acceptanceCriteria,
+  }))
+}
+
+function buildGenerationPrompt(input: {
+  context: TicketContext
+  prd: PrdDocument
+  beads: ReturnType<typeof compactBeads>
+  finalTestReport: string
+  previousQa: unknown
+  diffMetadata: string
+}): string {
+  return [
+    '# Manual QA checklist generation',
+    'Create a concise human-run checklist for the implemented user-facing behavior.',
+    'LoopTroop will never start, stop, preview, or control the user application. Do not instruct LoopTroop to do so.',
+    'Use only the supplied ticket/PRD/bead/final-test/previous-QA context. You may use read-only tools for focused diff inspection, but do not dump the repository.',
+    '',
+    `Return exactly one <${MANUAL_QA_CHECKLIST_TAG}> tagged YAML document with this strict shape:`,
+    'summary: string',
+    'items:',
+    '  - lineage_id: stable-kebab-id',
+    '    prior_item_ids: [prior version item IDs]',
+    '    source: prd | bead | final_test | previous_qa | implementation',
+    '    behavior: string',
+    '    severity: critical | high | medium | low',
+    '    required: boolean',
+    '    recheck_state: pending | pending_recheck | previously_passed',
+    '    prerequisites: [string]',
+    '    actions: [string] # at least one',
+    '    expected_result: string',
+    '    watch_notes: [string]',
+    '    bead_refs: [bead-id]',
+    '    prd_refs:',
+    '      - ref: <epic-id>/<story-id>/AC-<1-based-index>',
+    '        coverage: full | partial',
+    'Do not add fields. Use only valid PRD criterion refs shown below. Coverage gaps are advisory; never invent refs.',
+    '',
+    'Later-round rules: preserve relevant lineage/structure; failed/fixed or affected passed/waived items become pending_recheck; unaffected passed items may be previously_passed; omit unaffected waived items; add items only for newly affected user-facing behavior.',
+    '',
+    '## Ticket',
+    JSON.stringify({ id: input.context.externalId, title: input.context.title }, null, 2),
+    '',
+    '## Approved PRD',
+    JSON.stringify(input.prd, null, 2),
+    '',
+    '## Selected bead fields',
+    JSON.stringify(input.beads, null, 2),
+    '',
+    '## Current final-test report',
+    input.finalTestReport || 'No report content available.',
+    '',
+    '## Latest previous Manual QA artifacts',
+    JSON.stringify(input.previousQa, null, 2),
+    '',
+    '## Focused candidate diff metadata',
+    input.diffMetadata,
+  ].join('\n')
+}
+
+function persistGenerationArtifacts(ticketId: string, version: number, checklistContent: string, coverage: unknown): void {
+  const phase = 'GENERATING_QA_CHECKLIST'
+  const phaseAttempt = resolvePhaseAttempt(ticketId, phase)
+  const existing = getLatestPhaseArtifact(ticketId, 'manual_qa_checklist', phase, phaseAttempt)
+  if (!existing || !existing.content.includes(`"version":${version}`)) {
+    insertPhaseArtifact(ticketId, {
+      phase,
+      phaseAttempt,
+      artifactType: 'manual_qa_checklist',
+      content: JSON.stringify({ version, checklist: checklistContent }),
+    })
+    insertPhaseArtifact(ticketId, {
+      phase,
+      phaseAttempt,
+      artifactType: 'manual_qa_coverage',
+      content: JSON.stringify(coverage),
+    })
+  }
+}
+
+export async function handleManualQaChecklistGeneration(
+  ticketId: string,
+  context: TicketContext,
+  sendEvent: (event: TicketEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const paths = getTicketPaths(ticketId)
+  if (!paths) throw new Error(`Ticket storage was not found: ${ticketId}`)
+  const version = resolveGenerationVersion(paths.ticketDir)
+  const reservation = reserveManualQaVersion(paths.ticketDir, ticketId, version)
+
+  prepareManualQaCheckpoint(ticketId, version)
+
+  const existingChecklist = readManualQaChecklist(paths.ticketDir, version)
+  const existingCoverage = readManualQaCoverage(paths.ticketDir, version)
+  if (existingChecklist && existingCoverage) {
+    const checklistHash = getManualQaChecklistHash(paths.ticketDir, version)
+    if (!checklistHash) throw new Error('Existing Manual QA checklist hash is unavailable.')
+    completeManualQaReservation(paths.ticketDir, reservation, checklistHash)
+    persistGenerationArtifacts(ticketId, version, JSON.stringify(existingChecklist), existingCoverage)
+    sendEvent({ type: 'QA_CHECKLIST_READY' })
+    return
+  }
+
+  const model = context.lockedMainImplementer?.trim()
+  if (!model) throw new Error('Manual QA generation requires the locked main implementer model.')
+  const prd = readApprovedPrd(paths.ticketDir)
+  const criteria = deriveManualQaPrdCriteria(prd)
+  const priorVersion = listManualQaVersions(paths.ticketDir).filter((candidate) => candidate < version).at(-1)
+  const previousQa = priorVersion
+    ? {
+        checklist: readManualQaChecklist(paths.ticketDir, priorVersion),
+        summary: readManualQaSummary(paths.ticketDir, priorVersion),
+      }
+    : null
+  const finalTestReport = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')?.content ?? ''
+  const basePrompt = buildGenerationPrompt({
+    context,
+    prd,
+    beads: compactBeads(paths.beadsPath),
+    finalTestReport,
+    previousQa,
+    diffMetadata: focusedDiffMetadata(paths.worktreePath),
+  })
+  const timeoutMs = resolveAiResponseRuntimeSettings(context).timeoutMs
+  const maxRetries = resolveStructuredRetryRuntimeSettings(context).structuredRetryCount
+  let correction = ''
+  let lastError = 'Manual QA checklist generation failed.'
+
+  for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    const result = await runOpenCodePrompt({
+      adapter,
+      projectPath: paths.worktreePath,
+      parts: [{ type: 'text', content: `${basePrompt}${correction}` }],
+      signal,
+      timeoutMs,
+      timeoutKind: 'ai_response',
+      model,
+      variant: context.lockedMainImplementerVariant ?? undefined,
+      toolPolicy: 'read_only',
+      sessionOwnership: {
+        ticketId,
+        phase: 'GENERATING_QA_CHECKLIST',
+        phaseAttempt: resolvePhaseAttempt(ticketId, 'GENERATING_QA_CHECKLIST'),
+        memberId: model,
+        step: attempt === 0 ? 'generate' : `structured-retry-${attempt}`,
+        forceFresh: attempt > 0,
+      },
+    })
+    const parsed = parseManualQaChecklistOutput(result.response, {
+      ticketId: context.externalId,
+      version,
+      prdCriteria: criteria,
+    })
+    if (parsed.ok) {
+      const checklistHash = persistManualQaChecklist(paths.ticketDir, parsed.value)
+      const coverage = computeManualQaCoverage(parsed.value, criteria)
+      persistManualQaCoverage(paths.ticketDir, coverage)
+      completeManualQaReservation(paths.ticketDir, reservation, checklistHash)
+      persistGenerationArtifacts(ticketId, version, parsed.normalizedContent, coverage)
+      sendEvent({ type: 'QA_CHECKLIST_READY' })
+      return
+    }
+    lastError = parsed.error
+    correction = [
+      '\n\n## Structured-output correction',
+      `The previous response was invalid: ${parsed.error}`,
+      `Return a corrected response in exactly one <${MANUAL_QA_CHECKLIST_TAG}> tag. Formatting repairs may not invent checklist content, actions, observations, or expected results.`,
+      'Previous invalid response (for correction only):',
+      result.response.slice(0, 50_000),
+    ].join('\n')
+  }
+  throw new Error(lastError)
+}
