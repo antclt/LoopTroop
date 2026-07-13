@@ -100,7 +100,7 @@ describe('TicketForm', () => {
     expect(screen.getByText('bold').tagName).toBe('STRONG')
   })
 
-  it('shows only enabled and disabled Manual QA choices for ordinary new tickets', () => {
+  it('shows only enabled and disabled Manual QA choices for ordinary new tickets', async () => {
     renderWithProviders(
       <UIContext.Provider value={makeUIValue()}>
         <TicketForm onClose={vi.fn()} />
@@ -111,6 +111,13 @@ describe('TicketForm', () => {
     expect(screen.getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
+    const helpLink = screen.getByRole('link', { name: 'Open documentation for ticket Manual QA checkpoint' })
+    expect(helpLink).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
+    fireEvent.focus(helpLink)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent('Choose whether this ticket pauses for your verification after final tests.')
 
     fireEvent.change(screen.getByPlaceholderText('Brief summary of the work'), { target: { value: 'Verify checkout' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create Ticket' }))

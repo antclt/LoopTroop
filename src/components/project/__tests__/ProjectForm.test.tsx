@@ -100,6 +100,10 @@ describe('ProjectForm', () => {
 
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('link', { name: 'Open documentation for project Manual QA checkpoint' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
 
     fireEvent.change(screen.getByLabelText(/Project Name/i), { target: { value: 'Mounted Repo' } })
     fireEvent.change(screen.getByLabelText(/Short Name/i), { target: { value: 'MNT' } })

@@ -122,6 +122,10 @@ describe('DraftView', () => {
     expect(screen.getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('link', { name: 'Open documentation for ticket Manual QA checkpoint' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
   })
 
   it('mounts the draft log viewer immediately when start begins and keeps it open on failure', async () => {

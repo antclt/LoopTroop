@@ -20,6 +20,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added contextual Manual QA help links to global Configuration, Project settings, new-ticket Advanced settings, and the Draft ticket workspace, with scope-specific tooltip guidance and direct navigation to the relevant documentation.
 - Added the `GENERATING_QA_CHECKLIST` and `WAITING_MANUAL_QA` post-implementation statuses, versioned strict checklist/results/coverage schemas, stable item lineage, code-computed approved-PRD criterion coverage, and restart-safe generation reservations.
 - Added profile-level Manual QA enablement (off by default), project/ticket `Enabled / Disabled` controls, Draft-only ticket editing, and frozen effective value/source fields at ticket Start.
 - Added a lazy Manual QA workspace with generation guidance, required/optional result validation, pass/fail/waive/improvement/pending controls, five-second revision-checked autosave, evidence management, failure merge groups, improvement review, drift recovery, skip, and read-only historical rounds.

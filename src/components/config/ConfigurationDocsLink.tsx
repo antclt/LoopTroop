@@ -5,10 +5,11 @@ import { cn } from '@/lib/utils'
 interface ConfigurationDocsLinkProps {
   docsPath: string
   label: string
+  description?: string
   className?: string
 }
 
-export function ConfigurationDocsLink({ docsPath, label, className }: ConfigurationDocsLinkProps) {
+export function ConfigurationDocsLink({ docsPath, label, description = 'Open detailed documentation', className }: ConfigurationDocsLinkProps) {
   const href = `${__LOOPTROOP_DOCS_ORIGIN__}${docsPath.startsWith('/') ? docsPath : `/${docsPath}`}`
 
   return (
@@ -27,7 +28,7 @@ export function ConfigurationDocsLink({ docsPath, label, className }: Configurat
           <CircleHelp className="h-3.5 w-3.5" />
         </a>
       </TooltipTrigger>
-      <TooltipContent>Open detailed documentation</TooltipContent>
+      <TooltipContent className="max-w-xs text-xs leading-relaxed">{description}</TooltipContent>
     </Tooltip>
   )
 }

@@ -116,6 +116,8 @@ This is meant to answer two quick questions without opening logs or artifacts:
 
 Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. Configuration, Project, and ticket controls expose only `Enabled / Disabled`; new project and ticket saves persist the selected boolean explicitly. Legacy unset values remain readable and display their resolved parent/default boolean until the user chooses an explicit value. The ticket control remains available in the Draft workspace until **Start**.
 
+The help button beside each Manual QA control briefly explains that scope and opens this section in the documentation.
+
 Resolution is deterministic:
 
 1. a non-null ticket `manualQaOverride` wins;

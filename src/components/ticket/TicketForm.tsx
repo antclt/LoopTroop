@@ -14,6 +14,7 @@ import { TicketDescriptionTabs, type TicketDescriptionMode } from './TicketDescr
 import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
 import { resolveManualQaSettingLabel, type ManualQaOverride } from '@/lib/manualQaSetting'
 import { useProfile } from '@/hooks/useProfile'
+import { ConfigurationDocsLink } from '@/components/config/ConfigurationDocsLink'
 
 interface TicketFormProps {
   onClose: () => void
@@ -245,7 +246,14 @@ export function TicketForm({ onClose }: TicketFormProps) {
               <div className="border-t border-border p-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
-                    <label className="text-sm font-medium">Manual QA checkpoint</label>
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-sm font-medium">Manual QA checkpoint</label>
+                      <ConfigurationDocsLink
+                        docsPath="/configuration#manual-qa"
+                        label="ticket Manual QA checkpoint"
+                        description="Choose whether this ticket pauses for your verification after final tests. Open the Manual QA documentation."
+                      />
+                    </div>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Effective setting: <span className="font-medium text-foreground">{effectiveManualQa.enabled ? 'Enabled' : 'Disabled'}</span> from {effectiveManualQa.source === 'profile' ? 'global configuration' : effectiveManualQa.source}.
                     </p>

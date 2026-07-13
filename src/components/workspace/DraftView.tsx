@@ -14,6 +14,7 @@ import { TicketDescriptionTabs, type TicketDescriptionMode } from '@/components/
 import { TicketDescriptionViewer } from '@/components/ticket/TicketDescriptionViewer'
 import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
 import { resolveManualQaSettingLabel, type ManualQaOverride } from '@/lib/manualQaSetting'
+import { ConfigurationDocsLink } from '@/components/config/ConfigurationDocsLink'
 
 const PRIORITY_LABELS: Record<number, string> = { 1: 'Very High', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Very Low' }
 const PRIORITY_COLORS: Record<number, string> = {
@@ -288,7 +289,14 @@ export function DraftView({ ticket }: DraftViewProps) {
           <div className="w-full rounded-md border border-border p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <h4 className="text-xs font-medium">Manual QA checkpoint</h4>
+                <div className="flex items-center gap-1.5">
+                  <h4 className="text-xs font-medium">Manual QA checkpoint</h4>
+                  <ConfigurationDocsLink
+                    docsPath="/configuration#manual-qa"
+                    label="ticket Manual QA checkpoint"
+                    description="Choose whether this ticket pauses for your verification after final tests. Open the Manual QA documentation."
+                  />
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Effective setting: <span className="font-medium text-foreground">{effectiveManualQa.enabled ? 'Enabled' : 'Disabled'}</span> from {effectiveManualQa.source === 'profile' ? 'global configuration' : effectiveManualQa.source}. This value is frozen when the ticket starts.
                 </p>

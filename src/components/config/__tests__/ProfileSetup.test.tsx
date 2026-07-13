@@ -159,7 +159,12 @@ describe('ProfileSetup', () => {
     await renderProfileSetup()
 
     const docsLinks = screen.getAllByRole('link', { name: /Open documentation for / })
-    expect(docsLinks).toHaveLength(19)
+    expect(docsLinks).toHaveLength(20)
+
+    expect(screen.getByRole('link', { name: 'Open documentation for Manual QA checkpoint' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
 
     const mainImplementerLink = screen.getByRole('link', { name: 'Open documentation for Main Implementer Model' })
     expect(mainImplementerLink).toHaveAttribute('href', `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#main-implementer-model`)

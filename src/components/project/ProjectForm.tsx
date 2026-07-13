@@ -12,6 +12,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { DeleteWorktreesDialog } from './DeleteWorktreesDialog'
 import { PROJECT_GIT_CHECK_DEBOUNCE_MS, SECONDS_PER_HOUR, SECONDS_PER_DAY } from '@/lib/constants'
 import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
+import { ConfigurationDocsLink } from '@/components/config/ConfigurationDocsLink'
 import type { ManualQaOverride } from '@/lib/manualQaSetting'
 import { useProfile } from '@/hooks/useProfile'
 
@@ -257,7 +258,14 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
           <div className="rounded-md border border-border p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <label className="text-sm font-medium">Manual QA checkpoint</label>
+                <div className="flex items-center gap-1.5">
+                  <label className="text-sm font-medium">Manual QA checkpoint</label>
+                  <ConfigurationDocsLink
+                    docsPath="/configuration#manual-qa"
+                    label="project Manual QA checkpoint"
+                    description="Choose whether tickets in this project pause for your verification. Open the Manual QA documentation."
+                  />
+                </div>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Choose whether newly started tickets in this project pause for a user-run QA checklist after final tests.
                 </p>

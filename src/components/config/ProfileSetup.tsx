@@ -453,7 +453,14 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Manual QA</div>
           <div className="flex items-start justify-between gap-4">
             <div>
-              <label className="text-sm font-medium">Manual QA checkpoint</label>
+              <div className="flex items-center gap-1.5">
+                <label className="text-sm font-medium">Manual QA checkpoint</label>
+                <ConfigurationDocsLink
+                  docsPath="/configuration#manual-qa"
+                  label="Manual QA checkpoint"
+                  description="Set whether tickets pause for your verification after final tests. Open the Manual QA documentation."
+                />
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 When enabled, new tickets pause after final tests with a generated checklist. LoopTroop never starts or controls your application.
               </p>
