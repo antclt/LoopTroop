@@ -74,8 +74,49 @@ export interface ManualQaDraft {
 
 export interface ManualQaCoverageEntry {
   criterionRef: string
+  criterion: string
   status: 'covered' | 'partially_covered' | 'uncovered'
   itemIds: string[]
+}
+
+export interface ManualQaCoverageSummary {
+  coveredCount: number
+  partiallyCoveredCount: number
+  uncoveredCount: number
+  sourceItemCounts: {
+    prd: number
+    bead: number
+    finalTest: number
+    previousQa: number
+    implementationDiff: number
+  }
+}
+
+export interface ManualQaSummary {
+  outcome: NonNullable<ManualQaRound['outcome']>
+  createdFixBeadIds: string[]
+  improvementTicketIds: string[]
+  waivedItemIds: string[]
+  waivedItems: Array<{ itemId: string; reason: string }>
+  skipReason?: string
+  startedAt?: string
+  completedAt?: string
+  durationMs: number
+  itemCounts: Record<ManualQaResultStatus, number>
+  requiredItemCount: number
+  optionalItemCount: number
+  evidenceCount: number
+  nextAction?: 'integrate' | 'return_to_coding'
+  coverage: { covered: number; partiallyCovered: number; uncovered: number }
+  modelCapability?: {
+    modelId: string | null
+    modelVariant: string | null
+    capabilityLookup: 'available' | 'unavailable'
+    supportsImages: boolean | null
+    imageEvidenceMode: 'attached' | 'references_only'
+    capturedAt?: string
+  } | null
+  message?: string
 }
 
 export interface ManualQaWorkspaceDrift {
@@ -90,6 +131,7 @@ export interface ManualQaRound {
   checklistHash: string | null
   checklist: ManualQaChecklist | null
   coverage: ManualQaCoverageEntry[]
+  coverageSummary: ManualQaCoverageSummary
   evidence: ManualQaEvidence[]
   draftRevision: number
   completedAt?: string | null
@@ -104,7 +146,7 @@ export interface ManualQaRound {
     message?: string | null
   } | null
   draft?: ManualQaDraft | null
-  summary?: { outcome?: ManualQaRound['outcome']; message?: string } | null
+  summary?: ManualQaSummary | null
 }
 
 export interface ManualQaIndex {
@@ -178,7 +220,15 @@ function normalizeDraft(value: unknown): ManualQaDraft | null {
   return { results }
 }
 
-function normalizeRound(value: unknown, version: number): ManualQaRound {
+function numberValue(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : []
+}
+
+export function normalizeManualQaRound(value: unknown, version: number): ManualQaRound {
   const raw = asRecord(value)
   const checklistRaw = asRecord(raw.checklist)
   const checklist = raw.checklist ? {
@@ -213,6 +263,10 @@ function normalizeRound(value: unknown, version: number): ManualQaRound {
   const evidenceValues = Array.isArray(raw.evidence) ? raw.evidence : []
   const operationRaw = asRecord(raw.operation)
   const operationState = String(operationRaw.state ?? operationRaw.status ?? '')
+  const sourceItemCounts = asRecord(coverageRaw.sourceItemCounts)
+  const itemCounts = asRecord(summary.itemCounts)
+  const summaryCoverage = asRecord(summary.coverage)
+  const modelCapability = asRecord(summary.modelCapability)
   return {
     version,
     status: String(raw.status ?? (raw.summary ? 'completed' : raw.checklist ? 'waiting' : 'generating')),
@@ -222,10 +276,23 @@ function normalizeRound(value: unknown, version: number): ManualQaRound {
       const entry = asRecord(entryValue)
       return {
         criterionRef: String(entry.criterionRef ?? ''),
+        criterion: String(entry.criterion ?? ''),
         status: String(entry.status ?? 'uncovered') as ManualQaCoverageEntry['status'],
         itemIds: Array.isArray(entry.itemIds) ? entry.itemIds.map(String) : [],
       }
     }),
+    coverageSummary: {
+      coveredCount: numberValue(coverageRaw.coveredCount),
+      partiallyCoveredCount: numberValue(coverageRaw.partiallyCoveredCount),
+      uncoveredCount: numberValue(coverageRaw.uncoveredCount),
+      sourceItemCounts: {
+        prd: numberValue(sourceItemCounts.prd),
+        bead: numberValue(sourceItemCounts.bead),
+        finalTest: numberValue(sourceItemCounts.finalTest),
+        previousQa: numberValue(sourceItemCounts.previousQa),
+        implementationDiff: numberValue(sourceItemCounts.implementationDiff),
+      },
+    },
     evidence: evidenceValues.map(normalizeEvidence),
     draftRevision: typeof raw.draftRevision === 'number' ? raw.draftRevision : Number(asRecord(raw.draft).draftRevision ?? asRecord(raw.results).draftRevision ?? 0),
     completedAt: typeof summary.completedAt === 'string' ? summary.completedAt : null,
@@ -240,7 +307,45 @@ function normalizeRound(value: unknown, version: number): ManualQaRound {
       message: typeof operationRaw.message === 'string' ? operationRaw.message : undefined,
     } : null,
     draft,
-    summary: raw.summary ? { outcome: summary.outcome as ManualQaRound['outcome'], message: typeof summary.message === 'string' ? summary.message : undefined } : null,
+    summary: raw.summary ? {
+      outcome: String(summary.outcome ?? 'failed') as ManualQaSummary['outcome'],
+      createdFixBeadIds: stringArray(summary.createdFixBeadIds),
+      improvementTicketIds: stringArray(summary.improvementTicketIds),
+      waivedItemIds: stringArray(summary.waivedItemIds),
+      waivedItems: Array.isArray(summary.waivedItems) ? summary.waivedItems.map((value) => {
+        const item = asRecord(value)
+        return { itemId: String(item.itemId ?? ''), reason: String(item.reason ?? '') }
+      }) : [],
+      skipReason: typeof summary.skipReason === 'string' ? summary.skipReason : undefined,
+      startedAt: typeof summary.startedAt === 'string' ? summary.startedAt : undefined,
+      completedAt: typeof summary.completedAt === 'string' ? summary.completedAt : undefined,
+      durationMs: numberValue(summary.durationMs),
+      itemCounts: {
+        pass: numberValue(itemCounts.pass),
+        fail: numberValue(itemCounts.fail),
+        waive: numberValue(itemCounts.waive),
+        improvement: numberValue(itemCounts.improvement),
+        pending: numberValue(itemCounts.pending),
+      },
+      requiredItemCount: numberValue(summary.requiredItemCount),
+      optionalItemCount: numberValue(summary.optionalItemCount),
+      evidenceCount: numberValue(summary.evidenceCount),
+      nextAction: summary.nextAction === 'return_to_coding' ? 'return_to_coding' : summary.nextAction === 'integrate' ? 'integrate' : undefined,
+      coverage: {
+        covered: numberValue(summaryCoverage.covered),
+        partiallyCovered: numberValue(summaryCoverage.partiallyCovered),
+        uncovered: numberValue(summaryCoverage.uncovered),
+      },
+      modelCapability: summary.modelCapability && typeof summary.modelCapability === 'object' ? {
+        modelId: typeof modelCapability.modelId === 'string' ? modelCapability.modelId : null,
+        modelVariant: typeof modelCapability.modelVariant === 'string' ? modelCapability.modelVariant : null,
+        capabilityLookup: modelCapability.capabilityLookup === 'available' ? 'available' : 'unavailable',
+        supportsImages: typeof modelCapability.supportsImages === 'boolean' ? modelCapability.supportsImages : null,
+        imageEvidenceMode: modelCapability.imageEvidenceMode === 'attached' ? 'attached' : 'references_only',
+        capturedAt: typeof modelCapability.capturedAt === 'string' ? modelCapability.capturedAt : undefined,
+      } : null,
+      message: typeof summary.message === 'string' ? summary.message : undefined,
+    } : null,
   }
 }
 
@@ -287,7 +392,7 @@ export function useManualQaRound(ticketId: string, version: number | null, enabl
   return useQuery({
     queryKey: ['manual-qa', ticketId, 'version', version],
     enabled: Boolean(ticketId) && version !== null && enabled,
-    queryFn: async () => normalizeRound(await parseResponse<unknown>(
+    queryFn: async () => normalizeManualQaRound(await parseResponse<unknown>(
       await fetch(`/api/tickets/${ticketId}/manual-qa/versions/${version}`),
       'Failed to load Manual QA checklist',
     ), version!),
@@ -345,8 +450,7 @@ export function useResolveManualQaDrift(decision: 'include' | 'discard') {
 export function useUploadManualQaEvidence() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ ticketId, version, itemId, file, actionId, expectedChecklistHash, expectedDraftRevision }: ManualQaMutationBase & { itemId: string; file: File }) => {
-      const evidenceId = newManualQaActionId('evidence')
+    mutationFn: async ({ ticketId, version, itemId, file, evidenceId, actionId, expectedChecklistHash, expectedDraftRevision }: ManualQaMutationBase & { itemId: string; file: File; evidenceId: string }) => {
       const params = new URLSearchParams({
         itemId,
         actionId,
@@ -364,7 +468,7 @@ export function useUploadManualQaEvidence() {
       }), 'Evidence upload failed')
       return normalizeEvidence(asRecord(payload).evidence ?? payload)
     },
-    onSuccess: (_, variables) => {
+    onSettled: (_, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['manual-qa', variables.ticketId, 'version', variables.version] })
     },
   })
@@ -382,7 +486,7 @@ export function useRemoveManualQaEvidence() {
           body: JSON.stringify(body),
         },
       ), 'Failed to remove evidence'),
-    onSuccess: (_, variables) => {
+    onSettled: (_, _error, variables) => {
       queryClient.invalidateQueries({ queryKey: ['manual-qa', variables.ticketId, 'version', variables.version] })
     },
   })

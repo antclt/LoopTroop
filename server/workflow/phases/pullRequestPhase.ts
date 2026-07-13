@@ -59,6 +59,7 @@ import { getStructuredRetryDecision } from '../../lib/structuredOutputRetry'
 import { resolveStructuredRetryDiagnostic } from '../../lib/structuredRetryDiagnostics'
 import { appendAcceptedRawAttempt, appendRejectedRawAttempt } from '../../lib/structuredRawAttempts'
 import type { RawAttempt } from '../../council/types'
+import { readManualQaDeliverySummary } from '../../phases/manualQa/delivery'
 
 const PULL_REQUEST_REPORT_ARTIFACT = 'pull_request_report'
 const MERGE_REPORT_ARTIFACT = 'merge_report'
@@ -600,8 +601,13 @@ export function buildPullRequestContext(ticketId: string, context: TicketContext
   }
 
   const finalTestArtifact = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')
-  const manualQaArtifact = getLatestPhaseArtifact(ticketId, 'manual_qa_summary')
-  let manualQaSummary = manualQaArtifact?.content ?? ''
+  const canonicalManualQaSummary = readManualQaDeliverySummary(ticketDir)
+  const manualQaArtifact = canonicalManualQaSummary
+    ? null
+    : getLatestPhaseArtifact(ticketId, 'manual_qa_summary')
+  let manualQaSummary = canonicalManualQaSummary
+    ? JSON.stringify(canonicalManualQaSummary)
+    : manualQaArtifact?.content ?? ''
   if (manualQaSummary) {
     try {
       const parsed = jsYaml.load(manualQaSummary)

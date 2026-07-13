@@ -6,12 +6,13 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   renameSync,
   rmSync,
 } from 'node:fs'
-import { open, realpath } from 'node:fs/promises'
-import { basename, extname, resolve, sep } from 'node:path'
+import { open } from 'node:fs/promises'
+import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
 import { safeAtomicWrite } from '../../io/atomicWrite'
 import { appendJsonl, readJsonl } from '../../io/jsonl'
 import { buildYamlDocument, parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
@@ -252,8 +253,10 @@ export function allocateNextManualQaVersion(ticketDir: string): number {
 }
 
 export function readManualQaEvidenceIndex(ticketDir: string, version: number): ManualQaEvidenceRef[] {
-  const path = getManualQaStoragePaths(ticketDir, version).evidenceIndexPath
+  const paths = getManualQaStoragePaths(ticketDir, version)
+  const path = paths.evidenceIndexPath
   if (!existsSync(path)) return []
+  resolveContainedEvidencePath(paths.root, paths.evidenceDir, 'index.json')
   const value = JSON.parse(readFileSync(path, 'utf8')) as unknown
   return ManualQaEvidenceRefSchema.array().parse(value)
 }
@@ -277,8 +280,11 @@ export function readManualQaEvidenceActionReceipt(
   version: number,
   actionId: string,
 ): ManualQaEvidenceActionReceipt | null {
+  const paths = getManualQaStoragePaths(ticketDir, version)
   const path = evidenceActionReceiptPath(ticketDir, version, actionId)
   if (!existsSync(path)) return null
+  const relativeReceipt = relative(paths.evidenceDir, path)
+  resolveContainedEvidencePath(paths.root, paths.evidenceDir, relativeReceipt)
   const receipt = JSON.parse(readFileSync(path, 'utf8')) as ManualQaEvidenceActionReceipt
   if (receipt.actionId !== actionId) throw new Error('Evidence action receipt identity does not match its request.')
   return receipt
@@ -302,7 +308,10 @@ export function persistManualQaEvidenceActionReceipt(
     ) throw new Error('Evidence action ID was already used for another operation or evidence item.')
     if (existing.state === 'staged' && state === 'complete') {
       const completed = { ...existing, state: 'complete' as const }
-      safeAtomicWrite(evidenceActionReceiptPath(ticketDir, version, actionId), JSON.stringify(completed, null, 2))
+      const paths = getManualQaStoragePaths(ticketDir, version)
+      const path = evidenceActionReceiptPath(ticketDir, version, actionId)
+      resolveContainedEvidencePath(paths.root, paths.evidenceDir, relative(paths.evidenceDir, path))
+      safeAtomicWrite(path, JSON.stringify(completed, null, 2))
       return completed
     }
     return existing
@@ -315,15 +324,88 @@ export function persistManualQaEvidenceActionReceipt(
     evidence: ManualQaEvidenceRefSchema.parse(evidence),
     createdAt: new Date().toISOString(),
   }
-  safeAtomicWrite(evidenceActionReceiptPath(ticketDir, version, actionId), JSON.stringify(receipt, null, 2))
+  const paths = getManualQaStoragePaths(ticketDir, version)
+  const path = evidenceActionReceiptPath(ticketDir, version, actionId)
+  resolveContainedEvidencePath(paths.root, paths.evidenceDir, relative(paths.evidenceDir, path), {
+    allowMissing: true,
+    allowMissingParents: true,
+  })
+  safeAtomicWrite(path, JSON.stringify(receipt, null, 2))
   return receipt
 }
 
 function writeEvidenceIndex(ticketDir: string, version: number, entries: ManualQaEvidenceRef[]): void {
+  const paths = getManualQaStoragePaths(ticketDir, version)
+  resolveContainedEvidencePath(paths.root, paths.evidenceDir, 'index.json', { allowMissing: true })
   safeAtomicWrite(
-    getManualQaStoragePaths(ticketDir, version).evidenceIndexPath,
+    paths.evidenceIndexPath,
     JSON.stringify(ManualQaEvidenceRefSchema.array().parse(entries), null, 2),
   )
+}
+
+function resolveContainedEvidencePath(
+  manualQaRoot: string,
+  evidenceDir: string,
+  storedName: string,
+  options: { allowMissing?: boolean; allowMissingParents?: boolean } = {},
+): string {
+  const rootStats = lstatSync(manualQaRoot)
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
+    throw new Error('Manual QA evidence root is unsafe.')
+  }
+  const path = resolve(evidenceDir, storedName)
+  const lexicalRelative = relative(evidenceDir, path)
+  if (
+    !lexicalRelative
+    || lexicalRelative === '..'
+    || lexicalRelative.startsWith(`..${sep}`)
+    || lexicalRelative.startsWith('/')
+    || lexicalRelative.startsWith('\\')
+  ) throw new Error('Evidence path escaped Manual QA storage containment.')
+
+  const parent = dirname(path)
+  const parentRelative = relative(manualQaRoot, parent)
+  if (
+    parentRelative === '..'
+    || parentRelative.startsWith(`..${sep}`)
+    || parentRelative.startsWith('/')
+    || parentRelative.startsWith('\\')
+  ) throw new Error('Evidence path escaped Manual QA storage containment.')
+  let current = manualQaRoot
+  let parentMissing = false
+  for (const segment of parentRelative.split(sep).filter(Boolean)) {
+    current = resolve(current, segment)
+    if (!existsSync(current)) {
+      parentMissing = true
+      break
+    }
+    const stats = lstatSync(current)
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error('Evidence path contains an unsafe directory.')
+    }
+  }
+  const realRoot = realpathSync(manualQaRoot)
+  if (parentMissing) {
+    if (options.allowMissingParents) return path
+    throw new Error('Evidence directory is missing.')
+  } else {
+    const realParent = realpathSync(parent)
+    if (realParent !== realRoot && !realParent.startsWith(`${realRoot}${sep}`)) {
+      throw new Error('Evidence path escaped Manual QA storage containment.')
+    }
+  }
+
+  if (!existsSync(path)) {
+    if (options.allowMissing) return path
+    throw new Error('Evidence path is missing.')
+  }
+  const stats = lstatSync(path)
+  if (!stats.isFile() || stats.isSymbolicLink()) throw new Error('Evidence file is unsafe.')
+  const realPath = realpathSync(path)
+  if (!realPath.startsWith(`${realRoot}${sep}`)) {
+    throw new Error('Evidence path escaped Manual QA storage containment.')
+  }
+  return path
 }
 
 export function sanitizeEvidenceName(input: string): string {
@@ -373,14 +455,41 @@ async function sha256File(path: string): Promise<string> {
   return hash.digest('hex')
 }
 
-async function assertContainedDirectory(directory: string, root: string): Promise<void> {
-  mkdirSync(directory, { recursive: true })
-  const resolvedRoot = await realpath(root)
-  const resolvedDirectory = await realpath(directory)
-  if (resolvedDirectory !== resolvedRoot && !resolvedDirectory.startsWith(`${resolvedRoot}${sep}`)) {
-    throw new Error('Evidence directory escaped Manual QA storage containment.')
+function assertContainedDirectory(directory: string, root: string): void {
+  const resolvedRootPath = resolve(root)
+  const resolvedDirectoryPath = resolve(directory)
+  const lexicalRelative = relative(resolvedRootPath, resolvedDirectoryPath)
+  if (
+    lexicalRelative === '..'
+    || lexicalRelative.startsWith(`..${sep}`)
+    || lexicalRelative.startsWith('/')
+    || lexicalRelative.startsWith('\\')
+  ) throw new Error('Evidence directory escaped Manual QA storage containment.')
+  const rootStats = lstatSync(resolvedRootPath)
+  if (!rootStats.isDirectory() || rootStats.isSymbolicLink()) {
+    throw new Error('Evidence path contains an unsafe directory.')
   }
-  if (lstatSync(directory).isSymbolicLink()) throw new Error('Evidence directories cannot be symlinks.')
+  const realRoot = realpathSync(resolvedRootPath)
+  let current = resolvedRootPath
+  for (const segment of lexicalRelative.split(sep).filter(Boolean)) {
+    const next = resolve(current, segment)
+    if (!existsSync(next)) {
+      try {
+        mkdirSync(next, { mode: 0o700 })
+      } catch (error) {
+        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'EEXIST')) throw error
+      }
+    }
+    const stats = lstatSync(next)
+    if (!stats.isDirectory() || stats.isSymbolicLink()) {
+      throw new Error('Evidence path contains an unsafe directory.')
+    }
+    const realCurrent = realpathSync(next)
+    if (realCurrent !== realRoot && !realCurrent.startsWith(`${realRoot}${sep}`)) {
+      throw new Error('Evidence directory escaped Manual QA storage containment.')
+    }
+    current = next
+  }
 }
 
 export async function streamManualQaEvidence(input: {
@@ -404,7 +513,7 @@ export async function streamManualQaEvidence(input: {
   if (!checklist.items.some((item) => item.id === itemId)) {
     throw new Error(`Evidence references unknown checklist item: ${itemId}`)
   }
-  await assertContainedDirectory(paths.evidenceDir, paths.root)
+  assertContainedDirectory(paths.evidenceDir, paths.root)
   const existing = readManualQaEvidenceIndex(input.ticketDir, input.version)
   if (existing.some((entry) => entry.id === evidenceId)) throw new Error(`Evidence ID already exists: ${evidenceId}`)
 
@@ -412,7 +521,7 @@ export async function streamManualQaEvidence(input: {
   const extension = extname(originalName).slice(0, 24)
   const itemDirectoryName = `item-${itemId.replace(/[^A-Za-z0-9._-]/g, '_')}`
   const itemDirectory = resolve(paths.evidenceDir, itemDirectoryName)
-  await assertContainedDirectory(itemDirectory, paths.evidenceDir)
+  assertContainedDirectory(itemDirectory, paths.evidenceDir)
   const fileName = `${evidenceId}${extension}`
   const storedName = `${itemDirectoryName}/${fileName}`
   const finalPath = resolve(itemDirectory, fileName)
@@ -483,7 +592,21 @@ export async function streamManualQaEvidence(input: {
     inlinePreview,
     createdAt: new Date().toISOString(),
   })
-  writeEvidenceIndex(input.ticketDir, input.version, [...existing, metadata])
+  // Re-read in the synchronous commit section because other uploads may have
+  // completed while this request streamed its body.
+  const current = readManualQaEvidenceIndex(input.ticketDir, input.version)
+  const concurrent = current.find((entry) => entry.id === evidenceId)
+  if (concurrent) {
+    if (
+      concurrent.itemId !== metadata.itemId
+      || concurrent.storedName !== metadata.storedName
+      || concurrent.mediaType !== metadata.mediaType
+      || concurrent.size !== metadata.size
+      || concurrent.sha256 !== metadata.sha256
+    ) throw new Error(`Evidence ID already exists: ${evidenceId}`)
+    return concurrent
+  }
+  writeEvidenceIndex(input.ticketDir, input.version, [...current, metadata])
   return metadata
 }
 
@@ -496,11 +619,8 @@ export function resolveManualQaEvidence(input: {
   const metadata = readManualQaEvidenceIndex(input.ticketDir, input.version)
     .find((entry) => entry.id === input.evidenceId && entry.itemId === input.itemId)
   if (!metadata) throw new Error('Evidence was not found.')
-  const evidenceDir = getManualQaStoragePaths(input.ticketDir, input.version).evidenceDir
-  const path = resolve(evidenceDir, metadata.storedName)
-  if (!path.startsWith(`${evidenceDir}${sep}`) || !existsSync(path) || lstatSync(path).isSymbolicLink()) {
-    throw new Error('Evidence path is unsafe or missing.')
-  }
+  const paths = getManualQaStoragePaths(input.ticketDir, input.version)
+  const path = resolveContainedEvidencePath(paths.root, paths.evidenceDir, metadata.storedName)
   return { metadata, path }
 }
 
@@ -514,13 +634,28 @@ export function removeManualQaEvidence(input: {
   version: number
   itemId: string
   evidenceId: string
+  evidence?: ManualQaEvidenceRef
 }): ManualQaEvidenceRef {
-  const resolved = resolveManualQaEvidence(input)
-  rmSync(resolved.path, { force: true })
-  const remaining = readManualQaEvidenceIndex(input.ticketDir, input.version)
+  const index = readManualQaEvidenceIndex(input.ticketDir, input.version)
+  const indexed = index.find((entry) => entry.id === input.evidenceId && entry.itemId === input.itemId)
+  const metadata = indexed ?? (input.evidence ? ManualQaEvidenceRefSchema.parse(input.evidence) : null)
+  if (!metadata || metadata.id !== input.evidenceId || metadata.itemId !== input.itemId) {
+    throw new Error('Evidence was not found.')
+  }
+  if (indexed && input.evidence && (
+    indexed.sha256 !== input.evidence.sha256
+    || indexed.storedName !== input.evidence.storedName
+  )) throw new Error('Evidence removal receipt does not match the canonical evidence metadata.')
+  const paths = getManualQaStoragePaths(input.ticketDir, input.version)
+  const path = resolveContainedEvidencePath(paths.root, paths.evidenceDir, metadata.storedName, {
+    allowMissing: true,
+    allowMissingParents: true,
+  })
+  rmSync(path, { force: true })
+  const remaining = index
     .filter((entry) => entry.id !== input.evidenceId)
   writeEvidenceIndex(input.ticketDir, input.version, remaining)
-  return resolved.metadata
+  return metadata
 }
 
 export interface ManualQaVersionDetail {

@@ -20,6 +20,7 @@ import {
   type ManualQaDraft,
   type ManualQaItemResult,
   type ManualQaResultStatus,
+  type ManualQaSummary,
 } from '@/hooks/useManualQA'
 import { cn } from '@/lib/utils'
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
@@ -28,6 +29,13 @@ import { buildCanonicalManualQaDraft, composeManualQaImprovementPreview, validat
 interface ManualQAViewProps {
   ticket: Ticket
   readOnly?: boolean
+}
+
+interface PendingEvidenceUpload {
+  key: string
+  version: number
+  file: File
+  message: string
 }
 
 const RESULT_OPTIONS: Array<{ value: ManualQaResultStatus; label: string; className: string }> = [
@@ -72,6 +80,41 @@ function evidenceSize(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MiB`
 }
 
+function durationLabel(milliseconds: number) {
+  const seconds = Math.round(milliseconds / 1000)
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  const remainder = seconds % 60
+  return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`
+}
+
+function ManualQaRoundSummary({ summary }: { summary: ManualQaSummary }) {
+  const counts = summary.itemCounts
+  return (
+    <Card className="border-primary/30">
+      <CardHeader><CardTitle className="flex flex-wrap items-center gap-2 text-sm">Round summary <Badge variant="outline">{summary.outcome.replace(/_/g, ' ')}</Badge></CardTitle></CardHeader>
+      <CardContent className="space-y-3 text-xs">
+        <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[auto_1fr_auto_1fr]">
+          <dt className="text-muted-foreground">Checks</dt><dd>{summary.requiredItemCount} required · {summary.optionalItemCount} optional</dd>
+          <dt className="text-muted-foreground">Results</dt><dd>{counts.pass} passed · {counts.fail} failed · {counts.waive} waived · {counts.improvement} improvements · {counts.pending} pending</dd>
+          <dt className="text-muted-foreground">Evidence</dt><dd>{summary.evidenceCount} file{summary.evidenceCount === 1 ? '' : 's'}</dd>
+          <dt className="text-muted-foreground">Duration</dt><dd>{durationLabel(summary.durationMs)}</dd>
+          <dt className="text-muted-foreground">Coverage</dt><dd>{summary.coverage.covered} full · {summary.coverage.partiallyCovered} partial · {summary.coverage.uncovered} uncovered</dd>
+          <dt className="text-muted-foreground">Next action</dt><dd>{summary.nextAction?.replace(/_/g, ' ') ?? 'Recorded'}</dd>
+          {summary.startedAt && <><dt className="text-muted-foreground">Started</dt><dd>{new Date(summary.startedAt).toLocaleString()}</dd></>}
+          {summary.completedAt && <><dt className="text-muted-foreground">Completed</dt><dd>{new Date(summary.completedAt).toLocaleString()}</dd></>}
+        </dl>
+        {summary.waivedItems.length > 0 && <div><p className="font-medium">Waivers</p><ul className="mt-1 list-disc pl-5 text-muted-foreground">{summary.waivedItems.map((item) => <li key={item.itemId}><code>{item.itemId}</code>: {item.reason}</li>)}</ul></div>}
+        {summary.skipReason && <p><span className="font-medium">Skip reason:</span> {summary.skipReason}</p>}
+        {summary.createdFixBeadIds.length > 0 && <p><span className="font-medium">Fix beads:</span> <span className="font-mono">{summary.createdFixBeadIds.join(', ')}</span></p>}
+        {summary.improvementTicketIds.length > 0 && <p><span className="font-medium">Improvement tickets:</span> <span className="font-mono">{summary.improvementTicketIds.join(', ')}</span></p>}
+        {summary.modelCapability && <p className="text-muted-foreground">Evidence delivery: {summary.modelCapability.imageEvidenceMode.replace('_', ' ')} · model {summary.modelCapability.modelId ?? 'unavailable'}{summary.modelCapability.modelVariant ? ` (${summary.modelCapability.modelVariant})` : ''}</p>}
+        {summary.message && <p className="text-muted-foreground">{summary.message}</p>}
+      </CardContent>
+    </Card>
+  )
+}
+
 function ManualQaGeneration({ versions, onSelectVersion }: {
   versions: Array<{ version: number; outcome?: string | null; status: string }>
   onSelectVersion: (version: number) => void
@@ -114,7 +157,8 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
   const activeVersion = index?.activeVersion ?? projectedVersion
   const version = selectedVersion ?? activeVersion ?? index?.versions.at(-1)?.version ?? null
-  const { data: round, isLoading: roundLoading, error: roundError } = useManualQaRound(ticket.id, version)
+  const roundQuery = useManualQaRound(ticket.id, version)
+  const { data: round, isLoading: roundLoading, error: roundError } = roundQuery
   const scope = version === null ? 'manual_qa_draft:none' : `manual_qa_draft:v${version}`
   const uiState = useTicketUIState<ManualQaDraft>(ticket.id, scope, version !== null)
   const saveUiState = useSaveTicketUIState()
@@ -134,10 +178,15 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [improvementItemId, setImprovementItemId] = useState<string | null>(null)
   const [linkDrafts, setLinkDrafts] = useState<Record<string, { url: string; label: string; error?: string }>>({})
   const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string | undefined>>({})
+  const [pendingEvidenceUploads, setPendingEvidenceUploads] = useState<Record<string, PendingEvidenceUpload[]>>({})
+  const [driftError, setDriftError] = useState<string | null>(null)
+  const [removingEvidenceIds, setRemovingEvidenceIds] = useState<Set<string>>(new Set())
   const draftRef = useRef(draft)
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const latestDraftRevisionRef = useRef(0)
   const operationActionIdsRef = useRef(new Map<string, string>())
+  const mutationIdentitiesRef = useRef(new Map<string, string>())
+  const evidenceIdsRef = useRef(new Map<string, string>())
   draftRef.current = draft
 
   const historical = Boolean(version !== null && activeVersion !== null && version !== activeVersion)
@@ -152,7 +201,10 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const editable = !historical && !submissionInProgress
   const checklist = round?.checklist
   const checklistHash = round?.checklistHash ?? ''
-  const expectedDraftRevision = getUiRevision(uiState.data, round?.draftRevision ?? 0)
+  const expectedDraftRevision = Math.max(
+    getUiRevision(uiState.data, 0),
+    round?.draftRevision ?? 0,
+  )
   const items = useMemo(() => checklist?.items ?? [], [checklist?.items])
 
   useEffect(() => {
@@ -177,20 +229,23 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
         ? Promise.reject(new Error('Manual QA draft conflict; reload the latest draft before continuing.'))
         : Promise.resolve()
     }
-    setSaveState('saving')
+    if (!keepalive) setSaveState('saving')
     const current = draftRef.current
     const run = async () => {
       if (keepalive) {
         flushTicketUiStateSnapshot(ticket.id, scope, current)
-        return
+        return false
       }
       const saved = await saveUiState.mutateAsync({ ticketId: ticket.id, scope, data: current })
       if (saved.conflict) throw new Error('Manual QA draft conflict')
       latestDraftRevisionRef.current = saved.revision
+      return true
     }
-    const pending = saveQueueRef.current.then(run, run).then(() => {
-      if (draftRef.current === current) setDirty(false)
-      setSaveState('saved')
+    const pending = saveQueueRef.current.then(run, run).then((confirmed) => {
+      if (confirmed) {
+        if (draftRef.current === current) setDirty(false)
+        setSaveState('saved')
+      }
     }).catch((error) => {
       const message = error instanceof Error ? error.message.toLowerCase() : ''
       setSaveState(message.includes('conflict') || message.includes('stale') ? 'conflict' : 'error')
@@ -250,6 +305,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const hasFailures = items.some((item) => resultFor(draft, item.id).status === 'fail')
   const incompleteRequired = items.filter((item) => item.required && !['pass', 'fail', 'waive'].includes(resultFor(draft, item.id).status)).length
   const improvementItem = items.find((item) => item.id === improvementItemId) ?? null
+  const coverageSourceItemTotal = round ? Object.values(round.coverageSummary.sourceItemCounts).reduce((sum, count) => sum + count, 0) : 0
 
   const mutationBase = useCallback((actionId = newManualQaActionId('manual-qa')) => ({
     ticketId: ticket.id,
@@ -258,6 +314,123 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     expectedChecklistHash: checklistHash,
     expectedDraftRevision: latestDraftRevisionRef.current,
   }), [checklistHash, ticket.id, version])
+
+  const stableMutationBase = useCallback((key: string, prefix: string) => {
+    const actionId = mutationIdentitiesRef.current.get(key) ?? newManualQaActionId(prefix)
+    mutationIdentitiesRef.current.set(key, actionId)
+    // Action identity is stable, but CAS guards are intentionally read fresh on
+    // every retry so a newer autosave revision cannot strand a pending action.
+    return mutationBase(actionId)
+  }, [mutationBase])
+
+  const rememberRefetchedRevision = useCallback((refreshedRound: typeof round) => {
+    if (typeof refreshedRound?.draftRevision === 'number') {
+      latestDraftRevisionRef.current = refreshedRound.draftRevision
+    }
+  }, [])
+
+  const clearPendingEvidenceUpload = useCallback((itemId: string, key: string) => {
+    setPendingEvidenceUploads((current) => ({
+      ...current,
+      [itemId]: (current[itemId] ?? []).filter((entry) => entry.key !== key),
+    }))
+  }, [])
+
+  const retainPendingEvidenceUpload = useCallback((itemId: string, pending: PendingEvidenceUpload) => {
+    setPendingEvidenceUploads((current) => {
+      const entries = current[itemId] ?? []
+      const index = entries.findIndex((entry) => entry.key === pending.key)
+      const next = [...entries]
+      if (index >= 0) next[index] = pending
+      else next.push(pending)
+      return { ...current, [itemId]: next }
+    })
+  }, [])
+
+  const dismissPendingEvidenceUpload = useCallback((itemId: string, key: string) => {
+    clearPendingEvidenceUpload(itemId, key)
+    mutationIdentitiesRef.current.delete(key)
+    evidenceIdsRef.current.delete(key)
+  }, [clearPendingEvidenceUpload])
+
+  const resolveDrift = async (decision: 'include' | 'discard') => {
+    if (version === null) return
+    const key = `drift:${version}:${decision}`
+    setDriftError(null)
+    try {
+      const mutation = decision === 'include' ? includeDrift : discardDrift
+      await mutation.mutateAsync(stableMutationBase(key, `manual-qa-drift-${decision}`))
+      mutationIdentitiesRef.current.delete(key)
+    } catch (error) {
+      const refreshed = await roundQuery.refetch()
+      rememberRefetchedRevision(refreshed.data)
+      if (refreshed.data?.workspaceDrift?.detected !== true) {
+        mutationIdentitiesRef.current.delete(key)
+        return
+      }
+      setDriftError(error instanceof Error ? error.message : `Failed to ${decision} workspace drift.`)
+    }
+  }
+
+  const uploadEvidenceFile = async (itemId: string, file: File, key: string) => {
+    if (version === null) return
+    const base = stableMutationBase(key, 'manual-qa-evidence-upload')
+    const evidenceId = evidenceIdsRef.current.get(key) ?? newManualQaActionId('evidence')
+    evidenceIdsRef.current.set(key, evidenceId)
+    try {
+      const saved = await uploadEvidence.mutateAsync({ ...base, itemId, file, evidenceId })
+      appendEvidenceId(itemId, saved.id)
+      clearPendingEvidenceUpload(itemId, key)
+      mutationIdentitiesRef.current.delete(key)
+      evidenceIdsRef.current.delete(key)
+      return null
+    } catch (error) {
+      const refreshed = await roundQuery.refetch()
+      rememberRefetchedRevision(refreshed.data)
+      const reconciled = refreshed.data?.evidence.find((entry) => entry.id === evidenceId && entry.itemId === itemId)
+      if (reconciled) {
+        appendEvidenceId(itemId, reconciled.id)
+        clearPendingEvidenceUpload(itemId, key)
+        mutationIdentitiesRef.current.delete(key)
+        evidenceIdsRef.current.delete(key)
+        return null
+      }
+      retainPendingEvidenceUpload(itemId, {
+        key,
+        version,
+        file,
+        message: error instanceof Error ? error.message : 'Upload failed',
+      })
+    }
+  }
+
+  const removeEvidenceFile = async (itemId: string, evidenceId: string) => {
+    if (version === null) return
+    const key = `remove:${version}:${itemId}:${evidenceId}`
+    setEvidenceErrors((current) => ({ ...current, [itemId]: undefined }))
+    setRemovingEvidenceIds((current) => new Set(current).add(evidenceId))
+    try {
+      await removeEvidence.mutateAsync({ ...stableMutationBase(key, 'manual-qa-evidence-remove'), itemId, evidenceId })
+      mutationIdentitiesRef.current.delete(key)
+      updateResult(itemId, { evidenceIds: (resultFor(draftRef.current, itemId).evidenceIds ?? []).filter((id) => id !== evidenceId) })
+    } catch (error) {
+      const refreshed = await roundQuery.refetch()
+      rememberRefetchedRevision(refreshed.data)
+      const stillExists = refreshed.data?.evidence.some((entry) => entry.id === evidenceId && entry.itemId === itemId)
+      if (!stillExists) {
+        mutationIdentitiesRef.current.delete(key)
+        updateResult(itemId, { evidenceIds: (resultFor(draftRef.current, itemId).evidenceIds ?? []).filter((id) => id !== evidenceId) })
+      } else {
+        setEvidenceErrors((current) => ({ ...current, [itemId]: `${error instanceof Error ? error.message : 'Removal failed'}. Retry keeps the same action identity with the latest draft revision.` }))
+      }
+    } finally {
+      setRemovingEvidenceIds((current) => {
+        const next = new Set(current)
+        next.delete(evidenceId)
+        return next
+      })
+    }
+  }
 
   const resumableActionId = useCallback((kind: 'submit' | 'skip') => {
     const key = `${version}:${kind}`
@@ -399,21 +572,32 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 <ul className="mt-2 max-h-28 overflow-y-auto rounded border border-border bg-background p-2 font-mono text-xs">
                   {round.workspaceDrift.files.map((file) => <li key={file.path}>{file.path}</li>)}
                 </ul>
-                {editable && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => includeDrift.mutate(mutationBase())} disabled={includeDrift.isPending || discardDrift.isPending}>Include in checkpoint</Button><Button size="sm" variant="outline" onClick={() => discardDrift.mutate(mutationBase())} disabled={includeDrift.isPending || discardDrift.isPending}>Discard audited changes</Button></div>}
+                {editable && <div className="mt-3 flex gap-2"><Button size="sm" onClick={() => void resolveDrift('include')} disabled={includeDrift.isPending || discardDrift.isPending}>{includeDrift.isPending ? <LoadingText text="Including" /> : 'Include in checkpoint'}</Button><Button size="sm" variant="outline" onClick={() => void resolveDrift('discard')} disabled={includeDrift.isPending || discardDrift.isPending}>{discardDrift.isPending ? <LoadingText text="Discarding" /> : 'Discard audited changes'}</Button></div>}
+                {driftError && <p role="alert" className="mt-2 text-xs text-destructive">{driftError} Choose the same action to retry safely.</p>}
               </CardContent>
             </Card>
           )}
 
-          {round.coverage.length > 0 && (
+          {round.summary && <ManualQaRoundSummary summary={round.summary} />}
+
+          {(round.coverage.length > 0 || coverageSourceItemTotal > 0) && (
             <Card>
               <CardHeader><CardTitle className="text-sm">PRD coverage <Badge variant="outline" className="ml-2">Advisory</Badge></CardTitle></CardHeader>
-              <CardContent className="grid gap-2 sm:grid-cols-2">
-                {round.coverage.map((entry) => (
-                  <div key={entry.criterionRef} className="flex items-center justify-between gap-2 rounded border border-border px-2 py-1.5 text-xs">
-                    <code>{entry.criterionRef}</code>
-                    <Badge variant={entry.status === 'covered' ? 'default' : entry.status === 'partially_covered' ? 'secondary' : 'outline'}>{entry.status.replace('_', ' ')}</Badge>
-                  </div>
-                ))}
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span>{round.coverageSummary.coveredCount} covered</span><span>·</span><span>{round.coverageSummary.partiallyCoveredCount} partial</span><span>·</span><span>{round.coverageSummary.uncoveredCount} uncovered</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {Object.entries(round.coverageSummary.sourceItemCounts).map(([source, count]) => <Badge key={source} variant="secondary" className="text-[10px]">{source.replace(/([A-Z])/g, ' $1').toLowerCase()}: {count}</Badge>)}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {round.coverage.map((entry) => (
+                    <div key={entry.criterionRef} className="rounded border border-border px-2 py-1.5 text-xs">
+                      <div className="flex items-center justify-between gap-2"><code>{entry.criterionRef}</code><Badge variant={entry.status === 'covered' ? 'default' : entry.status === 'partially_covered' ? 'secondary' : 'outline'}>{entry.status.replace('_', ' ')}</Badge></div>
+                      {entry.criterion && <p className="mt-1 text-muted-foreground">{entry.criterion}</p>}
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           )}
@@ -422,6 +606,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             const result = resultFor(draft, item.id)
             const errors = validation[item.id] ?? []
             const evidence = round.evidence.filter((file) => file.itemId === item.id)
+            const pendingUploads = (pendingEvidenceUploads[item.id] ?? []).filter((entry) => entry.version === version)
             return (
               <Card key={item.id} className={cn(errors.length > 0 && editable && 'border-destructive/50')}>
                 <CardHeader className="space-y-2">
@@ -463,22 +648,16 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                     <div className="flex items-center justify-between gap-2"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h5>{editable && <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-2 py-1 text-xs hover:bg-accent"><FileUp className="mr-1 h-3 w-3" />Add files<input type="file" multiple className="sr-only" onChange={async (event) => {
                       const files = Array.from(event.target.files ?? [])
                       setEvidenceErrors((current) => ({ ...current, [item.id]: undefined }))
-                      const failures: string[] = []
                       for (const file of files) {
-                        try {
-                          const saved = await uploadEvidence.mutateAsync({ ...mutationBase(), itemId: item.id, file })
-                          appendEvidenceId(item.id, saved.id)
-                        } catch (error) {
-                          failures.push(`${file.name}: ${error instanceof Error ? error.message : 'upload failed'}`)
-                        }
+                        await uploadEvidenceFile(item.id, file, newManualQaActionId('pending-evidence-upload'))
                       }
-                      if (failures.length > 0) setEvidenceErrors((current) => ({ ...current, [item.id]: failures.join(' ') }))
                       event.target.value = ''
                     }} /></label>}</div>
-                    {evidence.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No evidence attached. Any file type is accepted up to 250 MiB per file.</p> : <div className="mt-2 grid gap-2 sm:grid-cols-2">{evidence.map((file) => { const downloadUrl = file.downloadUrl ?? manualQaEvidenceUrl(ticket.id, version, item.id, file.id); const previewUrl = manualQaEvidenceUrl(ticket.id, version, item.id, file.id, true); const canPreview = file.previewable && SAFE_RASTER_MEDIA_TYPES.has(file.mediaType); return <div key={file.id} className="overflow-hidden rounded-md border border-border bg-muted/20">{canPreview && <a href={downloadUrl} target="_blank" rel="noreferrer"><img src={previewUrl} alt={file.name} className="max-h-40 w-full object-contain bg-black/5" /></a>}<div className="flex items-center gap-2 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{file.name}</p><p className="text-[10px] text-muted-foreground">{evidenceSize(file.size)} · {file.mediaType || 'unknown type'}</p></div><a href={downloadUrl} download={file.name} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${file.name}`}><Download className="h-3.5 w-3.5" /></a>{editable && <button type="button" className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive" aria-label={`Remove ${file.name}`} onClick={async () => { await removeEvidence.mutateAsync({ ...mutationBase(), itemId: item.id, evidenceId: file.id }); updateResult(item.id, { evidenceIds: (result.evidenceIds ?? []).filter((id) => id !== file.id) }) }}><Trash2 className="h-3.5 w-3.5" /></button>}</div></div> })}</div>}
+                    {evidence.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No evidence attached. Any file type is accepted up to 250 MiB per file.</p> : <div className="mt-2 grid gap-2 sm:grid-cols-2">{evidence.map((file) => { const downloadUrl = file.downloadUrl ?? manualQaEvidenceUrl(ticket.id, version, item.id, file.id); const previewUrl = manualQaEvidenceUrl(ticket.id, version, item.id, file.id, true); const canPreview = file.previewable && SAFE_RASTER_MEDIA_TYPES.has(file.mediaType); const removing = removingEvidenceIds.has(file.id); return <div key={file.id} className="overflow-hidden rounded-md border border-border bg-muted/20">{canPreview && <a href={downloadUrl} target="_blank" rel="noreferrer"><img src={previewUrl} alt={file.name} className="max-h-40 w-full object-contain bg-black/5" /></a>}<div className="flex items-center gap-2 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{file.name}</p><p className="text-[10px] text-muted-foreground">{evidenceSize(file.size)} · {file.mediaType || 'unknown type'}</p></div><a href={downloadUrl} download={file.name} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${file.name}`}><Download className="h-3.5 w-3.5" /></a>{editable && <button type="button" disabled={removing} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" aria-label={`Remove ${file.name}`} onClick={() => void removeEvidenceFile(item.id, file.id)}>{removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>}</div></div> })}</div>}
                     {(result.links?.length ?? 0) > 0 && <div className="mt-2 space-y-1">{result.links?.map((link) => <div key={link.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"><a href={link.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-primary hover:underline">{link.label || link.url}</a>{editable && <button type="button" aria-label={`Remove link ${link.label || link.url}`} onClick={() => updateResult(item.id, { links: result.links?.filter((entry) => entry.id !== link.id) })} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}</div>}
                     {editable && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input aria-label={`Evidence link for ${item.id}`} value={linkDrafts[item.id]?.url ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { label: '' }), url: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="https://…" /><input aria-label={`Evidence link label for ${item.id}`} value={linkDrafts[item.id]?.label ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { url: '' }), label: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="Label (optional)" /><Button type="button" size="sm" variant="outline" onClick={() => { const pending = linkDrafts[item.id] ?? { url: '', label: '' }; try { const parsed = new URL(pending.url); if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(); const link = { id: newManualQaActionId('link'), url: parsed.toString(), label: pending.label.trim() || undefined }; updateResult(item.id, { links: [...(result.links ?? []), link] }); setLinkDrafts((current) => ({ ...current, [item.id]: { url: '', label: '' } })) } catch { setLinkDrafts((current) => ({ ...current, [item.id]: { ...pending, error: 'Use an HTTP or HTTPS link.' } })) } }}>Add link</Button>{linkDrafts[item.id]?.error && <p role="alert" className="text-xs text-destructive sm:col-span-3">{linkDrafts[item.id]?.error}</p>}</div>}
-                    {evidenceErrors[item.id] && <p role="alert" className="mt-2 text-xs text-destructive">Some files could not be uploaded. Successfully uploaded files remain linked. {evidenceErrors[item.id]}</p>}
+                    {pendingUploads.length > 0 && <div role="alert" className="mt-2 space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-2"><p className="text-xs text-destructive">Some uploads need attention. Confirmed uploads remain linked; Retry keeps each file&apos;s action and evidence identity while refreshing CAS guards.</p>{pendingUploads.map((pending) => <div key={pending.key} className="flex flex-wrap items-center gap-2 rounded border border-destructive/20 bg-background px-2 py-1.5 text-xs"><div className="min-w-0 flex-1"><p className="truncate font-medium">{pending.file.name}</p><p className="text-destructive">{pending.message}</p></div><Button type="button" size="sm" variant="outline" disabled={uploadEvidence.isPending} onClick={() => void uploadEvidenceFile(item.id, pending.file, pending.key)}>{uploadEvidence.isPending ? <LoadingText text="Retrying" /> : 'Retry upload'}</Button><Button type="button" size="sm" variant="ghost" disabled={uploadEvidence.isPending} onClick={() => dismissPendingEvidenceUpload(item.id, pending.key)}>Dismiss</Button></div>)}</div>}
+                    {evidenceErrors[item.id] && <p role="alert" className="mt-2 text-xs text-destructive">Evidence removal could not be completed. Confirmed uploads remain linked. {evidenceErrors[item.id]}</p>}
                   </section>
 
                   {errors.length > 0 && editable && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{errors.map((message) => <p key={message}>{message}</p>)}</div>}
@@ -539,12 +718,25 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 </div>
                 <div className="rounded-md border border-border p-3 text-xs">
                   <p className="font-medium">Evidence and provenance preview</p>
-                  <p className="mt-1 text-muted-foreground">The source round and checklist lineage are stored as audit metadata, outside future prompt context.</p>
+                  <p className="mt-1 text-muted-foreground">This structured audit metadata is stored outside future implementation prompt context.</p>
+                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
+                    <dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{ticket.externalId}</dd>
+                    <dt className="text-muted-foreground">Project</dt><dd>{ticket.projectId}</dd>
+                    <dt className="text-muted-foreground">Round</dt><dd>v{version}</dd>
+                    <dt className="text-muted-foreground">Checklist item</dt><dd>{improvementItem.title || improvementItem.behavior} <code className="text-[10px]">{improvementItem.id}</code></dd>
+                    <dt className="text-muted-foreground">Lineage</dt><dd className="font-mono">{improvementItem.lineageId}</dd>
+                    <dt className="text-muted-foreground">Result type</dt><dd>improvement</dd>
+                    <dt className="text-muted-foreground">PRD refs</dt><dd>{improvementItem.prdRefs.map((reference) => reference.ref).join(', ') || 'None'}</dd>
+                    <dt className="text-muted-foreground">Bead refs</dt><dd>{improvementItem.beadRefs?.join(', ') || 'None'}</dd>
+                    <dt className="text-muted-foreground">Evidence plan</dt><dd>{evidenceFiles.length} uploaded file{evidenceFiles.length === 1 ? '' : 's'} and {result.links?.length ?? 0} HTTP link{(result.links?.length ?? 0) === 1 ? '' : 's'} selected for provenance</dd>
+                  </dl>
                   {evidenceFiles.length > 0 ? (
                     <ul className="mt-2 list-disc pl-5 text-muted-foreground">
                       {evidenceFiles.map((file) => <li key={file.id}>{file.name} · {evidenceSize(file.size)}</li>)}
                     </ul>
                   ) : <p className="mt-2 text-muted-foreground">No uploaded evidence selected.</p>}
+                  {(result.links?.length ?? 0) > 0 && <ul className="mt-2 list-disc pl-5 text-muted-foreground">{result.links?.map((link) => <li key={link.id}>{link.label || link.url}</li>)}</ul>}
+                  <p className="mt-2 text-muted-foreground">Copied and omitted evidence is finalized during submission and recorded in the created ticket&apos;s origin receipt.</p>
                 </div>
                 <div className="flex justify-end"><Button onClick={() => setImprovementItemId(null)} disabled={!improvement.title.trim() || !improvement.description.trim()}>Done</Button></div>
               </div>

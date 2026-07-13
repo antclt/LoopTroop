@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { getLatestPhaseArtifact, insertPhaseArtifact } from '../../storage/tickets'
 import {
   FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
@@ -47,6 +48,7 @@ export interface FinalTestFileEffectsAudit {
 export interface FinalTestFileEffectsOverride {
   decision: 'include_unclassified_as_candidate' | 'discard_unclassified'
   files: string[]
+  auditFingerprint: string
   createdAt: string
   source: 'user'
 }
@@ -261,8 +263,14 @@ function isFinalTestFileEffectsOverride(value: unknown): value is FinalTestFileE
   return (
     (record.decision === 'include_unclassified_as_candidate' || record.decision === 'discard_unclassified')
     && isStringArray(record.files)
+    && typeof record.auditFingerprint === 'string'
+    && /^[a-f0-9]{64}$/.test(record.auditFingerprint)
     && record.source === 'user'
   )
+}
+
+function fingerprintFinalTestFileEffectsAudit(audit: FinalTestFileEffectsAudit): string {
+  return createHash('sha256').update(JSON.stringify(audit), 'utf8').digest('hex')
 }
 
 export function readLatestFinalTestFileEffectsAudit(ticketId: string): FinalTestFileEffectsAudit | null {
@@ -283,9 +291,19 @@ export function writeFinalTestFileEffectsOverride(
   files: string[],
   phase: 'GENERATING_QA_CHECKLIST' | 'INTEGRATING_CHANGES' = 'INTEGRATING_CHANGES',
 ): FinalTestFileEffectsOverride {
+  const audit = readLatestFinalTestFileEffectsAudit(ticketId)
+  if (!audit || audit.status !== 'blocked') {
+    throw new Error('A blocked final-test file-effects audit is required before recording a decision.')
+  }
+  const normalizedFiles = uniqueNormalizedPaths(files)
+  const expectedFiles = [...audit.decisionRequiredFiles].sort()
+  if (JSON.stringify([...normalizedFiles].sort()) !== JSON.stringify(expectedFiles)) {
+    throw new Error('Final-test file-effects decision does not match the current audit.')
+  }
   const override: FinalTestFileEffectsOverride = {
     decision,
-    files: uniqueNormalizedPaths(files),
+    files: normalizedFiles,
+    auditFingerprint: fingerprintFinalTestFileEffectsAudit(audit),
     createdAt: new Date().toISOString(),
     source: 'user',
   }
@@ -303,7 +321,10 @@ export function resolveFinalTestCandidateFiles(ticketId: string): FinalTestCandi
     return { ok: true, candidateFiles: [] }
   }
 
-  const override = readLatestFinalTestFileEffectsOverride(ticketId) ?? undefined
+  const latestOverride = readLatestFinalTestFileEffectsOverride(ticketId) ?? undefined
+  const override = latestOverride?.auditFingerprint === fingerprintFinalTestFileEffectsAudit(audit)
+    ? latestOverride
+    : undefined
   if (audit.status === 'blocked' && !override) {
     return {
       ok: false,

@@ -1,6 +1,6 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   MAX_MANUAL_QA_EVIDENCE_BYTES,
@@ -17,6 +17,7 @@ import {
   persistManualQaSummary,
   persistManualQaEvidenceActionReceipt,
   readManualQaEvidenceActionReceipt,
+  readManualQaEvidenceIndex,
   readManualQaEvents,
   readManualQaModelCapabilitySnapshot,
   removeManualQaEvidence,
@@ -215,6 +216,201 @@ describe('Manual QA canonical storage', () => {
     removeManualQaEvidence({ ticketDir, version: 1, itemId: evidence.itemId, evidenceId: evidence.id })
     expect(persistManualQaEvidenceActionReceipt(ticketDir, 1, 'remove:restart', 'remove', evidence, 'complete').state).toBe('complete')
     expect(() => resolveManualQaEvidence({ ticketDir, version: 1, itemId: evidence.itemId, evidenceId: evidence.id })).toThrow('not found')
+  })
+
+  it('repairs a staged removal interrupted after unlink but before index persistence', async () => {
+    const ticketDir = root()
+    persistChecklist(ticketDir)
+    const evidence = await streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'remove-after-unlink',
+      originalName: 'trace.txt',
+      mediaType: 'text/plain',
+      body: byteStream(new TextEncoder().encode('remove me')),
+    })
+    persistManualQaEvidenceActionReceipt(ticketDir, 1, 'remove:after-unlink', 'remove', evidence, 'staged')
+    const storedPath = resolveManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+    }).path
+    rmSync(dirname(storedPath), { recursive: true, force: true })
+
+    expect(removeManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+      evidence,
+    })).toEqual(evidence)
+    expect(readManualQaEvidenceIndex(ticketDir, 1)).toEqual([])
+  })
+
+  it('allows a new removal action to finish after reload when only index metadata remains', async () => {
+    const ticketDir = root()
+    persistChecklist(ticketDir)
+    const evidence = await streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'remove-new-action-after-unlink',
+      originalName: 'trace.txt',
+      mediaType: 'text/plain',
+      body: byteStream(new TextEncoder().encode('remove me')),
+    })
+    rmSync(resolveManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+    }).path)
+    const canonical = readManualQaEvidenceIndex(ticketDir, 1)
+      .find((entry) => entry.id === evidence.id && entry.itemId === evidence.itemId)!
+
+    persistManualQaEvidenceActionReceipt(ticketDir, 1, 'remove:new-after-reload', 'remove', canonical, 'staged')
+    removeManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: canonical.itemId,
+      evidenceId: canonical.id,
+      evidence: canonical,
+    })
+    expect(persistManualQaEvidenceActionReceipt(
+      ticketDir,
+      1,
+      'remove:new-after-reload',
+      'remove',
+      canonical,
+      'complete',
+    ).state).toBe('complete')
+    expect(readManualQaEvidenceIndex(ticketDir, 1)).toEqual([])
+  })
+
+  it('preserves both index entries when evidence uploads finish concurrently', async () => {
+    const ticketDir = root()
+    persistChecklist(ticketDir)
+    let releaseFirst!: () => void
+    let markFirstPull!: () => void
+    const firstPulled = new Promise<void>((resolve) => { markFirstPull = resolve })
+    const release = new Promise<void>((resolve) => { releaseFirst = resolve })
+    let pulled = false
+    const delayedBody = new ReadableStream<Uint8Array>({
+      async pull(controller) {
+        if (pulled) return
+        pulled = true
+        controller.enqueue(new TextEncoder().encode('first'))
+        markFirstPull()
+        await release
+        controller.close()
+      },
+    }, { highWaterMark: 0 })
+    const firstUpload = streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'concurrent-first',
+      originalName: 'first.txt',
+      mediaType: 'text/plain',
+      body: delayedBody,
+    })
+    await firstPulled
+    await streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'concurrent-second',
+      originalName: 'second.txt',
+      mediaType: 'text/plain',
+      body: byteStream(new TextEncoder().encode('second')),
+    })
+    releaseFirst()
+    await firstUpload
+
+    expect(readManualQaEvidenceIndex(ticketDir, 1).map((entry) => entry.id).sort())
+      .toEqual(['concurrent-first', 'concurrent-second'])
+  })
+
+  it('rejects evidence reads through a symlinked item directory', async () => {
+    const ticketDir = root()
+    const outside = root()
+    persistChecklist(ticketDir)
+    const evidence = await streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'symlink-parent',
+      originalName: 'trace.txt',
+      mediaType: 'text/plain',
+      body: byteStream(new TextEncoder().encode('inside')),
+    })
+    const storedPath = resolveManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+    }).path
+    const itemDir = dirname(storedPath)
+    rmSync(itemDir, { recursive: true, force: true })
+    mkdirSync(outside, { recursive: true })
+    writeFileSync(join(outside, basename(storedPath)), 'outside')
+    symlinkSync(outside, itemDir, 'dir')
+
+    expect(() => resolveManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+    })).toThrow('unsafe directory')
+  })
+
+  it('rejects evidence reads when the version directory is replaced by a symlink', async () => {
+    const ticketDir = root()
+    const outside = root()
+    persistChecklist(ticketDir)
+    const evidence = await streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'symlink-version',
+      originalName: 'trace.txt',
+      mediaType: 'text/plain',
+      body: byteStream(new TextEncoder().encode('inside')),
+    })
+    const versionDir = getManualQaStoragePaths(ticketDir, 1).versionDir
+    cpSync(versionDir, outside, { recursive: true })
+    rmSync(versionDir, { recursive: true, force: true })
+    symlinkSync(outside, versionDir, 'dir')
+
+    expect(() => resolveManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: evidence.itemId,
+      evidenceId: evidence.id,
+    })).toThrow('unsafe directory')
+  })
+
+  it('rejects a symlinked version before upload creates directories outside storage', async () => {
+    const ticketDir = root()
+    const outside = root()
+    persistChecklist(ticketDir)
+    const versionDir = getManualQaStoragePaths(ticketDir, 1).versionDir
+    cpSync(versionDir, outside, { recursive: true })
+    rmSync(versionDir, { recursive: true, force: true })
+    symlinkSync(outside, versionDir, 'dir')
+
+    await expect(streamManualQaEvidence({
+      ticketDir,
+      version: 1,
+      itemId: 'qa-v1-001',
+      evidenceId: 'blocked-symlink-upload',
+      originalName: 'trace.txt',
+      mediaType: 'text/plain',
+      body: byteStream(new TextEncoder().encode('outside write must not happen')),
+    })).rejects.toThrow('unsafe directory')
+    expect(existsSync(join(outside, 'evidence'))).toBe(false)
   })
 
   it('binds evidence to real checklist items and verifies preview file signatures', async () => {

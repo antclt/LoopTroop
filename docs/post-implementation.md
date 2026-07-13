@@ -65,6 +65,8 @@ When a final-test attempt passes, LoopTroop compares git-visible dirty files fro
 
 Integration only carries forward **audited candidate files** from this pass. If final testing leaves dirty files that were not declared, integration blocks with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` until the user explicitly includes or discards those files.
 
+Each include/discard receipt is bound to the exact final-test audit that produced it. Retrying the same blocked generation or integration step reuses that decision, but a fresh final-test attempt after Manual QA fixes must produce its own decision; an older round's override cannot resolve newly unclassified files.
+
 ### 1.5 Optional Manual QA route
 
 `TESTS_PASSED` branches on the value frozen when the ticket started. Disabled or missing locks keep the direct integration path. Enabled tickets enter:
@@ -81,7 +83,7 @@ RUNNING_FINAL_TEST → GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA
 
 No user action is needed. LoopTroop first resolves the current final-test audit, commits accepted candidate effects into a dedicated local checkpoint, quarantines ticket-owned temporary/unexpected or prior residue, and records HEAD/status/file signatures. Generation requires a clean Git-visible worktree so the first QA-fix bead cannot accidentally commit test or application-runtime residue.
 
-Before the model call, `vN` is reserved and projected immediately. A restart or retry reuses that incomplete version, and already-valid checklist/coverage files advance without another call. The locked main implementer and variant receive the ticket title and description, frozen approved PRD, selected bead fields (including verification intent, labels, and issue type), the current final-test report, latest previous checklist/results/coverage/summary, and targeted metadata for the complete merge-base-to-checkpoint candidate range. Focused read-only diff inspection is allowed; whole-repository dumps are not.
+Before the model call, `vN` is reserved and projected immediately. A restart or retry reuses that incomplete version even if the checklist was already written; valid checklist/coverage files advance without another call, and a missing deterministic coverage file is rebuilt from the frozen PRD. The locked main implementer and variant receive the ticket title and description, frozen approved PRD, selected bead fields (including verification intent, labels, and issue type), the current final-test report, latest previous checklist/results/coverage/summary, and targeted metadata for the complete merge-base-to-checkpoint candidate range. Focused read-only diff inspection is allowed; whole-repository dumps are not.
 
 One strict tagged YAML response supplies each short item title, checklist content, and `full | partial` PRD references. Formatting repairs may normalize envelopes, YAML syntax, or known aliases, but never invent behavior, actions, observations, or expected results. Invalid criterion refs and invalid later-round lineage/recheck relationships fail validation and use normal structured retries. LoopTroop derives refs as `<epic-id>/<story-id>/AC-<1-based-index>` and computes coverage plus checklist source-category counts in code: any valid full ref covers a criterion, partial-only refs make it partially covered, and no valid refs leave it uncovered. Gaps are advisory.
 
@@ -93,9 +95,11 @@ The user—not LoopTroop—starts and controls the application, follows prerequi
 
 The five-second autosave uses compare-and-set `ui_state:manual_qa_draft:vN`, while final Submit snapshots it as immutable `manual_qa_draft`. Evidence may be any file type up to 250 MiB per file, with no count/round cap. Uploads are streamed into contained temporary files, hashed and size-checked, then atomically renamed; only safe rasters preview inline. Links must be HTTP(S), and binaries remain disk-only.
 
-Before Submit or Skip, the worktree is compared with the QA baseline. If running the app caused drift, the gate stays open until the user includes exactly audited files in a checkpoint or discards exactly those changes. Submission then uses an operation-typed journal with deterministic origins/action IDs so partial restarts cannot switch Submit into Skip, change the frozen draft, overwrite immutable results, or duplicate beads/improvement tickets. A durable final summary repairs an incomplete journal before replaying the workflow transition.
+Before Submit or Skip, the worktree is compared with the QA baseline. If running the app caused drift, the gate stays open until the user includes exactly audited files in a checkpoint or discards exactly those changes. Submission then uses an operation-typed journal with deterministic origins/action IDs so partial restarts cannot switch Submit into Skip, change the frozen draft, overwrite immutable results, or duplicate beads/improvement tickets. A durable final summary repairs an incomplete journal and any missing compact summary/skip-receipt phase mirrors before replaying the workflow transition.
 
 Each completed round records start/completion time, duration, result/required/optional/evidence counts, waiver reasons, created work, next workflow action, coverage totals, and the immutable evidence-model capability snapshot. `.ticket/manual-qa/events.jsonl` provides the append-only generation-to-completion audit stream. Improvement ticket descriptions retain the user-edited text first and append only human-readable implementation context; ticket/version/item IDs, hashes, evidence paths, and receipt data stay in the structured origin metadata. The origin-to-child mapping is transactionally reserved in SQLite, allowing a restart to repair child evidence and provenance even if it stopped immediately after child creation.
+
+Final integration and PR delivery use the newest completed round for the outcome, waiver, and skip state, while accumulating every created QA-fix bead ID and improvement-ticket ID across earlier rounds. This keeps work created by a failed v1 visible after a later v2 passes, without putting evidence binaries into delivery context.
 
 Outcomes are:
 

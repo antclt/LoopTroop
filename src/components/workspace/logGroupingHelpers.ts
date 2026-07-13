@@ -1,5 +1,5 @@
 import type { LogEntry } from '@/context/LogContext'
-import type { Ticket } from '@/hooks/useTickets'
+import type { ManualQaBeadOrigin, Ticket } from '@/hooks/useTickets'
 import { isSystem } from './logFormat'
 
 export interface RenderedBeadSection {
@@ -7,6 +7,7 @@ export interface RenderedBeadSection {
   ordinal: number
   total: number
   title: string
+  qaOrigin?: ManualQaBeadOrigin | null
   entries: LogEntry[]
 }
 
@@ -49,6 +50,7 @@ export function buildBeadSections(
         ordinal: index + 1,
         title: bead.title,
         status: bead.status,
+        qaOrigin: bead.qaOrigin,
       },
     ]),
   )
@@ -119,6 +121,7 @@ export function buildBeadSections(
         ordinal,
         total: total > 0 ? total : ordinal,
         title: runtimeBead?.title?.trim() || segment.title,
+        qaOrigin: runtimeBead?.qaOrigin,
         entries: visibleEntries,
       }
     })

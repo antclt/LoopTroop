@@ -164,7 +164,36 @@ Operational notes:
 - Manual QA keeps compact append-only checklist, coverage, results, draft snapshot, and summary artifacts here; live editing exists only as `ui_state:manual_qa_draft:vN` with a server-owned compare-and-set revision
 - council companion artifacts may embed draft/vote metadata and attempt diagnostics in `content`; malformed model text is intentionally kept out of structured fields
 
-Manual QA also uses `manual_qa_operations` for submission recovery and `manual_qa_improvement_tickets` for the unique origin-to-child-ticket mapping. The latter is created in the same SQLite transaction as the Draft child ticket, so a restart after database creation but before filesystem provenance/evidence writes finds the same child and repairs the missing receipts instead of creating a duplicate.
+### `manual_qa_operations`
+
+This table is the durable operation journal for a final Manual QA Submit or Skip batch.
+
+Columns:
+
+- `id` — auto-incrementing primary key
+- `ticket_id` — source ticket foreign key with cascade deletion
+- `action_id` — caller-stable idempotency identity
+- `version` — checklist round reserved by the operation
+- `checklist_hash` and `draft_revision` — immutable optimistic-concurrency guards
+- `state` — durable journal stage (initially `staged`, then advanced as results, improvements, beads, receipts, and transition effects become durable)
+- `payload` — serialized operation/journal data used to resume incomplete stages
+- `created_at`, `updated_at`
+
+`(ticket_id, action_id)` has a unique index. A retry with the same identity resumes the existing state; it cannot create a second operation for that ticket/action pair or silently change the guarded checklist/draft.
+
+### `manual_qa_improvement_tickets`
+
+This table maps one deterministic Manual QA Improvement origin to exactly one Draft child ticket.
+
+Columns:
+
+- `id` — auto-incrementing primary key
+- `origin_id` — deterministic, globally unique improvement origin
+- `destination_ticket_id` — created Draft ticket foreign key with cascade deletion
+- `action_id` — parent submission identity
+- `created_at`
+
+`origin_id` is unique. The mapping is created in the same SQLite transaction as the Draft child ticket, so a restart after database creation but before filesystem provenance/evidence writes finds the same child and repairs the missing receipts instead of creating a duplicate.
 
 ### `ticket_phase_attempts`
 
@@ -317,7 +346,7 @@ SQLite is not the whole system. Some ticket state is intentionally filesystem-ba
 | `.ticket/manual-qa/workspace-baseline-vN.json` and drift receipts | Git baseline and audited include/discard decisions | Submission/skip safety records |
 | `.ticket/manual-qa/events.jsonl` | Idempotent versioned generation, evidence, drift, submission, child-work, and completion events | Append-only Manual QA audit stream |
 
-Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks are rejected, and bytes are streamed through contained temporary files, hashed, and atomically renamed. Stable evidence/action IDs reconcile a restart between file rename, index persistence, and the final upload/remove receipt. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
+Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks at every contained ancestor are rejected, and bytes are streamed through contained temporary files, hashed, and atomically renamed. Synchronous index publication preserves concurrent uploads, while stable evidence/action IDs reconcile a restart between file rename or unlink, index persistence, and the final upload/remove receipt. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
 
 The important split is:
 

@@ -11,6 +11,7 @@ import { handleMockExecutionUnsupported } from './executionPhase'
 import { withCommandLoggingAsync } from '../../log/commandLogger'
 import { CancelledError } from '../../council/types'
 import { ManualQaSummarySchema } from '../../phases/manualQa/types'
+import { readManualQaDeliverySummary as readCanonicalManualQaDeliverySummary } from '../../phases/manualQa/delivery'
 
 function readFinalTestFilesToStage(ticketId: string): string[] {
   const artifact = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')
@@ -36,6 +37,10 @@ function readFinalTestFilesToStage(ticketId: string): string[] {
 }
 
 function readManualQaDeliverySummary(ticketId: string) {
+  const ticketDir = getTicketPaths(ticketId)?.ticketDir
+  const canonical = ticketDir ? readCanonicalManualQaDeliverySummary(ticketDir) : null
+  if (canonical) return canonical
+
   const artifact = getLatestPhaseArtifact(ticketId, 'manual_qa_summary')
   if (!artifact) return null
   try {

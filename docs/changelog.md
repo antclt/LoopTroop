@@ -35,11 +35,15 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
-- Fixed Manual QA recovery end to end: strict action guards run before reservation, immutable results and incomplete journals resume safely, submit/skip and evidence mutations reuse durable identities without duplicate work, exact checkpoint files exclude staged residue, model image file parts reach coding sessions, and reverse-loop history remains reviewable through later errors or cancellation.
+- Fixed Manual QA recovery end to end: strict action guards run before reservation, immutable results and incomplete journals resume safely, terminal retries repair missing summary/skip-receipt phase mirrors before transitioning, submit/skip and evidence mutations reuse durable identities without duplicate work, exact checkpoint files exclude staged residue, model image file parts reach coding sessions, and reverse-loop history remains reviewable through later errors or cancellation.
+- Preserved complete Manual QA round summaries and coverage/source provenance in historical review, made upload/removal/drift retries reuse their identities with fresh CAS guards and visible reconciliation errors, retained exact failed files in collision-safe Retry/Dismiss states, and surfaced typed QA-fix origins in structured bead artifacts and grouped Coding logs while keeping retry notes separate.
+- Fixed checklist-generation recovery to reuse its reserved version, rebuild missing deterministic coverage without another model call, and independently repair half-written compact checklist/coverage artifacts; evidence storage now also preserves concurrent uploads, repairs removals interrupted after unlink even with a new action after reload, and rejects symlinked ancestor directories before reads, removals, or directory creation.
+- Bound final-test file-effect decisions to the exact audit that produced them so an older Manual QA round cannot resolve fresh unclassified files, and retained all earlier QA fix-bead/improvement-ticket IDs in final integration and PR summaries after a later round passes.
 
 #### Removed
 
 #### Maintenance
+- Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
 - Documented Manual QA configuration/inheritance, storage/schema, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, QA beads/file parts, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.

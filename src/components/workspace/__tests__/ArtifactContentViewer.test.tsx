@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render as baseRender, screen, within } from '@
 import type { ReactElement, ReactNode } from 'react'
 import { encode } from 'gpt-tokenizer'
 import { deriveStructuredInterventions } from '@shared/structuredInterventions'
-import { ArtifactContent, CollapsibleSection, InterviewAnswersView } from '../ArtifactContentViewer'
+import { ArtifactContent, BeadsDraftView, CollapsibleSection, InterviewAnswersView } from '../ArtifactContentViewer'
 import { buildArtifactProcessingNoticeCopy } from '../artifactProcessingNotice'
 import { serializeBeadCommitsDiffContent } from '../diffUtils'
 import type { ArtifactStructuredOutputData } from '../phaseArtifactTypes'
@@ -129,6 +129,24 @@ describe('ArtifactContentViewer', () => {
 
     expect(screen.getByText('Expanded body')).toBeInTheDocument()
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
+  })
+
+  it('shows Manual QA provenance in bead artifacts while keeping retry notes separate', () => {
+    render(<BeadsDraftView content={JSON.stringify({ beads: [{
+      id: 'QA-v2-1', title: 'Fix checkout', priority: 1, status: 'pending', notes: 'Retry note',
+      qaOrigin: {
+        schemaVersion: 1, actionId: 'action-1', sourceTicketId: '1:APP-1', sourceTicketExternalId: 'APP-1', version: 2, imageDelivery: 'references_only',
+        sourceItems: [{ itemId: 'item-1', lineageId: 'checkout', behavior: 'Checkout submits', observation: 'Nothing happened', expectedResult: 'Order is created', evidence: [{ id: 'ev-1', originalName: 'screen.png', mediaType: 'image/png', size: 10, sha256: 'a'.repeat(64), relativePath: 'screen.png' }], links: [] }],
+      },
+    }] })} />)
+
+    expect(screen.getByText('Manual QA Fix · v2')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Fix checkout/ }))
+    expect(screen.getByText(/Nothing happened/)).toBeInTheDocument()
+    expect(screen.getByText(/Order is created/)).toBeInTheDocument()
+    expect(screen.getByText('screen.png')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Metadata' }))
+    expect(screen.getByText('Retry note')).toBeInTheDocument()
   })
 
   it('uses the interview results header for approval-phase canonical interviews', () => {

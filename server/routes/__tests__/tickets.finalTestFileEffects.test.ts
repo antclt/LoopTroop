@@ -7,6 +7,8 @@ import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { attachProject } from '../../storage/projects'
 import {
+  archiveActivePhaseAttempts,
+  createFreshPhaseAttempts,
   createTicket,
   ensureActivePhaseAttempt,
   getLatestPhaseArtifact,
@@ -15,6 +17,7 @@ import {
   patchTicket,
   recordTicketErrorOccurrence,
 } from '../../storage/tickets'
+import { resolveFinalTestCandidateFiles } from '../../phases/finalTest/fileEffectsAudit'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { initializeTicket } from '../../ticket/initialize'
 import { ticketRouter } from '../tickets'
@@ -186,6 +189,42 @@ describe('ticketRouter final-test file effects recovery', () => {
       decision: 'discard_unclassified',
       files: ['tmp/final-output.txt'],
       source: 'user',
+    })
+  })
+
+  it('does not apply a prior-round decision to a fresh final-test audit', async () => {
+    const { app, ticket } = createBlockedFileEffectsTicket()
+
+    const response = await app.request(`/api/tickets/${ticket.id}/include-final-test-files`, { method: 'POST' })
+    expect(response.status).toBe(200)
+
+    ensureActivePhaseAttempt(ticket.id, 'RUNNING_FINAL_TEST')
+    archiveActivePhaseAttempts(ticket.id, ['RUNNING_FINAL_TEST'], 'manual_qa_fixes_created')
+    createFreshPhaseAttempts(ticket.id, ['RUNNING_FINAL_TEST'])
+    insertPhaseArtifact(ticket.id, {
+      phase: 'RUNNING_FINAL_TEST',
+      artifactType: 'final_test_file_effects_audit',
+      content: JSON.stringify({
+        status: 'blocked',
+        capturedAt: '2026-05-27T00:00:00.000Z',
+        baselineDirtyFiles: [],
+        dirtyFilesAfterTesting: [],
+        producedByFinalTesting: [],
+        declaredEffects: [],
+        candidateFiles: [],
+        temporaryFiles: [],
+        unexpectedFiles: [],
+        unclassifiedFiles: ['tmp/next-round-output.txt'],
+        decisionRequiredFiles: ['tmp/next-round-output.txt'],
+        message: 'Final testing left unclassified dirty file(s): tmp/next-round-output.txt',
+      }),
+    })
+
+    expect(resolveFinalTestCandidateFiles(ticket.id)).toMatchObject({
+      ok: false,
+      candidateFiles: [],
+      audit: { decisionRequiredFiles: ['tmp/next-round-output.txt'] },
+      errorCode: FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
     })
   })
 })

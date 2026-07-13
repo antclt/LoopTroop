@@ -104,6 +104,8 @@ import type {
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
 import { CopyButton, RawContentWithCopy, RawDisplayPre, RawDisplayStats } from './RawTextDisplay'
 import { getSafeGitHubPullRequestUrl } from '@/lib/githubUrls'
+import { ManualQaOriginBadge, ManualQaOriginCard } from './ManualQaOriginCard'
+import type { ManualQaBeadOrigin } from '@/hooks/useTickets'
 
 const COVERAGE_ATTRIBUTION_HIDDEN_PHASES = new Set([
   'VERIFYING_INTERVIEW_COVERAGE',
@@ -2437,6 +2439,8 @@ interface ParsedBead {
   started_at?: string
   beadStartCommit?: string | null
   bead_start_commit?: string | null
+  qaOrigin?: ManualQaBeadOrigin | null
+  qa_origin?: ManualQaBeadOrigin | null
 }
 
 const PRD_TECHNICAL_SECTION_CONFIG: Array<{
@@ -3013,6 +3017,7 @@ export function BeadsDraftView({ content }: { content: string }) {
             const startedAt = getBeadStringValue(bead, ['startedAt', 'started_at'])
             const completedAt = getBeadStringValue(bead, ['completedAt', 'completed_at'])
             const beadStartCommit = getBeadStringValue(bead, ['beadStartCommit', 'bead_start_commit'])
+            const qaOrigin = bead.qaOrigin ?? bead.qa_origin ?? null
             const metadataId = getBeadStringValue(bead, ['id'])
             const { blockedBy, blocks } = getBeadDependencies(bead)
             return (
@@ -3026,6 +3031,7 @@ export function BeadsDraftView({ content }: { content: string }) {
                       #{order}
                     </span>
                     <span className="min-w-0 flex-1 truncate">{title}</span>
+                    {qaOrigin && <ManualQaOriginBadge origin={qaOrigin} />}
                   </span>
                 )}
               >
@@ -3056,6 +3062,7 @@ export function BeadsDraftView({ content }: { content: string }) {
                       <span className="whitespace-pre-wrap">{description}</span>
                     </div>
                   )}
+                  {qaOrigin && <ManualQaOriginCard origin={qaOrigin} />}
                   {targetFiles.length > 0 && (
                     <BeadSection title="Target Files" accent="border-cyan-300 dark:border-cyan-700">
                       <div className="space-y-1">

@@ -33,6 +33,7 @@ import {
   ManualQaImprovementOriginSchema,
   type ManualQaImprovementOrigin,
 } from '../phases/manualQa/types'
+import type { QaOrigin } from '../phases/beads/types'
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
@@ -60,6 +61,37 @@ const LockedCouncilMemberVariantsSchema = z.record(z.string(), TrimmedNonEmptySt
     }
   }
 })
+const RuntimeQaOriginSchema: z.ZodType<QaOrigin> = z.object({
+  schemaVersion: z.literal(1),
+  actionId: TrimmedNonEmptyStringSchema,
+  sourceTicketId: TrimmedNonEmptyStringSchema,
+  sourceTicketExternalId: TrimmedNonEmptyStringSchema,
+  version: z.number().int().positive(),
+  sourceItems: z.array(z.object({
+    itemId: TrimmedNonEmptyStringSchema,
+    lineageId: TrimmedNonEmptyStringSchema,
+    behavior: TrimmedNonEmptyStringSchema,
+    observation: TrimmedNonEmptyStringSchema,
+    expectedResult: TrimmedNonEmptyStringSchema,
+    evidence: z.array(z.object({
+      id: TrimmedNonEmptyStringSchema,
+      originalName: TrimmedNonEmptyStringSchema,
+      mediaType: TrimmedNonEmptyStringSchema,
+      size: z.number().int().nonnegative(),
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+      relativePath: TrimmedNonEmptyStringSchema,
+    }).strict()),
+    links: z.array(z.object({
+      id: TrimmedNonEmptyStringSchema,
+      url: z.string().url().refine((value) => {
+        const protocol = new URL(value).protocol
+        return protocol === 'http:' || protocol === 'https:'
+      }, 'Manual QA evidence links must use HTTP or HTTPS.'),
+      label: z.string().optional(),
+    }).strict()),
+  }).strict()).min(1),
+  imageDelivery: z.enum(['attached', 'references_only']).optional(),
+}).strict()
 
 function truncateLoggedValue(value: string, maxLength = 200): string {
   const trimmed = value.trim()
@@ -146,6 +178,7 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
       notes?: string
       startedAt?: string | null
       updatedAt?: string | null
+      qaOrigin?: QaOrigin | null
     }>
     candidateCommitSha: string | null
     preSquashHead: string | null
@@ -898,6 +931,7 @@ function buildRuntime(
       iteration: bead.iteration,
       notes: bead.notes,
       startedAt: bead.startedAt,
+      qaOrigin: bead.qaOrigin,
     })),
     candidateCommitSha: integrationReport?.candidateCommitSha ?? null,
     preSquashHead: integrationReport?.preSquashHead ?? null,
@@ -915,15 +949,19 @@ function buildRuntime(
 function readRuntimeBeads(projectRoot: string, externalId: string, baseBranch: string) {
   try {
     return readJsonl<Record<string, unknown>>(getTicketBeadsPath(projectRoot, externalId, baseBranch))
-      .map((bead) => ({
-        id: typeof bead.id === 'string' ? bead.id : '',
-        title: typeof bead.title === 'string' ? bead.title : 'Untitled',
-        status: typeof bead.status === 'string' ? bead.status : 'pending',
-        iteration: typeof bead.iteration === 'number' ? bead.iteration : 0,
-        notes: typeof bead.notes === 'string' ? bead.notes : '',
-        updatedAt: typeof bead.updatedAt === 'string' ? bead.updatedAt : null,
-        startedAt: typeof bead.startedAt === 'string' ? bead.startedAt : null,
-      }))
+      .map((bead) => {
+        const qaOrigin = RuntimeQaOriginSchema.safeParse(bead.qaOrigin)
+        return {
+          id: typeof bead.id === 'string' ? bead.id : '',
+          title: typeof bead.title === 'string' ? bead.title : 'Untitled',
+          status: typeof bead.status === 'string' ? bead.status : 'pending',
+          iteration: typeof bead.iteration === 'number' ? bead.iteration : 0,
+          notes: typeof bead.notes === 'string' ? bead.notes : '',
+          updatedAt: typeof bead.updatedAt === 'string' ? bead.updatedAt : null,
+          startedAt: typeof bead.startedAt === 'string' ? bead.startedAt : null,
+          qaOrigin: qaOrigin.success ? qaOrigin.data : null,
+        }
+      })
       .filter((bead) => bead.id.length > 0)
   } catch {
     return []

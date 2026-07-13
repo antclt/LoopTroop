@@ -42,16 +42,17 @@ const PrdSchema = z.object({
   }).passthrough()),
 }).passthrough()
 
-function resolveGenerationVersion(ticketDir: string): number {
+export function resolveManualQaGenerationVersion(ticketDir: string): number {
   const root = resolve(ticketDir, 'manual-qa')
   if (existsSync(root)) {
     const reserved = readdirSync(root)
       .map((name) => name.match(/^generation-reservation-v([1-9]\d*)\.json$/)?.[1])
       .filter((value): value is string => Boolean(value))
       .map(Number)
-      .sort((left, right) => left - right)
+      .sort((left, right) => right - left)
     for (const version of reserved) {
-      if (!readManualQaChecklist(ticketDir, version)) return version
+      const summary = readManualQaSummary(ticketDir, version)
+      if (!summary || summary.outcome === 'failed') return version
     }
   }
   return allocateNextManualQaVersion(ticketDir)
@@ -62,6 +63,20 @@ function readApprovedPrd(ticketDir: string): PrdDocument {
   if (!existsSync(path)) throw new Error('Approved PRD is required before Manual QA checklist generation.')
   const parsed = PrdSchema.parse(parseYamlOrJsonCandidate(readFileSync(path, 'utf8')))
   return parsed as unknown as PrdDocument
+}
+
+export function restoreManualQaGenerationArtifacts(ticketDir: string, version: number): {
+  checklist: NonNullable<ReturnType<typeof readManualQaChecklist>>
+  coverage: NonNullable<ReturnType<typeof readManualQaCoverage>>
+} | null {
+  const checklist = readManualQaChecklist(ticketDir, version)
+  if (!checklist) return null
+  let coverage = readManualQaCoverage(ticketDir, version)
+  if (!coverage) {
+    coverage = computeManualQaCoverage(checklist, deriveManualQaPrdCriteria(readApprovedPrd(ticketDir)))
+    persistManualQaCoverage(ticketDir, coverage)
+  }
+  return { checklist, coverage }
 }
 
 function focusedDiffMetadata(worktreePath: string, baseBranch: string): string {
@@ -158,17 +173,40 @@ export function buildGenerationPrompt(input: {
   ].join('\n')
 }
 
+function shouldPersistManualQaGenerationArtifact(existingContent: string | null | undefined, version: number): boolean {
+  return !existingContent?.includes(`"version":${version}`)
+}
+
+export function resolveManualQaGenerationArtifactRepairs(input: {
+  checklistContent?: string | null
+  coverageContent?: string | null
+  version: number
+}): { checklist: boolean; coverage: boolean } {
+  return {
+    checklist: shouldPersistManualQaGenerationArtifact(input.checklistContent, input.version),
+    coverage: shouldPersistManualQaGenerationArtifact(input.coverageContent, input.version),
+  }
+}
+
 function persistGenerationArtifacts(ticketId: string, version: number, checklistContent: string, coverage: unknown): void {
   const phase = 'GENERATING_QA_CHECKLIST'
   const phaseAttempt = resolvePhaseAttempt(ticketId, phase)
-  const existing = getLatestPhaseArtifact(ticketId, 'manual_qa_checklist', phase, phaseAttempt)
-  if (!existing || !existing.content.includes(`"version":${version}`)) {
+  const existingChecklist = getLatestPhaseArtifact(ticketId, 'manual_qa_checklist', phase, phaseAttempt)
+  const existingCoverage = getLatestPhaseArtifact(ticketId, 'manual_qa_coverage', phase, phaseAttempt)
+  const repairs = resolveManualQaGenerationArtifactRepairs({
+    checklistContent: existingChecklist?.content,
+    coverageContent: existingCoverage?.content,
+    version,
+  })
+  if (repairs.checklist) {
     insertPhaseArtifact(ticketId, {
       phase,
       phaseAttempt,
       artifactType: 'manual_qa_checklist',
       content: JSON.stringify({ version, checklist: checklistContent }),
     })
+  }
+  if (repairs.coverage) {
     insertPhaseArtifact(ticketId, {
       phase,
       phaseAttempt,
@@ -199,7 +237,7 @@ export async function handleManualQaChecklistGeneration(
 ): Promise<void> {
   const paths = getTicketPaths(ticketId)
   if (!paths) throw new Error(`Ticket storage was not found: ${ticketId}`)
-  const version = resolveGenerationVersion(paths.ticketDir)
+  const version = resolveManualQaGenerationVersion(paths.ticketDir)
   const reservation = reserveManualQaVersion(paths.ticketDir, ticketId, version)
   persistGenerationReservationArtifact(ticketId, version, reservation.actionId)
   appendManualQaEvent(paths.ticketDir, {
@@ -215,9 +253,9 @@ export async function handleManualQaChecklistGeneration(
 
   prepareManualQaCheckpoint(ticketId, version)
 
-  const existingChecklist = readManualQaChecklist(paths.ticketDir, version)
-  const existingCoverage = readManualQaCoverage(paths.ticketDir, version)
-  if (existingChecklist && existingCoverage) {
+  const restored = restoreManualQaGenerationArtifacts(paths.ticketDir, version)
+  if (restored) {
+    const { checklist: existingChecklist, coverage: existingCoverage } = restored
     const checklistHash = getManualQaChecklistHash(paths.ticketDir, version)
     if (!checklistHash) throw new Error('Existing Manual QA checklist hash is unavailable.')
     completeManualQaReservation(paths.ticketDir, reservation, checklistHash)

@@ -16,7 +16,7 @@ LoopTroop applies configuration in three layers:
 | Ticket override | Optional Draft-only Manual QA choice | Wins over project and profile when the ticket starts |
 | Ticket start lock | Frozen planning-critical values captured on **Start** | Stays fixed for that ticket run |
 
-The main UI edits the singleton profile. Project-level overrides are supported by the project API / local project state even though there is no full project-override editor in the main configuration modal. The overrideable fields are:
+The Configuration dialog edits the singleton profile. Project-level overrides are stored by the project API/local project state; the Project form provides the focused Manual QA `Inherit / Enabled / Disabled` editor, while the other project overrides do not have a general editor in the Configuration dialog. The overrideable fields are:
 
 - `councilMembers`
 - `maxIterations` (`Max Bead Retries`)

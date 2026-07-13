@@ -11,6 +11,7 @@ const {
   emitPhaseLogMock,
   isMockOpenCodeModeMock,
   handleMockExecutionUnsupportedMock,
+  readManualQaDeliverySummaryMock,
 } = vi.hoisted(() => ({
   prepareSquashCandidateMock: vi.fn(),
   getLatestPhaseArtifactMock: vi.fn(),
@@ -19,10 +20,15 @@ const {
   emitPhaseLogMock: vi.fn(),
   isMockOpenCodeModeMock: vi.fn(),
   handleMockExecutionUnsupportedMock: vi.fn(),
+  readManualQaDeliverySummaryMock: vi.fn(),
 }))
 
 vi.mock('../../phases/integration/squash', () => ({
   prepareSquashCandidate: prepareSquashCandidateMock,
+}))
+
+vi.mock('../../phases/manualQa/delivery', () => ({
+  readManualQaDeliverySummary: readManualQaDeliverySummaryMock,
 }))
 
 vi.mock('../../storage/tickets', () => ({
@@ -87,6 +93,7 @@ describe('handleIntegration', () => {
     getTicketPathsMock.mockReturnValue(defaultPaths)
     getLatestPhaseArtifactMock.mockReturnValue(undefined)
     prepareSquashCandidateMock.mockReturnValue(successSquash)
+    readManualQaDeliverySummaryMock.mockReturnValue(null)
 
     context = makeTicketContext()
   })

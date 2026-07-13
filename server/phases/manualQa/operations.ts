@@ -25,6 +25,7 @@ import type { Bead, QaOrigin, QaOriginEvidenceRef, QaOriginSourceItem } from '..
 import { captureFinalTestDirtyFiles } from '../finalTest/fileEffectsAudit'
 import { fetchProviderCatalog, flattenCatalogModels } from '../../opencode/providerCatalog'
 import { composeManualQaImprovementDescription } from '../../../shared/manualQaImprovement'
+import { parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
 import {
   MANUAL_QA_SCHEMA_VERSION,
   ManualQaDraftSchema,
@@ -726,6 +727,43 @@ function persistSummaryArtifact(ticketId: string, summary: ManualQaSummary): voi
   persistManualQaPhaseArtifact(ticketId, 'manual_qa_summary', summary, `${summary.version}:${summary.outcome}`)
 }
 
+function repairTerminalManualQaArtifacts(input: {
+  ticketId: string
+  ticketDir: string
+  summary: ManualQaSummary
+  actionId: string
+}): void {
+  persistSummaryArtifact(input.ticketId, input.summary)
+  if (input.summary.outcome !== 'skipped') return
+
+  const skipReceiptPath = getManualQaStoragePaths(input.ticketDir, input.summary.version).skipReceiptPath
+  if (!existsSync(skipReceiptPath)) {
+    throw new Error('Canonical Manual QA skip receipt is missing during recovery.')
+  }
+  const parsed = parseYamlOrJsonCandidate(readFileSync(skipReceiptPath, 'utf8'))
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Canonical Manual QA skip receipt is invalid during recovery.')
+  }
+  const receipt = parsed as Record<string, unknown>
+  if (
+    receipt.artifact !== 'manual_qa_skip_receipt'
+    || receipt.version !== input.summary.version
+    || typeof receipt.actionId !== 'string'
+    || !receipt.actionId.trim()
+  ) {
+    throw new Error('Canonical Manual QA skip receipt does not match the durable summary.')
+  }
+  if (input.actionId && receipt.actionId !== input.actionId) {
+    throw new Error('Canonical Manual QA skip receipt does not match the recovery operation.')
+  }
+  persistManualQaPhaseArtifact(
+    input.ticketId,
+    'manual_qa_skip_receipt',
+    receipt,
+    receipt.actionId,
+  )
+}
+
 function persistManualQaPhaseArtifact(ticketId: string, artifactType: string, value: unknown, idempotencyKey: string): void {
   const existing = getLatestPhaseArtifact(ticketId, artifactType, 'WAITING_MANUAL_QA')
   if (existing?.content.includes(`"idempotencyKey":"${idempotencyKey}"`)) return
@@ -846,8 +884,15 @@ export async function submitManualQa(input: {
     const existingJournal = existsSync(operationPath)
       ? JSON.parse(readFileSync(operationPath, 'utf8')) as ManualQaOperationJournal
       : null
+    const recoveryActionId = existingJournal?.actionId ?? `manual-qa-recovery-v${input.version}`
     finalizeRecoveredOperation(input.ticketId, operationPath, existingJournal, existingSummary)
-    appendManualQaSummaryEvent(paths.ticketDir, existingSummary, existingJournal?.actionId ?? `manual-qa-recovery-v${input.version}`)
+    repairTerminalManualQaArtifacts({
+      ticketId: input.ticketId,
+      ticketDir: paths.ticketDir,
+      summary: existingSummary,
+      actionId: recoveryActionId,
+    })
+    appendManualQaSummaryEvent(paths.ticketDir, existingSummary, recoveryActionId)
     dispatchCompletedManualQaWorkflow({
       ticketId: input.ticketId,
       summary: existingSummary,
@@ -1107,8 +1152,15 @@ export async function skipManualQa(input: {
     const existingJournal = existsSync(operationPath)
       ? JSON.parse(readFileSync(operationPath, 'utf8')) as ManualQaOperationJournal
       : null
+    const recoveryActionId = existingJournal?.actionId ?? `manual-qa-recovery-v${input.version}`
     finalizeRecoveredOperation(input.ticketId, operationPath, existingJournal, existing)
-    appendManualQaSummaryEvent(ticketDir, existing, existingJournal?.actionId ?? `manual-qa-recovery-v${input.version}`)
+    repairTerminalManualQaArtifacts({
+      ticketId: input.ticketId,
+      ticketDir,
+      summary: existing,
+      actionId: recoveryActionId,
+    })
+    appendManualQaSummaryEvent(ticketDir, existing, recoveryActionId)
     dispatchCompletedManualQaWorkflow({
       ticketId: input.ticketId,
       summary: existing,

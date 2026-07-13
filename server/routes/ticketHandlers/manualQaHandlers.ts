@@ -380,7 +380,13 @@ export async function handleRemoveManualQaEvidence(c: Context) {
         const stillPresent = readManualQaEvidenceIndex(resolved.paths.ticketDir, version)
           .some((entry) => entry.id === evidenceId && entry.itemId === itemId)
         if (stillPresent) {
-          removeManualQaEvidence({ ticketDir: resolved.paths.ticketDir, version, itemId, evidenceId })
+          removeManualQaEvidence({
+            ticketDir: resolved.paths.ticketDir,
+            version,
+            itemId,
+            evidenceId,
+            evidence: previousReceipt.evidence,
+          })
         }
         persistManualQaEvidenceActionReceipt(
           resolved.paths.ticketDir,
@@ -403,14 +409,11 @@ export async function handleRemoveManualQaEvidence(c: Context) {
       })
       return c.json({ success: true, removed: previousReceipt.evidence, expectedDraftRevision: guard.expectedDraftRevision })
     }
-    const evidence = resolveManualQaEvidence({
-      ticketDir: resolved.paths.ticketDir,
-      version,
-      itemId,
-      evidenceId,
-    }).metadata
+    const evidence = readManualQaEvidenceIndex(resolved.paths.ticketDir, version)
+      .find((entry) => entry.id === evidenceId && entry.itemId === itemId)
+    if (!evidence) throw new Error('Evidence was not found.')
     persistManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId, 'remove', evidence, 'staged')
-    removeManualQaEvidence({ ticketDir: resolved.paths.ticketDir, version, itemId, evidenceId })
+    removeManualQaEvidence({ ticketDir: resolved.paths.ticketDir, version, itemId, evidenceId, evidence })
     persistManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId, 'remove', evidence, 'complete')
     const receipt = readManualQaEvidenceActionReceipt(resolved.paths.ticketDir, version, guard.actionId)!
     appendEvidenceEvent({

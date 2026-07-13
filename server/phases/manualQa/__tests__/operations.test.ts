@@ -21,10 +21,11 @@ import {
   getManualQaStoragePaths,
   persistManualQaChecklist,
   persistManualQaResults,
+  persistManualQaSummary,
   readManualQaResults,
   streamManualQaEvidence,
 } from '../storage'
-import type { ManualQaChecklist, ManualQaDraft } from '../types'
+import type { ManualQaChecklist, ManualQaDraft, ManualQaSummary } from '../types'
 
 const repoManager = createTestRepoManager('manual-qa-operations-')
 
@@ -113,6 +114,35 @@ function byteStream(value: Uint8Array) {
   })
 }
 
+function terminalSummary(
+  setup: ReturnType<typeof prepareFixture>,
+  outcome: 'passed' | 'skipped',
+  skipReason?: string,
+): ManualQaSummary {
+  return {
+    schemaVersion: 1,
+    artifact: 'manual_qa_summary',
+    ticketId: setup.ticket.externalId,
+    version: 1,
+    outcome,
+    createdFixBeadIds: [],
+    improvementTicketIds: [],
+    waivedItemIds: [],
+    waivedItems: [],
+    ...(skipReason ? { skipReason } : {}),
+    startedAt: '2026-07-13T12:00:00.000Z',
+    completedAt: '2026-07-13T12:01:00.000Z',
+    durationMs: 60_000,
+    itemCounts: { pass: 1, fail: 0, waive: 0, improvement: 0, pending: 0 },
+    requiredItemCount: 1,
+    optionalItemCount: 0,
+    evidenceCount: 0,
+    nextAction: 'integrate',
+    coverage: { covered: 0, partiallyCovered: 0, uncovered: 0 },
+    modelCapability: null,
+  }
+}
+
 describe('Manual QA submission recovery and integrity', () => {
   beforeEach(() => resetTestDb())
   afterAll(() => {
@@ -167,6 +197,73 @@ describe('Manual QA submission recovery and integrity', () => {
       sendEvent: vi.fn(),
     })
     expect(JSON.parse(readFileSync(operationPath, 'utf8')).state).toBe('complete')
+  })
+
+  it('repairs a missing phase summary before replaying a canonical terminal outcome', async () => {
+    const setup = prepareFixture()
+    persistManualQaSummary(setup.paths.ticketDir, terminalSummary(setup, 'passed'))
+
+    const sendEvent = vi.fn()
+    await submitManualQa({
+      ticketId: setup.ticket.id,
+      version: 1,
+      draft: setup.draft,
+      guard: setup.guard,
+      sendEvent,
+    })
+
+    const artifact = getLatestPhaseArtifact(setup.ticket.id, 'manual_qa_summary', 'WAITING_MANUAL_QA')
+    expect(JSON.parse(artifact!.content)).toMatchObject({ version: 1, outcome: 'passed' })
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'MANUAL_QA_COMPLETE' })
+  })
+
+  it('repairs missing skip and summary phase artifacts after a terminal skip crash window', async () => {
+    const setup = prepareFixture()
+    const paths = getManualQaStoragePaths(setup.paths.ticketDir, 1)
+    const actionId = 'skip-crash-window'
+    reserveManualQaSubmissionOperation({
+      path: paths.operationPath,
+      actionId,
+      operationType: 'skip',
+      ticketId: setup.ticket.id,
+      version: 1,
+      checklistHash: setup.guard.expectedChecklistHash,
+      draftRevision: 1,
+    })
+    writeFileSync(paths.skipReceiptPath, [
+      'schemaVersion: 1',
+      'artifact: manual_qa_skip_receipt',
+      `ticketId: ${JSON.stringify(setup.ticket.externalId)}`,
+      'version: 1',
+      `actionId: ${JSON.stringify(actionId)}`,
+      'reason: "Recovered skip"',
+      'createdAt: "2026-07-13T12:01:00.000Z"',
+      '',
+    ].join('\n'))
+    persistManualQaSummary(setup.paths.ticketDir, terminalSummary(setup, 'skipped', 'Recovered skip'))
+
+    const sendEvent = vi.fn()
+    await skipManualQa({
+      ticketId: setup.ticket.id,
+      version: 1,
+      draft: setup.draft,
+      guard: { ...setup.guard, actionId, operationType: 'skip' },
+      reason: 'Recovered skip',
+      sendEvent,
+    })
+
+    expect(JSON.parse(getLatestPhaseArtifact(
+      setup.ticket.id,
+      'manual_qa_summary',
+      'WAITING_MANUAL_QA',
+    )!.content)).toMatchObject({ version: 1, outcome: 'skipped' })
+    expect(JSON.parse(getLatestPhaseArtifact(
+      setup.ticket.id,
+      'manual_qa_skip_receipt',
+      'WAITING_MANUAL_QA',
+    )!.content)).toMatchObject({ actionId, version: 1, reason: 'Recovered skip' })
+    expect(JSON.parse(readFileSync(paths.operationPath, 'utf8')).state).toBe('complete')
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'MANUAL_QA_SKIPPED' })
   })
 
   it('rejects a conflicting operation before writing canonical submission results', async () => {

@@ -591,7 +591,7 @@ export function FullLogView({ ticket }: FullLogViewProps) {
                       ))}
                       {group.beadSections.map((section) => (
                         <Fragment key={`${group.phase}-${groupIdx}-${section.beadId}-${section.ordinal}`}>
-                          <BeadDelimiter ordinal={section.ordinal} total={section.total} title={section.title} />
+                          <BeadDelimiter ordinal={section.ordinal} total={section.total} title={section.title} qaOrigin={section.qaOrigin} />
                           {section.entries.map((entry) => (
                             <LogEntryRow
                               key={entry.entryId}

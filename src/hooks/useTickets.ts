@@ -34,6 +34,58 @@ export interface TicketEta {
   basis: 'history' | 'current' | 'default'
 }
 
+export interface ManualQaOriginEvidenceRef {
+  id: string
+  originalName: string
+  mediaType: string
+  size: number
+  sha256: string
+  relativePath: string
+}
+
+export interface ManualQaOriginSourceItem {
+  itemId: string
+  lineageId: string
+  behavior: string
+  observation: string
+  expectedResult: string
+  evidence: ManualQaOriginEvidenceRef[]
+  links: Array<{ id: string; url: string; label?: string }>
+}
+
+export interface ManualQaBeadOrigin {
+  schemaVersion: 1
+  actionId: string
+  sourceTicketId: string
+  sourceTicketExternalId: string
+  version: number
+  sourceItems: ManualQaOriginSourceItem[]
+  imageDelivery?: 'attached' | 'references_only'
+}
+
+export interface ManualQaImprovementOrigin {
+  schemaVersion: 1
+  source: 'manual_qa_improvement'
+  originId: string
+  actionId: string
+  sourceTicketId: string
+  sourceTicketExternalId: string
+  sourceProjectId: number
+  sourceVersion: number
+  sourceItemIds: string[]
+  sourceItemTitles: string[]
+  resultType: 'improvement'
+  relatedPrdRefs: string[]
+  relatedBeadRefs: string[]
+  evidenceRefs: ManualQaOriginEvidenceRef[]
+  omittedEvidence: Array<{ id: string; reason: string }>
+  titleSha256: string
+  descriptionSha256: string
+  omittedFields: string[]
+  imageEvidenceMode: 'attached' | 'references_only'
+  createdAt: string
+}
+
 interface TicketRuntime {
   baseBranch: string
   currentBead: number
@@ -56,6 +108,7 @@ interface TicketRuntime {
     notes?: string
     startedAt?: string | null
     updatedAt?: string | null
+    qaOrigin?: ManualQaBeadOrigin | null
   }>
   candidateCommitSha: string | null
   preSquashHead: string | null
@@ -111,6 +164,7 @@ export interface Ticket {
       summary: boolean
     }
   }
+  manualQaOrigin?: ManualQaImprovementOrigin | null
   lockedMainImplementer: string | null
   lockedMainImplementerVariant?: string | null
   lockedInterviewQuestions?: number | null

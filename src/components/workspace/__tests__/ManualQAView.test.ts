@@ -42,6 +42,7 @@ describe('Manual QA result validation', () => {
       checklistHash: 'a'.repeat(64),
       checklist: { schemaVersion: 1, version: 2, items: [item] },
       coverage: [],
+      coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, finalTest: 0, previousQa: 0, implementationDiff: 0 } },
       evidence: [],
       draftRevision: 4,
     }
