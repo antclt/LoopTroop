@@ -172,6 +172,49 @@ describe('DashboardHeader', () => {
     expect(within(projectSection as HTMLElement).getByText('🧭')).toBeInTheDocument()
   })
 
+  it('shows the effective Manual QA state in the Details advanced settings section', () => {
+    const ticket = makeTicket({
+      status: 'DRAFTING_PRD',
+      availableActions: ['cancel'],
+      effectiveManualQaEnabled: true,
+    })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+
+    const advancedSettings = screen.getByText('Advanced Settings').parentElement
+    expect(advancedSettings).not.toBeNull()
+    expect(within(advancedSettings as HTMLElement).getByText('Manual QA checkpoint')).toBeInTheDocument()
+    expect(within(advancedSettings as HTMLElement).getByText('Enabled')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open documentation for ticket Details Manual QA checkpoint' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
+  })
+
+  it('shows Manual QA as disabled in Details when the effective setting is off', () => {
+    const ticket = makeTicket({
+      status: 'DRAFTING_PRD',
+      availableActions: ['cancel'],
+      effectiveManualQaEnabled: false,
+    })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const advancedSettings = screen.getByText('Advanced Settings').parentElement
+    expect(within(advancedSettings as HTMLElement).getByText('Disabled')).toBeInTheDocument()
+  })
+
   it('shows ticket details descriptions as Markdown without view tabs', () => {
     const ticket = makeTicket({
       description: '# Scope\nUse **bold** details.',

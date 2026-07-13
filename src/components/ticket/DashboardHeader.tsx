@@ -21,6 +21,7 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TicketDescriptionViewer } from './TicketDescriptionViewer'
 import { TicketExternalId } from './TicketExternalId'
+import { ConfigurationDocsLink } from '@/components/config/ConfigurationDocsLink'
 
 interface DashboardHeaderProps {
   ticket: Ticket
@@ -507,6 +508,24 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
                                         <TooltipContent className="max-w-xs text-center text-balance">{workflowRingProgress.label}</TooltipContent>
                                       </Tooltip>
                 )}
+              </div>
+            </div>
+            <div className="col-span-2 border-t-[2px] border-border/70 pt-2 mt-1">
+              <span className="text-xs font-medium text-muted-foreground">Advanced Settings</span>
+              <div className="mt-1 rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+                <div className="flex items-center justify-between gap-3 text-xs">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    <span>Manual QA checkpoint</span>
+                    <ConfigurationDocsLink
+                      docsPath="/configuration#manual-qa"
+                      label="ticket Details Manual QA checkpoint"
+                      description="Learn when this ticket pauses for your verification after final tests. Open the Manual QA documentation."
+                    />
+                  </div>
+                  <Badge variant="outline" className="h-5 px-2 text-[10px] font-medium">
+                    {ticket.effectiveManualQaEnabled === true ? 'Enabled' : 'Disabled'}
+                  </Badge>
+                </div>
               </div>
             </div>
             {(() => {
