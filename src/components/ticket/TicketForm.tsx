@@ -11,6 +11,9 @@ import { cn } from '@/lib/utils'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TicketDescriptionViewer } from './TicketDescriptionViewer'
 import { TicketDescriptionTabs, type TicketDescriptionMode } from './TicketDescriptionTabs'
+import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
+import { resolveManualQaSettingLabel, type ManualQaOverride } from '@/lib/manualQaSetting'
+import { useProfile } from '@/hooks/useProfile'
 
 interface TicketFormProps {
   onClose: () => void
@@ -21,20 +24,29 @@ export function TicketForm({ onClose }: TicketFormProps) {
   const createTicket = useCreateTicket()
   const { mutateAsync: startTicket, isPending: isStartPending } = useTicketAction()
   const { data: projects = [] } = useProjects()
+  const { data: profile } = useProfile()
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [descriptionMode, setDescriptionMode] = useState<TicketDescriptionMode>('raw')
   const [priority, setPriority] = useState(3)
   const [projectId, setProjectId] = useState<number | ''>('')
   const [isProjectPickerOpen, setIsProjectPickerOpen] = useState(false)
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
+  const [manualQaOverride, setManualQaOverride] = useState<ManualQaOverride>(null)
 
   const selectedProject = projects.find(p => p.id === projectId) ?? projects[0]
   const effectiveProjectId = selectedProject?.id ?? ''
+  const effectiveManualQa = resolveManualQaSettingLabel(
+    manualQaOverride,
+    selectedProject?.manualQaOverride ?? null,
+    profile?.manualQaEnabled ?? false,
+  )
   const createInput = () => ({
     projectId: effectiveProjectId as number,
     title,
     description: description || undefined,
     priority,
+    manualQaOverride: effectiveManualQa.enabled,
   })
 
   const handleCreateAndStart = async () => {
@@ -217,6 +229,36 @@ export function TicketForm({ onClose }: TicketFormProps) {
               <option value={4}>4 — Low</option>
               <option value={5}>5 — Very Low</option>
             </select>
+          </div>
+
+          <div className="rounded-md border border-border">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-medium"
+              onClick={() => setIsAdvancedOpen((open) => !open)}
+              aria-expanded={isAdvancedOpen}
+            >
+              Advanced
+              <ChevronDown className={cn('h-4 w-4 transition-transform', isAdvancedOpen && 'rotate-180')} />
+            </button>
+            {isAdvancedOpen && (
+              <div className="border-t border-border p-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <label className="text-sm font-medium">Manual QA checkpoint</label>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Effective setting: <span className="font-medium text-foreground">{effectiveManualQa.enabled ? 'Enabled' : 'Disabled'}</span> from {effectiveManualQa.source === 'profile' ? 'global configuration' : effectiveManualQa.source}.
+                    </p>
+                  </div>
+                  <ManualQaSetting
+                    idPrefix="ticket-manual-qa"
+                    value={manualQaOverride}
+                    onChange={setManualQaOverride}
+                    inheritedEnabled={effectiveManualQa.enabled}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
         </CardContent>

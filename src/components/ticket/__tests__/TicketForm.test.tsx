@@ -100,14 +100,23 @@ describe('TicketForm', () => {
     expect(screen.getByText('bold').tagName).toBe('STRONG')
   })
 
-  it('does not show a Manual QA checkpoint for ordinary new tickets', () => {
+  it('shows only enabled and disabled Manual QA choices for ordinary new tickets', () => {
     renderWithProviders(
       <UIContext.Provider value={makeUIValue()}>
         <TicketForm onClose={vi.fn()} />
       </UIContext.Provider>,
     )
 
-    expect(screen.queryByText('Manual QA checkpoint')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    expect(screen.getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.change(screen.getByPlaceholderText('Brief summary of the work'), { target: { value: 'Verify checkout' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create Ticket' }))
+    expect(mockUseCreateTicket().mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ manualQaOverride: true }),
+      expect.any(Object),
+    )
   })
 })

@@ -8,11 +8,9 @@ interface ManualQaSettingProps {
   idPrefix: string
   inheritedEnabled?: boolean
   compact?: boolean
-  allowInherit?: boolean
 }
 
-const OPTIONS: Array<{ value: ManualQaOverride; label: string }> = [
-  { value: null, label: 'Inherit' },
+const OPTIONS: Array<{ value: boolean; label: string }> = [
   { value: true, label: 'Enabled' },
   { value: false, label: 'Disabled' },
 ]
@@ -24,13 +22,14 @@ export function ManualQaSetting({
   idPrefix,
   inheritedEnabled,
   compact = false,
-  allowInherit = true,
 }: ManualQaSettingProps) {
+  const selectedValue = value ?? inheritedEnabled ?? false
+
   return (
     <div>
       <div className="inline-flex rounded-md border border-input bg-muted/30 p-0.5" role="radiogroup" aria-label="Manual QA setting">
-        {OPTIONS.filter((option) => allowInherit || option.value !== null).map((option) => {
-          const selected = option.value === value
+        {OPTIONS.map((option) => {
+          const selected = option.value === selectedValue
           return (
             <button
               key={option.label}
@@ -51,9 +50,9 @@ export function ManualQaSetting({
           )
         })}
       </div>
-      {!compact && allowInherit && value === null && typeof inheritedEnabled === 'boolean' && (
+      {!compact && value === null && typeof inheritedEnabled === 'boolean' && (
         <p className="mt-1 text-xs text-muted-foreground">
-          Currently inherits <span className="font-medium text-foreground">{inheritedEnabled ? 'Enabled' : 'Disabled'}</span>.
+          Current default: <span className="font-medium text-foreground">{inheritedEnabled ? 'Enabled' : 'Disabled'}</span>. Choose an option to set this explicitly.
         </p>
       )}
     </div>

@@ -129,7 +129,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
     e.preventDefault()
     if (isEditing) {
       updateProject.mutate(
-        { id: project.id, name, icon, color, manualQaOverride },
+        { id: project.id, name, icon, color, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
         {
           onSuccess: () => {
             addToast('success', 'Project updated.')
@@ -139,7 +139,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
       )
     } else {
       createProject.mutate(
-        { name, shortname, folderPath: folder, icon, color, manualQaOverride },
+        { name, shortname, folderPath: folder, icon, color, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
         {
           onSuccess: () => {
             addToast('success', restoreMode ? 'Project restored from existing LoopTroop data.' : 'Project created.')

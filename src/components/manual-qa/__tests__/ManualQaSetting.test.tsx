@@ -4,11 +4,13 @@ import { ManualQaSetting } from '../ManualQaSetting'
 import { resolveManualQaSettingLabel } from '@/lib/manualQaSetting'
 
 describe('ManualQaSetting', () => {
-  it('offers inherit, enabled, and disabled choices', () => {
+  it('offers only enabled and disabled while resolving legacy defaults', () => {
     const onChange = vi.fn()
     render(<ManualQaSetting idPrefix="qa" value={null} onChange={onChange} inheritedEnabled />)
 
-    expect(screen.getByText((_, element) => element?.tagName === 'P' && element.textContent === 'Currently inherits Enabled.')).toHaveTextContent('Enabled')
+    expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText(/Current default:/)).toHaveTextContent('Enabled')
     fireEvent.click(screen.getByRole('radio', { name: 'Disabled' }))
     expect(onChange).toHaveBeenCalledWith(false)
   })

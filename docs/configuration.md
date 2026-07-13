@@ -16,7 +16,7 @@ LoopTroop applies configuration in three layers:
 | Ticket override | Optional Draft-only Manual QA choice | Wins over project and profile when the ticket starts |
 | Ticket start lock | Frozen planning-critical values captured on **Start** | Stays fixed for that ticket run |
 
-The Configuration dialog edits the singleton profile. Project-level overrides are stored by the project API/local project state; the Project form provides the focused Manual QA `Inherit / Enabled / Disabled` editor, while the other project overrides do not have a general editor in the Configuration dialog. The overrideable fields are:
+The Configuration dialog edits the singleton profile. Project-level overrides are stored by the project API/local project state; the Project form provides the focused Manual QA `Enabled / Disabled` editor, while the other project overrides do not have a general editor in the Configuration dialog. The overrideable fields are:
 
 - `councilMembers`
 - `maxIterations` (`Max Bead Retries`)
@@ -114,7 +114,7 @@ This is meant to answer two quick questions without opening logs or artifacts:
 
 ## Manual QA
 
-Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. The Project form exposes `Inherit / Enabled / Disabled`. Ordinary new tickets inherit the project/profile resolution without showing a ticket-level checkpoint control; Draft follow-up tickets created from Manual QA Improvements expose the ticket override until **Start**.
+Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. Configuration, Project, and ticket controls expose only `Enabled / Disabled`; new project and ticket saves persist the selected boolean explicitly. Legacy unset values remain readable and display their resolved parent/default boolean until the user chooses an explicit value. The ticket control remains available in the Draft workspace until **Start**.
 
 Resolution is deterministic:
 

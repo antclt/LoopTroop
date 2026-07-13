@@ -12,7 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
-- Simplified ordinary ticket creation by reserving the Manual QA checkpoint control for follow-up tickets created from Manual QA Improvements.
+- Simplified Manual QA configuration with consistent Enabled/Disabled choices at global, project, and ticket levels.
 - Added a spec-aligned, ticket-locked Manual QA checkpoint that turns post-test failures into traceable fix beads and any reviewed checklist improvement into a context-rich backlog ticket without controlling the user's application.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
@@ -21,7 +21,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Added
 - Added the `GENERATING_QA_CHECKLIST` and `WAITING_MANUAL_QA` post-implementation statuses, versioned strict checklist/results/coverage schemas, stable item lineage, code-computed approved-PRD criterion coverage, and restart-safe generation reservations.
-- Added profile-level Manual QA enablement (off by default), project/ticket `Inherit / Enabled / Disabled` overrides, Draft-only ticket editing, and frozen effective value/source fields at ticket Start.
+- Added profile-level Manual QA enablement (off by default), project/ticket `Enabled / Disabled` controls, Draft-only ticket editing, and frozen effective value/source fields at ticket Start.
 - Added a lazy Manual QA workspace with generation guidance, required/optional result validation, pass/fail/waive/improvement/pending controls, five-second revision-checked autosave, evidence management, failure merge groups, improvement review, drift recovery, skip, and read-only historical rounds.
 - Added contained streaming evidence storage with a 250 MiB per-file limit and no count/round cap, SHA-256/size verification, sanitized paths, symlink/traversal protection, atomic publication, safe-raster inline previews, attachment-only unsafe/unknown content, and HTTP(S)-only evidence links.
 - Added restart-idempotent Manual QA submission journaling that creates deterministic `qa-fix` beads and one Normal-priority Draft ticket per reviewed Improvement, copies selected evidence/provenance to child ticket storage, and resumes partial creation without duplicates.
@@ -29,7 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
-- Hidden the ticket-level Manual QA checkpoint from ordinary new-ticket and Draft surfaces while retaining it for Draft follow-ups with typed Manual QA Improvement provenance; ordinary tickets continue to inherit project/profile settings.
+- Removed the visible `Inherit` choice from Manual QA settings, restored the checkpoint selector for all new and Draft tickets, and made new project/ticket saves persist an explicit Enabled/Disabled value while safely resolving legacy unset values.
 - Updated the Kanban triage control bar to support showing or hiding mock tickets (marked with `(M)`). This setting can be persisted in Kanban filter presets and defaults to showing mocks.
 - Changed `TESTS_PASSED` routing to use the ticket's frozen Manual QA value: disabled/missing locks retain direct integration, while enabled tickets checkpoint final-test effects and enter the generated QA loop.
 - Strengthened generic ticket UI state to serialized server-owned compare-and-set revisions with idempotent action IDs and latest-state `409` conflicts; existing approval autosave consumers retain debounce and unload keepalive behavior.

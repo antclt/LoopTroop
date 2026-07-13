@@ -98,6 +98,9 @@ describe('ProjectForm', () => {
 
     render(<ProjectForm onClose={vi.fn()} />, { wrapper: Wrapper })
 
+    expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true')
+
     fireEvent.change(screen.getByLabelText(/Project Name/i), { target: { value: 'Mounted Repo' } })
     fireEvent.change(screen.getByLabelText(/Short Name/i), { target: { value: 'MNT' } })
     fireEvent.change(screen.getByLabelText(/Project Folder/i), { target: { value: '/mnt/d/work/app' } })

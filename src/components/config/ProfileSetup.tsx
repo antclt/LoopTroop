@@ -463,7 +463,6 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
               value={formData.manualQaEnabled ? true : false}
               onChange={(value) => updateField('manualQaEnabled', value === true)}
               compact
-              allowInherit={false}
             />
           </div>
 

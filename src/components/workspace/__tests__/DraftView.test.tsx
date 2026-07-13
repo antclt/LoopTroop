@@ -114,21 +114,14 @@ describe('DraftView', () => {
     vi.restoreAllMocks()
   })
 
-  it('shows Manual QA settings only for tickets created from Manual QA improvements', async () => {
+  it('shows only enabled and disabled Manual QA settings for ordinary Draft tickets', async () => {
     const ordinaryTicket = makeTicket({ availableActions: ['start', 'cancel'] })
-    const { unmount } = renderWithProviders(<DraftView ticket={ordinaryTicket} />)
+    renderWithProviders(<DraftView ticket={ordinaryTicket} />)
 
     expect(await screen.findByText('Current Council Members')).toBeInTheDocument()
-    expect(screen.queryByText('Manual QA checkpoint')).not.toBeInTheDocument()
-
-    unmount()
-    renderWithProviders(<DraftView ticket={{
-      ...ordinaryTicket,
-      manualQaOrigin: { sourceTicketExternalId: 'LOOP-1' } as NonNullable<typeof ordinaryTicket.manualQaOrigin>,
-    }} />)
-
     expect(screen.getByText('Manual QA checkpoint')).toBeInTheDocument()
-    expect(screen.getByRole('radio', { name: 'Inherit' })).toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true')
   })
 
   it('mounts the draft log viewer immediately when start begins and keeps it open on failure', async () => {
