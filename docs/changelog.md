@@ -39,6 +39,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed the Configuration model-refresh icon to spin and remain disabled for the full provider/model refresh instead of stopping before the refresh request completes.
 - Fixed stale provider/model discovery after OpenCode credentials change: Configuration reload now disposes only LoopTroop's catalog/root OpenCode instance before refetching the catalog, while leaving `opencode serve` and active ticket worktree instances running.
 - Fixed application documentation links to include the VitePress `/docs/` base path, so contextual help and the header Docs link open the locally started documentation server instead of its unmounted root.
 - Aligned Manual QA checklist sources, required/optional severity, and recheck states with the documented contract; required checks now support non-blocking Improvements, improvement tickets share deterministic IDs and retain editable human-readable PRD/bead/evidence context, and QA-fix origins carry their model capability and creation timestamp.

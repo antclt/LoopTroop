@@ -244,13 +244,34 @@ describe('ProfileSetup', () => {
     })
     const removeQueriesSpy = vi.spyOn(queryClient, 'removeQueries')
     await renderProfileSetup(queryClient)
+    await waitFor(() => expect(queryClient.getQueryData(OPENCODE_MODELS_QUERY_KEY)).toBeDefined())
+
+    let finishRefresh: (() => void) | undefined
+    vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url === '/api/models/refresh') {
+        await new Promise<void>((resolve) => { finishRefresh = resolve })
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          models: [{ fullId: 'opencode/big-pickle' }],
+          allModels: [{ fullId: 'opencode/big-pickle' }],
+          connectedProviders: ['opencode'],
+          defaultModels: {},
+        }),
+      } as Response
+    })
 
     const reloadBtn = screen.getByRole('button', { name: 'Reload OpenCode providers and models' })
     expect(reloadBtn).toBeInTheDocument()
 
-    await act(async () => {
+    act(() => {
       fireEvent.click(reloadBtn)
     })
+
+    expect(reloadBtn).toBeDisabled()
+    expect(reloadBtn.querySelector('svg')).toHaveClass('animate-spin')
 
     expect(removeQueriesSpy).toHaveBeenCalledWith({
       queryKey: OPENCODE_MODELS_QUERY_KEY,
@@ -260,6 +281,9 @@ describe('ProfileSetup', () => {
       method: 'POST',
       signal: expect.any(AbortSignal),
     }))
+    await act(async () => { finishRefresh?.() })
+    await waitFor(() => expect(reloadBtn).not.toBeDisabled())
+    expect(reloadBtn.querySelector('svg')).not.toHaveClass('animate-spin')
     expect(queryClient.getQueryData(OPENCODE_MODELS_QUERY_KEY)).toEqual({
       models: [{ fullId: 'opencode/big-pickle' }],
       allModels: [{ fullId: 'opencode/big-pickle' }],

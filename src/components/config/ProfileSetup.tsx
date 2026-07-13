@@ -145,6 +145,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
   }, [profile])
 
   const [isOpenCodeConnected, setIsOpenCodeConnected] = useState<boolean | null>(null)
+  const [isRefreshingModels, setIsRefreshingModels] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -186,8 +187,13 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
     return { dotClass: 'bg-green-500', label: 'OpenCode connected and working' }
   }, [isOpenCodeConnected, models, modelsError, modelsFetching, modelsLoading])
 
-  const handleReloadModels = useCallback(() => {
-    void refreshOpenCodeModelsQuery(queryClient)
+  const handleReloadModels = useCallback(async () => {
+    setIsRefreshingModels(true)
+    try {
+      await refreshOpenCodeModelsQuery(queryClient)
+    } finally {
+      setIsRefreshingModels(false)
+    }
   }, [queryClient])
 
   useEffect(() => {
@@ -250,12 +256,12 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                 <button
                   type="button"
                   id="reload-opencode-models"
-                  onClick={handleReloadModels}
-                  disabled={modelsFetching}
+                  onClick={() => { void handleReloadModels() }}
+                  disabled={modelsFetching || isRefreshingModels}
                   className="p-0.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   aria-label="Reload OpenCode providers and models"
                 >
-                  <RefreshCw className={`h-3 w-3 ${modelsFetching ? 'animate-spin' : ''}`} />
+                  <RefreshCw className={`h-3 w-3 ${modelsFetching || isRefreshingModels ? 'animate-spin' : ''}`} />
                 </button>
               </TooltipTrigger>
               <TooltipContent>Reload OpenCode providers and models</TooltipContent>
