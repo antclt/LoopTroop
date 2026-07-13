@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAllowedBackendHost, getBackendOrigin, getBackendPort, getDocsPort, getFrontendOrigin, getFrontendPort } from '../appConfig'
+import { getAllowedBackendHost, getBackendOrigin, getBackendPort, getDocsBaseUrl, getDocsPort, getFrontendOrigin, getFrontendPort } from '../appConfig'
 
 const ORIGINAL_ENV = {
   LOOPTROOP_BACKEND_PORT: process.env.LOOPTROOP_BACKEND_PORT,
@@ -7,6 +7,7 @@ const ORIGINAL_ENV = {
   LOOPTROOP_ALLOW_REMOTE_API: process.env.LOOPTROOP_ALLOW_REMOTE_API,
   LOOPTROOP_API_TOKEN: process.env.LOOPTROOP_API_TOKEN,
   LOOPTROOP_DOCS_PORT: process.env.LOOPTROOP_DOCS_PORT,
+  LOOPTROOP_DOCS_ORIGIN: process.env.LOOPTROOP_DOCS_ORIGIN,
   LOOPTROOP_FRONTEND_ORIGIN: process.env.LOOPTROOP_FRONTEND_ORIGIN,
   LOOPTROOP_FRONTEND_PORT: process.env.LOOPTROOP_FRONTEND_PORT,
 }
@@ -43,6 +44,12 @@ describe('appConfig frontend origin', () => {
       process.env.LOOPTROOP_DOCS_PORT = ORIGINAL_ENV.LOOPTROOP_DOCS_PORT
     }
 
+    if (ORIGINAL_ENV.LOOPTROOP_DOCS_ORIGIN === undefined) {
+      delete process.env.LOOPTROOP_DOCS_ORIGIN
+    } else {
+      process.env.LOOPTROOP_DOCS_ORIGIN = ORIGINAL_ENV.LOOPTROOP_DOCS_ORIGIN
+    }
+
     if (ORIGINAL_ENV.LOOPTROOP_FRONTEND_ORIGIN === undefined) {
       delete process.env.LOOPTROOP_FRONTEND_ORIGIN
     } else {
@@ -62,6 +69,18 @@ describe('appConfig frontend origin', () => {
     process.env.LOOPTROOP_FRONTEND_PORT = '6199'
 
     expect(getFrontendOrigin()).toBe('http://localhost:6199')
+  })
+
+  it('includes the VitePress base path in browser-facing documentation URLs', () => {
+    delete process.env.LOOPTROOP_DOCS_ORIGIN
+    process.env.LOOPTROOP_DOCS_PORT = '6198'
+    expect(getDocsBaseUrl()).toBe('http://localhost:6198/docs')
+
+    process.env.LOOPTROOP_DOCS_ORIGIN = 'http://devbox.local:7000/'
+    expect(getDocsBaseUrl()).toBe('http://devbox.local:7000/docs')
+
+    process.env.LOOPTROOP_DOCS_ORIGIN = 'http://devbox.local:7000/docs'
+    expect(getDocsBaseUrl()).toBe('http://devbox.local:7000/docs')
   })
 
   it('keeps explicit LOOPTROOP_FRONTEND_ORIGIN validation and falls back to the derived port origin', () => {

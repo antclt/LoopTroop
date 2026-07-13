@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { IncomingMessage, ServerResponse } from 'http'
-import { getBackendOrigin, getDocsOrigin, getFrontendPort } from './shared/appConfig'
+import { getBackendOrigin, getDocsBaseUrl, getFrontendPort } from './shared/appConfig'
 import { resolveDevHostMode } from './scripts/dev-host-mode'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -48,7 +48,7 @@ async function respondToBackendHealthProbe(req: IncomingMessage, res: ServerResp
 export default defineConfig({
   define: {
     __LOOPTROOP_DEV_BACKEND_ORIGIN__: JSON.stringify(backendOrigin),
-    __LOOPTROOP_DOCS_ORIGIN__: JSON.stringify(getDocsOrigin()),
+    __LOOPTROOP_DOCS_ORIGIN__: JSON.stringify(getDocsBaseUrl()),
   },
   plugins: [
     react(),

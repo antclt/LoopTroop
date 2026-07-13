@@ -73,8 +73,12 @@ export function getFrontendOrigin(): string {
 }
 
 export function getDocsOrigin(): string {
-  return process.env.LOOPTROOP_DOCS_ORIGIN
-    ?? `http://localhost:${getDocsPort()}`
+  const defaultDocsOrigin = `http://localhost:${getDocsPort()}`
+  return parseOrigin(process.env.LOOPTROOP_DOCS_ORIGIN, defaultDocsOrigin, 'LOOPTROOP_DOCS_ORIGIN')
+}
+
+export function getDocsBaseUrl(): string {
+  return new URL('/docs/', getDocsOrigin()).toString().replace(/\/$/, '')
 }
 
 export function getBackendOrigin(): string {
