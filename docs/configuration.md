@@ -114,7 +114,7 @@ This is meant to answer two quick questions without opening logs or artifacts:
 
 ## Manual QA
 
-Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. The Project form and a ticket's collapsed **Advanced** section expose `Inherit / Enabled / Disabled`; the same ticket control remains available in the Draft workspace until **Start**.
+Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. The Project form exposes `Inherit / Enabled / Disabled`. Ordinary new tickets inherit the project/profile resolution without showing a ticket-level checkpoint control; Draft follow-up tickets created from Manual QA Improvements expose the ticket override until **Start**.
 
 Resolution is deterministic:
 

@@ -100,15 +100,14 @@ describe('TicketForm', () => {
     expect(screen.getByText('bold').tagName).toBe('STRONG')
   })
 
-  it('shows the ticket override and inherited project source in Advanced settings', () => {
+  it('does not show a Manual QA checkpoint for ordinary new tickets', () => {
     renderWithProviders(
       <UIContext.Provider value={makeUIValue()}>
         <TicketForm onClose={vi.fn()} />
       </UIContext.Provider>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
-    expect(screen.getByText(/Effective setting:/)).toHaveTextContent('Enabled from project')
-    expect(screen.getByRole('radio', { name: 'Inherit' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByText('Manual QA checkpoint')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
   })
 })

@@ -324,7 +324,7 @@ Profile settings are inherited by new tickets at start time. The locked copies i
 
 ### Manual QA Settings
 
-Configuration exposes the global Manual QA boolean (off by default). Project settings and the ticket form's collapsed **Advanced** section expose `Inherit / Enabled / Disabled`, and the Draft workspace mirrors the ticket control until Start. The ticket surface shows the effective value and source. Once started, the override becomes read-only because the backend has frozen the effective value/source for the run.
+Configuration exposes the global Manual QA boolean (off by default), and Project settings expose `Inherit / Enabled / Disabled`. The ordinary new-ticket form and ordinary Draft workspace omit the Manual QA checkpoint; a Draft ticket created from a Manual QA Improvement shows the ticket-level override and effective source until Start. Once started, the backend freezes the effective value/source for the run.
 
 Improvement ticket Details/audit UI reads `.ticket/meta/manual-qa-origin.json` provenance, while later planning still uses only the saved title/description as prompt context; the structured origin record is not injected into future implementation prompts.
 

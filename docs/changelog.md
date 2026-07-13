@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Simplified ordinary ticket creation by reserving the Manual QA checkpoint control for follow-up tickets created from Manual QA Improvements.
 - Added a spec-aligned, ticket-locked Manual QA checkpoint that turns post-test failures into traceable fix beads and any reviewed checklist improvement into a context-rich backlog ticket without controlling the user's application.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
@@ -28,6 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Hidden the ticket-level Manual QA checkpoint from ordinary new-ticket and Draft surfaces while retaining it for Draft follow-ups with typed Manual QA Improvement provenance; ordinary tickets continue to inherit project/profile settings.
 - Updated the Kanban triage control bar to support showing or hiding mock tickets (marked with `(M)`). This setting can be persisted in Kanban filter presets and defaults to showing mocks.
 - Changed `TESTS_PASSED` routing to use the ticket's frozen Manual QA value: disabled/missing locks retain direct integration, while enabled tickets checkpoint final-test effects and enter the generated QA loop.
 - Strengthened generic ticket UI state to serialized server-owned compare-and-set revisions with idempotent action IDs and latest-state `409` conflicts; existing approval autosave consumers retain debounce and unload keepalive behavior.

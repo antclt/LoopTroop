@@ -285,7 +285,7 @@ export function DraftView({ ticket }: DraftViewProps) {
             </div>
           )}
 
-          <div className="w-full rounded-md border border-border p-3">
+          {ticket.manualQaOrigin && <div className="w-full rounded-md border border-border p-3">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <h4 className="text-xs font-medium">Manual QA checkpoint</h4>
@@ -302,7 +302,7 @@ export function DraftView({ ticket }: DraftViewProps) {
               />
             </div>
             {manualQaError && <p role="alert" className="mt-2 text-xs text-destructive">{manualQaError}</p>}
-          </div>
+          </div>}
 
           <div className="w-full rounded-md border border-border p-3">
             <div className="flex items-center justify-between gap-2">
