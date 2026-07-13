@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Download, FileUp, Loader2, Plus, RefreshCw, Save, ShieldCheck, SkipForward, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileUp, Loader2, RefreshCw, Save, ShieldCheck, SkipForward, Trash2, XCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,7 +24,7 @@ import {
 } from '@/hooks/useManualQA'
 import { cn } from '@/lib/utils'
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
-import { buildCanonicalManualQaDraft, composeManualQaImprovementPreview, validateManualQaItem } from '@/lib/manualQaDraft'
+import { buildCanonicalManualQaDraft, buildDefaultManualQaImprovementContext, composeManualQaImprovementPreview, validateManualQaItem } from '@/lib/manualQaDraft'
 
 interface ManualQAViewProps {
   ticket: Ticket
@@ -303,7 +303,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   ), [draft, items])
   const allErrors = Object.values(validation).flat()
   const hasFailures = items.some((item) => resultFor(draft, item.id).status === 'fail')
-  const incompleteRequired = items.filter((item) => item.required && !['pass', 'fail', 'waive'].includes(resultFor(draft, item.id).status)).length
+  const incompleteRequired = items.filter((item) => item.severity === 'required' && resultFor(draft, item.id).status === 'pending').length
   const improvementItem = items.find((item) => item.id === improvementItemId) ?? null
   const coverageSourceItemTotal = round ? Object.values(round.coverageSummary.sourceItemCounts).reduce((sum, count) => sum + count, 0) : 0
 
@@ -614,8 +614,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                     <div className="min-w-0">
                       <CardTitle className="text-sm">{indexNumber + 1}. {item.title || item.behavior}</CardTitle>
                       <div className="mt-1 flex flex-wrap gap-1">
-                        <Badge variant={item.required ? 'default' : 'outline'}>{item.required ? 'Required' : 'Optional'}</Badge>
-                        <Badge variant="secondary">{item.severity}</Badge>
+                        <Badge variant={item.severity === 'required' ? 'default' : 'outline'}>{item.severity === 'required' ? 'Required' : 'Optional'}</Badge>
                         {item.recheckState && item.recheckState !== 'new' && <Badge variant="outline">{item.recheckState.replace(/_/g, ' ')}</Badge>}
                         {item.prdRefs.map((reference) => <Badge key={`${reference.ref}:${reference.coverage}`} variant="outline">{reference.ref} · {reference.coverage}</Badge>)}
                       </div>
@@ -632,10 +631,9 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                   <div>
                     <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Result</h5>
                     <div className="flex flex-wrap gap-2">
-                      {RESULT_OPTIONS.filter((option) => !item.required || option.value !== 'improvement').map((option) => (
+                      {RESULT_OPTIONS.map((option) => (
                         <button key={option.value} type="button" data-selected={result.status === option.value} disabled={!editable} onClick={() => { updateResult(item.id, { status: option.value }); if (option.value === 'improvement') setImprovementItemId(item.id) }} className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}>{option.label}</button>
                       ))}
-                      {!item.required && result.status !== 'improvement' && editable && <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={() => { updateResult(item.id, { status: 'improvement' }); setImprovementItemId(item.id) }}><Plus className="mr-1 h-3 w-3" />Improvement</Button>}
                     </div>
                   </div>
 
@@ -694,6 +692,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             const result = resultFor(draft, improvementItem.id)
             const improvement = result.improvement ?? { title: '', description: '' }
             const preview = composeManualQaImprovementPreview(improvementItem, { ...result, improvement })
+            const editableContext = improvement.contextOverride ?? buildDefaultManualQaImprovementContext(improvementItem, { ...result, improvement })
             const evidenceFiles = round.evidence.filter((file) => (result.evidenceIds ?? []).includes(file.id))
             return (
               <div className="space-y-4">
@@ -704,6 +703,11 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 <div>
                   <label className="text-sm font-medium">Description</label>
                   <textarea value={improvement.description} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
+                </div>
+                <div>
+                  <label className="text-sm font-medium">Manual QA context</label>
+                  <p className="mt-1 text-xs text-muted-foreground">This context is appended to the ticket description. Edit it only when the generated details need correction; untouched context is enriched by the server during submission.</p>
+                  <textarea value={editableContext} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, contextOverride: event.target.value } })} className="mt-1 min-h-56 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Improvement note <span className="font-normal text-muted-foreground">(optional)</span></label>
@@ -738,7 +742,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                   {(result.links?.length ?? 0) > 0 && <ul className="mt-2 list-disc pl-5 text-muted-foreground">{result.links?.map((link) => <li key={link.id}>{link.label || link.url}</li>)}</ul>}
                   <p className="mt-2 text-muted-foreground">Copied and omitted evidence is finalized during submission and recorded in the created ticket&apos;s origin receipt.</p>
                 </div>
-                <div className="flex justify-end"><Button onClick={() => setImprovementItemId(null)} disabled={!improvement.title.trim() || !improvement.description.trim()}>Done</Button></div>
+                <div className="flex justify-end"><Button onClick={() => setImprovementItemId(null)} disabled={!improvement.title.trim() || !improvement.description.trim() || (improvement.contextOverride !== undefined && !improvement.contextOverride.trim())}>Done</Button></div>
               </div>
             )
           })()}

@@ -12,7 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
-- Added an optional, ticket-locked Manual QA checkpoint that turns post-test failures into fix beads and reviewed improvements into independent backlog tickets without controlling the user's application.
+- Added a spec-aligned, ticket-locked Manual QA checkpoint that turns post-test failures into traceable fix beads and any reviewed checklist improvement into a context-rich backlog ticket without controlling the user's application.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
 
@@ -35,6 +35,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Aligned Manual QA checklist sources, required/optional severity, and recheck states with the documented contract; required checks now support non-blocking Improvements, improvement tickets share deterministic IDs and retain editable human-readable PRD/bead/evidence context, and QA-fix origins carry their model capability and creation timestamp.
 - Fixed Manual QA recovery end to end: strict action guards run before reservation, immutable results and incomplete journals resume safely, terminal retries repair missing summary/skip-receipt phase mirrors before transitioning, submit/skip and evidence mutations reuse durable identities without duplicate work, exact checkpoint files exclude staged residue, model image file parts reach coding sessions, and reverse-loop history remains reviewable through later errors or cancellation.
 - Preserved complete Manual QA round summaries and coverage/source provenance in historical review, made upload/removal/drift retries reuse their identities with fresh CAS guards and visible reconciliation errors, retained exact failed files in collision-safe Retry/Dismiss states, and surfaced typed QA-fix origins in structured bead artifacts and grouped Coding logs while keeping retry notes separate.
 - Fixed checklist-generation recovery to reuse its reserved version, rebuild missing deterministic coverage without another model call, and independently repair half-written compact checklist/coverage artifacts; evidence storage now also preserves concurrent uploads, repairs removals interrupted after unlink even with a new action after reload, and rejects symlinked ancestor directories before reads, removals, or directory creation.
@@ -46,7 +47,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
-- Documented Manual QA configuration/inheritance, storage/schema, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, QA beads/file parts, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.
+- Documented Manual QA configuration/inheritance, strict checklist/result contracts, Submit-versus-Skip artifact semantics, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, context-rich Improvements, self-contained QA origins, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.
 - Added **Skip Reason Auditability** to the [High Priority roadmap](roadmap.md#high-priority): users can provide an optional reason when skipping any step, prompt, or approval gate, and the reason is persisted in the relevant ticket artifact.
 
 :::

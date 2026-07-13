@@ -72,9 +72,8 @@ export function computeManualQaCoverage(
     sourceItemCounts: {
       prd: countSource('prd'),
       bead: countSource('bead'),
-      finalTest: countSource('final_test'),
       previousQa: countSource('previous_qa'),
-      implementationDiff: countSource('implementation'),
+      implementationDiff: countSource('implementation_diff'),
     },
   }
 }

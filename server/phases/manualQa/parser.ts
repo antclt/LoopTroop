@@ -28,11 +28,10 @@ const ModelItemSchema = z.object({
   lineageId: z.string().trim().min(1).max(160),
   priorItemIds: z.array(z.string().trim().min(1)).default([]),
   title: z.string().trim().min(1).max(500),
-  source: z.enum(['prd', 'bead', 'final_test', 'previous_qa', 'implementation']),
+  source: z.enum(['prd', 'bead', 'previous_qa', 'implementation_diff']),
   behavior: z.string().trim().min(1),
-  severity: z.enum(['critical', 'high', 'medium', 'low']),
-  required: z.boolean(),
-  recheckState: z.enum(['pending', 'pending_recheck', 'previously_passed']),
+  severity: z.enum(['required', 'optional']),
+  recheckState: z.enum(['new', 'pending_recheck', 'previously_passed']),
   prerequisites: z.array(z.string().trim().min(1)).default([]),
   actions: z.array(z.string().trim().min(1)).min(1),
   expectedResult: z.string().trim().min(1),
@@ -92,9 +91,9 @@ export function validateManualQaChecklistLineage(
   previousResults: ManualQaResults | null | undefined,
 ): void {
   if (!previousChecklist) {
-    const invalid = checklist.items.find((item) => item.priorItemIds.length > 0 || item.recheckState !== 'pending')
+    const invalid = checklist.items.find((item) => item.priorItemIds.length > 0 || item.recheckState !== 'new')
     if (invalid) {
-      throw new Error(`First-round checklist item ${invalid.id} must be pending and cannot reference prior items.`)
+      throw new Error(`First-round checklist item ${invalid.id} must be new and cannot reference prior items.`)
     }
     return
   }
@@ -105,12 +104,12 @@ export function validateManualQaChecklistLineage(
 
   for (const item of checklist.items) {
     if (item.priorItemIds.length === 0) {
-      if (item.recheckState !== 'pending') {
-        throw new Error(`New checklist item ${item.id} must use the pending recheck state.`)
+      if (item.recheckState !== 'new') {
+        throw new Error(`New checklist item ${item.id} must use the new recheck state.`)
       }
       continue
     }
-    if (item.recheckState === 'pending') {
+    if (item.recheckState === 'new') {
       throw new Error(`Checklist item ${item.id} references prior items and must be pending_recheck or previously_passed.`)
     }
     for (const priorItemId of item.priorItemIds) {
@@ -165,7 +164,7 @@ export function parseManualQaChecklistOutput(
       nestedMappingChildren: {
         items: [
           'lineage_id', 'lineageId', 'prior_item_ids', 'priorItemIds', 'source',
-          'title', 'behavior', 'severity', 'required', 'recheck_state', 'recheckState',
+          'title', 'behavior', 'severity', 'recheck_state', 'recheckState',
           'prerequisites', 'actions', 'expected_result', 'expectedResult',
           'watch_notes', 'watchNotes', 'bead_refs', 'beadRefs', 'prd_refs', 'prdRefs',
         ],

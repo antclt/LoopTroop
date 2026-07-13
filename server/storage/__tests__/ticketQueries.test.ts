@@ -39,6 +39,9 @@ describe('runtime Manual QA bead origin projection', () => {
       sourceTicketId: setup.ticket.id,
       sourceTicketExternalId: setup.ticket.externalId,
       version: 2,
+      modelId: 'provider/manual-qa-model',
+      modelSupportsImages: true,
+      createdFromManualQaAt: '2026-07-13T12:00:00.000Z',
       sourceItems: [{
         itemId: 'qa-v2-001',
         lineageId: 'delete-ticket',

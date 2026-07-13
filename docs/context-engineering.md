@@ -95,7 +95,7 @@ ticketState:
 | `tests` | Test/result material used by review surfaces where available. |
 | `manual_qa_previous` | Latest prior checklist/results/summary slices used only to preserve lineage and identify affected rechecks. |
 | `manual_qa_checklist` | The immutable active or selected checklist shown in Manual QA context/review surfaces. |
-| `manual_qa_results` | Submitted results/summary metadata for live or historical Manual QA review. |
+| `manual_qa_results` | Immutable item results created by Submit; skipped rounds use the archived draft, skip receipt, and summary instead. |
 | `error_context` | A compact failure summary for recovery prompts, especially context-wipe and final-test retry-note generation. |
 
 ### Manual QA generation contract
@@ -104,7 +104,7 @@ Manual QA checklist generation uses a dedicated focused builder rather than inhe
 
 Checklist items receive app-assigned version IDs and stable cross-round `lineageId` values. A failed round archives its attempts; after normal fix-bead execution, generation receives a fresh final-test report instead of old round reports or retry notes.
 
-For a `qa-fix` bead, typed `qaOrigin` is part of the narrow active-bead contract and stays separate from normal `bead_notes`. It contains the QA version/source items, observations, expected behavior, and evidence references. If the locked model advertises image input, every detected image evidence file is added as an OpenCode SDK file part with no extra prompt-size cap; non-images remain references. Capability false/unavailable records `references_only`, while provider/context overflow follows normal bead error recovery and never silently drops images.
+For a `qa-fix` bead, typed `qaOrigin` is part of the narrow active-bead contract and stays separate from normal `bead_notes`. It contains the QA version/source items, observations, expected behavior, evidence references, locked model ID/image-capability result, and Manual-QA creation timestamp. If the locked model advertises image input, every detected image evidence file is added as an OpenCode SDK file part with no extra prompt-size cap; non-images remain references. Capability false/unavailable records `references_only`, while provider/context overflow follows normal bead error recovery and never silently drops images.
 
 ## 6. Current Phase Allowlists
 

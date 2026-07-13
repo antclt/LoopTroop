@@ -58,10 +58,9 @@ const round: ManualQaRound = {
       id: 'item-1',
       lineageId: 'checkout',
       title: 'Submit checkout',
-      required: true,
       source: 'prd',
       behavior: 'A valid checkout can be submitted.',
-      severity: 'high',
+      severity: 'required',
       prerequisites: [],
       actions: ['Press submit.'],
       expectedResult: 'The order is confirmed.',
@@ -69,7 +68,7 @@ const round: ManualQaRound = {
     }],
   },
   coverage: [],
-  coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, finalTest: 0, previousQa: 0, implementationDiff: 0 } },
+  coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
   evidence: [],
   draftRevision: 0,
 }
@@ -106,6 +105,19 @@ describe('ManualQAView recovery behavior', () => {
   })
 
   afterEach(() => cleanup())
+
+  it('offers a non-blocking Improvement result for required checks', () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    expect(screen.getByText('Required')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Improvement' })).toHaveLength(1)
+    fireEvent.click(screen.getByRole('button', { name: 'Improvement' }))
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Improvement backlog ticket')
+    const contextEditor = screen.getByText('Manual QA context').parentElement?.querySelector('textarea')
+    expect(contextEditor?.value).toContain('## Manual QA Context')
+    expect(screen.queryByText(/required check.*incomplete/i)).not.toBeInTheDocument()
+  })
 
   it('blocks submission after an autosave conflict and offers an explicit reload', async () => {
     mocks.save.mockResolvedValueOnce({ conflict: true, revision: 2, data: { results: {} } })
@@ -255,7 +267,7 @@ describe('ManualQAView recovery behavior', () => {
         readOnly: true,
         outcome: 'waived_through',
         coverage: [{ criterionRef: 'EP-1/ST-1/AC-1', criterion: 'Checkout succeeds', status: 'covered', itemIds: ['item-1'] }],
-        coverageSummary: { coveredCount: 1, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 1, bead: 2, finalTest: 1, previousQa: 0, implementationDiff: 3 } },
+        coverageSummary: { coveredCount: 1, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 1, bead: 2, previousQa: 0, implementationDiff: 3 } },
         summary: {
           outcome: 'waived_through', createdFixBeadIds: ['QA-v1-1'], improvementTicketIds: ['APP-9'], waivedItemIds: ['item-1'], waivedItems: [{ itemId: 'item-1', reason: 'Unavailable device' }], durationMs: 65_000,
           itemCounts: { pass: 0, fail: 0, waive: 1, improvement: 0, pending: 0 }, requiredItemCount: 1, optionalItemCount: 0, evidenceCount: 2, nextAction: 'integrate', coverage: { covered: 1, partiallyCovered: 0, uncovered: 0 }, modelCapability: null,

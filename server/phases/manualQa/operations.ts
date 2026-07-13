@@ -195,8 +195,8 @@ function validateSubmission(
   }
   for (const item of checklist.items) {
     const outcome = results.get(item.id)?.outcome ?? 'pending'
-    if (item.required && !['pass', 'fail', 'waive'].includes(outcome)) {
-      throw new Error(`Required checklist item ${item.id} must be passed, failed, or waived.`)
+    if (item.severity === 'required' && !['pass', 'fail', 'waive', 'improvement'].includes(outcome)) {
+      throw new Error(`Required checklist item ${item.id} must be passed, failed, waived, or recorded as an improvement.`)
     }
   }
 
@@ -319,6 +319,7 @@ function evidenceForIds(evidence: ManualQaEvidenceRef[], ids: string[]): ManualQ
 
 export function buildImprovementDescription(input: {
   description: string
+  contextOverride?: string
   title?: string
   sourceExternalId: string
   version: number
@@ -334,9 +335,13 @@ export function buildImprovementDescription(input: {
   links?: Array<{ url: string; label?: string }>
   prdRefs?: string[]
   beadRefs?: string[]
+  prdRequirements?: string[]
+  beadWorkAreas?: string[]
+  evidenceSummary?: string
 }): { description: string; omittedCharacters: number; omittedFields: string[] } {
   const composed = composeManualQaImprovementDescription({
     description: input.description,
+    contextOverride: input.contextOverride,
     itemTitle: input.title ?? input.behavior,
     behavior: input.behavior,
     source: input.source,
@@ -347,6 +352,9 @@ export function buildImprovementDescription(input: {
     observation: input.observation,
     links: input.links,
     evidenceCount: input.evidence.length,
+    evidenceSummary: input.evidenceSummary,
+    prdRequirements: input.prdRequirements,
+    beadWorkAreas: input.beadWorkAreas,
     hasPrdRefs: Boolean(input.prdRefs?.length),
     hasBeadRefs: Boolean(input.beadRefs?.length),
   })
@@ -355,6 +363,69 @@ export function buildImprovementDescription(input: {
     omittedCharacters: composed.omittedCharacters,
     omittedFields: composed.omittedFields,
   }
+}
+
+function humanReadableExcerpt(value: unknown, maxLength = 600): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.replace(/\s+/g, ' ').trim()
+  if (!normalized) return null
+  return normalized.length <= maxLength ? normalized : `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+}
+
+function resolvePrdRequirements(ticketDir: string, refs: Array<{ ref: string }>): string[] {
+  if (refs.length === 0) return []
+  try {
+    const raw = parseYamlOrJsonCandidate(readFileSync(resolve(ticketDir, 'prd.yaml'), 'utf8')) as {
+      epics?: Array<{
+        id?: unknown
+        user_stories?: Array<{ id?: unknown; title?: unknown; acceptance_criteria?: unknown[] }>
+      }>
+    }
+    const requirements: string[] = []
+    for (const { ref } of refs) {
+      const [epicId, storyId, criterionId] = ref.split('/')
+      const epic = raw.epics?.find((entry) => entry.id === epicId)
+      const story = epic?.user_stories?.find((entry) => entry.id === storyId)
+      const criterionIndex = criterionId?.match(/^AC-(\d+)$/i)?.[1]
+      const criterion = criterionIndex && story?.acceptance_criteria
+        ? story.acceptance_criteria[Number(criterionIndex) - 1]
+        : undefined
+      const readable = humanReadableExcerpt(criterion) ?? humanReadableExcerpt(story?.title)
+      if (readable && !requirements.includes(readable)) requirements.push(readable)
+    }
+    return requirements
+  } catch {
+    return []
+  }
+}
+
+function resolveBeadWorkAreas(beads: Bead[], refs: string[]): string[] {
+  const byId = new Map(beads.map((bead) => [bead.id, bead]))
+  const workAreas: string[] = []
+  for (const ref of refs) {
+    const bead = byId.get(ref)
+    if (!bead) continue
+    const title = humanReadableExcerpt(bead.title, 240)
+    const description = humanReadableExcerpt(bead.description)
+    const targetFiles = (bead.targetFiles ?? []).slice(0, 8).join(', ')
+    const readable = [title, description && description !== title ? description : null]
+      .filter((value): value is string => Boolean(value))
+      .join(' — ')
+    const withFiles = `${readable}${targetFiles ? `${readable ? ' ' : ''}(files: ${targetFiles})` : ''}`.trim()
+    if (withFiles && !workAreas.includes(withFiles)) workAreas.push(withFiles)
+  }
+  return workAreas
+}
+
+function summarizeImprovementEvidence(evidence: ManualQaEvidenceRef[]): string | undefined {
+  if (evidence.length === 0) return undefined
+  const imageCount = evidence.filter((entry) => entry.mediaType.toLowerCase().startsWith('image/')).length
+  const otherCount = evidence.length - imageCount
+  const categories = [
+    imageCount ? `${imageCount} image${imageCount === 1 ? '' : 's'}` : '',
+    otherCount ? `${otherCount} other file${otherCount === 1 ? '' : 's'}` : '',
+  ].filter(Boolean).join(' and ')
+  return `${evidence.length} uploaded file${evidence.length === 1 ? '' : 's'} (${categories}) retained with the Manual QA origin metadata.`
 }
 
 function copyImprovementEvidence(input: {
@@ -437,8 +508,11 @@ function createImprovementTicket(input: {
     reservedTicketId = reservation.ticketId
   }
   const existing = reservedTicketId ? getTicketByRef(reservedTicketId) : findExistingImprovement(input.projectId, originId)
+  const sourceBeadsPath = getTicketPaths(input.sourceTicketId)?.beadsPath
+  const sourceBeads = sourceBeadsPath && existsSync(sourceBeadsPath) ? readJsonl<Bead>(sourceBeadsPath) : []
   const built = buildImprovementDescription({
     description: input.draft.description,
+    contextOverride: input.draft.contextOverride,
     sourceExternalId: input.sourceExternalId,
     version: input.version,
     itemId: input.item.id,
@@ -454,6 +528,9 @@ function createImprovementTicket(input: {
     links: input.result.links,
     prdRefs: input.item.prdRefs.map((entry) => `${entry.ref} (${entry.coverage})`),
     beadRefs: input.item.beadRefs,
+    prdRequirements: resolvePrdRequirements(input.sourceTicketDir, input.item.prdRefs),
+    beadWorkAreas: resolveBeadWorkAreas(sourceBeads, input.item.beadRefs),
+    evidenceSummary: summarizeImprovementEvidence(input.evidence),
   })
   const description = built.description
   const ticket = existing ?? createManualQaImprovementTicket({
@@ -531,6 +608,7 @@ function buildQaFixBeads(input: {
   version: number
   actionId: string
   imageDelivery: 'attached' | 'references_only'
+  modelCapability: ManualQaModelCapabilitySnapshot
 }): Bead[] {
   const failed = input.results.filter((result) => result.outcome === 'fail')
   const groups = new Map<string, ManualQaItemResult[]>()
@@ -569,6 +647,9 @@ function buildQaFixBeads(input: {
       sourceTicketId: input.ticketId,
       sourceTicketExternalId: input.externalId,
       version: input.version,
+      modelId: input.modelCapability.modelId,
+      modelSupportsImages: input.modelCapability.supportsImages,
+      createdFromManualQaAt: now,
       sourceItems,
       imageDelivery: input.imageDelivery,
     }
@@ -694,8 +775,8 @@ function buildManualQaSummary(input: {
     completedAt: input.completedAt,
     durationMs: Math.max(0, Date.parse(input.completedAt) - Date.parse(startedAt)),
     itemCounts,
-    requiredItemCount: input.checklist.items.filter((item) => item.required).length,
-    optionalItemCount: input.checklist.items.filter((item) => !item.required).length,
+    requiredItemCount: input.checklist.items.filter((item) => item.severity === 'required').length,
+    optionalItemCount: input.checklist.items.filter((item) => item.severity === 'optional').length,
     evidenceCount: input.evidence.length,
     nextAction: input.outcome === 'failed' || input.outcome === 'created_fixes' ? 'return_to_coding' : 'integrate',
     coverage: {
@@ -1073,6 +1154,7 @@ export async function submitManualQa(input: {
     version: input.version,
     actionId: operationActionId,
     imageDelivery: modelCapability.imageEvidenceMode,
+    modelCapability,
   })
   journal.state = 'creating_beads'
   journal.fixBeadIds = fixBeads.map((bead) => bead.id)
@@ -1107,7 +1189,7 @@ export async function submitManualQa(input: {
   }
 
   const waivedItemIds = draft.results.filter((result) => result.outcome === 'waive').map((result) => result.itemId)
-  const requiredWaivers = waivedItemIds.filter((itemId) => itemById.get(itemId)?.required)
+  const requiredWaivers = waivedItemIds.filter((itemId) => itemById.get(itemId)?.severity === 'required')
   const summary = buildManualQaSummary({
     checklist,
     draft,

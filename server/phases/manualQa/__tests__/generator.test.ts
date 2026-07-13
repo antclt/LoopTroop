@@ -43,9 +43,8 @@ function persistChecklist(ticketDir: string) {
       title: 'Application usability',
       source: 'prd',
       behavior: 'The application remains usable.',
-      severity: 'high',
-      required: true,
-      recheckState: 'pending',
+      severity: 'required',
+      recheckState: 'new',
       prerequisites: [],
       actions: ['Exercise the behavior.'],
       expectedResult: 'The behavior works.',
@@ -89,6 +88,10 @@ describe('Manual QA generation context', () => {
     expect(prompt).toContain('"issueType": "feature"')
     expect(prompt).toContain('Reset after reload')
     expect(prompt).toContain('title: concise human-facing check title')
+    expect(prompt).toContain('source: prd | bead | previous_qa | implementation_diff')
+    expect(prompt).toContain('severity: required | optional')
+    expect(prompt).toContain('recheck_state: new | pending_recheck | previously_passed')
+    expect(prompt).not.toContain('required: boolean')
   })
 
   it('reuses a reserved version after the checklist was persisted but the transition did not finish', () => {

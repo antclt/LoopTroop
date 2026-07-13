@@ -26,6 +26,8 @@ import {
   streamManualQaEvidence,
 } from '../storage'
 import type { ManualQaChecklist, ManualQaDraft, ManualQaSummary } from '../types'
+import { readJsonl, writeJsonl } from '../../../io/jsonl'
+import type { Bead } from '../../beads/types'
 
 const repoManager = createTestRepoManager('manual-qa-operations-')
 
@@ -35,11 +37,10 @@ function checklistItem(id: string, required = true): ManualQaChecklist['items'][
     lineageId: `lineage-${id}`,
     priorItemIds: [],
     title: `Verify ${id}`,
-    source: 'implementation',
+    source: 'implementation_diff',
     behavior: `${id} remains usable`,
-    severity: 'high',
-    required,
-    recheckState: 'pending',
+    severity: required ? 'required' : 'optional',
+    recheckState: 'new',
     prerequisites: [],
     actions: [`Exercise ${id}`],
     expectedResult: `${id} works`,
@@ -386,6 +387,13 @@ describe('Manual QA submission recovery and integrity', () => {
       sendEvent: firstEvent,
     })
     expect(summary.outcome).toBe('created_fixes')
+    const fixBead = readJsonl<Bead>(setup.paths.beadsPath).find((bead) => bead.qaOrigin)
+    expect(fixBead?.qaOrigin).toMatchObject({
+      modelId: null,
+      modelSupportsImages: null,
+      imageDelivery: 'references_only',
+    })
+    expect(fixBead?.qaOrigin?.createdFromManualQaAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     expect(firstEvent).toHaveBeenCalledWith({ type: 'MANUAL_QA_FIXES_CREATED' })
     const attemptCounts = Object.fromEntries(
       ['RUNNING_FINAL_TEST', 'GENERATING_QA_CHECKLIST', 'WAITING_MANUAL_QA']
@@ -429,13 +437,31 @@ describe('Manual QA submission recovery and integrity', () => {
     })).rejects.toThrow('does not belong to checklist item item-one')
   })
 
-  it('creates one restart-idempotent improvement ticket with structured-only provenance', async () => {
-    const item = checklistItem('optional-improvement', false)
+  it('creates one restart-idempotent improvement ticket with human-readable context and structured provenance', async () => {
+    const item = checklistItem('required-improvement')
     item.title = 'Remember the chosen value'
     item.behavior = 'The chosen value can be reused on a future visit'
     item.actions = ['Choose a value and reload the page']
     item.expectedResult = 'The chosen value remains selected after reload'
+    item.prdRefs = [{ ref: 'EPIC-1/STORY-1/AC-1', coverage: 'full' }]
+    item.beadRefs = ['source-bead']
     const setup = prepareFixture([item])
+    writeFileSync(resolve(setup.paths.ticketDir, 'prd.yaml'), [
+      'epics:',
+      '  - id: EPIC-1',
+      '    user_stories:',
+      '      - id: STORY-1',
+      '        title: Remember a saved preference',
+      '        acceptance_criteria:',
+      '          - The saved choice is restored on the next visit.',
+      '',
+    ].join('\n'))
+    writeJsonl(setup.paths.beadsPath, [{
+      id: 'source-bead',
+      title: 'Persist user preferences',
+      description: 'Store and restore the selected value.',
+      targetFiles: ['src/preferences.ts'],
+    } as Bead])
     setup.draft.results[0] = {
       ...setup.draft.results[0]!,
       outcome: 'improvement',
@@ -444,7 +470,7 @@ describe('Manual QA submission recovery and integrity', () => {
     }
     setup.draft.improvements = [{
       id: 'improvement-one',
-      itemId: 'optional-improvement',
+      itemId: 'required-improvement',
       title: 'Persist the choice',
       description: 'Keep the chosen value after reload.',
       evidenceIds: [],
@@ -456,16 +482,21 @@ describe('Manual QA submission recovery and integrity', () => {
       guard: setup.guard,
       sendEvent: vi.fn(),
     })
+    expect(summary.outcome).toBe('passed')
     expect(summary.improvementTicketIds).toHaveLength(1)
     const childId = summary.improvementTicketIds[0]!
     const child = getTicketByRef(childId)!
     expect(child.description).toContain('## Manual QA Context')
-    expect(child.description).not.toContain('optional-improvement')
+    expect(child.description).toContain('PRD requirement: The saved choice is restored on the next visit.')
+    expect(child.description).toContain('Implementation work area: Persist user preferences')
+    expect(child.description).not.toContain('required-improvement')
+    expect(child.description).not.toContain('EPIC-1/STORY-1/AC-1')
+    expect(child.description).not.toContain('source-bead')
     const childPaths = getTicketPaths(childId)!
     const origin = JSON.parse(readFileSync(resolve(childPaths.ticketDir, 'meta', 'manual-qa-origin.json'), 'utf8'))
     expect(origin).toMatchObject({
       source: 'manual_qa_improvement',
-      sourceItemIds: ['optional-improvement'],
+      sourceItemIds: ['required-improvement'],
       resultType: 'improvement',
       evidenceRefs: [],
     })

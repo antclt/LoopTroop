@@ -4,7 +4,11 @@ import type {
   ManualQaItemResult,
   ManualQaRound,
 } from '@/hooks/useManualQA'
-import { composeManualQaImprovementDescription } from '@shared/manualQaImprovement'
+import {
+  buildManualQaImprovementContext,
+  composeManualQaImprovementDescription,
+  createManualQaImprovementDraftId,
+} from '@shared/manualQaImprovement'
 
 function resultFor(draft: ManualQaDraft, itemId: string): ManualQaItemResult {
   return draft.results[itemId] ?? { itemId, status: 'pending', evidenceIds: [] }
@@ -12,14 +16,20 @@ function resultFor(draft: ManualQaDraft, itemId: string): ManualQaItemResult {
 
 export function validateManualQaItem(item: ManualQaChecklistItem, result: ManualQaItemResult): string[] {
   const errors: string[] = []
-  if (item.required && !['pass', 'fail', 'waive'].includes(result.status)) {
-    errors.push('Required checks must be marked Pass, Fail, or Waive.')
+  if (item.severity === 'required' && result.status === 'pending') {
+    errors.push('Required checks must be marked Pass, Fail, Waive, or Improvement.')
   }
   if (result.status === 'fail' && !result.observation?.trim()) errors.push('Describe what you observed for this failure.')
   if (result.status === 'waive' && !result.waiverReason?.trim()) errors.push('Explain why this check is being waived.')
   if (result.status === 'improvement') {
     if (!result.improvement?.title.trim()) errors.push('Improvement title is required.')
     if (!result.improvement?.description.trim()) errors.push('Improvement description is required.')
+    if (result.improvement?.contextOverride !== undefined && !result.improvement.contextOverride.trim()) {
+      errors.push('Manual QA context cannot be empty.')
+    }
+    if ((result.improvement?.contextOverride?.trim().length ?? 0) > 10_000) {
+      errors.push('Manual QA context must be 10,000 characters or fewer.')
+    }
   }
   return errors
 }
@@ -40,12 +50,13 @@ export function buildCanonicalManualQaDraft(
     itemId: string
     title: string
     description: string
+    contextOverride?: string
     evidenceIds: string[]
   }> = []
   const results = (round.checklist?.items ?? []).map((item) => {
     const result = resultFor(uiDraft, item.id)
     const improvementId = result.status === 'improvement'
-      ? `improvement-v${round.version}-${canonicalId(item.id)}`
+      ? createManualQaImprovementDraftId(round.version, item.id)
       : undefined
     if (improvementId && result.improvement) {
       improvements.push({
@@ -53,6 +64,9 @@ export function buildCanonicalManualQaDraft(
         itemId: item.id,
         title: result.improvement.title.trim(),
         description: result.improvement.description.trim(),
+        ...(result.improvement.contextOverride !== undefined
+          ? { contextOverride: result.improvement.contextOverride.trim() }
+          : {}),
         evidenceIds: result.improvement.evidenceIds ?? result.evidenceIds ?? [],
       })
     }
@@ -99,12 +113,9 @@ export function buildManualQaImprovementContextPreview(
   return composeManualQaImprovementPreview(item, result).description
 }
 
-export function composeManualQaImprovementPreview(
-  item: ManualQaChecklistItem,
-  result: ManualQaItemResult,
-) {
+function improvementDescriptionInput(item: ManualQaChecklistItem, result: ManualQaItemResult) {
   const improvement = result.improvement
-  return composeManualQaImprovementDescription({
+  return {
     description: improvement?.description.trim() ?? '',
     itemTitle: item.title?.trim() || item.behavior,
     behavior: item.behavior,
@@ -118,5 +129,20 @@ export function composeManualQaImprovementPreview(
     evidenceCount: result.evidenceIds?.length ?? 0,
     hasPrdRefs: item.prdRefs.length > 0,
     hasBeadRefs: (item.beadRefs?.length ?? 0) > 0,
-  })
+    contextOverride: improvement?.contextOverride,
+  }
+}
+
+export function buildDefaultManualQaImprovementContext(
+  item: ManualQaChecklistItem,
+  result: ManualQaItemResult,
+): string {
+  return buildManualQaImprovementContext(improvementDescriptionInput(item, result))
+}
+
+export function composeManualQaImprovementPreview(
+  item: ManualQaChecklistItem,
+  result: ManualQaItemResult,
+) {
+  return composeManualQaImprovementDescription(improvementDescriptionInput(item, result))
 }

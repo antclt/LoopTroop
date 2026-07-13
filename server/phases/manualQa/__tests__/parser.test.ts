@@ -17,9 +17,8 @@ items:
     title: Save valid form values
     source: prd
     behavior: Saving a valid form persists the values
-    severity: high
-    required: true
-    recheck_state: pending
+    severity: required
+    recheck_state: new
     prerequisites:
       - Open the form
     actions:
@@ -32,11 +31,10 @@ items:
         coverage: full
   - lineage_id: form-errors
     title: Show actionable validation errors
-    source: implementation
+    source: implementation_diff
     behavior: Invalid values show an actionable error
-    severity: medium
-    required: false
-    recheck_state: pending
+    severity: optional
+    recheck_state: new
     prerequisites: []
     actions: [Submit an invalid value]
     expected_result: An error is shown without losing the value
@@ -72,7 +70,6 @@ describe('Manual QA checklist parser and coverage', () => {
     expect(coverage.sourceItemCounts).toEqual({
       prd: 1,
       bead: 0,
-      finalTest: 0,
       previousQa: 0,
       implementationDiff: 1,
     })
@@ -87,6 +84,20 @@ describe('Manual QA checklist parser and coverage', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error).toContain('invalid PRD criterion references')
+  })
+
+  it('rejects the superseded source, severity, required, and recheck fields', () => {
+    const legacy = output()
+      .replace('source: implementation_diff', 'source: implementation')
+      .replace('severity: required', 'severity: high\n    required: true')
+      .replace('recheck_state: new', 'recheck_state: pending')
+    const result = parseManualQaChecklistOutput(legacy, {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+    })
+
+    expect(result.ok).toBe(false)
   })
 
   it('requires exactly one complete tagged response', () => {
@@ -109,7 +120,7 @@ describe('Manual QA checklist parser and coverage', () => {
     if (!priorResult.ok) return
     const nextOutput = output()
       .replace('prior_item_ids: []', 'prior_item_ids: [qa-v1-001]')
-      .replace('recheck_state: pending', 'recheck_state: pending_recheck')
+      .replace('recheck_state: new', 'recheck_state: pending_recheck')
     const nextResult = parseManualQaChecklistOutput(nextOutput, {
       ticketId: 'DEMO-1',
       version: 2,

@@ -28,6 +28,7 @@ import {
 } from '../../phases/manualQa'
 import { readTicketUiState } from './uiStateHandlers'
 import { getRequiredRouteParam, getTicketParam } from './routeUtils'
+import { createManualQaImprovementDraftId } from '../../../shared/manualQaImprovement'
 
 function parseVersion(c: Context): number {
   const version = Number(getRequiredRouteParam(c, 'version'))
@@ -78,19 +79,22 @@ function toCanonicalDraft(input: {
   const resultRecord = raw.results && typeof raw.results === 'object' && !Array.isArray(raw.results)
     ? raw.results as Record<string, unknown>
     : {}
-  const improvements: Array<{ id: string; itemId: string; title: string; description: string; evidenceIds: string[] }> = []
+  const improvements: Array<{ id: string; itemId: string; title: string; description: string; contextOverride?: string; evidenceIds: string[] }> = []
   const results = Object.entries(resultRecord).map(([itemId, rawValue]) => {
     const value = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue as Record<string, unknown> : {}
     const improvement = value.improvement && typeof value.improvement === 'object' && !Array.isArray(value.improvement)
       ? value.improvement as Record<string, unknown>
       : null
-    const improvementDraftId = improvement ? `improvement-${itemId.replace(/[^A-Za-z0-9._:-]/g, '_')}` : undefined
+    const improvementDraftId = improvement ? createManualQaImprovementDraftId(input.version, itemId) : undefined
     if (improvement && improvementDraftId) {
       improvements.push({
         id: improvementDraftId,
         itemId,
         title: String(improvement.title ?? '').trim(),
         description: String(improvement.description ?? '').trim(),
+        ...(typeof improvement.contextOverride === 'string' && improvement.contextOverride.trim()
+          ? { contextOverride: improvement.contextOverride.trim() }
+          : {}),
         evidenceIds: Array.isArray(improvement.evidenceIds) ? improvement.evidenceIds.map(String) : [],
       })
     }

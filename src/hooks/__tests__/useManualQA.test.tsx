@@ -7,6 +7,36 @@ import { useManualQaRound } from '../useManualQA'
 describe('useManualQaRound', () => {
   afterEach(() => vi.restoreAllMocks())
 
+  it('normalizes checklist items with the documented Manual QA schema', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      version: 1,
+      checklist: {
+        schemaVersion: 1,
+        version: 1,
+        items: [{
+          id: 'qa-1', lineageId: 'checkout', source: 'implementation_diff',
+          behavior: 'Checkout reports a useful error.', severity: 'required', recheckState: 'new',
+          prerequisites: [], actions: ['Submit an invalid card.'], expectedResult: 'A useful error appears.', prdRefs: [],
+        }],
+      },
+      coverage: { entries: [], sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 1 } },
+      evidence: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
+
+    const { result } = renderHook(() => useManualQaRound('ticket-1', 1), { wrapper })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(result.current.data?.checklist?.items[0]).toMatchObject({
+      source: 'implementation_diff', severity: 'required', recheckState: 'new',
+    })
+    expect(result.current.data?.checklist?.items[0]).not.toHaveProperty('required')
+    expect(result.current.data?.coverageSummary.sourceItemCounts).toEqual({
+      prd: 0, bead: 0, previousQa: 0, implementationDiff: 1,
+    })
+  })
+
   it('normalizes durable operation state for resumable submission UI', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
       version: 2,
@@ -47,7 +77,7 @@ describe('useManualQaRound', () => {
       coverage: {
         entries: [{ criterionRef: 'EP/ST/AC-1', criterion: 'The behavior works', status: 'covered', itemIds: ['item-1'] }],
         coveredCount: 1, partiallyCoveredCount: 0, uncoveredCount: 0,
-        sourceItemCounts: { prd: 1, bead: 2, finalTest: 3, previousQa: 4, implementationDiff: 5 },
+        sourceItemCounts: { prd: 1, bead: 2, previousQa: 4, implementationDiff: 5 },
       },
       evidence: [],
       summary: {
@@ -65,7 +95,7 @@ describe('useManualQaRound', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(result.current.data?.coverage[0]).toMatchObject({ criterion: 'The behavior works' })
-    expect(result.current.data?.coverageSummary.sourceItemCounts).toEqual({ prd: 1, bead: 2, finalTest: 3, previousQa: 4, implementationDiff: 5 })
+    expect(result.current.data?.coverageSummary.sourceItemCounts).toEqual({ prd: 1, bead: 2, previousQa: 4, implementationDiff: 5 })
     expect(result.current.data?.summary).toMatchObject({
       createdFixBeadIds: ['QA-1'], improvementTicketIds: ['APP-2'], durationMs: 60_000,
       modelCapability: { imageEvidenceMode: 'attached' },

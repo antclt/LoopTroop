@@ -338,7 +338,7 @@ SQLite is not the whole system. Some ticket state is intentionally filesystem-ba
 | `.ticket/runtime/execution-setup-profile.json` | Reusable execution-setup profile | Filesystem runtime artifact |
 | `.ticket/runtime/state.yaml` | UI-friendly runtime projection | **Rebuildable projection**, not the primary source of truth |
 | `.ticket/manual-qa/vN/checklist.yaml` | Immutable generated checklist for one round | Canonical versioned artifact |
-| `.ticket/manual-qa/vN/results.yaml` and `summary.yaml` | Submitted results and round outcome | Canonical submission records |
+| `.ticket/manual-qa/vN/results.yaml` and `summary.yaml` | Submitted results and round outcome | Results exist for Submit; summary exists for every completed round |
 | `.ticket/manual-qa/vN/coverage.yaml` | Code-computed PRD criterion coverage | Advisory canonical report |
 | `.ticket/manual-qa/vN/model-capability.json` | Immutable locked-model image capability snapshot | Captured for evidence delivery auditing |
 | `.ticket/manual-qa/vN/evidence/**` | Contained evidence binaries plus metadata index | Disk-only binaries; database/UI state stores refs only |
@@ -346,7 +346,7 @@ SQLite is not the whole system. Some ticket state is intentionally filesystem-ba
 | `.ticket/manual-qa/workspace-baseline-vN.json` and drift receipts | Git baseline and audited include/discard decisions | Submission/skip safety records |
 | `.ticket/manual-qa/events.jsonl` | Idempotent versioned generation, evidence, drift, submission, child-work, and completion events | Append-only Manual QA audit stream |
 
-Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks at every contained ancestor are rejected, and bytes are streamed through contained temporary files, hashed, and atomically renamed. Synchronous index publication preserves concurrent uploads, while stable evidence/action IDs reconcile a restart between file rename or unlink, index persistence, and the final upload/remove receipt. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
+Manual QA also writes immutable draft snapshots, skip receipts, submission-operation journals, and origin/source receipts where needed. A skipped round intentionally has draft + skip receipt + summary rather than `results.yaml`, because Skip does not submit item results. Evidence is capped at 250 MiB **per file** with no count or round-total limit. Filenames are sanitized, traversal and symlinks at every contained ancestor are rejected, and bytes are streamed through contained temporary files, hashed, and atomically renamed. Synchronous index publication preserves concurrent uploads, while stable evidence/action IDs reconcile a restart between file rename or unlink, index persistence, and the final upload/remove receipt. These files remain under ticket-owned `.ticket` storage, so normal bead commits, candidate diffs, and PRs exclude them.
 
 The important split is:
 

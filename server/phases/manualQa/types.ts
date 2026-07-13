@@ -17,11 +17,10 @@ export const ManualQaChecklistItemSchema = z.object({
   lineageId: IdString,
   priorItemIds: z.array(IdString).default([]),
   title: NonEmptyString.max(500),
-  source: z.enum(['prd', 'bead', 'final_test', 'previous_qa', 'implementation']),
+  source: z.enum(['prd', 'bead', 'previous_qa', 'implementation_diff']),
   behavior: NonEmptyString,
-  severity: z.enum(['critical', 'high', 'medium', 'low']),
-  required: z.boolean(),
-  recheckState: z.enum(['pending', 'pending_recheck', 'previously_passed']),
+  severity: z.enum(['required', 'optional']),
+  recheckState: z.enum(['new', 'pending_recheck', 'previously_passed']),
   prerequisites: z.array(NonEmptyString),
   actions: z.array(NonEmptyString).min(1),
   expectedResult: NonEmptyString,
@@ -70,6 +69,7 @@ export const ManualQaImprovementDraftSchema = z.object({
   itemId: IdString,
   title: NonEmptyString.max(500),
   description: NonEmptyString.max(10_000),
+  contextOverride: NonEmptyString.max(10_000).optional(),
   evidenceIds: z.array(IdString).default([]),
 }).strict()
 
@@ -142,7 +142,6 @@ export const ManualQaCoverageSchema = z.object({
   sourceItemCounts: z.object({
     prd: z.number().int().nonnegative(),
     bead: z.number().int().nonnegative(),
-    finalTest: z.number().int().nonnegative(),
     previousQa: z.number().int().nonnegative(),
     implementationDiff: z.number().int().nonnegative(),
   }).strict(),

@@ -63,11 +63,10 @@ function persistChecklist(ticketDir: string) {
       lineageId: 'lineage-001',
       title: 'Application usability',
       priorItemIds: [],
-      source: 'implementation',
+      source: 'implementation_diff',
       behavior: 'The application remains usable.',
-      severity: 'high',
-      required: true,
-      recheckState: 'pending',
+      severity: 'required',
+      recheckState: 'new',
       prerequisites: [],
       actions: ['Exercise the behavior.'],
       expectedResult: 'The behavior works.',
@@ -484,7 +483,7 @@ describe('Manual QA canonical storage', () => {
       version: 3,
       itemId: 'qa-v3-002',
       behavior: 'The filter should preserve selection',
-      source: 'implementation',
+      source: 'implementation_diff',
       expectedResult: 'Selection remains after reload',
       actions: ['Choose a filter', 'Reload'],
       improvementTitle: 'Remember the selected filter',
@@ -510,7 +509,7 @@ describe('Manual QA canonical storage', () => {
       version: 3,
       itemId: 'qa-v3-002',
       behavior: 'The filter should preserve selection',
-      source: 'implementation',
+      source: 'implementation_diff',
       expectedResult: 'Selection remains after reload',
       actions: ['Choose a filter', 'Reload'],
       improvementTitle: 'Remember the selected filter',
@@ -518,6 +517,9 @@ describe('Manual QA canonical storage', () => {
       evidence: [],
       prdRefs: ['EPIC-1/US-1/AC-1'],
       beadRefs: ['DEMO-1.2'],
+      prdRequirements: ['The selected filter remains active after reload.'],
+      beadWorkAreas: ['Persist filter state — Store and restore the selection.'],
+      evidenceSummary: '2 uploaded files (1 image and 1 other file) retained with the Manual QA origin metadata.',
     })
     expect(result.description).toContain('## Manual QA Context')
     expect(result.description).toContain('This follow-up was created from a non-blocking Manual QA improvement.')
@@ -525,6 +527,24 @@ describe('Manual QA canonical storage', () => {
     expect(result.description).not.toContain('DEMO-1')
     expect(result.description).not.toContain('qa-v3-002')
     expect(result.description).not.toContain('EPIC-1/US-1/AC-1')
+    expect(result.description).toContain('PRD requirement: The selected filter remains active after reload.')
+    expect(result.description).toContain('Implementation work area: Persist filter state')
+    expect(result.description).toContain('Evidence summary: 2 uploaded files')
+  })
+
+  it('honors a reviewed Manual QA context override', () => {
+    const result = buildImprovementDescription({
+      description: 'Keep the editable lead description.',
+      contextOverride: '## Reviewed QA Context\nUse this reviewed implementation context.',
+      sourceExternalId: 'DEMO-1',
+      version: 1,
+      itemId: 'qa-v1-001',
+      behavior: 'Default generated behavior',
+      expectedResult: 'Default generated expectation',
+      evidence: [],
+    })
+    expect(result.description).toBe('Keep the editable lead description.\n## Reviewed QA Context\nUse this reviewed implementation context.')
+    expect(result.description).not.toContain('Default generated behavior')
   })
 
   it('persists an immutable capability snapshot and append-only idempotent events', () => {

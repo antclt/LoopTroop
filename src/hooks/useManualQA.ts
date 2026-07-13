@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 export type ManualQaResultStatus = 'pass' | 'fail' | 'waive' | 'improvement' | 'pending'
-export type ManualQaSeverity = 'critical' | 'high' | 'medium' | 'low'
+export type ManualQaSeverity = 'required' | 'optional'
+export type ManualQaChecklistSource = 'prd' | 'bead' | 'previous_qa' | 'implementation_diff'
 export type ManualQaCoverageLevel = 'full' | 'partial'
 
 export interface ManualQaPrdReference {
@@ -14,11 +15,10 @@ export interface ManualQaChecklistItem {
   lineageId: string
   priorItemIds?: string[]
   title?: string
-  required: boolean
-  source: string
+  source: ManualQaChecklistSource
   behavior: string
   severity: ManualQaSeverity
-  recheckState?: 'new' | 'pending' | 'pending_recheck' | 'previously_passed'
+  recheckState?: 'new' | 'pending_recheck' | 'previously_passed'
   prerequisites: string[]
   actions: string[]
   expectedResult: string
@@ -52,6 +52,7 @@ export interface ManualQaEvidence {
 export interface ManualQaImprovementDraft {
   title: string
   description: string
+  contextOverride?: string
   evidenceIds?: string[]
 }
 
@@ -86,7 +87,6 @@ export interface ManualQaCoverageSummary {
   sourceItemCounts: {
     prd: number
     bead: number
-    finalTest: number
     previousQa: number
     implementationDiff: number
   }
@@ -213,6 +213,7 @@ function normalizeDraft(value: unknown): ManualQaDraft | null {
       improvement: improvement ? {
         title: String(improvement.title ?? ''),
         description: String(improvement.description ?? ''),
+        contextOverride: typeof improvement.contextOverride === 'string' ? improvement.contextOverride : undefined,
         evidenceIds: Array.isArray(improvement.evidenceIds) ? improvement.evidenceIds.map(String) : [],
       } : undefined,
     }
@@ -242,10 +243,9 @@ export function normalizeManualQaRound(value: unknown, version: number): ManualQ
         id: String(item.id ?? ''),
         lineageId: String(item.lineageId ?? ''),
         title: typeof item.title === 'string' ? item.title : undefined,
-        required: item.required === true,
-        source: String(item.source ?? 'implementation'),
+        source: String(item.source ?? 'implementation_diff') as ManualQaChecklistSource,
         behavior: String(item.behavior ?? ''),
-        severity: String(item.severity ?? 'medium') as ManualQaSeverity,
+        severity: String(item.severity ?? 'optional') as ManualQaSeverity,
         recheckState: item.recheckState as ManualQaChecklistItem['recheckState'],
         prerequisites: Array.isArray(item.prerequisites) ? item.prerequisites.map(String) : [],
         actions: Array.isArray(item.actions) ? item.actions.map(String) : [],
@@ -288,7 +288,6 @@ export function normalizeManualQaRound(value: unknown, version: number): ManualQ
       sourceItemCounts: {
         prd: numberValue(sourceItemCounts.prd),
         bead: numberValue(sourceItemCounts.bead),
-        finalTest: numberValue(sourceItemCounts.finalTest),
         previousQa: numberValue(sourceItemCounts.previousQa),
         implementationDiff: numberValue(sourceItemCounts.implementationDiff),
       },

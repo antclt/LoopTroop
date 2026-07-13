@@ -33,6 +33,9 @@ export interface QaOrigin {
   sourceTicketId: string
   sourceTicketExternalId: string
   version: number
+  modelId: string | null
+  modelSupportsImages: boolean | null
+  createdFromManualQaAt: string
   sourceItems: QaOriginSourceItem[]
   imageDelivery?: 'attached' | 'references_only'
 }

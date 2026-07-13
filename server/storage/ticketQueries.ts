@@ -67,6 +67,9 @@ const RuntimeQaOriginSchema: z.ZodType<QaOrigin> = z.object({
   sourceTicketId: TrimmedNonEmptyStringSchema,
   sourceTicketExternalId: TrimmedNonEmptyStringSchema,
   version: z.number().int().positive(),
+  modelId: TrimmedNonEmptyStringSchema.nullable(),
+  modelSupportsImages: z.boolean().nullable(),
+  createdFromManualQaAt: z.string().datetime(),
   sourceItems: z.array(z.object({
     itemId: TrimmedNonEmptyStringSchema,
     lineageId: TrimmedNonEmptyStringSchema,
