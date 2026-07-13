@@ -138,11 +138,25 @@ export async function fetchConnectedModelIds(): Promise<string[]> {
   return flattenCatalogModels(catalog, 'connected').map((model) => model.fullId)
 }
 
-function fetchCatalogEndpoint(path: string) {
+export async function refreshProviderCatalog(): Promise<OpenCodeCatalogResponse> {
+  if (!isMockOpenCodeMode()) {
+    const response = await fetchCatalogEndpoint('/instance/dispose', { method: 'POST' })
+    if (!response.ok) {
+      throw new Error(`OpenCode provider catalog refresh failed with ${response.status}`)
+    }
+  }
+
+  return fetchProviderCatalog()
+}
+
+function fetchCatalogEndpoint(path: string, init: RequestInit = {}) {
   const authHeader = getOpenCodeBasicAuthHeader()
   return fetch(`${getOpenCodeBaseUrl()}${path}`, {
+    ...init,
     signal: AbortSignal.timeout(SDK_OPERATION_TIMEOUT_MS),
-    ...(authHeader ? { headers: { Authorization: authHeader } } : {}),
+    ...(authHeader
+      ? { headers: { ...Object.fromEntries(new Headers(init.headers).entries()), Authorization: authHeader } }
+      : {}),
   })
 }
 

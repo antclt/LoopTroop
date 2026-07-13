@@ -11,7 +11,7 @@ import { Plus, X, RefreshCw } from 'lucide-react'
 import { useToast } from '@/components/shared/useToast'
 import { PROFILE_DEFAULTS } from '@server/db/defaults'
 import { useQueryClient } from '@tanstack/react-query'
-import { useOpenCodeModels, clearOpenCodeModelsQuery, refetchOpenCodeModelsQuery } from '@/hooks/useOpenCodeModels'
+import { useOpenCodeModels, refetchOpenCodeModelsQuery, refreshOpenCodeModelsQuery } from '@/hooks/useOpenCodeModels'
 import { numericFields, hasNumericErrors, buildInitialRawNumeric } from './numericFieldConfig'
 import { NumericField } from './profileNumericUtils'
 import { ConfigurationDocsLink } from './ConfigurationDocsLink'
@@ -187,8 +187,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
   }, [isOpenCodeConnected, models, modelsError, modelsFetching, modelsLoading])
 
   const handleReloadModels = useCallback(() => {
-    clearOpenCodeModelsQuery(queryClient)
-    void refetchOpenCodeModelsQuery(queryClient)
+    void refreshOpenCodeModelsQuery(queryClient)
   }, [queryClient])
 
   useEffect(() => {

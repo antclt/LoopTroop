@@ -235,7 +235,7 @@ describe('ProfileSetup', () => {
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
   })
 
-  it('reload button clears cache and refetches models', async () => {
+  it('reload button clears cache and strongly refreshes OpenCode models', async () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false, gcTime: Infinity },
@@ -243,7 +243,6 @@ describe('ProfileSetup', () => {
       },
     })
     const removeQueriesSpy = vi.spyOn(queryClient, 'removeQueries')
-    const refetchQueriesSpy = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
     await renderProfileSetup(queryClient)
 
     const reloadBtn = screen.getByRole('button', { name: 'Reload OpenCode providers and models' })
@@ -257,10 +256,15 @@ describe('ProfileSetup', () => {
       queryKey: OPENCODE_MODELS_QUERY_KEY,
       exact: true,
     })
-    expect(refetchQueriesSpy).toHaveBeenCalledWith({
-      queryKey: OPENCODE_MODELS_QUERY_KEY,
-      exact: true,
-      type: 'active',
+    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/models/refresh', {
+      method: 'POST',
+      signal: expect.any(AbortSignal),
+    }))
+    expect(queryClient.getQueryData(OPENCODE_MODELS_QUERY_KEY)).toEqual({
+      models: [{ fullId: 'opencode/big-pickle' }],
+      allModels: [{ fullId: 'opencode/big-pickle' }],
+      connectedProviders: ['opencode'],
+      defaultModels: {},
     })
   })
 

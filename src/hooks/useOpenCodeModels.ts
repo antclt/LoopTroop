@@ -13,8 +13,8 @@ export interface ModelsApiResponse {
 export type OpenCodeModel = OpenCodeCatalogModel
 export const OPENCODE_MODELS_QUERY_KEY = ['opencode-models'] as const
 
-export async function fetchModelsApi(): Promise<ModelsApiResponse> {
-  const res = await fetch('/api/models', { signal: AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS) })
+async function requestModelsApi(path: string, method: 'GET' | 'POST'): Promise<ModelsApiResponse> {
+  const res = await fetch(path, { method, signal: AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS) })
   if (!res.ok) throw new Error('Failed to fetch models')
   const data: ModelsApiResponse = await res.json()
   // When the backend cannot reach OpenCode it returns a `message` with an empty
@@ -24,10 +24,27 @@ export async function fetchModelsApi(): Promise<ModelsApiResponse> {
   return data
 }
 
+export function fetchModelsApi(): Promise<ModelsApiResponse> {
+  return requestModelsApi('/api/models', 'GET')
+}
+
+export function refreshModelsApi(): Promise<ModelsApiResponse> {
+  return requestModelsApi('/api/models/refresh', 'POST')
+}
+
 export function clearOpenCodeModelsQuery(queryClient: Pick<QueryClient, 'removeQueries'>) {
   queryClient.removeQueries({
     queryKey: OPENCODE_MODELS_QUERY_KEY,
     exact: true,
+  })
+}
+
+export function refreshOpenCodeModelsQuery(queryClient: Pick<QueryClient, 'removeQueries' | 'fetchQuery'>) {
+  clearOpenCodeModelsQuery(queryClient)
+  return queryClient.fetchQuery({
+    queryKey: OPENCODE_MODELS_QUERY_KEY,
+    queryFn: refreshModelsApi,
+    staleTime: QUERY_STALE_TIME_5M,
   })
 }
 

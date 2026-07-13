@@ -7,7 +7,7 @@ import {
   clearOpenCodeModelsQuery,
   fetchModelsApi,
   OPENCODE_MODELS_QUERY_KEY,
-  refetchOpenCodeModelsQuery,
+  refreshOpenCodeModelsQuery,
   useAllOpenCodeModels,
   useOpenCodeModels,
 } from '../useOpenCodeModels'
@@ -56,7 +56,7 @@ describe('useOpenCodeModels', () => {
     })
 
     expect(fetch).toHaveBeenCalledTimes(1)
-    expect(fetch).toHaveBeenCalledWith('/api/models', { signal: expect.any(AbortSignal) })
+    expect(fetch).toHaveBeenCalledWith('/api/models', { method: 'GET', signal: expect.any(AbortSignal) })
   })
 
   it('treats a response with a message field as an error (opencode not ready)', async () => {
@@ -85,15 +85,17 @@ describe('useOpenCodeModels', () => {
     })
   })
 
-  it('refetches the active models query after OpenCode connects', () => {
-    const refetchQueries = vi.fn()
+  it('clears and refreshes models through the strong refresh endpoint', async () => {
+    const queryClient = createTestQueryClient()
 
-    refetchOpenCodeModelsQuery({ refetchQueries })
+    await refreshOpenCodeModelsQuery(queryClient)
 
-    expect(refetchQueries).toHaveBeenCalledWith({
-      queryKey: OPENCODE_MODELS_QUERY_KEY,
-      exact: true,
-      type: 'active',
+    expect(fetch).toHaveBeenCalledWith('/api/models/refresh', {
+      method: 'POST',
+      signal: expect.any(AbortSignal),
     })
+    expect(queryClient.getQueryData(OPENCODE_MODELS_QUERY_KEY)).toEqual(expect.objectContaining({
+      connectedProviders: ['openai'],
+    }))
   })
 })

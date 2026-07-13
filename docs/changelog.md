@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Provider changes now appear after a lightweight Configuration reload without restarting OpenCode or interrupting active tickets.
 - Simplified Manual QA configuration with consistent Enabled/Disabled choices at global, project, and ticket levels.
 - Added a spec-aligned, ticket-locked Manual QA checkpoint that turns post-test failures into traceable fix beads and any reviewed checklist improvement into a context-rich backlog ticket without controlling the user's application.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
@@ -38,6 +39,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed stale provider/model discovery after OpenCode credentials change: Configuration reload now disposes only LoopTroop's catalog/root OpenCode instance before refetching the catalog, while leaving `opencode serve` and active ticket worktree instances running.
 - Fixed application documentation links to include the VitePress `/docs/` base path, so contextual help and the header Docs link open the locally started documentation server instead of its unmounted root.
 - Aligned Manual QA checklist sources, required/optional severity, and recheck states with the documented contract; required checks now support non-blocking Improvements, improvement tickets share deterministic IDs and retain editable human-readable PRD/bead/evidence context, and QA-fix origins carry their model capability and creation timestamp.
 - Fixed Manual QA recovery end to end: strict action guards run before reservation, immutable results and incomplete journals resume safely, terminal retries repair missing summary/skip-receipt phase mirrors before transitioning, submit/skip and evidence mutations reuse durable identities without duplicate work, exact checkpoint files exclude staged residue, model image file parts reach coding sessions, and reverse-loop history remains reviewable through later errors or cancellation.

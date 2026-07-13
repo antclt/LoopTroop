@@ -237,12 +237,15 @@ LoopTroop uses related but distinct OpenCode probes:
 | --- | --- | --- |
 | `adapter.checkHealth()` and `GET /api/health/opencode` | `server/opencode/adapter.ts`, `server/routes/health.ts` | Basic OpenCode reachability, version, and a lightweight model list |
 | `GET /api/models` | `server/opencode/providerCatalog.ts`, `server/routes/models.ts` | Fetch the provider catalog, normalize both supported response shapes, flatten active models, and expose connected/all/default model sets to the UI |
+| `POST /api/models/refresh` | `server/opencode/providerCatalog.ts`, `server/routes/models.ts` | Dispose LoopTroop's catalog/root OpenCode instance, then return a freshly fetched provider catalog using the same response shape as `GET /api/models` |
 
 Provider-catalog fetch first tries `/provider` and falls back to `/config/providers`. The normalizer accepts both catalog shapes, filters inactive models out of the flattened lists, and returns both `models` (connected providers only) and `allModels` (full catalog), plus `connectedProviders` and `defaultModels`.
 
 If model discovery fails but health still passes, the API returns empty model arrays plus a message instead of crashing the UI. The frontend treats that startup message as retriable so model selectors can recover automatically while OpenCode is still coming up.
 
-When `LOOPTROOP_OPENCODE_MODE=mock`, both health and model discovery come from in-process mock data rather than network calls.
+The Configuration reload button uses `POST /api/models/refresh` for a stronger refresh after provider credentials change. The route first calls OpenCode's instance-scoped `/instance/dispose` endpoint for the catalog/root directory, using the same Basic authentication as other OpenCode requests, and only then fetches `/provider` again. It does not restart `opencode serve`, use global disposal, or dispose the separate worktree instances owned by active ticket sessions. A disposal or subsequent catalog-fetch failure is surfaced to the model-discovery error state rather than returning a catalog known to be stale.
+
+When `LOOPTROOP_OPENCODE_MODE=mock`, health and model discovery come from in-process mock data rather than network calls. The refresh route returns that mock catalog without attempting instance disposal.
 
 ## 11. Question Log Fingerprinting
 
