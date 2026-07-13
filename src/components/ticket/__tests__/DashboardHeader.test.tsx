@@ -177,6 +177,7 @@ describe('DashboardHeader', () => {
       status: 'DRAFTING_PRD',
       availableActions: ['cancel'],
       effectiveManualQaEnabled: true,
+      lockedMainImplementer: 'openai/gpt-5.4',
     })
 
     renderWithProviders(
@@ -191,10 +192,9 @@ describe('DashboardHeader', () => {
     expect(advancedSettings).not.toBeNull()
     expect(within(advancedSettings as HTMLElement).getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(within(advancedSettings as HTMLElement).getByText('Enabled')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Open documentation for ticket Details Manual QA checkpoint' })).toHaveAttribute(
-      'href',
-      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
-    )
+    expect(screen.queryByRole('link', { name: /Manual QA checkpoint/ })).not.toBeInTheDocument()
+    const modelsSelected = screen.getByText('Models Selected')
+    expect(modelsSelected.compareDocumentPosition(advancedSettings as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('shows Manual QA as disabled in Details when the effective setting is off', () => {
