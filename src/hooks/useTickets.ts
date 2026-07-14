@@ -145,6 +145,7 @@ export interface Ticket {
     status: 'clean' | 'warning' | null
     errorCount: number
     latestReportArtifactId: number | null
+    errors?: string[]
   }
   manualQaOverride?: boolean | null
   effectiveManualQaEnabled?: boolean

@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Fixed `CLEANING_ENV` failures by recursively ensuring write permissions before deleting cached read-only files (like Go module caches) and added a hover tooltip to the Cleanup status in the Ticket Details dialog showing the exact cleanup warnings.
 - Added a subtle top border to the collapsible log section when collapsed or expanded, ensuring visual separation from the content above it in the ticket workspace views.
 - Manual QA Pass and Waive submissions now finish without evidence requirements or stale file-reference failures.
 - Development restarts now open tickets safely without mixing stale and current React dependency generations.
@@ -26,6 +27,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added cleanup warning messages display in a `<Tooltip>` on hover over the Cleanup status badge in the Ticket Details dialog.
+- Added `errors` array property to the cleanup payload in backend database queries and frontend ticket normalization.
 - Added a live voting-result tally to the ticket-view council card for `COUNCIL_VOTING_INTERVIEW` / `COUNCIL_VOTING_PRD` / `COUNCIL_VOTING_BEADS`: while a live voting attempt is selected, the header card's description line now appends ` · X/Y complete · Leading: <model> · <pts>` (switching to `Winner: <model> · <pts>` once a winner is selected), derived from the streamed vote companion artifact with no backend changes.
 - Added an extensible Advanced Settings section directly below Models Selected in Ticket Details, showing whether the ticket's effective Manual QA checkpoint is Enabled or Disabled.
 - Added contextual Manual QA help links to global Configuration, Project settings, new-ticket Advanced settings, and the Draft ticket workspace, with scope-specific tooltip guidance and direct navigation to the relevant documentation.
@@ -52,6 +55,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed recursive deletion permission errors (`EACCES`) during the `CLEANING_ENV` phase by recursively making target files and folders writable before deletion.
 - Fixed the collapsed log element lacking visual separation in ticket workspace views by adding a subtle top border (`border-t border-border/40`) to `CollapsiblePhaseLogSection` by default when there is no active resize handle, and removed the duplicate top border from the parent container in `DraftView.tsx`.
 - Fixed Manual QA submission races by waiting for active evidence uploads/removals, retaining valid durably stored files, and safely dropping dangling optional references before Pass or Waive completes. Any remaining file-integrity error now identifies the checklist item number/title and human filename instead of exposing an internal evidence ID.
 - Fixed the first lazy ticket workspace opened after a development-server restart crashing with a null React hook dispatcher. Vite now finishes an explicit frontend dependency bundle before serving, marks dev resources `no-store`, deduplicates the React/React Query graph, and performs a cooldown-limited development-only reload if an already-restored tab still reports two dependency generations.

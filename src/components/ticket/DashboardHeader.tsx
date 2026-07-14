@@ -624,14 +624,39 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
               <div>
                 <span className="text-xs font-medium text-muted-foreground">Cleanup</span>
                 <div className="mt-1 flex items-center gap-2">
-                  <Badge variant={ticket.cleanup.status === 'warning' ? 'destructive' : 'outline'} className="capitalize">
-                    {ticket.cleanup.status}
-                  </Badge>
-                  {ticket.cleanup.status === 'warning' ? (
-                    <span className="text-xs text-muted-foreground">
-                      {ticket.cleanup.errorCount} warning{ticket.cleanup.errorCount === 1 ? '' : 's'}
-                    </span>
-                  ) : null}
+                  {ticket.cleanup.status === 'warning' && ticket.cleanup.errors && ticket.cleanup.errors.length > 0 ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-2 cursor-help select-none">
+                          <Badge variant="destructive" className="capitalize">
+                            {ticket.cleanup.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground underline decoration-dotted">
+                            {ticket.cleanup.errorCount} warning{ticket.cleanup.errorCount === 1 ? '' : 's'}
+                          </span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-md p-3 text-left">
+                        <p className="font-semibold text-xs mb-1 text-foreground">Cleanup Warnings:</p>
+                        <ul className="list-disc pl-4 space-y-1 text-xs font-mono max-h-48 overflow-y-auto">
+                          {ticket.cleanup.errors.map((err, idx) => (
+                            <li key={idx} className="break-all">{err}</li>
+                          ))}
+                        </ul>
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <>
+                      <Badge variant={ticket.cleanup.status === 'warning' ? 'destructive' : 'outline'} className="capitalize">
+                        {ticket.cleanup.status}
+                      </Badge>
+                      {ticket.cleanup.status === 'warning' ? (
+                        <span className="text-xs text-muted-foreground">
+                          {ticket.cleanup.errorCount} warning{ticket.cleanup.errorCount === 1 ? '' : 's'}
+                        </span>
+                      ) : null}
+                    </>
+                  )}
                 </div>
               </div>
             )}

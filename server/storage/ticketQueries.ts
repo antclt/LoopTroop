@@ -158,6 +158,7 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
     status: 'clean' | 'warning' | null
     errorCount: number
     latestReportArtifactId: number | null
+    errors: string[]
   }
   runtime: {
     baseBranch: string
@@ -760,7 +761,7 @@ function readCleanupSummary(
   localTicketId: number,
 ): PublicTicket['cleanup'] {
   if (!projectContext) {
-    return { status: null, errorCount: 0, latestReportArtifactId: null }
+    return { status: null, errorCount: 0, latestReportArtifactId: null, errors: [] }
   }
 
   const artifact = projectContext.projectDb.select().from(phaseArtifacts)
@@ -772,7 +773,7 @@ function readCleanupSummary(
     .get()
 
   if (!artifact?.content) {
-    return { status: null, errorCount: 0, latestReportArtifactId: null }
+    return { status: null, errorCount: 0, latestReportArtifactId: null, errors: [] }
   }
 
   const parsed = parseJsonObject<{ status?: unknown; errors?: unknown }>(artifact.content)
@@ -789,6 +790,7 @@ function readCleanupSummary(
     status,
     errorCount: errors.length,
     latestReportArtifactId: artifact.id,
+    errors,
   }
 }
 

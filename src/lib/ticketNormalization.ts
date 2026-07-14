@@ -150,6 +150,7 @@ export function normalizeTicketForRender(ticket: Ticket): Ticket {
       status: cleanup?.status === 'clean' || cleanup?.status === 'warning' ? cleanup.status : null,
       errorCount: numberOrFallback(cleanup?.errorCount, DEFAULT_CLEANUP_SUMMARY.errorCount),
       latestReportArtifactId: nullableNumber(cleanup?.latestReportArtifactId),
+      errors: Array.isArray(cleanup?.errors) ? cleanup.errors.filter((e): e is string => typeof e === 'string') : [],
     },
   }
 }
