@@ -13,11 +13,12 @@ import {
 } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { basename, dirname, extname, relative, resolve, sep } from 'node:path'
+import * as jsYaml from 'js-yaml'
 import { safeAtomicWrite } from '../../io/atomicWrite'
 import { appendJsonl, readJsonl } from '../../io/jsonl'
-import { buildYamlDocument, parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
+import { buildYamlDocument } from '../../structuredOutput/yamlUtils'
 import { contentSha256 } from '../../lib/contentHash'
-import { getTicketPaths } from '../../storage/tickets'
+import { getTicketPaths, listPhaseArtifacts, listPhaseAttempts } from '../../storage/tickets'
 import {
   MANUAL_QA_SCHEMA_VERSION,
   MAX_MANUAL_QA_EVIDENCE_BYTES,
@@ -38,6 +39,7 @@ import {
   type ManualQaResults,
   type ManualQaModelCapabilitySnapshot,
   type ManualQaSummary,
+  type ManualQaVersionIndexEntry,
 } from './types'
 
 const SAFE_RASTER_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'])
@@ -52,6 +54,7 @@ export interface ManualQaStoragePaths {
   skipReceiptPath: string
   operationPath: string
   beadCreationReceiptPath: string
+  fixBeadsPath: string
   improvementTicketReceiptPath: string
   evidenceDir: string
   evidenceIndexPath: string
@@ -79,6 +82,7 @@ export function getManualQaStoragePaths(ticketDir: string, version: number): Man
     skipReceiptPath: resolve(versionDir, 'skip-receipt.yaml'),
     operationPath: resolve(versionDir, 'submission-operation.json'),
     beadCreationReceiptPath: resolve(versionDir, 'bead-creation-receipt.yaml'),
+    fixBeadsPath: resolve(versionDir, 'fix-beads.yaml'),
     improvementTicketReceiptPath: resolve(versionDir, 'improvement-ticket-receipt.yaml'),
     evidenceDir: resolve(versionDir, 'evidence'),
     evidenceIndexPath: resolve(versionDir, 'evidence', 'index.json'),
@@ -101,7 +105,7 @@ function writeYaml(path: string, value: unknown): void {
 
 function readYaml<T>(path: string, parser: { parse(value: unknown): T }): T | null {
   if (!existsSync(path)) return null
-  return parser.parse(parseYamlOrJsonCandidate(readFileSync(path, 'utf8')))
+  return parser.parse(jsYaml.load(readFileSync(path, 'utf8')))
 }
 
 export function persistManualQaChecklist(ticketDir: string, checklist: ManualQaChecklist): string {
@@ -689,10 +693,44 @@ export function resolveActiveManualQaVersion(ticketDir: string): number | null {
 
 export function buildManualQaProjection(ticketId: string) {
   const ticketDir = resolveManualQaTicketDir(ticketId)
-  const versions = listManualQaVersions(ticketDir)
+  const versionNumbers = listManualQaVersions(ticketDir)
   const activeVersion = resolveActiveManualQaVersion(ticketDir)
-  const summaries = versions.map((version) => readManualQaSummary(ticketDir, version)).filter((value): value is ManualQaSummary => Boolean(value))
+  const summaries = versionNumbers.map((version) => readManualQaSummary(ticketDir, version)).filter((value): value is ManualQaSummary => Boolean(value))
   const completedSummaries = summaries.filter((summary) => summary.outcome !== 'failed')
+  const waitingAttempts = listPhaseAttempts(ticketId, 'WAITING_MANUAL_QA')
+  const versionByAttempt = new Map<number, number>()
+  for (const attempt of waitingAttempts) {
+    const artifacts = listPhaseArtifacts(ticketId, {
+      phase: 'WAITING_MANUAL_QA',
+      phaseAttempt: attempt.attemptNumber,
+    })
+    for (const artifact of artifacts) {
+      try {
+        if (typeof artifact.content !== 'string') continue
+        const parsed = JSON.parse(artifact.content) as { version?: unknown }
+        if (typeof parsed.version === 'number' && Number.isInteger(parsed.version) && parsed.version > 0) {
+          versionByAttempt.set(attempt.attemptNumber, parsed.version)
+          break
+        }
+      } catch { /* unrelated non-JSON artifact */ }
+    }
+  }
+  const activeWaitingAttempt = waitingAttempts.find((attempt) => attempt.state === 'active')?.attemptNumber ?? null
+  const versions: ManualQaVersionIndexEntry[] = versionNumbers.map((version) => {
+    const checklist = readManualQaChecklist(ticketDir, version)
+    const summary = readManualQaSummary(ticketDir, version)
+    const matchedAttempt = [...versionByAttempt.entries()].find(([, candidate]) => candidate === version)?.[0] ?? null
+    const phaseAttempt = matchedAttempt ?? (version === activeVersion && checklist ? activeWaitingAttempt : null)
+    const completed = Boolean(summary && summary.outcome !== 'failed')
+    return {
+      version,
+      status: completed ? 'completed' : checklist ? summary?.outcome === 'failed' ? 'failed' : 'waiting' : 'generating',
+      artifactAvailable: checklist !== null,
+      phaseAttempt,
+      outcome: summary?.outcome ?? null,
+      completedAt: completed ? summary?.completedAt ?? null : null,
+    }
+  })
   return {
     activeVersion,
     completedRoundCount: completedSummaries.length,

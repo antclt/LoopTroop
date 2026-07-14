@@ -39,7 +39,7 @@ describe('Manual QA result validation', () => {
       'Improvement description is required.',
     ])
     expect(validateManualQaItem(item, result('improvement', {
-      improvement: { title: 'Clarify confirmation', description: 'Use a clearer message.' },
+      improvement: { title: 'Clarify confirmation', description: 'Use a clearer message.', priority: 3, manualQaEnabled: true },
     }))).toEqual([])
   })
 
@@ -68,7 +68,7 @@ describe('Manual QA result validation', () => {
       checklistHash: 'a'.repeat(64),
       checklist: { schemaVersion: 1, version: 2, items: [item, paymentItem, receiptItem, unrelatedItem] },
       coverage: [],
-      coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
+      coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, notApplicableCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
       evidence: [],
       draftRevision: 4,
     }
@@ -141,7 +141,7 @@ describe('Manual QA result validation', () => {
         note: 'The confirmation could be clearer.',
         evidenceIds: ['evidence-1'],
         links: [{ id: 'link-1', url: 'https://example.com/notes', label: 'Research notes' }],
-        improvement: { title: 'Clarify confirmation', description: 'Use a more explicit confirmation message.' },
+        improvement: { title: 'Clarify confirmation', description: 'Use a more explicit confirmation message.', priority: 3, manualQaEnabled: true },
       }),
     )
 
@@ -161,19 +161,19 @@ describe('Manual QA result validation', () => {
       checklistHash: 'c'.repeat(64),
       checklist: { schemaVersion: 1, version: 3, items: [item] },
       coverage: [],
-      coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
+      coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, notApplicableCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
       evidence: [],
       draftRevision: 1,
     }
     const contextOverride = '## Manual QA Context\nEdited context retained for future implementation.'
     const improvementResult = result('improvement', {
-      improvement: { title: 'Clarify confirmation', description: 'Use a clearer message.', contextOverride },
+      improvement: { title: 'Clarify confirmation', description: 'Use a clearer message.', priority: 2, manualQaEnabled: false, contextOverride },
     })
 
     expect(validateManualQaItem(item, improvementResult)).toEqual([])
     expect(buildManualQaImprovementContextPreview(item, improvementResult)).toContain(contextOverride)
     expect(buildCanonicalManualQaDraft('ticket-1', round, {
       results: { [item.id]: improvementResult },
-    }, 2).improvements[0]).toMatchObject({ contextOverride })
+    }, 2).improvements[0]).toMatchObject({ contextOverride, priority: 2, manualQaEnabled: false })
   })
 })

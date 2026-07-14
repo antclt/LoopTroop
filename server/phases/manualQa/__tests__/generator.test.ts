@@ -36,6 +36,7 @@ function persistChecklist(ticketDir: string) {
     version: 1,
     generatedAt: new Date().toISOString(),
     summary: 'Verify the application behavior.',
+    notApplicablePrdRefs: [],
     items: [{
       id: 'qa-v1-001',
       lineageId: 'lineage-001',
@@ -91,6 +92,9 @@ describe('Manual QA generation context', () => {
     expect(prompt).toContain('source: prd | bead | previous_qa | implementation_diff')
     expect(prompt).toContain('severity: required | optional')
     expect(prompt).toContain('recheck_state: new | pending_recheck | previously_passed')
+    expect(prompt).toContain('not_applicable_prd_refs:')
+    expect(prompt).toContain('Never use it to conceal a missing human check.')
+    expect(prompt).toContain('Quote every YAML string containing #')
     expect(prompt).not.toContain('required: boolean')
   })
 

@@ -12,6 +12,11 @@ export const ManualQaPrdReferenceSchema = z.object({
   coverage: z.enum(['full', 'partial']),
 }).strict()
 
+export const ManualQaNotApplicablePrdReferenceSchema = z.object({
+  ref: NonEmptyString,
+  reason: NonEmptyString,
+}).strict()
+
 export const ManualQaChecklistItemSchema = z.object({
   id: IdString,
   lineageId: IdString,
@@ -36,6 +41,7 @@ export const ManualQaChecklistSchema = z.object({
   version: z.number().int().positive(),
   generatedAt: z.string().datetime(),
   summary: NonEmptyString,
+  notApplicablePrdRefs: z.array(ManualQaNotApplicablePrdReferenceSchema),
   items: z.array(ManualQaChecklistItemSchema).min(1),
 }).strict().superRefine((checklist, ctx) => {
   const ids = new Set<string>()
@@ -49,6 +55,17 @@ export const ManualQaChecklistSchema = z.object({
       ctx.addIssue({ code: 'custom', path: ['items', index, 'lineageId'], message: `Duplicate active lineage id: ${item.lineageId}` })
     }
     lineages.add(item.lineageId)
+  }
+  const notApplicableRefs = new Set<string>()
+  for (const [index, reference] of checklist.notApplicablePrdRefs.entries()) {
+    if (notApplicableRefs.has(reference.ref)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['notApplicablePrdRefs', index, 'ref'],
+        message: `Duplicate not-applicable PRD criterion reference: ${reference.ref}`,
+      })
+    }
+    notApplicableRefs.add(reference.ref)
   }
 })
 
@@ -71,6 +88,8 @@ export const ManualQaImprovementDraftSchema = z.object({
   description: z.string().max(10_000),
   contextOverride: z.string().max(10_000).optional(),
   evidenceIds: z.array(IdString).default([]),
+  priority: z.number().int().min(1).max(5),
+  manualQaEnabled: z.boolean(),
 }).strict()
 
 export const ManualQaEvidenceLinkSchema = z.object({
@@ -116,9 +135,17 @@ export const ManualQaResultsSchema = ManualQaDraftSchema.omit({ artifact: true }
 export const ManualQaCoverageEntrySchema = z.object({
   criterionRef: NonEmptyString,
   criterion: NonEmptyString,
-  status: z.enum(['covered', 'partially_covered', 'uncovered']),
+  status: z.enum(['covered', 'partially_covered', 'uncovered', 'not_applicable']),
   itemIds: z.array(IdString),
-}).strict()
+  reason: NonEmptyString.optional(),
+}).strict().superRefine((entry, ctx) => {
+  if (entry.status === 'not_applicable' && !entry.reason) {
+    ctx.addIssue({ code: 'custom', path: ['reason'], message: 'Not-applicable coverage requires a reason.' })
+  }
+  if (entry.status !== 'not_applicable' && entry.reason) {
+    ctx.addIssue({ code: 'custom', path: ['reason'], message: 'Only not-applicable coverage can include a reason.' })
+  }
+})
 
 export const ManualQaCoverageSchema = z.object({
   schemaVersion: z.literal(MANUAL_QA_SCHEMA_VERSION),
@@ -129,6 +156,7 @@ export const ManualQaCoverageSchema = z.object({
   coveredCount: z.number().int().nonnegative(),
   partiallyCoveredCount: z.number().int().nonnegative(),
   uncoveredCount: z.number().int().nonnegative(),
+  notApplicableCount: z.number().int().nonnegative(),
   sourceItemCounts: z.object({
     prd: z.number().int().nonnegative(),
     bead: z.number().int().nonnegative(),
@@ -162,6 +190,7 @@ export const ManualQaSummaryCoverageSchema = z.object({
   covered: z.number().int().nonnegative(),
   partiallyCovered: z.number().int().nonnegative(),
   uncovered: z.number().int().nonnegative(),
+  notApplicable: z.number().int().nonnegative(),
 }).strict()
 
 export const ManualQaSummarySchema = z.object({
@@ -185,6 +214,15 @@ export const ManualQaSummarySchema = z.object({
   nextAction: z.enum(['integrate', 'return_to_coding']),
   coverage: ManualQaSummaryCoverageSchema,
   modelCapability: ManualQaModelCapabilitySnapshotSchema.nullable(),
+}).strict()
+
+export const ManualQaVersionIndexEntrySchema = z.object({
+  version: z.number().int().positive(),
+  status: z.enum(['generating', 'waiting', 'failed', 'completed']),
+  artifactAvailable: z.boolean(),
+  phaseAttempt: z.number().int().positive().nullable(),
+  outcome: ManualQaSummarySchema.shape.outcome.nullable(),
+  completedAt: z.string().datetime().nullable(),
 }).strict()
 
 export const ManualQaImprovementOriginSchema = z.object({
@@ -212,6 +250,8 @@ export const ManualQaImprovementOriginSchema = z.object({
   omittedEvidence: z.array(z.object({ id: IdString, reason: NonEmptyString }).strict()),
   titleSha256: Sha256,
   descriptionSha256: Sha256,
+  priority: z.number().int().min(1).max(5),
+  manualQaEnabled: z.boolean(),
   omittedFields: z.array(NonEmptyString),
   imageEvidenceMode: z.enum(['attached', 'references_only']),
   createdAt: z.string().datetime(),
@@ -241,6 +281,7 @@ export const ManualQaEventSchema = z.object({
 }).strict()
 
 export type ManualQaPrdReference = z.infer<typeof ManualQaPrdReferenceSchema>
+export type ManualQaNotApplicablePrdReference = z.infer<typeof ManualQaNotApplicablePrdReferenceSchema>
 export type ManualQaChecklistItem = z.infer<typeof ManualQaChecklistItemSchema>
 export type ManualQaChecklist = z.infer<typeof ManualQaChecklistSchema>
 export type ManualQaEvidenceRef = z.infer<typeof ManualQaEvidenceRefSchema>
@@ -252,6 +293,7 @@ export type ManualQaResults = z.infer<typeof ManualQaResultsSchema>
 export type ManualQaCoverage = z.infer<typeof ManualQaCoverageSchema>
 export type ManualQaModelCapabilitySnapshot = z.infer<typeof ManualQaModelCapabilitySnapshotSchema>
 export type ManualQaSummary = z.infer<typeof ManualQaSummarySchema>
+export type ManualQaVersionIndexEntry = z.infer<typeof ManualQaVersionIndexEntrySchema>
 export type ManualQaImprovementOrigin = z.infer<typeof ManualQaImprovementOriginSchema>
 export type ManualQaEvent = z.infer<typeof ManualQaEventSchema>
 

@@ -678,10 +678,19 @@ The parser applies the shared YAML/JSON formatting repairs and a deliberately sm
 | `watch_notes` | `watchNotes` |
 | `bead_refs` | `beadRefs` |
 | `prd_refs` | `prdRefs` |
+| `not_applicable_prd_refs` | `notApplicablePrdRefs` |
 
 Alias collisions fail instead of choosing one value. Repairs may restore YAML structure, normalize the strict envelope, or rename these fields, but may never invent a checklist summary, behavior, action, observation, prerequisite, or expected result. The strict item contract accepts only `prd | bead | previous_qa | implementation_diff` sources, `required | optional` severity, and `new | pending_recheck | previously_passed` recheck state; there is no duplicate requiredness boolean. The result still must satisfy the versioned schema, unique active IDs/lineages, at least one action per item, and all other constraints.
 
-PRD criterion refs are validated against the frozen approved PRD after parsing. The canonical form is `<epic-id>/<story-id>/AC-<1-based-index>`, with a required `full | partial` level. Invalid refs use the normal structured-output retry path. After validation, coverage is deterministic code: any valid full reference means covered, partial-only means partially covered, and no valid references means uncovered. Gaps remain advisory and no second model response is requested.
+PRD criterion refs are validated against the frozen approved PRD after parsing. The canonical form is `<epic-id>/<story-id>/AC-<1-based-index>`, with a required `full | partial` level. `notApplicablePrdRefs` is a unique list of `{ ref, reason }`; reasons must be nonempty, and a ref cannot appear both there and on an item. After validation, coverage is deterministic code: any valid full reference means covered, partial-only means partially covered, an explicit reasoned exclusion means `not_applicable`, and all remaining refs are uncovered. Gaps remain advisory and no second model response is requested.
+
+Application-owned checklist/results YAML is loaded directly with `js-yaml` and validated against its schema; model-output repair is not applied to canonical files. Shared inline-key repair recognizes a mapping colon only when followed by whitespace or end-of-line, preserving scalar IDs such as `manual-qa-submit:<uuid>` and URLs. During model checklist parsing, a narrow context-aware repair may quote YAML-sensitive hex-color text in known prose fields and records a warning; it never invents lost words.
+
+### Manual QA Fix-Bead Candidate
+
+Failed submissions require exactly one complete `<MANUAL_QA_FIX_BEADS>…</MANUAL_QA_FIX_BEADS>` envelope. Its candidate keys must exactly match the application-provided merge-group keys, with one complete bead definition per key. Validation requires meaningful title/description/context, PRD refs, acceptance criteria, tests, test commands, labels, dependencies, and safe project-relative target files. At least one successful focused read-only repository inspection tool call is part of the generation contract.
+
+LoopTroop assigns bead IDs, priority/order, pending lifecycle state, `qa-fix` issue type, external references, reverse dependency links, timestamps, and `qaOrigin`; the model may not override these fields. The complete validated batch is written to `fix-beads.yaml` before any Improvement ticket or bead is created. There is no lower-quality repair/fallback bead: exhausted model/tool/parser validation routes the submission to recoverable `BLOCKED_ERROR` with zero child records.
 
 Later rounds reuse stable `lineageId` values and may reference prior item IDs. Code rejects unknown/duplicate prior references, changed lineage, `previously_passed` items whose prior result did not pass, retained waivers not marked for recheck, and any failed prior item omitted from the next checklist. First-round and newly introduced items must be `new`; referenced affected items must be `pending_recheck`. The version reservation is allocated before generation, so structured retries/restarts reuse the same `vN`; a valid existing checklist plus coverage advances idempotently without normalization or another model call.
 

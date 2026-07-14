@@ -21,7 +21,7 @@ import {
 } from '../../storage/tickets'
 import { manualQaOperations } from '../../db/schema'
 import type { TicketEvent } from '../../machines/types'
-import type { Bead, QaOrigin, QaOriginEvidenceRef, QaOriginSourceItem } from '../beads/types'
+import type { Bead, QaOriginEvidenceRef } from '../beads/types'
 import { captureFinalTestDirtyFiles } from '../finalTest/fileEffectsAudit'
 import { fetchProviderCatalog, flattenCatalogModels } from '../../opencode/providerCatalog'
 import { composeManualQaImprovementDescription } from '../../../shared/manualQaImprovement'
@@ -43,7 +43,6 @@ import {
   appendManualQaEvent,
   getManualQaChecklistHash,
   getManualQaStoragePaths,
-  getManualQaEvidenceRelativePath,
   persistManualQaResults,
   persistManualQaModelCapabilitySnapshot,
   persistManualQaSummary,
@@ -57,6 +56,16 @@ import {
   resolveManualQaTicketDir,
   snapshotManualQaDraft,
 } from './storage'
+import {
+  buildManualQaFixGroups,
+  generateManualQaFixBeadCandidates,
+  hydrateManualQaFixBeads,
+  persistManualQaFixBeadCandidates,
+  readManualQaFixBeadCandidates,
+  type GenerateManualQaFixBeadsInput,
+  type ManualQaFixBeadCandidate,
+} from './fixBeads'
+import { emitAiMilestone, emitPhaseLog } from '../../workflow/phases/helpers'
 
 export interface ManualQaMutationGuard {
   actionId: string
@@ -81,7 +90,7 @@ interface ManualQaOperationJournal {
   version: number
   checklistHash: string
   draftRevision: number
-  state: 'staged' | 'creating_improvements' | 'creating_beads' | 'complete'
+  state: 'staged' | 'generating_beads' | 'creating_improvements' | 'creating_beads' | 'complete'
   improvementTicketIds: string[]
   fixBeadIds: string[]
   sourcePhaseAttempts?: Record<string, number>
@@ -294,6 +303,13 @@ function canonicalizeSubmissionEvidence(
 
 function deterministicId(prefix: string, value: string): string {
   return `${prefix}-${createHash('sha256').update(value).digest('hex').slice(0, 12)}`
+}
+
+function emitManualQaOperationMilestone(ticketId: string, externalId: string, message: string, suffix: string): void {
+  emitAiMilestone(ticketId, externalId, 'WAITING_MANUAL_QA', message, suffix, {
+    source: 'system',
+    phaseAttempt: resolvePhaseAttempt(ticketId, 'WAITING_MANUAL_QA'),
+  })
 }
 
 function writeJournal(path: string, journal: ManualQaOperationJournal): void {
@@ -597,8 +613,12 @@ function createImprovementTicket(input: {
     actionId: input.actionId,
     title: input.draft.title,
     description,
-    priority: 3,
+    priority: input.draft.priority,
+    manualQaEnabled: input.draft.manualQaEnabled,
   })
+  if (ticket.priority !== input.draft.priority || ticket.manualQaOverride !== input.draft.manualQaEnabled) {
+    throw new Error(`Manual QA improvement ticket settings conflict with the reserved draft: ${originId}`)
+  }
   const destinationPaths = getTicketPaths(ticket.id)
   if (!destinationPaths) throw new Error(`Improvement ticket storage was not created: ${ticket.id}`)
   safeAtomicWrite(reservationPath, JSON.stringify({
@@ -643,6 +663,8 @@ function createImprovementTicket(input: {
     omittedEvidence: copied.omitted,
     titleSha256: contentSha256Text(input.draft.title),
     descriptionSha256: contentSha256Text(description),
+    priority: input.draft.priority,
+    manualQaEnabled: input.draft.manualQaEnabled,
     omittedFields: built.omittedFields,
     imageEvidenceMode: 'references_only',
     createdAt: ticket.createdAt,
@@ -654,95 +676,6 @@ function createImprovementTicket(input: {
 
 function contentSha256Text(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex')
-}
-
-function buildQaFixBeads(input: {
-  existing: Bead[]
-  checklist: ManualQaChecklist
-  results: ManualQaItemResult[]
-  evidence: ManualQaEvidenceRef[]
-  ticketId: string
-  externalId: string
-  version: number
-  actionId: string
-  imageDelivery: 'attached' | 'references_only'
-  modelCapability: ManualQaModelCapabilitySnapshot
-}): Bead[] {
-  const failed = input.results.filter((result) => result.outcome === 'fail')
-  const groups = new Map<string, ManualQaItemResult[]>()
-  for (const result of failed) {
-    const key = result.mergeGroupId ?? `item:${result.itemId}`
-    groups.set(key, [...(groups.get(key) ?? []), result])
-  }
-  const itemById = new Map(input.checklist.items.map((item) => [item.id, item]))
-  const beadById = new Map(input.existing.map((bead) => [bead.id, bead]))
-  const maxPriority = input.existing.reduce((max, bead) => Math.max(max, bead.priority), 0)
-  const now = new Date().toISOString()
-
-  return [...groups.entries()].map(([groupId, results], index): Bead => {
-    const sourceItems: QaOriginSourceItem[] = results.map((result) => {
-      const item = itemById.get(result.itemId)!
-      return {
-        itemId: item.id,
-        lineageId: item.lineageId,
-        behavior: item.behavior,
-        observation: result.observation,
-        expectedResult: item.expectedResult,
-        evidence: evidenceForIds(input.evidence, result.evidenceIds).map((entry) => ({
-          id: entry.id,
-          originalName: entry.originalName,
-          mediaType: entry.mediaType,
-          size: entry.size,
-          sha256: entry.sha256,
-          relativePath: getManualQaEvidenceRelativePath(input.version, entry),
-        })),
-        links: result.links,
-      }
-    })
-    const origin: QaOrigin = {
-      schemaVersion: MANUAL_QA_SCHEMA_VERSION,
-      actionId: input.actionId,
-      sourceTicketId: input.ticketId,
-      sourceTicketExternalId: input.externalId,
-      version: input.version,
-      modelId: input.modelCapability.modelId,
-      modelSupportsImages: input.modelCapability.supportsImages,
-      createdFromManualQaAt: now,
-      sourceItems,
-      imageDelivery: input.imageDelivery,
-    }
-    const referencedBeads = sourceItems.flatMap((source) => itemById.get(source.itemId)?.beadRefs ?? [])
-    const targetFiles = [...new Set(referencedBeads.flatMap((id) => beadById.get(id)?.targetFiles ?? []))]
-    const id = deterministicId(`qa-v${input.version}`, `${input.ticketId}:${input.version}:${groupId}`)
-    return {
-      id,
-      title: `Manual QA fix: ${sourceItems.map((item) => item.behavior).join('; ').slice(0, 240)}`,
-      prdRefs: [...new Set(results.flatMap((result) => itemById.get(result.itemId)?.prdRefs.map((ref) => ref.ref) ?? []))],
-      description: sourceItems.map((item) => `${item.behavior}\nObserved: ${item.observation}\nExpected: ${item.expectedResult}`).join('\n\n'),
-      contextGuidance: {
-        patterns: ['Use the structured Manual QA origin and preserve evidence references.'],
-        anti_patterns: ['Do not conflate retry notes with Manual QA observations.'],
-      },
-      acceptanceCriteria: sourceItems.map((item) => `${item.itemId}: ${item.expectedResult}`),
-      tests: sourceItems.map((item) => `Add or update an automated regression check for: ${item.behavior}`),
-      testCommands: [],
-      priority: maxPriority + index + 1,
-      status: 'pending',
-      issueType: 'qa-fix',
-      externalRef: input.externalId,
-      labels: ['manual-looptroop-qa'],
-      dependencies: { blocked_by: [], blocks: [] },
-      targetFiles,
-      notes: '',
-      iteration: 1,
-      createdAt: now,
-      updatedAt: now,
-      completedAt: '',
-      startedAt: '',
-      beadStartCommit: null,
-      qaOrigin: origin,
-    }
-  })
 }
 
 async function resolveQaModelCapability(input: {
@@ -841,6 +774,7 @@ function buildManualQaSummary(input: {
       covered: input.coverage?.coveredCount ?? 0,
       partiallyCovered: input.coverage?.partiallyCoveredCount ?? 0,
       uncovered: input.coverage?.uncoveredCount ?? 0,
+      notApplicable: input.coverage?.notApplicableCount ?? 0,
     },
     modelCapability: input.modelCapability,
   }
@@ -1013,6 +947,8 @@ export async function submitManualQa(input: {
   draft: ManualQaDraft
   guard: ManualQaMutationGuard
   sendEvent: (event: TicketEvent) => void
+  signal?: AbortSignal
+  generateFixBeads?: (input: GenerateManualQaFixBeadsInput) => Promise<ManualQaFixBeadCandidate[]>
 }): Promise<ManualQaSummary> {
   const ticket = getTicketByRef(input.ticketId)
   const paths = getTicketPaths(input.ticketId)
@@ -1047,6 +983,12 @@ export async function submitManualQa(input: {
   const evidence = readManualQaEvidenceIndex(paths.ticketDir, input.version)
   const draft = canonicalizeSubmissionEvidence(checklist, parsedDraft, evidence)
   validateSubmission(checklist, draft, evidence)
+  emitManualQaOperationMilestone(
+    input.ticketId,
+    ticket.externalId,
+    `Validated Manual QA submission for v${input.version}.`,
+    `${input.guard.actionId}:validated`,
+  )
   const drift = detectManualQaWorkspaceDrift(input.ticketId, input.version)
   if (drift.drifted) {
     const error = new Error('Manual QA workspace changed during user verification; include or discard audited files before submitting.')
@@ -1136,6 +1078,92 @@ export async function submitManualQa(input: {
     persistSummaryArtifact(input.ticketId, intermediate)
   }
 
+  const existingBeads = readJsonl<Bead>(paths.beadsPath)
+  const fixGroups = buildManualQaFixGroups(checklist, draft)
+  let fixBeads: Bead[] = []
+  if (fixGroups.length > 0) {
+    journal.state = 'generating_beads'
+    journal.updatedAt = new Date().toISOString()
+    writeJournal(operationPath, journal)
+    persistManualQaDatabaseOperation(input.ticketId, journal)
+    try {
+      const storedCandidates = readManualQaFixBeadCandidates(paths.ticketDir, input.version, fixGroups)
+      const candidates = storedCandidates ?? await (input.generateFixBeads ?? generateManualQaFixBeadCandidates)({
+        ticketId: input.ticketId,
+        context: {
+          ticketId: input.ticketId,
+          projectId: ticket.projectId,
+          externalId: ticket.externalId,
+          title: ticket.title,
+          status: ticket.status,
+          lockedMainImplementer: ticket.lockedMainImplementer,
+          lockedMainImplementerVariant: ticket.lockedMainImplementerVariant,
+          lockedCouncilMembers: ticket.lockedCouncilMembers,
+          lockedCouncilMemberVariants: ticket.lockedCouncilMemberVariants,
+          lockedInterviewQuestions: ticket.lockedInterviewQuestions,
+          lockedCoverageFollowUpBudgetPercent: ticket.lockedCoverageFollowUpBudgetPercent,
+          lockedMaxCoveragePasses: ticket.lockedMaxCoveragePasses,
+          lockedMaxPrdCoveragePasses: ticket.lockedMaxPrdCoveragePasses,
+          lockedMaxBeadsCoveragePasses: ticket.lockedMaxBeadsCoveragePasses,
+          lockedStructuredRetryCount: ticket.lockedStructuredRetryCount,
+          lockedManualQaEnabled: ticket.lockedManualQaEnabled,
+          lockedManualQaSource: ticket.lockedManualQaSource,
+          previousStatus: ticket.previousStatus,
+          error: null,
+          errorCodes: [],
+          errorDiagnostics: null,
+          blockedErrorResolution: null,
+          beadProgress: {
+            total: ticket.runtime.totalBeads,
+            completed: ticket.runtime.completedBeads,
+            current: ticket.runtime.activeBeadId,
+          },
+          iterationCount: ticket.runtime.iterationCount,
+          maxIterations: ticket.runtime.maxIterations ?? 1,
+          councilResults: null,
+          createdAt: ticket.createdAt,
+          updatedAt: ticket.updatedAt,
+        },
+        checklist,
+        draft,
+        evidence,
+        existingBeads,
+        signal: input.signal,
+      })
+      const candidateContent = persistManualQaFixBeadCandidates(paths.ticketDir, input.version, candidates)
+      persistManualQaPhaseArtifact(
+        input.ticketId,
+        'manual_qa_fix_beads',
+        { version: input.version, content: candidateContent },
+        operationActionId,
+      )
+      fixBeads = hydrateManualQaFixBeads({
+        candidates,
+        groups: fixGroups,
+        existing: existingBeads,
+        checklist,
+        evidence,
+        ticketId: input.ticketId,
+        externalId: ticket.externalId,
+        version: input.version,
+        actionId: operationActionId,
+        modelCapability,
+      })
+      journal.fixBeadIds = fixBeads.map((bead) => bead.id)
+      journal.updatedAt = new Date().toISOString()
+      writeJournal(operationPath, journal)
+      persistManualQaDatabaseOperation(input.ticketId, journal)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      emitPhaseLog(input.ticketId, ticket.externalId, 'WAITING_MANUAL_QA', 'error', `Manual QA fix-bead generation failed: ${message}`, {
+        source: 'system',
+        phaseAttempt: resolvePhaseAttempt(input.ticketId, 'WAITING_MANUAL_QA'),
+      })
+      input.sendEvent({ type: 'ERROR', message: `Manual QA fix-bead generation failed: ${message}`, codes: ['MANUAL_QA_FIX_BEADS_FAILED'] })
+      throw error
+    }
+  }
+
   const itemById = new Map(checklist.items.map((item) => [item.id, item]))
   journal.state = 'creating_improvements'
   journal.updatedAt = new Date().toISOString()
@@ -1161,6 +1189,12 @@ export async function submitManualQa(input: {
       writeJournal(operationPath, journal)
       persistManualQaDatabaseOperation(input.ticketId, journal)
     }
+    emitManualQaOperationMilestone(
+      input.ticketId,
+      ticket.externalId,
+      `Created Improvement ticket ${getTicketByRef(ticketId)?.externalId ?? ticketId} with P${improvement.priority} and Manual QA ${improvement.manualQaEnabled ? 'enabled' : 'disabled'}.`,
+      `${operationActionId}:improvement:${ticketId}`,
+    )
   }
   const improvementCreations = journal.improvementTicketIds.map((ticketId) => {
     const childPaths = getTicketPaths(ticketId)
@@ -1176,6 +1210,8 @@ export async function submitManualQa(input: {
       copiedEvidence: origin.evidenceRefs.map((entry) => ({ id: entry.id, sha256: entry.sha256 })),
       omittedEvidence: origin.omittedEvidence,
       omittedFields: origin.omittedFields,
+      priority: origin.priority,
+      manualQaEnabled: origin.manualQaEnabled,
       createdAt: origin.createdAt,
     }
   })
@@ -1198,31 +1234,30 @@ export async function submitManualQa(input: {
       version: input.version,
       actionId: operationActionId,
       createdAt: creation.createdAt,
-      data: { ticketId: creation.ticketId, sourceItemIds: creation.sourceItemIds },
+      data: {
+        ticketId: creation.ticketId,
+        sourceItemIds: creation.sourceItemIds,
+        priority: creation.priority,
+        manualQaEnabled: creation.manualQaEnabled,
+      },
     })
   }
 
-  const existingBeads = readJsonl<Bead>(paths.beadsPath)
-  const fixBeads = buildQaFixBeads({
-    existing: existingBeads,
-    checklist,
-    results: draft.results,
-    evidence,
-    ticketId: input.ticketId,
-    externalId: ticket.externalId,
-    version: input.version,
-    actionId: operationActionId,
-    imageDelivery: modelCapability.imageEvidenceMode,
-    modelCapability,
-  })
   journal.state = 'creating_beads'
-  journal.fixBeadIds = fixBeads.map((bead) => bead.id)
   journal.updatedAt = new Date().toISOString()
   writeJournal(operationPath, journal)
   persistManualQaDatabaseOperation(input.ticketId, journal)
   if (fixBeads.length > 0) {
     const existingIds = new Set(existingBeads.map((bead) => bead.id))
     writeJsonl(paths.beadsPath, [...existingBeads, ...fixBeads.filter((bead) => !existingIds.has(bead.id))])
+    for (const bead of fixBeads) {
+      emitManualQaOperationMilestone(
+        input.ticketId,
+        ticket.externalId,
+        `Created QA fix bead ${bead.id}: ${bead.title}`,
+        `${operationActionId}:bead:${bead.id}`,
+      )
+    }
   }
 
   const beadReceipt = {
@@ -1273,6 +1308,12 @@ export async function submitManualQa(input: {
     journal,
     sendEvent: input.sendEvent,
   })
+  emitManualQaOperationMilestone(
+    input.ticketId,
+    ticket.externalId,
+    `Manual QA v${input.version} completed with outcome ${summary.outcome}.`,
+    `${operationActionId}:complete`,
+  )
   return summary
 }
 

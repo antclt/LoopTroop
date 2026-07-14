@@ -662,6 +662,44 @@ export const PROM25: PromptTemplate = {
   toolPolicy: 'default',
 }
 
+export const PROM_MANUAL_QA_FIX_BEADS: PromptTemplate = {
+  id: 'PROM_MANUAL_QA_FIX_BEADS',
+  description: 'Manual QA Fix Beads Prompt',
+  systemRole: 'You are the locked main implementer preparing execution-ready repair beads from failed human QA checks.',
+  task: 'Inspect the repository with read-only tools and produce one complete fix-bead candidate for every supplied Manual QA merge group.',
+  instructions: [
+    'Repository Inspection Is Mandatory: perform at least one successful focused read-only repository tool call before answering. Inspect the files that are most likely to explain each failure, including files outside earlier bead targets when the evidence points there.',
+    'No Mutation: do not edit files, run mutating commands, install dependencies, or change repository state.',
+    'Exact Group Coverage: return exactly one candidate for every supplied merge-group ID, in the supplied order. Do not add, omit, merge, split, or rename groups.',
+    'Implementation Quality: each candidate must contain a precise title and description, concrete implementation guidance, acceptance criteria, automated tests, runnable test commands, useful labels, dependencies, and minimal project-relative target files.',
+    'PRD References: use only PRD references supplied for that merge group. Never invent a PRD reference.',
+    'Dependencies: `blockedByGroupIds` may reference only earlier supplied merge-group IDs. Keep the graph acyclic.',
+    'Application-Owned Fields: do not generate bead IDs, priority, status, issue type, external reference, reverse `blocks`, lifecycle timestamps, notes, iteration, or QA provenance. LoopTroop adds those fields after validation.',
+    'Output Discipline: end with exactly one `<MANUAL_QA_FIX_BEADS>...</MANUAL_QA_FIX_BEADS>` YAML block and no prose outside it.',
+    'YAML Safety: quote punctuation-heavy strings and strings containing `#`, `: `, URLs, shell syntax, brackets, braces, or backslashes. Prefer block scalars for complex descriptions and commands.',
+  ],
+  outputFormat: [
+    '<MANUAL_QA_FIX_BEADS>',
+    'beads:',
+    '  - groupId: "exact-app-provided-group-id"',
+    '    title: "Concise repair title"',
+    '    description: "Detailed implementation work"',
+    '    prdRefs: ["exact supplied criterion ref"]',
+    '    contextGuidance:',
+    '      patterns: ["Specific pattern to follow"]',
+    '      anti_patterns: ["Specific approach to avoid"]',
+    '    acceptanceCriteria: ["Observable completion criterion"]',
+    '    tests: ["Concrete automated regression test"]',
+    '    testCommands: ["Repository-supported command"]',
+    '    labels: ["manual-qa", "domain-label"]',
+    '    blockedByGroupIds: []',
+    '    targetFiles: ["project/relative/path.ext"]',
+    '</MANUAL_QA_FIX_BEADS>',
+  ].join('\n'),
+  contextInputs: ['ticket_details', 'prd', 'beads', 'final_test_report', 'manual_qa_results', 'focused_diff'],
+  toolPolicy: 'read_only',
+}
+
 // Execution Prompts
 export const PROM_EXECUTION_CAPABILITY_PROBE: PromptTemplate = {
   id: 'PROM_EXECUTION_CAPABILITY_PROBE',
@@ -1062,6 +1100,7 @@ export const ALL_PROMPTS = {
   PROM23,
   PROM24,
   PROM25,
+  PROM_MANUAL_QA_FIX_BEADS,
   PROM_EXECUTION_CAPABILITY_PROBE,
   PROM_EXECUTION_SETUP_PLAN,
   PROM_EXECUTION_SETUP_PLAN_REGENERATE,

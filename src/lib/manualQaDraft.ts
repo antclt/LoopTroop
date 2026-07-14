@@ -74,6 +74,8 @@ export function buildCanonicalManualQaDraft(
     itemId: string
     title: string
     description: string
+    priority: number
+    manualQaEnabled: boolean
     contextOverride?: string
     evidenceIds: string[]
   }> = []
@@ -88,6 +90,8 @@ export function buildCanonicalManualQaDraft(
         itemId: item.id,
         title: result.improvement.title.trim(),
         description: result.improvement.description.trim(),
+        priority: result.improvement.priority,
+        manualQaEnabled: result.improvement.manualQaEnabled,
         ...(result.improvement.contextOverride !== undefined
           ? { contextOverride: result.improvement.contextOverride.trim() }
           : {}),

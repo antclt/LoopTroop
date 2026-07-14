@@ -71,7 +71,7 @@ describe('PhaseTimeline', () => {
     expect(postImplementationGroup).toHaveClass('text-green-600')
     expect(postImplementationGroup).not.toHaveClass('text-primary')
     fireEvent.click(postImplementationGroup!)
-    const qaButton = screen.getByText(/^Manual QA \(v1\)$/).closest('button')
+    const qaButton = screen.getByText(/^Manual QA$/).closest('button')
     expect(qaButton).not.toBeDisabled()
     fireEvent.click(qaButton!)
     expect(onSelect).toHaveBeenCalledWith('WAITING_MANUAL_QA')

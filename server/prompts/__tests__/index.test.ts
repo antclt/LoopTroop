@@ -18,6 +18,7 @@ import {
   PROM23,
   PROM24,
   PROM25,
+  PROM_MANUAL_QA_FIX_BEADS,
   PROM_EXECUTION_CAPABILITY_PROBE,
   PROM_EXECUTION_SETUP_PLAN,
   PROM_EXECUTION_SETUP_PLAN_REGENERATE,
@@ -99,6 +100,7 @@ describe.concurrent('structured prompt hardening', () => {
     expect(buildPromptFromTemplate(PROM_EXECUTION_CAPABILITY_PROBE, [])).not.toContain('Do not use tools.')
     expect(PROM_EXECUTION_SETUP_PLAN.toolPolicy).toBe('read_only')
     expect(PROM_EXECUTION_SETUP_PLAN_REGENERATE.toolPolicy).toBe('read_only')
+    expect(PROM_MANUAL_QA_FIX_BEADS.toolPolicy).toBe('read_only')
   })
 
   it('uses same-session rules for prompts that continue an existing session', () => {
@@ -386,6 +388,15 @@ describe.concurrent('structured prompt hardening', () => {
     expect(expandPrompt).toContain('Use `relevant_files` first as hints for likely `targetFiles`')
     expect(expandPrompt).toContain('Repository-inspection tools are allowed')
     expect(expandPrompt).toContain('Do not edit files, run mutating commands, or change the repository')
+  })
+
+  it('requires Manual QA fix-bead generation to inspect the repository and return every full candidate', () => {
+    const prompt = buildPromptFromTemplate(PROM_MANUAL_QA_FIX_BEADS, [])
+    expect(prompt).toContain('at least one successful focused read-only repository tool call')
+    expect(prompt).toContain('exactly one candidate for every supplied merge-group ID')
+    expect(prompt).toContain('acceptance criteria, automated tests, runnable test commands')
+    expect(prompt).toContain('<MANUAL_QA_FIX_BEADS>')
+    expect(prompt).toContain('LoopTroop adds those fields after validation')
   })
 
   it('keeps PROM4 and PROM52 explicit about marker-only structured output', () => {

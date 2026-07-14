@@ -88,10 +88,10 @@ describe.concurrent('workflow metadata', () => {
 
   it('preserves the requested Manual QA status descriptions verbatim', () => {
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'GENERATING_QA_CHECKLIST')?.description).toBe(
-      'LoopTroop is preparing a human-facing Manual QA checklist from approved context and focused implementation evidence, with generation status, logs, and the produced checklist artifact available in the phase workspace.',
+      'LoopTroop is preparing a human-facing Manual QA checklist with live checkpoint, context, model/tool, validation, and persistence milestones; the completed checklist opens as a readable artifact with an exact Raw view.',
     )
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.description).toBe(
-      'LoopTroop is waiting for user-run verification in an autosaved Manual QA checklist: items start Pending, Pass and Waive require no evidence, file changes settle before completion, and Submit or Skip finishes the round.',
+      'LoopTroop is waiting for user-run verification in an autosaved checklist with collapsed logs, explicit Not applicable PRD coverage, configurable Improvement tickets, and AI-planned full QA-fix beads for failed checks.',
     )
   })
 

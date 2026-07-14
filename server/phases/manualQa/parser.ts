@@ -24,6 +24,11 @@ const ModelReferenceSchema = z.object({
   coverage: z.enum(['full', 'partial']),
 }).strict()
 
+const ModelNotApplicableReferenceSchema = z.object({
+  ref: z.string().trim().min(1),
+  reason: z.string().trim().min(1),
+}).strict()
+
 const ModelItemSchema = z.object({
   lineageId: z.string().trim().min(1).max(160),
   priorItemIds: z.array(z.string().trim().min(1)).default([]),
@@ -42,6 +47,7 @@ const ModelItemSchema = z.object({
 
 const ModelChecklistSchema = z.object({
   summary: z.string().trim().min(1),
+  notApplicablePrdRefs: z.array(ModelNotApplicableReferenceSchema),
   items: z.array(ModelItemSchema).min(1),
 }).strict()
 
@@ -53,6 +59,68 @@ const KEY_ALIASES: Record<string, string> = {
   watch_notes: 'watchNotes',
   bead_refs: 'beadRefs',
   prd_refs: 'prdRefs',
+  not_applicable_prd_refs: 'notApplicablePrdRefs',
+}
+
+const HEX_TEXT_MAPPING_KEYS = new Set([
+  'summary',
+  'title',
+  'behavior',
+  'expected_result',
+  'expectedResult',
+])
+const HEX_TEXT_SEQUENCE_KEYS = new Set(['prerequisites', 'actions', 'watch_notes', 'watchNotes'])
+const HEX_COLOR_TOKEN = /(^|[\s(,;:])#(?:[0-9a-fA-F]{8}|[0-9a-fA-F]{6}|[0-9a-fA-F]{4}|[0-9a-fA-F]{3})(?=$|[\s),.;:!?])/i
+
+function isPlainYamlScalar(value: string): boolean {
+  const trimmed = value.trim()
+  return Boolean(trimmed) && !/^["'[\]{|}>]/.test(trimmed)
+}
+
+/**
+ * Preserve emitted hex-color text before YAML can interpret it as a comment.
+ * This repair is deliberately restricted to known Manual QA prose fields and
+ * only quotes the model's existing scalar; it never creates replacement text.
+ */
+export function repairManualQaHexColorText(yaml: string): { yaml: string; repaired: boolean } {
+  const lines = yaml.split('\n')
+  let sequenceKey: string | null = null
+  let sequenceIndent = -1
+  let repaired = false
+  const output = lines.map((line) => {
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0
+    const trimmed = line.trim()
+    if (trimmed && sequenceKey && indent <= sequenceIndent && !trimmed.startsWith('-')) {
+      sequenceKey = null
+      sequenceIndent = -1
+    }
+
+    const sequenceParent = line.match(/^(\s*)([A-Za-z_][\w-]*)\s*:\s*$/)
+    if (sequenceParent) {
+      sequenceKey = HEX_TEXT_SEQUENCE_KEYS.has(sequenceParent[2]!) ? sequenceParent[2]! : null
+      sequenceIndent = sequenceKey ? sequenceParent[1]!.length : -1
+      return line
+    }
+
+    const mapping = line.match(/^(\s*(?:-\s+)?)([A-Za-z_][\w-]*)\s*:\s*(.+)$/)
+    if (mapping && HEX_TEXT_MAPPING_KEYS.has(mapping[2]!)) {
+      const value = mapping[3]!
+      if (isPlainYamlScalar(value) && HEX_COLOR_TOKEN.test(value)) {
+        repaired = true
+        return `${mapping[1]}${mapping[2]}: ${JSON.stringify(value.trim())}`
+      }
+    }
+
+    if (sequenceKey && indent > sequenceIndent) {
+      const item = line.match(/^(\s*-\s+)(.+)$/)
+      if (item && isPlainYamlScalar(item[2]!) && HEX_COLOR_TOKEN.test(item[2]!)) {
+        repaired = true
+        return `${item[1]}${JSON.stringify(item[2]!.trim())}`
+      }
+    }
+    return line
+  })
+  return { yaml: output.join('\n'), repaired }
 }
 
 function normalizeAliases(value: unknown, warnings: string[]): unknown {
@@ -159,7 +227,11 @@ export function parseManualQaChecklistOutput(
 
   const repairWarnings: string[] = []
   try {
-    const parsed = parseYamlOrJsonCandidate(candidates[0]!, {
+    const hexRepaired = repairManualQaHexColorText(candidates[0]!)
+    if (hexRepaired.repaired) {
+      repairWarnings.push('Quoted hex-color text in Manual QA prose before YAML parsing.')
+    }
+    const parsed = parseYamlOrJsonCandidate(hexRepaired.yaml, {
       repairWarnings,
       nestedMappingChildren: {
         items: [
@@ -178,6 +250,7 @@ export function parseManualQaChecklistOutput(
       version: options.version,
       generatedAt: options.generatedAt ?? new Date().toISOString(),
       summary: model.summary,
+      notApplicablePrdRefs: model.notApplicablePrdRefs,
       items: model.items.map((item, index) => ({
         id: `qa-v${options.version}-${String(index + 1).padStart(3, '0')}`,
         ...item,

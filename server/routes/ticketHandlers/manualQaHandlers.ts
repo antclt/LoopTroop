@@ -82,7 +82,16 @@ function toCanonicalDraft(input: {
   const resultRecord = raw.results && typeof raw.results === 'object' && !Array.isArray(raw.results)
     ? raw.results as Record<string, unknown>
     : {}
-  const improvements: Array<{ id: string; itemId: string; title: string; description: string; contextOverride?: string; evidenceIds: string[] }> = []
+  const improvements: Array<{
+    id: string
+    itemId: string
+    title: string
+    description: string
+    contextOverride?: string
+    evidenceIds: string[]
+    priority: number
+    manualQaEnabled: boolean
+  }> = []
   const rawResults = Object.entries(resultRecord).map(([itemId, rawValue]) => {
     const value = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue as Record<string, unknown> : {}
     const improvement = value.improvement && typeof value.improvement === 'object' && !Array.isArray(value.improvement)
@@ -90,6 +99,9 @@ function toCanonicalDraft(input: {
       : null
     const improvementDraftId = improvement ? createManualQaImprovementDraftId(input.version, itemId) : undefined
     if (improvement && improvementDraftId) {
+      if (typeof improvement.manualQaEnabled !== 'boolean') {
+        throw new Error(`Improvement ${improvementDraftId} must explicitly enable or disable Manual QA.`)
+      }
       improvements.push({
         id: improvementDraftId,
         itemId,
@@ -99,6 +111,8 @@ function toCanonicalDraft(input: {
           ? { contextOverride: improvement.contextOverride.trim() }
           : {}),
         evidenceIds: Array.isArray(improvement.evidenceIds) ? improvement.evidenceIds.map(String) : [],
+        priority: Number(improvement.priority),
+        manualQaEnabled: improvement.manualQaEnabled,
       })
     }
     return {

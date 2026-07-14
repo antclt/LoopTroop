@@ -22,6 +22,12 @@ import {
   updateTicket,
 } from '../tickets'
 import { getTicketAiLogPath, getTicketDebugLogPath } from '../paths'
+import {
+  buildManualQaProjection,
+  persistManualQaChecklist,
+  persistManualQaSummary,
+  reserveManualQaVersion,
+} from '../../phases/manualQa'
 
 const lockRepoManager = createFixtureRepoManager({
   templatePrefix: 'looptroop-ticket-lock-',
@@ -164,6 +170,8 @@ describe('ticket start configuration locking', () => {
       actionId: 'submit-one',
       title: 'Follow-up improvement',
       description: 'Keep the selected filter.',
+      priority: 2,
+      manualQaEnabled: true,
     })
     // This return point represents the crash window before operations.ts writes
     // `.ticket/meta/manual-qa-origin.json` and copies evidence.
@@ -174,9 +182,13 @@ describe('ticket start configuration locking', () => {
       actionId: 'submit-one',
       title: 'Follow-up improvement',
       description: 'Keep the selected filter.',
+      priority: 2,
+      manualQaEnabled: true,
     })
     expect(restored.id).toBe(first.id)
     expect(restored.externalId).toBe(first.externalId)
+    expect(restored.priority).toBe(2)
+    expect(restored.manualQaOverride).toBe(true)
     expect(readTicketMeta(repoDir, restored.externalId).externalId).toBe(restored.externalId)
   })
 
@@ -247,6 +259,89 @@ describe('ticket start configuration locking', () => {
     expect(getTicketByRef(ticket.id)?.manualQa).toMatchObject({
       activeVersion: 3,
       artifactAvailability: { checklist: true, results: false, coverage: false, summary: false },
+    })
+  })
+
+  it('indexes Manual QA rounds with artifact availability and phase-attempt identity', () => {
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'Manual QA versions', shortname: 'MQV' })
+    const ticket = createTicket({ projectId: project.id, title: 'Read prior Manual QA while generating' })
+    const ticketDir = getTicketPaths(ticket.id)!.ticketDir
+    persistManualQaChecklist(ticketDir, {
+      schemaVersion: 1,
+      artifact: 'manual_qa_checklist',
+      ticketId: ticket.externalId,
+      version: 1,
+      generatedAt: '2026-07-13T00:00:00.000Z',
+      summary: 'Verify the first round.',
+      notApplicablePrdRefs: [],
+      items: [{
+        id: 'qa-v1-001',
+        lineageId: 'first-round',
+        priorItemIds: [],
+        title: 'Verify behavior',
+        source: 'prd',
+        behavior: 'The behavior remains visible.',
+        severity: 'required',
+        recheckState: 'new',
+        prerequisites: [],
+        actions: ['Exercise the behavior.'],
+        expectedResult: 'The behavior is visible.',
+        watchNotes: [],
+        beadRefs: [],
+        prdRefs: [],
+      }],
+    })
+    persistManualQaSummary(ticketDir, {
+      schemaVersion: 1,
+      artifact: 'manual_qa_summary',
+      ticketId: ticket.externalId,
+      version: 1,
+      outcome: 'passed',
+      createdFixBeadIds: [],
+      improvementTicketIds: [],
+      waivedItemIds: [],
+      waivedItems: [],
+      startedAt: '2026-07-13T00:00:00.000Z',
+      completedAt: '2026-07-13T00:01:00.000Z',
+      durationMs: 60_000,
+      itemCounts: { pass: 1, fail: 0, waive: 0, improvement: 0, pending: 0 },
+      requiredItemCount: 1,
+      optionalItemCount: 0,
+      evidenceCount: 0,
+      nextAction: 'integrate',
+      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0, notApplicable: 0 },
+      modelCapability: null,
+    })
+    insertPhaseArtifact(ticket.id, {
+      phase: 'WAITING_MANUAL_QA',
+      artifactType: 'manual_qa_summary',
+      content: JSON.stringify({ version: 1, outcome: 'passed' }),
+    })
+    reserveManualQaVersion(ticketDir, ticket.id, 2, 'generation-v2')
+
+    expect(buildManualQaProjection(ticket.id)).toMatchObject({
+      activeVersion: 2,
+      completedRoundCount: 1,
+      artifactAvailable: false,
+      versions: [
+        {
+          version: 1,
+          status: 'completed',
+          artifactAvailable: true,
+          phaseAttempt: 1,
+          outcome: 'passed',
+          completedAt: '2026-07-13T00:01:00.000Z',
+        },
+        {
+          version: 2,
+          status: 'generating',
+          artifactAvailable: false,
+          phaseAttempt: null,
+          outcome: null,
+          completedAt: null,
+        },
+      ],
     })
   })
 

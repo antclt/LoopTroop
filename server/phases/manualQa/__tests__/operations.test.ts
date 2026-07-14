@@ -7,6 +7,7 @@ import {
   getTicketByRef,
   getTicketPaths,
   insertPhaseArtifact,
+  listTickets,
   listPhaseAttempts,
   patchTicket,
 } from '../../../storage/tickets'
@@ -70,6 +71,7 @@ function prepareFixture(items = [checklistItem('item-one')]) {
     version: 1,
     generatedAt: new Date().toISOString(),
     summary: 'Verify the implemented behavior.',
+    notApplicablePrdRefs: [],
     items,
   })
   const checklistHash = getManualQaChecklistHash(setup.paths.ticketDir, 1)!
@@ -139,7 +141,7 @@ function terminalSummary(
     optionalItemCount: 0,
     evidenceCount: 0,
     nextAction: 'integrate',
-    coverage: { covered: 0, partiallyCovered: 0, uncovered: 0 },
+    coverage: { covered: 0, partiallyCovered: 0, uncovered: 0, notApplicable: 0 },
     modelCapability: null,
   }
 }
@@ -168,7 +170,7 @@ describe('Manual QA submission recovery and integrity', () => {
       optionalItemCount: 0,
       evidenceCount: 0,
       nextAction: 'integrate',
-      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0 },
+      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0, notApplicable: 0 },
     })
     expect(summary.durationMs).toBeGreaterThanOrEqual(0)
     expect(summary.modelCapability).toMatchObject({ imageEvidenceMode: 'references_only' })
@@ -475,6 +477,22 @@ describe('Manual QA submission recovery and integrity', () => {
       draft: setup.draft,
       guard: setup.guard,
       sendEvent: firstEvent,
+      generateFixBeads: async () => [{
+        groupId: 'item:item-one',
+        title: 'Repair item one behavior',
+        description: 'Correct the implementation so item one remains usable.',
+        prdRefs: [],
+        contextGuidance: {
+          patterns: ['Follow the existing implementation boundary.'],
+          anti_patterns: ['Do not mask the failure in the UI.'],
+        },
+        acceptanceCriteria: ['Item one works as specified.'],
+        tests: ['Add an automated regression test for item one.'],
+        testCommands: ['npm run test:server'],
+        labels: ['manual-qa'],
+        blockedByGroupIds: [],
+        targetFiles: ['src/item-one.ts'],
+      }],
     })
     expect(summary.outcome).toBe('created_fixes')
     const fixBead = readJsonl<Bead>(setup.paths.beadsPath).find((bead) => bead.qaOrigin)
@@ -502,6 +520,53 @@ describe('Manual QA submission recovery and integrity', () => {
     for (const [phase, count] of Object.entries(attemptCounts)) {
       expect(listPhaseAttempts(setup.ticket.id, phase)).toHaveLength(count)
     }
+  })
+
+  it('moves fix-bead generation failures to the error path before creating any child work', async () => {
+    const setup = prepareFixture([checklistItem('failed-item'), checklistItem('improvement-item')])
+    setup.draft.results = [
+      {
+        ...setup.draft.results[0]!,
+        itemId: 'failed-item',
+        outcome: 'fail',
+        observation: 'The behavior is broken.',
+      },
+      {
+        ...setup.draft.results[1]!,
+        itemId: 'improvement-item',
+        outcome: 'improvement',
+        improvementDraftId: 'improvement-draft',
+      },
+    ]
+    setup.draft.improvements = [{
+      id: 'improvement-draft',
+      itemId: 'improvement-item',
+      title: 'Improve the adjacent behavior',
+      description: 'Make the adjacent behavior clearer.',
+      evidenceIds: [],
+      priority: 4,
+      manualQaEnabled: false,
+    }]
+    const sendEvent = vi.fn()
+
+    await expect(submitManualQa({
+      ticketId: setup.ticket.id,
+      version: 1,
+      draft: setup.draft,
+      guard: setup.guard,
+      sendEvent,
+      generateFixBeads: async () => { throw new Error('invalid candidate') },
+    })).rejects.toThrow('invalid candidate')
+
+    expect(sendEvent).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'ERROR',
+      codes: ['MANUAL_QA_FIX_BEADS_FAILED'],
+    }))
+    expect(readJsonl<Bead>(setup.paths.beadsPath).filter((bead) => bead.qaOrigin)).toEqual([])
+    expect(listTickets(setup.ticket.projectId).filter((entry) => entry.manualQaOrigin)).toEqual([])
+    expect(JSON.parse(readFileSync(getManualQaStoragePaths(setup.paths.ticketDir, 1).operationPath, 'utf8')).state)
+      .toBe('generating_beads')
+    expect(existsSync(resolve(getManualQaStoragePaths(setup.paths.ticketDir, 1).versionDir, 'fix-beads.yaml'))).toBe(false)
   })
 
   it('rejects evidence attached to a different checklist item', async () => {
@@ -564,6 +629,8 @@ describe('Manual QA submission recovery and integrity', () => {
       title: 'Persist the choice',
       description: 'Keep the chosen value after reload.',
       evidenceIds: [],
+      priority: 2,
+      manualQaEnabled: true,
     }]
     const summary = await submitManualQa({
       ticketId: setup.ticket.id,
@@ -582,6 +649,8 @@ describe('Manual QA submission recovery and integrity', () => {
     expect(child.description).not.toContain('required-improvement')
     expect(child.description).not.toContain('EPIC-1/STORY-1/AC-1')
     expect(child.description).not.toContain('source-bead')
+    expect(child.priority).toBe(2)
+    expect(child.manualQaOverride).toBe(true)
     const childPaths = getTicketPaths(childId)!
     const origin = JSON.parse(readFileSync(resolve(childPaths.ticketDir, 'meta', 'manual-qa-origin.json'), 'utf8'))
     expect(origin).toMatchObject({
@@ -589,6 +658,8 @@ describe('Manual QA submission recovery and integrity', () => {
       sourceItemIds: ['required-improvement'],
       resultType: 'improvement',
       evidenceRefs: [],
+      priority: 2,
+      manualQaEnabled: true,
     })
     const retried = await submitManualQa({
       ticketId: setup.ticket.id,

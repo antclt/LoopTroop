@@ -131,6 +131,48 @@ describe('ArtifactContentViewer', () => {
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'start' })
   })
 
+  it('renders Manual QA checklists as readable cards with the canonical YAML in Raw', () => {
+    const checklist = `schema_version: 1
+artifact: manual_qa_checklist
+version: 2
+generated_at: 2026-07-14T10:00:00.000Z
+not_applicable_prd_refs:
+  - ref: EP-2/ST-1/AC-3
+    reason: Verified only by the build pipeline.
+items:
+  - id: QA-v2-1
+    lineage_id: checkout-submit
+    title: Submit checkout
+    source: prd
+    behavior: A valid checkout can be submitted.
+    severity: required
+    recheck_state: pending_recheck
+    prerequisites:
+      - Open a populated cart.
+    actions:
+      - Select Checkout.
+      - Confirm the order.
+    expected_result: The confirmation page displays the order number.
+    watch_notes:
+      - The submit button must not remain busy.
+    bead_refs: [BEAD-2]
+    prd_refs:
+      - ref: EP-1/ST-1/AC-1
+        coverage: full
+`
+    render(<ArtifactContent artifactId="manual-qa-checklist" content={JSON.stringify({ version: 2, checklist })} />)
+
+    expect(screen.getByRole('button', { name: 'Checklist' })).toBeInTheDocument()
+    expect(screen.getByText('1 check')).toBeInTheDocument()
+    expect(screen.getByText('1. Submit checkout')).toBeInTheDocument()
+    expect(screen.getByText('The confirmation page displays the order number.')).toBeInTheDocument()
+    expect(screen.getByText('Not applicable to Manual QA')).toBeInTheDocument()
+    expect(screen.getByText('Verified only by the build pipeline.')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Raw' }))
+    expect(screen.getByText((_, element) => element?.tagName === 'PRE' && element.textContent === checklist)).toBeInTheDocument()
+  })
+
   it('shows Manual QA provenance in bead artifacts while keeping retry notes separate', () => {
     render(<BeadsDraftView content={JSON.stringify({ beads: [{
       id: 'QA-v2-1', title: 'Fix checkout', priority: 1, status: 'pending', notes: 'Retry note',

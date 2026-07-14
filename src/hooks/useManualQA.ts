@@ -31,6 +31,7 @@ export interface ManualQaChecklist {
   schemaVersion: number
   version: number
   generatedAt?: string
+  notApplicablePrdRefs?: Array<{ ref: string; reason: string }>
   items: ManualQaChecklistItem[]
 }
 
@@ -52,6 +53,8 @@ export interface ManualQaEvidence {
 export interface ManualQaImprovementDraft {
   title: string
   description: string
+  priority: number
+  manualQaEnabled: boolean
   contextOverride?: string
   evidenceIds?: string[]
 }
@@ -76,14 +79,16 @@ export interface ManualQaDraft {
 export interface ManualQaCoverageEntry {
   criterionRef: string
   criterion: string
-  status: 'covered' | 'partially_covered' | 'uncovered'
+  status: 'covered' | 'partially_covered' | 'uncovered' | 'not_applicable'
   itemIds: string[]
+  reason?: string
 }
 
 export interface ManualQaCoverageSummary {
   coveredCount: number
   partiallyCoveredCount: number
   uncoveredCount: number
+  notApplicableCount: number
   sourceItemCounts: {
     prd: number
     bead: number
@@ -107,7 +112,7 @@ export interface ManualQaSummary {
   optionalItemCount: number
   evidenceCount: number
   nextAction?: 'integrate' | 'return_to_coding'
-  coverage: { covered: number; partiallyCovered: number; uncovered: number }
+  coverage: { covered: number; partiallyCovered: number; uncovered: number; notApplicable: number }
   modelCapability?: {
     modelId: string | null
     modelVariant: string | null
@@ -160,6 +165,8 @@ export interface ManualQaIndex {
     status: ManualQaRound['status']
     outcome?: ManualQaRound['outcome']
     completedAt?: string | null
+    artifactAvailable: boolean
+    phaseAttempt: number | null
   }>
 }
 
@@ -213,6 +220,8 @@ function normalizeDraft(value: unknown): ManualQaDraft | null {
       improvement: improvement ? {
         title: String(improvement.title ?? ''),
         description: String(improvement.description ?? ''),
+        priority: numberValue(improvement.priority) || 3,
+        manualQaEnabled: improvement.manualQaEnabled === true,
         contextOverride: typeof improvement.contextOverride === 'string' ? improvement.contextOverride : undefined,
         evidenceIds: Array.isArray(improvement.evidenceIds) ? improvement.evidenceIds.map(String) : [],
       } : undefined,
@@ -236,6 +245,12 @@ export function normalizeManualQaRound(value: unknown, version: number): ManualQ
     ...checklistRaw,
     schemaVersion: Number(checklistRaw.schemaVersion ?? 1),
     version: Number(checklistRaw.version ?? version),
+    notApplicablePrdRefs: Array.isArray(checklistRaw.notApplicablePrdRefs)
+      ? checklistRaw.notApplicablePrdRefs.map((value) => {
+        const entry = asRecord(value)
+        return { ref: String(entry.ref ?? ''), reason: String(entry.reason ?? '') }
+      })
+      : [],
     items: Array.isArray(checklistRaw.items) ? checklistRaw.items.map((itemValue) => {
       const item = asRecord(itemValue)
       return {
@@ -279,12 +294,14 @@ export function normalizeManualQaRound(value: unknown, version: number): ManualQ
         criterion: String(entry.criterion ?? ''),
         status: String(entry.status ?? 'uncovered') as ManualQaCoverageEntry['status'],
         itemIds: Array.isArray(entry.itemIds) ? entry.itemIds.map(String) : [],
+        reason: typeof entry.reason === 'string' ? entry.reason : undefined,
       }
     }),
     coverageSummary: {
       coveredCount: numberValue(coverageRaw.coveredCount),
       partiallyCoveredCount: numberValue(coverageRaw.partiallyCoveredCount),
       uncoveredCount: numberValue(coverageRaw.uncoveredCount),
+      notApplicableCount: numberValue(coverageRaw.notApplicableCount),
       sourceItemCounts: {
         prd: numberValue(sourceItemCounts.prd),
         bead: numberValue(sourceItemCounts.bead),
@@ -334,6 +351,7 @@ export function normalizeManualQaRound(value: unknown, version: number): ManualQ
         covered: numberValue(summaryCoverage.covered),
         partiallyCovered: numberValue(summaryCoverage.partiallyCovered),
         uncovered: numberValue(summaryCoverage.uncovered),
+        notApplicable: numberValue(summaryCoverage.notApplicable),
       },
       modelCapability: summary.modelCapability && typeof summary.modelCapability === 'object' ? {
         modelId: typeof modelCapability.modelId === 'string' ? modelCapability.modelId : null,
@@ -378,9 +396,25 @@ export function useManualQaIndex(ticketId: string, enabled = true) {
       return {
         ...value,
         completedRounds: value.completedRounds ?? value.completedRoundCount ?? 0,
-        versions: rawVersions.map((entry) => typeof entry === 'number'
-          ? { version: entry, status: entry === value.activeVersion ? 'waiting' : 'completed' }
-          : entry as ManualQaIndex['versions'][number]),
+        versions: rawVersions.map((entry) => {
+          if (typeof entry === 'number') {
+            return {
+              version: entry,
+              status: entry === value.activeVersion ? 'waiting' : 'completed',
+              artifactAvailable: true,
+              phaseAttempt: null,
+            }
+          }
+          const versionEntry = asRecord(entry)
+          return {
+            version: Number(versionEntry.version),
+            status: String(versionEntry.status ?? 'completed'),
+            outcome: typeof versionEntry.outcome === 'string' ? versionEntry.outcome as ManualQaRound['outcome'] : undefined,
+            completedAt: typeof versionEntry.completedAt === 'string' ? versionEntry.completedAt : null,
+            artifactAvailable: versionEntry.artifactAvailable === true,
+            phaseAttempt: typeof versionEntry.phaseAttempt === 'number' ? versionEntry.phaseAttempt : null,
+          }
+        }),
       }
     },
     refetchInterval: (query) => query.state.data?.activeVersion ? 5000 : false,

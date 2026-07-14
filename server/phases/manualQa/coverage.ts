@@ -27,8 +27,21 @@ export function validateManualQaPrdReferences(
       .filter((reference) => !validRefs.has(reference.ref))
       .map((reference) => `${item.id}: ${reference.ref}`),
   )
+  const invalidNotApplicableRefs = checklist.notApplicablePrdRefs
+    .filter((reference) => !validRefs.has(reference.ref))
+    .map((reference) => reference.ref)
+  const referencedRefs = new Set(checklist.items.flatMap((item) => item.prdRefs.map((reference) => reference.ref)))
+  const overlappingRefs = checklist.notApplicablePrdRefs
+    .filter((reference) => referencedRefs.has(reference.ref))
+    .map((reference) => reference.ref)
   if (invalidRefs.length > 0) {
     throw new Error(`Checklist contains invalid PRD criterion references: ${invalidRefs.join(', ')}`)
+  }
+  if (invalidNotApplicableRefs.length > 0) {
+    throw new Error(`Checklist contains invalid not-applicable PRD criterion references: ${invalidNotApplicableRefs.join(', ')}`)
+  }
+  if (overlappingRefs.length > 0) {
+    throw new Error(`PRD criteria cannot be both checklist-covered and not applicable to Manual QA: ${overlappingRefs.join(', ')}`)
   }
 }
 
@@ -39,12 +52,15 @@ export function computeManualQaCoverage(
   validateManualQaPrdReferences(checklist, criteria)
 
   const entries = criteria.map((criterion) => {
+    const notApplicable = checklist.notApplicablePrdRefs.find((reference) => reference.ref === criterion.ref)
     const references = checklist.items.flatMap((item) =>
       item.prdRefs
         .filter((reference) => reference.ref === criterion.ref)
         .map((reference) => ({ itemId: item.id, coverage: reference.coverage })),
     )
-    const status = references.some((reference) => reference.coverage === 'full')
+    const status = notApplicable
+      ? 'not_applicable' as const
+      : references.some((reference) => reference.coverage === 'full')
       ? 'covered' as const
       : references.some((reference) => reference.coverage === 'partial')
         ? 'partially_covered' as const
@@ -55,6 +71,7 @@ export function computeManualQaCoverage(
       criterion: criterion.criterion,
       status,
       itemIds: [...new Set(references.map((reference) => reference.itemId))],
+      ...(notApplicable ? { reason: notApplicable.reason } : {}),
     }
   })
   const countSource = (source: ManualQaChecklist['items'][number]['source']) =>
@@ -69,6 +86,7 @@ export function computeManualQaCoverage(
     coveredCount: entries.filter((entry) => entry.status === 'covered').length,
     partiallyCoveredCount: entries.filter((entry) => entry.status === 'partially_covered').length,
     uncoveredCount: entries.filter((entry) => entry.status === 'uncovered').length,
+    notApplicableCount: entries.filter((entry) => entry.status === 'not_applicable').length,
     sourceItemCounts: {
       prd: countSource('prd'),
       bead: countSource('bead'),

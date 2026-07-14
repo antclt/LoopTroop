@@ -153,12 +153,6 @@ function getPhaseLabel(phaseId: string, ticket?: Ticket): string {
     })
   }
 
-  if (phaseId === 'GENERATING_QA_CHECKLIST' || phaseId === 'WAITING_MANUAL_QA') {
-    const version = ticket?.manualQa?.activeVersion
-    const base = getStatusUserLabel(phaseId)
-    return version ? `${base} (v${version})` : base
-  }
-
   return getStatusUserLabel(phaseId)
 }
 

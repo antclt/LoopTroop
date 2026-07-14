@@ -1144,6 +1144,19 @@ describe('repairYamlInlineKeys', () => {
     })
   })
 
+  it('preserves colon-bearing scalar IDs and URLs', () => {
+    const input = [
+      'actionId: manual-qa-submit:817fd50e-4f77-4b6d-bc09-18c9c4d89328',
+      'callback: https://example.test/manual-qa:8443/result',
+    ].join('\n')
+
+    expect(repairYamlInlineKeys(input)).toBe(input)
+    expect(jsYaml.load(repairYamlInlineKeys(input))).toEqual({
+      actionId: 'manual-qa-submit:817fd50e-4f77-4b6d-bc09-18c9c4d89328',
+      callback: 'https://example.test/manual-qa:8443/result',
+    })
+  })
+
   it.each([
     ['values with spaces', 'rationale: This is an important question about the project'],
     ['quoted values containing colons', 'rationale: "key: value style explanation"'],

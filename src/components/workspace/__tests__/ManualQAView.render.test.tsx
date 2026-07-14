@@ -17,6 +17,19 @@ const mocks = vi.hoisted(() => ({
   refetchRound: vi.fn(),
   includeDrift: vi.fn(),
   discardDrift: vi.fn(),
+  logSection: vi.fn((_props: Record<string, unknown>) => <div data-testid="manual-qa-log" />),
+}))
+
+vi.mock('@/hooks/useProjects', () => ({
+  useProjects: () => ({ data: [{ id: 1, manualQaOverride: true }] }),
+}))
+
+vi.mock('@/hooks/useProfile', () => ({
+  useProfile: () => ({ data: { manualQaEnabled: false } }),
+}))
+
+vi.mock('../CollapsiblePhaseLogSection', () => ({
+  CollapsiblePhaseLogSection: mocks.logSection,
 }))
 
 vi.mock('@/hooks/useTickets', async (importOriginal) => {
@@ -66,7 +79,7 @@ const round: ManualQaRound = {
     }],
   },
   coverage: [],
-  coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
+  coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, notApplicableCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
   evidence: [],
   draftRevision: 0,
 }
@@ -109,7 +122,7 @@ describe('ManualQAView recovery behavior', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.index.mockReturnValue({
-      data: { activeVersion: 1, completedRounds: 0, latestOutcome: null, artifactAvailable: true, versions: [{ version: 1, status: 'waiting' }] },
+      data: { activeVersion: 1, completedRounds: 0, latestOutcome: null, artifactAvailable: true, versions: [{ version: 1, status: 'waiting', artifactAvailable: true, phaseAttempt: 1 }] },
       isLoading: false,
       error: null,
     })
@@ -164,13 +177,35 @@ describe('ManualQAView recovery behavior', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByText(/^Title/).parentElement?.querySelector('input')).toBeInTheDocument()
     expect(screen.getByText(/^Description/).parentElement?.querySelector('textarea')).toBeInTheDocument()
-    for (const name of ['Manual QA context', 'Final description preview', 'Evidence and provenance preview']) {
+    for (const name of ['Advanced', 'Manual QA context', 'Final description preview', 'Evidence and provenance preview']) {
       expect(screen.getByRole('button', { name })).toHaveAttribute('aria-expanded', 'false')
     }
+    expect(screen.getByRole('combobox', { name: 'Priority' })).toHaveValue('3')
     fireEvent.click(screen.getByRole('button', { name: 'Manual QA context' }))
     const contextEditor = screen.getByRole('button', { name: 'Manual QA context' }).parentElement?.parentElement?.querySelector('textarea')
     expect(contextEditor?.value).toContain('## Manual QA Context')
     expect(screen.queryByText(/required check.*incomplete/i)).not.toBeInTheDocument()
+  })
+
+  it('submits the selected improvement priority and explicit Manual QA setting', async () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Improvement' }))
+    const title = screen.getByText(/^Title/).parentElement!.querySelector('input')!
+    const description = screen.getByText(/^Description/).parentElement!.querySelector('textarea')!
+    fireEvent.change(title, { target: { value: 'Improve checkout feedback' } })
+    fireEvent.change(description, { target: { value: 'Make the confirmation state clearer.' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Priority' }), { target: { value: '2' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Advanced' }))
+    expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
+    fireEvent.click(screen.getByRole('radio', { name: 'Disabled' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
+
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalled())
+    expect(mocks.submit.mock.calls[0]![0].draft.improvements[0]).toMatchObject({
+      priority: 2,
+      manualQaEnabled: false,
+    })
   })
 
   it('keeps PRD coverage collapsed by default', () => {
@@ -191,6 +226,36 @@ describe('ManualQAView recovery behavior', () => {
     expect(screen.queryByText('Checkout succeeds')).not.toBeInTheDocument()
     fireEvent.click(coverage)
     expect(screen.getByText('Checkout succeeds')).toBeInTheDocument()
+  })
+
+  it('shows PRD criteria that are not applicable to Manual QA with their reason', () => {
+    mocks.round.mockReturnValue({
+      data: {
+        ...round,
+        coverage: [{ criterionRef: 'EP-1/ST-2/AC-4', criterion: 'Build metadata is generated', status: 'not_applicable', itemIds: [], reason: 'Verified by the build pipeline.' }],
+        coverageSummary: { ...round.coverageSummary, notApplicableCount: 1 },
+      },
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    })
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /PRD coverage/i }))
+    expect(screen.getByText('Not applicable to Manual QA')).toBeInTheDocument()
+    expect(screen.getByText(/Verified by the build pipeline/)).toBeInTheDocument()
+    expect(screen.getByText('1 not applicable')).toBeInTheDocument()
+  })
+
+  it('binds a collapsed Manual QA log to the selected round phase attempt', () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    expect(mocks.logSection).toHaveBeenLastCalledWith(expect.objectContaining({
+      phase: 'WAITING_MANUAL_QA',
+      phaseAttempt: 1,
+      logMode: 'live',
+      defaultExpanded: false,
+    }), undefined)
   })
 
   it('blocks submission after an autosave conflict and offers an explicit reload', async () => {
@@ -293,7 +358,7 @@ describe('ManualQAView recovery behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add files' }))
 
     expect(inputClick).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('heading', { name: 'Manual QA · Round v1' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual QA' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit QA' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add files' })).toBeInTheDocument()
     expect(input).toBeInTheDocument()
@@ -525,10 +590,10 @@ describe('ManualQAView recovery behavior', () => {
         readOnly: true,
         outcome: 'waived_through',
         coverage: [{ criterionRef: 'EP-1/ST-1/AC-1', criterion: 'Checkout succeeds', status: 'covered', itemIds: ['item-1'] }],
-        coverageSummary: { coveredCount: 1, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 1, bead: 2, previousQa: 0, implementationDiff: 3 } },
+        coverageSummary: { coveredCount: 1, partiallyCoveredCount: 0, uncoveredCount: 0, notApplicableCount: 0, sourceItemCounts: { prd: 1, bead: 2, previousQa: 0, implementationDiff: 3 } },
         summary: {
           outcome: 'waived_through', createdFixBeadIds: ['QA-v1-1'], improvementTicketIds: ['APP-9'], waivedItemIds: ['item-1'], waivedItems: [{ itemId: 'item-1', reason: 'Unavailable device' }], durationMs: 65_000,
-          itemCounts: { pass: 0, fail: 0, waive: 1, improvement: 0, pending: 0 }, requiredItemCount: 1, optionalItemCount: 0, evidenceCount: 2, nextAction: 'integrate', coverage: { covered: 1, partiallyCovered: 0, uncovered: 0 }, modelCapability: null,
+          itemCounts: { pass: 0, fail: 0, waive: 1, improvement: 0, pending: 0 }, requiredItemCount: 1, optionalItemCount: 0, evidenceCount: 2, nextAction: 'integrate', coverage: { covered: 1, partiallyCovered: 0, uncovered: 0, notApplicable: 0 }, modelCapability: null,
         },
       },
       isLoading: false,
@@ -561,7 +626,7 @@ describe('ManualQAView recovery behavior', () => {
     expect(screen.getByText('implementation diff: 2')).toBeInTheDocument()
   })
 
-  it('allows a previous round to be opened while the next checklist generates', () => {
+  it('opens the newest artifact-backed round while the next checklist generates', () => {
     const ticket = makeTicket({
       status: 'GENERATING_QA_CHECKLIST',
       manualQa: {
@@ -577,7 +642,10 @@ describe('ManualQAView recovery behavior', () => {
         completedRounds: 1,
         latestOutcome: 'created_fixes',
         artifactAvailable: true,
-        versions: [{ version: 1, status: 'completed', outcome: 'created_fixes' }, { version: 2, status: 'generating' }],
+        versions: [
+          { version: 1, status: 'completed', outcome: 'created_fixes', artifactAvailable: true, phaseAttempt: 1 },
+          { version: 2, status: 'generating', artifactAvailable: false, phaseAttempt: 2 },
+        ],
       },
       isLoading: false,
       error: null,
@@ -590,10 +658,90 @@ describe('ManualQAView recovery behavior', () => {
     }))
 
     renderWithProviders(<ManualQAView ticket={ticket} />)
-    fireEvent.change(screen.getByLabelText('Open historical Manual QA round'), { target: { value: '1' } })
 
-    expect(screen.getByText('Manual QA · Round v1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual QA' })).toBeInTheDocument()
     expect(screen.getByText('Read only')).toBeInTheDocument()
+    expect(mocks.round).toHaveBeenLastCalledWith(ticket.id, 1, true)
+    expect(screen.queryByLabelText('Manual QA version')).not.toBeInTheDocument()
+  })
+
+  it('defaults to the newest artifact-backed round instead of a reserved active version', () => {
+    const ticket = makeTicket({
+      status: 'CODING',
+      manualQa: {
+        activeVersion: 2,
+        completedRoundCount: 1,
+        latestOutcome: 'created_fixes',
+        artifactAvailability: { checklist: true, results: true, coverage: true, summary: true },
+      },
+    })
+    mocks.index.mockReturnValue({
+      data: {
+        activeVersion: 2,
+        completedRounds: 1,
+        latestOutcome: 'created_fixes',
+        artifactAvailable: true,
+        versions: [
+          { version: 1, status: 'completed', outcome: 'created_fixes', artifactAvailable: true, phaseAttempt: 3 },
+          { version: 2, status: 'generating', artifactAvailable: false, phaseAttempt: 4 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    })
+    mocks.round.mockImplementation((_ticketId: string, selectedVersion: number) => ({
+      data: selectedVersion === 1 ? { ...round, readOnly: true, outcome: 'created_fixes' } : undefined,
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    }))
+
+    renderWithProviders(<ManualQAView ticket={ticket} readOnly />)
+
+    expect(mocks.round).toHaveBeenLastCalledWith(ticket.id, 1, true)
+    expect(screen.getByRole('heading', { name: 'Manual QA' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Manual QA version')).not.toBeInTheDocument()
+    expect(mocks.logSection.mock.calls.at(-1)?.[0]).toMatchObject({ phaseAttempt: 3, logMode: 'snapshot' })
+  })
+
+  it('shows the version selector only for multiple artifact-backed rounds and switches log snapshots with it', () => {
+    mocks.index.mockReturnValue({
+      data: {
+        activeVersion: 2,
+        completedRounds: 1,
+        latestOutcome: 'passed',
+        artifactAvailable: true,
+        versions: [
+          { version: 1, status: 'completed', outcome: 'created_fixes', artifactAvailable: true, phaseAttempt: 5 },
+          { version: 2, status: 'waiting', artifactAvailable: true, phaseAttempt: 6 },
+        ],
+      },
+      isLoading: false,
+      error: null,
+    })
+    mocks.round.mockImplementation((_ticketId: string, selectedVersion: number) => ({
+      data: { ...round, version: selectedVersion, checklist: { ...round.checklist!, version: selectedVersion }, readOnly: selectedVersion === 1 },
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    }))
+    const ticket = makeTicket({
+      status: 'WAITING_MANUAL_QA',
+      manualQa: {
+        activeVersion: 2,
+        completedRoundCount: 1,
+        latestOutcome: 'created_fixes',
+        artifactAvailability: { checklist: true, results: false, coverage: true, summary: false },
+      },
+    })
+    renderWithProviders(<ManualQAView ticket={ticket} />)
+
+    const selector = screen.getByLabelText('Manual QA version')
+    expect(selector).toHaveValue('2')
+    fireEvent.change(selector, { target: { value: '1' } })
+
+    expect(screen.getByRole('heading', { name: 'Manual QA' })).toBeInTheDocument()
+    expect(mocks.logSection.mock.calls.at(-1)?.[0]).toMatchObject({ phaseAttempt: 5, logMode: 'snapshot' })
   })
 
   it('does not query a reserved active version until generation hands it to Manual QA', () => {
@@ -612,13 +760,29 @@ describe('ManualQAView recovery behavior', () => {
       error: null,
       refetch: mocks.refetchRound,
     }))
+    mocks.index.mockReturnValue({
+      data: {
+        activeVersion: 1,
+        completedRounds: 0,
+        latestOutcome: null,
+        artifactAvailable: false,
+        versions: [{ version: 1, status: 'generating', artifactAvailable: false, phaseAttempt: 1 }],
+      },
+      isLoading: false,
+      error: null,
+    })
 
     const { rerender } = renderWithProviders(<ManualQAView ticket={generatingTicket} />)
-    expect(mocks.round).toHaveBeenLastCalledWith(generatingTicket.id, 1, false)
+    expect(mocks.round).toHaveBeenLastCalledWith(generatingTicket.id, null, false)
 
+    mocks.index.mockReturnValue({
+      data: { activeVersion: 1, completedRounds: 0, latestOutcome: null, artifactAvailable: true, versions: [{ version: 1, status: 'waiting', artifactAvailable: true, phaseAttempt: 1 }] },
+      isLoading: false,
+      error: null,
+    })
     rerender(<ManualQAView ticket={waitingTicket()} />)
     expect(mocks.round).toHaveBeenLastCalledWith(generatingTicket.id, 1, true)
-    expect(screen.getByText('Manual QA · Round v1')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Manual QA' })).toBeInTheDocument()
     expect(screen.queryByText('Manual QA version not found')).not.toBeInTheDocument()
   })
 })

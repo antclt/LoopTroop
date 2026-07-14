@@ -11,6 +11,7 @@ const criteria = [
 function output(ref = criteria[0]!.ref) {
   return `<MANUAL_QA_CHECKLIST>
 summary: Verify the saved form behavior
+not_applicable_prd_refs: []
 items:
   - lineage_id: save-form
     prior_item_ids: []
@@ -84,6 +85,95 @@ describe('Manual QA checklist parser and coverage', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error).toContain('invalid PRD criterion references')
+  })
+
+  it('classifies criteria that are not applicable to human Manual QA with a required reason', () => {
+    const notApplicable = output().replace(
+      'not_applicable_prd_refs: []',
+      [
+        'not_applicable_prd_refs:',
+        '  - ref: EPIC-1/US-1/AC-3',
+        '    reason: This internal invariant is fully exercised by automated tests and has no user-observable behavior.',
+      ].join('\n'),
+    )
+    const result = parseManualQaChecklistOutput(notApplicable, {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(computeManualQaCoverage(result.value, criteria)).toMatchObject({
+      notApplicableCount: 1,
+      uncoveredCount: 0,
+      entries: expect.arrayContaining([{
+        criterionRef: 'EPIC-1/US-1/AC-3',
+        criterion: 'Keyboard remains usable',
+        status: 'not_applicable',
+        itemIds: [],
+        reason: 'This internal invariant is fully exercised by automated tests and has no user-observable behavior.',
+      }]),
+    })
+  })
+
+  it('rejects duplicate not-applicable PRD references', () => {
+    const duplicate = output().replace(
+      'not_applicable_prd_refs: []',
+      [
+        'not_applicable_prd_refs:',
+        '  - ref: EPIC-1/US-1/AC-1',
+        '    reason: Automated only.',
+        '  - ref: EPIC-1/US-1/AC-1',
+        '    reason: Internal only.',
+      ].join('\n'),
+    )
+    const result = parseManualQaChecklistOutput(duplicate, {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toContain('Duplicate not-applicable')
+  })
+
+  it('rejects PRD criteria that are both checklist-covered and not applicable', () => {
+    const overlapping = output().replace(
+      'not_applicable_prd_refs: []',
+      [
+        'not_applicable_prd_refs:',
+        '  - ref: EPIC-1/US-1/AC-1',
+        '    reason: Automated only.',
+      ].join('\n'),
+    )
+    const result = parseManualQaChecklistOutput(overlapping, {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+    })
+
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.error).toContain('both checklist-covered and not applicable')
+  })
+
+  it('preserves unquoted hex colors in known Manual QA prose fields', () => {
+    const withHexColor = output().replace(
+      'Enter valid values and choose Save',
+      'Observe the saved border (expect #ff69b4)',
+    )
+    const result = parseManualQaChecklistOutput(withHexColor, {
+      ticketId: 'DEMO-1',
+      version: 1,
+      prdCriteria: criteria,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.value.items[0]?.actions).toContain('Observe the saved border (expect #ff69b4)')
+    expect(result.repairWarnings).toContain('Quoted hex-color text in Manual QA prose before YAML parsing.')
   })
 
   it('rejects the superseded source, severity, required, and recheck fields', () => {

@@ -2158,6 +2158,8 @@ function collectInlineKeyMatches(text: string): Array<{
       colonCursor += 1
     }
     if (text[colonCursor] !== ':') continue
+    const afterColon = text[colonCursor + 1]
+    if (afterColon !== undefined && !/\s/.test(afterColon)) continue
 
     let valueStart = colonCursor + 1
     while (valueStart < text.length && /\s/.test(text[valueStart]!)) {

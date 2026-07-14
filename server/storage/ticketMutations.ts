@@ -429,6 +429,7 @@ export function createManualQaImprovementTicket(input: {
   title: string
   description: string
   priority?: number
+  manualQaEnabled: boolean
 }): PublicTicket {
   if (!input.originId.trim() || !input.actionId.trim()) {
     throw new Error('Manual QA improvement creation requires origin and action IDs.')
@@ -438,7 +439,7 @@ export function createManualQaImprovementTicket(input: {
     title: input.title,
     description: input.description,
     priority: input.priority ?? 3,
-    manualQaOverride: null,
+    manualQaOverride: input.manualQaEnabled,
   })
   if (!parsedInput.success) throw new Error(`Invalid Manual QA improvement ticket: ${parsedInput.error.message}`)
   const project = getProjectContextById(input.projectId)
@@ -486,7 +487,7 @@ export function createManualQaImprovementTicket(input: {
         title: parsedInput.data.title,
         description: parsedInput.data.description ?? null,
         priority: parsedInput.data.priority ?? 3,
-        manualQaOverride: null,
+        manualQaOverride: parsedInput.data.manualQaOverride,
         status: 'DRAFT',
       }).returning().get() ?? null
       if (!inserted) throw new Error(`Failed to create Manual QA improvement ticket: ${externalId}`)

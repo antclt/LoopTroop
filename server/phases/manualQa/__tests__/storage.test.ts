@@ -14,12 +14,14 @@ import {
   isSafeRasterMediaType,
   persistManualQaChecklist,
   persistManualQaModelCapabilitySnapshot,
+  persistManualQaResults,
   persistManualQaSummary,
   persistManualQaEvidenceActionReceipt,
   readManualQaEvidenceActionReceipt,
   readManualQaEvidenceIndex,
   readManualQaEvents,
   readManualQaModelCapabilitySnapshot,
+  readManualQaResults,
   removeManualQaEvidence,
   reserveManualQaVersion,
   resolveActiveManualQaVersion,
@@ -58,6 +60,7 @@ function persistChecklist(ticketDir: string) {
     version: 1,
     generatedAt: new Date().toISOString(),
     summary: 'Verify the application behavior.',
+    notApplicablePrdRefs: [],
     items: [{
       id: 'qa-v1-001',
       lineageId: 'lineage-001',
@@ -112,7 +115,7 @@ describe('Manual QA canonical storage', () => {
       optionalItemCount: 0,
       evidenceCount: 0,
       nextAction: 'integrate',
-      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0 },
+      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0, notApplicable: 0 },
       modelCapability: null,
     })
     expect(resolveActiveManualQaVersion(ticketDir)).toBeNull()
@@ -139,11 +142,41 @@ describe('Manual QA canonical storage', () => {
       optionalItemCount: 0,
       evidenceCount: 0,
       nextAction: 'return_to_coding',
-      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0 },
+      coverage: { covered: 0, partiallyCovered: 0, uncovered: 0, notApplicable: 0 },
       modelCapability: null,
     })
 
     expect(resolveActiveManualQaVersion(ticketDir)).toBe(1)
+  })
+
+  it('round-trips application-owned YAML without treating colon-bearing action IDs as mappings', () => {
+    const ticketDir = root()
+    persistChecklist(ticketDir)
+    persistManualQaResults(ticketDir, {
+      schemaVersion: 1,
+      artifact: 'manual_qa_results',
+      ticketId: 'DEMO-1',
+      version: 1,
+      checklistHash: 'a'.repeat(64),
+      draftRevision: 1,
+      results: [{
+        itemId: 'qa-v1-001',
+        outcome: 'fail',
+        note: '',
+        observation: 'The border remained unchanged.',
+        reason: '',
+        evidenceIds: [],
+        links: [],
+      }],
+      improvements: [],
+      evidence: [],
+      updatedAt: '2026-07-13T00:00:00.000Z',
+      actionId: 'manual-qa-submit:817fd50e-4f77-4b6d-bc09-18c9c4d89328',
+      submittedAt: '2026-07-13T00:01:00.000Z',
+    })
+
+    expect(readManualQaResults(ticketDir, 1)?.actionId)
+      .toBe('manual-qa-submit:817fd50e-4f77-4b6d-bc09-18c9c4d89328')
   })
 
   it('streams evidence into an item-contained directory and makes action retries idempotent', async () => {

@@ -27,7 +27,7 @@ function summary(version: number, input: Partial<ManualQaSummary>): ManualQaSumm
     optionalItemCount: 0,
     evidenceCount: 0,
     nextAction: 'integrate',
-    coverage: { covered: 1, partiallyCovered: 0, uncovered: 0 },
+    coverage: { covered: 1, partiallyCovered: 0, uncovered: 0, notApplicable: 0 },
     modelCapability: null,
     ...input,
   }

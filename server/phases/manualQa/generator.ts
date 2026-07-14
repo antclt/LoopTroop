@@ -11,6 +11,11 @@ import { getLatestPhaseArtifact, getTicketByRef, getTicketPaths, insertPhaseArti
 import { runOpenCodePrompt } from '../../workflow/runOpenCodePrompt'
 import { adapter } from '../../workflow/phases/state'
 import {
+  createOpenCodeStreamState,
+  emitAiMilestone,
+  emitOpenCodePromptLog,
+  emitOpenCodeSessionLogs,
+  emitOpenCodeStreamEvent,
   resolveAiResponseRuntimeSettings,
   resolveStructuredRetryRuntimeSettings,
 } from '../../workflow/phases/helpers'
@@ -128,6 +133,9 @@ export function buildGenerationPrompt(input: {
     '',
     `Return exactly one <${MANUAL_QA_CHECKLIST_TAG}> tagged YAML document with this strict shape:`,
     'summary: string',
+    'not_applicable_prd_refs:',
+    '  - ref: <epic-id>/<story-id>/AC-<1-based-index>',
+    '    reason: why this criterion cannot be meaningfully verified by a human',
     'items:',
     '  - lineage_id: stable-kebab-id',
     '    prior_item_ids: [prior version item IDs]',
@@ -144,7 +152,9 @@ export function buildGenerationPrompt(input: {
     '    prd_refs:',
     '      - ref: <epic-id>/<story-id>/AC-<1-based-index>',
     '        coverage: full | partial',
-    'Do not add fields. Use only valid PRD criterion refs shown below. Coverage gaps are advisory; never invent refs.',
+    'Do not add fields. Use only valid PRD criterion refs shown below. Every criterion may be covered, not applicable to Manual QA with a concrete reason, or genuinely uncovered. Coverage gaps are advisory; never invent refs.',
+    'Use not_applicable_prd_refs only for automated, build-only, internal, or otherwise non-user-observable criteria. Never use it to conceal a missing human check.',
+    'Quote every YAML string containing #, : followed by a space, brackets, braces, or other YAML-sensitive punctuation so user-visible text is preserved exactly.',
     '',
     'First-round and newly introduced items must use recheck_state: new and have no prior_item_ids.',
     'Later-round rules: preserve relevant lineage/structure; failed/fixed or affected passed/waived items become pending_recheck; unaffected passed items may be previously_passed; omit unaffected waived items; add items only for newly affected user-facing behavior.',
@@ -237,8 +247,20 @@ export async function handleManualQaChecklistGeneration(
 ): Promise<void> {
   const paths = getTicketPaths(ticketId)
   if (!paths) throw new Error(`Ticket storage was not found: ${ticketId}`)
+  const phase = 'GENERATING_QA_CHECKLIST'
+  const phaseAttempt = resolvePhaseAttempt(ticketId, phase)
+  const milestone = (message: string, suffix: string) => emitAiMilestone(
+    ticketId,
+    context.externalId,
+    phase,
+    message,
+    suffix,
+    { source: 'system', phaseAttempt },
+  )
+  milestone('Preparing the next Manual QA checklist round.', 'started')
   const version = resolveManualQaGenerationVersion(paths.ticketDir)
   const reservation = reserveManualQaVersion(paths.ticketDir, ticketId, version)
+  milestone(`Reserved Manual QA v${version}.`, `v${version}:reserved`)
   persistGenerationReservationArtifact(ticketId, version, reservation.actionId)
   appendManualQaEvent(paths.ticketDir, {
     schemaVersion: 1,
@@ -251,7 +273,9 @@ export async function handleManualQaChecklistGeneration(
     data: {},
   })
 
+  milestone('Creating the clean checkpoint and workspace baseline.', `v${version}:checkpoint-started`)
   prepareManualQaCheckpoint(ticketId, version)
+  milestone('Checkpoint and workspace baseline are ready.', `v${version}:checkpoint-ready`)
 
   const restored = restoreManualQaGenerationArtifacts(paths.ticketDir, version)
   if (restored) {
@@ -270,6 +294,7 @@ export async function handleManualQaChecklistGeneration(
       createdAt: existingChecklist.generatedAt,
       data: { checklistHash },
     })
+    milestone(`Restored and validated the existing Manual QA v${version} checklist artifacts.`, `v${version}:restored`)
     sendEvent({ type: 'QA_CHECKLIST_READY' })
     return
   }
@@ -299,12 +324,19 @@ export async function handleManualQaChecklistGeneration(
     previousQa,
     diffMetadata: focusedDiffMetadata(paths.worktreePath, ticket.runtime.baseBranch),
   })
+  milestone('Assembled ticket, PRD, bead, test, prior-QA, and focused-diff context.', `v${version}:context-ready`)
   const timeoutMs = resolveAiResponseRuntimeSettings(context).timeoutMs
   const maxRetries = resolveStructuredRetryRuntimeSettings(context).structuredRetryCount
   let correction = ''
   let lastError = 'Manual QA checklist generation failed.'
 
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    let sessionId = ''
+    const streamState = createOpenCodeStreamState()
+    milestone(
+      attempt === 0 ? 'Generating the Manual QA checklist with read-only repository tools.' : `Retrying checklist structured output (attempt ${attempt + 1}).`,
+      `v${version}:model-attempt:${attempt + 1}`,
+    )
     const result = await runOpenCodePrompt({
       adapter,
       projectPath: paths.worktreePath,
@@ -323,7 +355,23 @@ export async function handleManualQaChecklistGeneration(
         step: attempt === 0 ? 'generate' : `structured-retry-${attempt}`,
         forceFresh: attempt > 0,
       },
+      onSessionCreated: (session) => { sessionId = session.id },
+      onPromptDispatched: (event) => emitOpenCodePromptLog(ticketId, context.externalId, phase, model, event),
+      onStreamEvent: (event) => {
+        if (sessionId) emitOpenCodeStreamEvent(ticketId, context.externalId, phase, model, sessionId, event, streamState)
+      },
     })
+    emitOpenCodeSessionLogs(
+      ticketId,
+      context.externalId,
+      phase,
+      model,
+      result.session.id,
+      'Manual QA checklist generation',
+      result.response,
+      result.messages,
+      streamState,
+    )
     const parsed = parseManualQaChecklistOutput(result.response, {
       ticketId: context.externalId,
       version,
@@ -347,6 +395,7 @@ export async function handleManualQaChecklistGeneration(
         createdAt: parsed.value.generatedAt,
         data: { checklistHash },
       })
+      milestone(`Validated and persisted Manual QA v${version} checklist and PRD coverage.`, `v${version}:persisted`)
       sendEvent({ type: 'QA_CHECKLIST_READY' })
       return
     }

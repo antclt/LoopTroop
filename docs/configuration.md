@@ -126,6 +126,8 @@ Resolution is deterministic:
 
 On Start, LoopTroop persists both `lockedManualQaEnabled` and `lockedManualQaSource` (`ticket`, `project`, or `profile`). Only Draft tickets may change their override, and later profile/project edits cannot change the route of a started ticket. Existing in-progress tickets that do not have a locked value behave as disabled.
 
+Manual QA Improvement drafts use the same explicit Enabled/Disabled choice for the new child ticket. Their collapsed Advanced control starts from the current effective project/profile value and is stored with the chosen P1–P5 priority, so child creation does not depend on a later configuration change.
+
 When the lock is disabled, `TESTS_PASSED` keeps the direct `RUNNING_FINAL_TEST → INTEGRATING_CHANGES` route. When enabled, it enters `GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA`; a submitted failure creates QA-fix beads and loops through Coding and fresh final tests before the next checklist version.
 
 ---

@@ -106,6 +106,8 @@ Checklist items receive app-assigned version IDs and stable cross-round `lineage
 
 For a `qa-fix` bead, typed `qaOrigin` is part of the narrow active-bead contract and stays separate from normal `bead_notes`. It contains the QA version/source items, observations, expected behavior, evidence references, locked model ID/image-capability result, and Manual-QA creation timestamp. If the locked model advertises image input, every detected image evidence file is added as an OpenCode SDK file part with no extra prompt-size cap; non-images remain references. Capability false/unavailable records `references_only`, while provider/context overflow follows normal bead error recovery and never silently drops images.
 
+QA-fix planning uses its own focused builder during Manual QA Submit. It supplies all failed merge groups plus ticket details, approved PRD, existing beads, current final-test report, checklist/results, evidence references, and targeted diff metadata. At least one successful read-only repository inspection tool call is mandatory so the model can discover files outside the original bead targets. The model returns complete candidate bead content; LoopTroop owns identifiers and lifecycle fields and persists the validated batch before any child creation.
+
 ## 6. Current Phase Allowlists
 
 The block below mirrors the current phase mapping in `server/opencode/contextBuilder.ts`.

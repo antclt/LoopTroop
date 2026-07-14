@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Improved Manual QA with reliable canonical parsing, version-consistent status/history UI, richer logs and artifacts, reasoned PRD applicability, configurable Improvements, and repository-aware full QA-fix beads.
 - Fixed application documentation links to consistently include the VitePress trailing slash base path, resolving public base URL mismatches when opening local docs from the header link, console summary, or documentation guides.
 - Fixed `CLEANING_ENV` failures by recursively ensuring write permissions before deleting cached read-only files (like Go module caches) and added a hover tooltip to the Cleanup status in the Ticket Details dialog showing the exact cleanup warnings.
 - Added a subtle top border to the collapsible log section when collapsed or expanded, ensuring visual separation from the content above it in the ticket workspace views.
@@ -28,6 +29,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added reasoned **Not applicable to Manual QA** PRD coverage, P1–P5 and Manual QA settings for Improvement tickets, and strict repository-aware `<MANUAL_QA_FIX_BEADS>` generation persisted before child creation.
 - Added cleanup warning messages display in a `<Tooltip>` on hover over the Cleanup status badge in the Ticket Details dialog.
 - Added `errors` array property to the cleanup payload in backend database queries and frontend ticket normalization.
 - Added a live voting-result tally to the ticket-view council card for `COUNCIL_VOTING_INTERVIEW` / `COUNCIL_VOTING_PRD` / `COUNCIL_VOTING_BEADS`: while a live voting attempt is selected, the header card's description line now appends ` · X/Y complete · Leading: <model> · <pts>` (switching to `Winner: <model> · <pts>` once a winner is selected), derived from the streamed vote companion artifact with no backend changes.
@@ -37,11 +39,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added profile-level Manual QA enablement (off by default), project/ticket `Enabled / Disabled` controls, Draft-only ticket editing, and frozen effective value/source fields at ticket Start.
 - Added a lazy Manual QA workspace with generation guidance, required/optional result validation, pass/fail/waive/improvement/pending controls, five-second revision-checked autosave, evidence management, failure merge groups, improvement review, drift recovery, skip, and read-only historical rounds.
 - Added contained streaming evidence storage with a 250 MiB per-file limit and no count/round cap, SHA-256/size verification, sanitized paths, symlink/traversal protection, atomic publication, safe-raster inline previews, attachment-only unsafe/unknown content, and HTTP(S)-only evidence links.
-- Added restart-idempotent Manual QA submission journaling that creates deterministic `qa-fix` beads and one Normal-priority Draft ticket per reviewed Improvement, copies selected evidence/provenance to child ticket storage, and resumes partial creation without duplicates.
+- Added restart-idempotent Manual QA submission journaling that persists validated `qa-fix` bead candidates before application-owned bead creation and creates one priority/configured Draft ticket per reviewed Improvement without duplicates.
 - Added loop-aware public ticket projections (`visitedStatuses`, monotonic `workflowRevision`, and Manual QA round/outcome/artifact availability) plus Manual QA REST routes for rounds, evidence, submit/skip, and workspace-drift include/discard decisions.
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Changed Manual QA status titles to remain version-free and show the established selector only for multiple checklist-backed rounds; Preparing now reports live milestones and presents structured/Raw artifacts, while Manual QA logs default collapsed and follow the selected version.
+- Changed failed Manual QA Submit to require focused read-only repository inspection and full normal-bead candidates. Model/tool/parser failure now creates no children, enters recoverable Blocked Error, and resumes the stored submission action on Retry.
 - Changed Manual QA items to start with a field-free Pending choice, made waiver reasons optional, collapsed advisory PRD coverage and Improvement context/previews by default, and moved Improvement editing inline with the checklist item.
 - Reworked extra evidence into matching Add link/Add files actions, delayed Link and Details fields until requested, limited the initial evidence list to five entries, and added Show more/Show less disclosure.
 - Replaced the separate Manual QA Save action with automatic saving, a relative last-save indicator and exact hover timestamp, while retaining Submit as the only primary completion action.
@@ -56,6 +60,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed canonical Manual QA YAML being corrupted by model-output repairs when scalar identifiers contained colons, and preserved YAML-sensitive checklist prose such as hex-color values through safe quoting/repair.
 - Fixed recursive deletion permission errors (`EACCES`) during the `CLEANING_ENV` phase by recursively making target files and folders writable before deletion.
 - Fixed the collapsed log element lacking visual separation in ticket workspace views by adding a subtle top border (`border-t border-border/40`) to `CollapsiblePhaseLogSection` by default when there is no active resize handle, and removed the duplicate top border from the parent container in `DraftView.tsx`.
 - Fixed Manual QA submission races by waiting for active evidence uploads/removals, retaining valid durably stored files, and safely dropping dangling optional references before Pass or Waive completes. Any remaining file-integrity error now identifies the checklist item number/title and human filename instead of exposing an internal evidence ID.
@@ -77,6 +82,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
+- Updated Manual QA status Details and reference guides for version-free titles, structured history, activity/log/artifact presentation, four-state PRD coverage, configurable Improvements, and failure-safe AI-planned QA beads. Existing testing tickets/artifacts are intentionally not migrated.
 - Updated the Manual QA status details and reference guides for Pending-first results, optional waiver reasons, collapsed disclosures, inline Improvements, evidence controls, merge-group validation, autosave status, and lossless Skip semantics.
 - Documented Manual QA configuration/inheritance, strict checklist/result contracts, Submit-versus-Skip artifact semantics, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, context-rich Improvements, self-contained QA origins, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.
 - Added **Skip Reason Auditability** to the [High Priority roadmap](roadmap.md#high-priority): users can provide an optional reason when skipping any step, prompt, or approval gate, and the reason is persisted in the relevant ticket artifact.

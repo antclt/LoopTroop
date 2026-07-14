@@ -340,6 +340,7 @@ SQLite is not the whole system. Some ticket state is intentionally filesystem-ba
 | `.ticket/manual-qa/vN/checklist.yaml` | Immutable generated checklist for one round | Canonical versioned artifact |
 | `.ticket/manual-qa/vN/results.yaml` and `summary.yaml` | Submitted results and round outcome | Results exist for Submit; summary exists for every completed round |
 | `.ticket/manual-qa/vN/coverage.yaml` | Code-computed PRD criterion coverage | Advisory canonical report |
+| `.ticket/manual-qa/vN/fix-beads.yaml` | Complete validated AI-planned QA-fix bead candidates | Written before any child ticket/bead side effect |
 | `.ticket/manual-qa/vN/model-capability.json` | Immutable locked-model image capability snapshot | Captured for evidence delivery auditing |
 | `.ticket/manual-qa/vN/evidence/**` | Contained evidence binaries plus metadata index | Disk-only binaries; database/UI state stores refs only |
 | `.ticket/manual-qa/generation-reservation-vN.json` | Restart-safe version reservation | Reused after generation retry/restart |

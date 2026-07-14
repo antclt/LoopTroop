@@ -7,6 +7,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { LoadingText } from '@/components/ui/LoadingText'
 import type { Ticket } from '@/hooks/useTickets'
 import { useSaveTicketUIState, useTicketUIState } from '@/hooks/useTickets'
+import { useProjects } from '@/hooks/useProjects'
+import { useProfile } from '@/hooks/useProfile'
 import {
   manualQaEvidenceUrl,
   newManualQaActionId,
@@ -26,6 +28,9 @@ import {
 import { cn } from '@/lib/utils'
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
 import { CollapsibleSection } from '@/components/workspace/ArtifactContentViewer'
+import { CollapsiblePhaseLogSection } from '@/components/workspace/CollapsiblePhaseLogSection'
+import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
+import { resolveManualQaSettingLabel } from '@/lib/manualQaSetting'
 import { buildCanonicalManualQaDraft, buildDefaultManualQaImprovementContext, composeManualQaImprovementPreview, validateManualQaItem, validateManualQaMergeGroups } from '@/lib/manualQaDraft'
 
 interface ManualQAViewProps {
@@ -136,7 +141,7 @@ function ManualQaRoundSummary({ summary }: { summary: ManualQaSummary }) {
           <dt className="text-muted-foreground">Results</dt><dd>{counts.pass} passed · {counts.fail} failed · {counts.waive} waived · {counts.improvement} improvements · {counts.pending} pending</dd>
           <dt className="text-muted-foreground">Evidence</dt><dd>{summary.evidenceCount} file{summary.evidenceCount === 1 ? '' : 's'}</dd>
           <dt className="text-muted-foreground">Duration</dt><dd>{durationLabel(summary.durationMs)}</dd>
-          <dt className="text-muted-foreground">Coverage</dt><dd>{summary.coverage.covered} full · {summary.coverage.partiallyCovered} partial · {summary.coverage.uncovered} uncovered</dd>
+          <dt className="text-muted-foreground">Coverage</dt><dd>{summary.coverage.covered} full · {summary.coverage.partiallyCovered} partial · {summary.coverage.uncovered} uncovered · {summary.coverage.notApplicable} not applicable</dd>
           <dt className="text-muted-foreground">Next action</dt><dd>{summary.nextAction?.replace(/_/g, ' ') ?? 'Recorded'}</dd>
           {summary.startedAt && <><dt className="text-muted-foreground">Started</dt><dd>{new Date(summary.startedAt).toLocaleString()}</dd></>}
           {summary.completedAt && <><dt className="text-muted-foreground">Completed</dt><dd>{new Date(summary.completedAt).toLocaleString()}</dd></>}
@@ -152,10 +157,7 @@ function ManualQaRoundSummary({ summary }: { summary: ManualQaSummary }) {
   )
 }
 
-function ManualQaGeneration({ versions, onSelectVersion }: {
-  versions: Array<{ version: number; outcome?: string | null; status: string }>
-  onSelectVersion: (version: number) => void
-}) {
+function ManualQaGeneration() {
   return (
     <div className="flex h-full items-center justify-center p-6">
       <Card className="max-w-xl">
@@ -167,20 +169,6 @@ function ManualQaGeneration({ versions, onSelectVersion }: {
               LoopTroop is generating user-run verification steps from the approved ticket, final tests, and focused implementation evidence. No action is needed, and LoopTroop will not start or control your application.
             </p>
           </div>
-          {versions.length > 0 && (
-            <div className="w-full border-t border-border pt-4">
-              <p className="mb-2 text-xs text-muted-foreground">Previous rounds remain available while the next checklist is generated.</p>
-              <select
-                aria-label="Open historical Manual QA round"
-                defaultValue=""
-                onChange={(event) => event.target.value && onSelectVersion(Number(event.target.value))}
-                className="w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs"
-              >
-                <option value="" disabled>Open a previous round…</option>
-                {versions.map((entry) => <option key={entry.version} value={entry.version}>Round v{entry.version} · {entry.outcome ?? entry.status}</option>)}
-              </select>
-            </div>
-          )}
         </CardContent>
       </Card>
     </div>
@@ -190,13 +178,22 @@ function ManualQaGeneration({ versions, onSelectVersion }: {
 export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const isGenerating = ticket.status === 'GENERATING_QA_CHECKLIST'
   const { data: index, isLoading: indexLoading, error: indexError } = useManualQaIndex(ticket.id)
+  const { data: projects = [] } = useProjects()
+  const { data: profile } = useProfile()
   const projectedVersion = ticket.manualQa?.activeVersion ?? null
   const [selectedVersion, setSelectedVersion] = useState<number | null>(null)
   const activeVersion = index?.activeVersion ?? projectedVersion
-  const version = selectedVersion ?? activeVersion ?? index?.versions.at(-1)?.version ?? null
+  const artifactVersions = useMemo(
+    () => (index?.versions ?? []).filter((entry) => entry.artifactAvailable).sort((left, right) => left.version - right.version),
+    [index?.versions],
+  )
+  const activeArtifactVersion = artifactVersions.find((entry) => entry.version === activeVersion)?.version
+    ?? (!index && ticket.status === 'WAITING_MANUAL_QA' && ticket.manualQa?.artifactAvailability.checklist ? activeVersion : null)
+  const version = selectedVersion ?? activeArtifactVersion ?? artifactVersions.at(-1)?.version ?? null
+  const versionIsArtifactBacked = version !== null && artifactVersions.some((entry) => entry.version === version)
   // A generation reservation exposes its version before checklist.yaml exists.
   // Do not cache that expected pre-artifact 404; historical rounds remain selectable.
-  const roundQuery = useManualQaRound(ticket.id, version, !isGenerating || selectedVersion !== null)
+  const roundQuery = useManualQaRound(ticket.id, version, !isGenerating || selectedVersion !== null || versionIsArtifactBacked)
   const { data: round, isLoading: roundLoading, error: roundError } = roundQuery
   const scope = version === null ? 'manual_qa_draft:none' : `manual_qa_draft:v${version}`
   const uiState = useTicketUIState<ManualQaDraft>(ticket.id, scope, version !== null)
@@ -233,6 +230,14 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const mutationIdentitiesRef = useRef(new Map<string, string>())
   const evidenceIdsRef = useRef(new Map<string, string>())
   draftRef.current = draft
+
+  const selectedProject = projects.find((project) => project.id === ticket.projectId)
+  const defaultImprovementManualQaEnabled = resolveManualQaSettingLabel(
+    null,
+    selectedProject?.manualQaOverride ?? null,
+    profile?.manualQaEnabled ?? false,
+  ).enabled
+  const selectedVersionEntry = artifactVersions.find((entry) => entry.version === version)
 
   const historical = Boolean(version !== null && activeVersion !== null && version !== activeVersion)
     || round?.readOnly === true
@@ -611,8 +616,8 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     }
   }
 
-  if (indexLoading || (isGenerating && selectedVersion === null) || (version !== null && roundLoading && !round)) {
-    return <ManualQaGeneration versions={(index?.versions ?? []).filter((entry) => entry.version !== activeVersion)} onSelectVersion={setSelectedVersion} />
+  if (indexLoading || (isGenerating && artifactVersions.length === 0 && selectedVersion === null) || (version !== null && roundLoading && !round)) {
+    return <ManualQaGeneration />
   }
 
   const error = indexError ?? roundError
@@ -635,7 +640,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
           <div>
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold">Manual QA · Round v{version}</h3>
+              <h3 className="font-semibold">Manual QA</h3>
               {historical && <Badge variant="secondary">Read only</Badge>}
               {round.outcome && <Badge variant="outline">{round.outcome.replace(/_/g, ' ')}</Badge>}
             </div>
@@ -644,20 +649,17 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {(isGenerating || (index?.versions.length ?? 0) > 1) && (
+            {artifactVersions.length > 1 && (
               <select
                 aria-label="Manual QA version"
                 value={version}
                 onChange={(event) => {
                   const selected = Number(event.target.value)
-                  setSelectedVersion(isGenerating && selected === activeVersion ? null : selected)
+                  setSelectedVersion(selected)
                 }}
                 className="rounded-md border border-input bg-background px-2 py-1.5 text-xs"
               >
-                {isGenerating && activeVersion !== null && !index?.versions.some((entry) => entry.version === activeVersion) && (
-                  <option value={activeVersion}>Round v{activeVersion} · generating</option>
-                )}
-                {index?.versions.map((entry) => <option key={entry.version} value={entry.version}>Round v{entry.version} · {entry.outcome ?? entry.status}</option>)}
+                {artifactVersions.map((entry) => <option key={entry.version} value={entry.version}>Round v{entry.version} · {entry.outcome ?? entry.status}</option>)}
               </select>
             )}
             {editable && saveState === 'conflict' && (
@@ -691,7 +693,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             <CollapsibleSection title={<span>PRD coverage <Badge variant="outline" className="ml-2">Advisory</Badge></span>} scrollOnOpen={false}>
               <div className="space-y-3 pt-1">
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>{round.coverageSummary.coveredCount} covered</span><span>·</span><span>{round.coverageSummary.partiallyCoveredCount} partial</span><span>·</span><span>{round.coverageSummary.uncoveredCount} uncovered</span>
+                  <span>{round.coverageSummary.coveredCount} covered</span><span>·</span><span>{round.coverageSummary.partiallyCoveredCount} partial</span><span>·</span><span>{round.coverageSummary.uncoveredCount} uncovered</span><span>·</span><span>{round.coverageSummary.notApplicableCount} not applicable</span>
                 </div>
                 <div className="flex flex-wrap gap-1">
                   {Object.entries(round.coverageSummary.sourceItemCounts).map(([source, count]) => <Badge key={source} variant="secondary" className="text-[10px]">{source.replace(/([A-Z])/g, ' $1').toLowerCase()}: {count}</Badge>)}
@@ -699,8 +701,9 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {round.coverage.map((entry) => (
                     <div key={entry.criterionRef} className="rounded border border-border px-2 py-1.5 text-xs">
-                      <div className="flex items-center justify-between gap-2"><code>{entry.criterionRef}</code><Badge variant={entry.status === 'covered' ? 'default' : entry.status === 'partially_covered' ? 'secondary' : 'outline'}>{entry.status.replace('_', ' ')}</Badge></div>
+                      <div className="flex items-center justify-between gap-2"><code>{entry.criterionRef}</code><Badge variant={entry.status === 'covered' ? 'default' : entry.status === 'partially_covered' ? 'secondary' : 'outline'}>{entry.status === 'not_applicable' ? 'Not applicable to Manual QA' : entry.status.replace('_', ' ')}</Badge></div>
                       {entry.criterion && <p className="mt-1 text-muted-foreground">{entry.criterion}</p>}
+                      {entry.status === 'not_applicable' && entry.reason && <p className="mt-1 text-muted-foreground"><span className="font-medium text-foreground">Reason:</span> {entry.reason}</p>}
                     </div>
                   ))}
                 </div>
@@ -714,7 +717,12 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
             const itemEvidence = evidence.filter((file) => file.itemId === item.id)
             const visibleEvidence = expandedEvidenceItems.has(item.id) ? itemEvidence : itemEvidence.slice(0, 5)
             const pendingUploads = (pendingEvidenceUploads[item.id] ?? []).filter((entry) => entry.version === version)
-            const improvement = result.improvement ?? { title: '', description: '' }
+            const improvement = result.improvement ?? {
+              title: '',
+              description: '',
+              priority: 3,
+              manualQaEnabled: defaultImprovementManualQaEnabled,
+            }
             const preview = result.status === 'improvement'
               ? composeManualQaImprovementPreview(item, { ...result, improvement })
               : null
@@ -747,7 +755,19 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                     <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Result</h5>
                     <div className="flex flex-wrap gap-2">
                       {RESULT_OPTIONS.map((option) => (
-                        <button key={option.value} type="button" data-selected={result.status === option.value} disabled={!editable} onClick={() => updateResult(item.id, { status: option.value })} className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}>{option.label}</button>
+                        <button
+                          key={option.value}
+                          type="button"
+                          data-selected={result.status === option.value}
+                          disabled={!editable}
+                          onClick={() => updateResult(item.id, {
+                            status: option.value,
+                            ...(option.value === 'improvement' && !result.improvement ? { improvement } : {}),
+                          })}
+                          className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}
+                        >
+                          {option.label}
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -756,7 +776,29 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                   {result.status === 'fail' && <div><label className="text-xs font-medium">Observed behavior <span className="text-destructive">*</span></label><textarea disabled={!editable} value={result.observation ?? ''} onChange={(event) => updateResult(item.id, { observation: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="What happened, and how did it differ from the expected result?" /><div className="mt-3"><p className="text-xs font-medium">Merge with other QA items <span className="font-normal text-muted-foreground">(optional)</span></p><p className="mt-1 text-xs text-muted-foreground">Select related items that should create one fix bead. Every selected item must be marked Fail before Submit.</p><div className="mt-2 flex flex-wrap gap-2">{items.filter((candidate) => candidate.id !== item.id).map((candidate) => { const candidateIndex = items.findIndex((entry) => entry.id === candidate.id); const selected = (result.mergeWithItemIds ?? []).includes(candidate.id); return <button key={candidate.id} type="button" data-selected={selected} disabled={!editable} onClick={() => toggleMergeItem(item.id, candidate.id)} className="rounded-md border border-input px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors data-[selected=true]:border-red-500 data-[selected=true]:bg-red-500/10 data-[selected=true]:text-foreground disabled:opacity-70">{candidateIndex + 1}. {candidate.title || candidate.behavior}</button> })}</div></div></div>}
                   {result.status === 'waive' && <div><label className="text-xs font-medium">Waiver reason <span className="font-normal text-muted-foreground">(optional)</span></label><textarea disabled={!editable} value={result.waiverReason ?? ''} onChange={(event) => updateResult(item.id, { waiverReason: event.target.value })} className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
                   {result.status === 'pass' && <div><label className="text-xs font-medium">Notes <span className="font-normal text-muted-foreground">(optional)</span></label><textarea disabled={!editable} value={result.note ?? ''} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
-                  {result.status === 'improvement' && preview && <div className="space-y-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3"><p className="text-xs text-muted-foreground">Submitting creates one Normal-priority Draft ticket in this project.</p><div><label className="text-xs font-medium">Title <span className="text-destructive">*</span></label><input value={improvement.title} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, title: event.target.value } })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><div><label className="text-xs font-medium">Description <span className="text-destructive">*</span></label><textarea value={improvement.description} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><CollapsibleSection title="Manual QA context" scrollOnOpen={false} className="bg-background"><p className="mb-2 text-muted-foreground">This context is appended to the ticket description. Edit it only when the generated details need correction.</p><textarea value={editableContext} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, contextOverride: event.target.value } })} className="min-h-48 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" /></CollapsibleSection><div><label className="text-xs font-medium">Improvement note <span className="font-normal text-muted-foreground">(optional)</span></label><textarea value={result.note ?? ''} disabled={!editable} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><CollapsibleSection title="Final description preview" scrollOnOpen={false} className="bg-background"><pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-muted-foreground">{preview.description}</pre><p className={cn('mt-2', preview.omittedCharacters > 0 ? 'text-amber-600' : 'text-muted-foreground')}>{preview.requestedLength.toLocaleString()} / 10,000 projected characters{preview.omittedCharacters > 0 ? ` — ${preview.omittedCharacters.toLocaleString()} lower-priority characters will be omitted and reported.` : ''}</p></CollapsibleSection><CollapsibleSection title="Evidence and provenance preview" scrollOnOpen={false} className="bg-background"><p className="text-muted-foreground">This structured audit metadata is stored outside future implementation prompt context.</p><dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1"><dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{ticket.externalId}</dd><dt className="text-muted-foreground">Project</dt><dd>{ticket.projectId}</dd><dt className="text-muted-foreground">Round</dt><dd>v{version}</dd><dt className="text-muted-foreground">Checklist item</dt><dd>{item.title || item.behavior} <code className="text-[10px]">{item.id}</code></dd><dt className="text-muted-foreground">Lineage</dt><dd className="font-mono">{item.lineageId}</dd><dt className="text-muted-foreground">Result type</dt><dd>improvement</dd><dt className="text-muted-foreground">PRD refs</dt><dd>{item.prdRefs.map((reference) => reference.ref).join(', ') || 'None'}</dd><dt className="text-muted-foreground">Bead refs</dt><dd>{item.beadRefs?.join(', ') || 'None'}</dd><dt className="text-muted-foreground">Evidence plan</dt><dd>{evidenceFiles.length} uploaded file{evidenceFiles.length === 1 ? '' : 's'} and {result.links?.length ?? 0} HTTP link{(result.links?.length ?? 0) === 1 ? '' : 's'}</dd></dl></CollapsibleSection></div>}
+                  {result.status === 'improvement' && preview && (
+                    <div className="space-y-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3">
+                      <p className="text-xs text-muted-foreground">Submitting creates one Draft ticket in this project with the selected priority and Manual QA setting.</p>
+                      <div><label className="text-xs font-medium">Title <span className="text-destructive">*</span></label><input value={improvement.title} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, title: event.target.value } })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
+                      <div><label className="text-xs font-medium">Description <span className="text-destructive">*</span></label><textarea value={improvement.description} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
+                      <div>
+                        <label htmlFor={`manual-qa-improvement-priority-${item.id}`} className="text-xs font-medium">Priority</label>
+                        <select id={`manual-qa-improvement-priority-${item.id}`} value={improvement.priority} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, priority: Number(event.target.value) } })} className="mt-1 w-48 rounded-md border border-input bg-background px-3 py-2 text-sm">
+                          <option value={1}>1 — Very High</option><option value={2}>2 — High</option><option value={3}>3 — Normal</option><option value={4}>4 — Low</option><option value={5}>5 — Very Low</option>
+                        </select>
+                      </div>
+                      <CollapsibleSection title="Advanced" scrollOnOpen={false} className="bg-background">
+                        <div className="flex items-center justify-between gap-3">
+                          <div><p className="text-xs font-medium">Manual QA checkpoint</p><p className="mt-1 text-xs text-muted-foreground">Choose whether this follow-up ticket pauses for user verification.</p></div>
+                          <ManualQaSetting idPrefix={`manual-qa-improvement-${item.id}`} value={improvement.manualQaEnabled} onChange={(manualQaEnabled) => updateResult(item.id, { improvement: { ...improvement, manualQaEnabled: manualQaEnabled ?? false } })} inheritedEnabled={defaultImprovementManualQaEnabled} disabled={!editable} compact />
+                        </div>
+                      </CollapsibleSection>
+                      <CollapsibleSection title="Manual QA context" scrollOnOpen={false} className="bg-background"><p className="mb-2 text-muted-foreground">This context is appended to the ticket description. Edit it only when the generated details need correction.</p><textarea value={editableContext} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, contextOverride: event.target.value } })} className="min-h-48 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" /></CollapsibleSection>
+                      <div><label className="text-xs font-medium">Improvement note <span className="font-normal text-muted-foreground">(optional)</span></label><textarea value={result.note ?? ''} disabled={!editable} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
+                      <CollapsibleSection title="Final description preview" scrollOnOpen={false} className="bg-background"><pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-muted-foreground">{preview.description}</pre><p className={cn('mt-2', preview.omittedCharacters > 0 ? 'text-amber-600' : 'text-muted-foreground')}>{preview.requestedLength.toLocaleString()} / 10,000 projected characters{preview.omittedCharacters > 0 ? ` — ${preview.omittedCharacters.toLocaleString()} lower-priority characters will be omitted and reported.` : ''}</p></CollapsibleSection>
+                      <CollapsibleSection title="Evidence and provenance preview" scrollOnOpen={false} className="bg-background"><p className="text-muted-foreground">This structured audit metadata is stored outside future implementation prompt context.</p><dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1"><dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{ticket.externalId}</dd><dt className="text-muted-foreground">Project</dt><dd>{ticket.projectId}</dd><dt className="text-muted-foreground">Round</dt><dd>v{version}</dd><dt className="text-muted-foreground">Checklist item</dt><dd>{item.title || item.behavior} <code className="text-[10px]">{item.id}</code></dd><dt className="text-muted-foreground">Lineage</dt><dd className="font-mono">{item.lineageId}</dd><dt className="text-muted-foreground">Result type</dt><dd>improvement</dd><dt className="text-muted-foreground">PRD refs</dt><dd>{item.prdRefs.map((reference) => reference.ref).join(', ') || 'None'}</dd><dt className="text-muted-foreground">Bead refs</dt><dd>{item.beadRefs?.join(', ') || 'None'}</dd><dt className="text-muted-foreground">Evidence plan</dt><dd>{evidenceFiles.length} uploaded file{evidenceFiles.length === 1 ? '' : 's'} and {result.links?.length ?? 0} HTTP link{(result.links?.length ?? 0) === 1 ? '' : 's'}</dd></dl></CollapsibleSection>
+                    </div>
+                  )}
 
                   {result.status !== 'pending' && <section>
                     <div className="flex flex-wrap items-center justify-between gap-2"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h5>{editable && <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setOpenLinkEditors((current) => { const next = new Set(current); next.add(item.id); return next })}><Link2 className="mr-1 h-3 w-3" />Add link</Button><EvidenceFilePicker itemId={item.id} onFiles={async (files) => {
@@ -779,6 +821,16 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
           })}
         </div>
       </div>
+
+      <CollapsiblePhaseLogSection
+        phase="WAITING_MANUAL_QA"
+        ticket={ticket}
+        phaseAttempt={selectedVersionEntry?.phaseAttempt ?? undefined}
+        logMode={historical ? 'snapshot' : 'live'}
+        defaultExpanded={false}
+        variant="bottom"
+        className="px-4 pb-2"
+      />
 
       {!historical && (
         <div className="shrink-0 border-t border-border bg-background p-3">
