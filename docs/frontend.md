@@ -14,7 +14,7 @@ The UI is data-driven from:
 
 In development, same-origin `/api/*` calls go through the Vite proxy. When `npm run dev` generates or receives `LOOPTROOP_API_TOKEN`, the proxy supplies the token to the backend server-side so the browser bundle does not contain the secret.
 
-The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by two more probes spaced 1.5 seconds apart before the banner appears. When reconnecting or post-initial loading banners remain visible for at least five seconds and then clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so real backend gaps recover the same way as a manual refresh without turning brief warning flickers into page reloads.
+The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by two more probes spaced 1.5 seconds apart before the banner appears. When reconnecting or post-initial loading banners remain visible for at least five seconds and then clear, the frontend schedules one guarded full-page reload, throttled by `sessionStorage` for 10 seconds, so real backend gaps recover the same way as a manual refresh without turning brief warning flickers into page reloads. Recovery episodes interrupted by a hidden tab or an unfocused window are excluded: time spent in a native file picker, another application, or another tab must not turn a successful upload or edit into a recovery reload when focus returns.
 
 Most modal routes and workspace views are also lazy-loaded through `lazyWithChunkReload()`. Recoverable chunk-load failures trigger at most one full-page reload per surface, using `sessionStorage` markers so the browser does not loop forever on a broken import.
 
@@ -48,7 +48,7 @@ Most modal routes and workspace views are also lazy-loaded through `lazyWithChun
 - reconciles the polled ticket snapshot with live `state_change` events so the workspace can advance immediately while the REST snapshot catches up
 - tracks selected phase, selected error occurrence, archived attempt review, full-log mode, and the `Back to live` flow
 - forwards workspace navigation/focus events so approval panes can jump directly to a requested anchor
-- owns loading and reconnecting banners plus the guarded auto-reload path for sustained ticket or stream recovery
+- owns loading and reconnecting banners plus the guarded auto-reload path for sustained ticket-data recovery; stream reconnection recovers through targeted query invalidation without reloading the workspace
 
 ## 2. Active Workspace Routing
 
@@ -155,7 +155,7 @@ The timeline is visit-aware rather than solely status-index based. Ticket payloa
 | `useStartupStatus()` | Startup storage/runtime state for restore notices and WSL warnings |
 | `useOpenCodeModels()` / `useAllOpenCodeModels()` | Connected-model list versus full provider catalog |
 | `useBackendHealth()` | Global backend-reachability banner with confirmation probes to avoid startup false positives |
-| `useRecoveryAutoReload(source, active)` | Guarded full-page recovery reload after a sustained reconnect/loading episode clears |
+| `useRecoveryAutoReload(source, active)` | Guarded full-page recovery reload after a sustained, continuously attended reconnect/loading episode clears; browser blur and hidden-tab intervals suppress the reload |
 
 ### Live Updates
 
@@ -166,6 +166,7 @@ Current behavior:
 - connects to `/api/stream`
 - persists the latest SSE event id per ticket in browser storage
 - sends `ticketId` and `lastEventId` on reconnect when available
+- refreshes ticket, artifact, Manual QA, interview, bead, and log queries after a stream gap instead of full-page reloading the active workspace
 - waits for the dev backend readiness guard before opening the stream during local Vite development
 - uses the same-origin Vite proxy during development, which injects token auth server-side; outside that path, `apiToken` query auth is only valid for `/api/stream`
 - listens for `state_change`, `progress`, `log`, `app_error`, `bead_complete`, `needs_input`, and `artifact_change`

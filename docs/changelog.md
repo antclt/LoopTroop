@@ -49,7 +49,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
-- Fixed successful Manual QA file uploads remaining visually stuck until a page refresh by publishing the acknowledged evidence into the active checklist item immediately.
+- Fixed successful Manual QA file uploads remaining visually stuck until a page refresh by publishing acknowledged evidence into the active checklist item immediately and preventing native file-picker focus changes from being misclassified as a recovered outage that requires a full-page reload.
 - Fixed the first Manual QA handoff showing `Manual QA version not found` until refresh by deferring reserved-version reads until the checklist is handed off and reconciling Manual QA queries on artifact, status, and stream-recovery events; Preparing Manual QA now exposes the exact checklist as a clickable artifact beside its status and log instead of duplicating the interactive Manual QA screen.
 - Fixed the Configuration model-refresh icon to spin and remain disabled for the full provider/model refresh instead of stopping before the refresh request completes.
 - Fixed stale provider/model discovery after OpenCode credentials change: Configuration reload now disposes only LoopTroop's catalog/root OpenCode instance before refetching the catalog, while leaving `opencode serve` and active ticket worktree instances running.

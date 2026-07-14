@@ -346,7 +346,7 @@ describe('TicketDashboard', () => {
     })
   })
 
-  it('shows a reconnect badge when live updates are reconnecting', async () => {
+  it('shows reconnect feedback without arming a destructive reload', async () => {
     const initialTicket = makeTicket({ status: 'CODING', id: selectedTicketId })
     mockSSEState.connectionState = 'reconnecting'
 
@@ -373,7 +373,7 @@ describe('TicketDashboard', () => {
       screen.getByText('LoopTroop is refetching the latest ticket state and will reconnect automatically.'),
     ).toBeInTheDocument()
     expect(screen.getByTestId('live-updates-reconnecting-overlay')).toBeInTheDocument()
-    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('live-updates-reconnect', true)
+    expect(useRecoveryAutoReloadMock).not.toHaveBeenCalledWith('live-updates-reconnect', true)
 
     mockSSEState.connectionState = 'connected'
     rerender(renderDashboardElement())
@@ -381,7 +381,7 @@ describe('TicketDashboard', () => {
     await waitFor(() => {
       expect(useRecoveryAutoReloadMock).toHaveBeenLastCalledWith(`ticket-loading:${selectedTicketId}`, false)
     })
-    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('live-updates-reconnect', false)
+    expect(useRecoveryAutoReloadMock).not.toHaveBeenCalledWith('live-updates-reconnect', false)
   })
 
   it('arms ticket loading recovery only after the selected ticket rendered once', async () => {

@@ -214,7 +214,6 @@ export function TicketDashboard() {
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false)
   const [liveUpdatesState, setLiveUpdatesState] = useState<SSEConnectionState>('connecting')
   const isRecoverableTicketLoading = Boolean(ticketId && !ticket && renderedTicketIdsRef.current.has(ticketId))
-  useRecoveryAutoReload('live-updates-reconnect', ticketId !== null && liveUpdatesState === 'reconnecting')
   useRecoveryAutoReload(`ticket-loading:${ticketId ?? 'none'}`, isRecoverableTicketLoading)
 
   useEffect(() => {
