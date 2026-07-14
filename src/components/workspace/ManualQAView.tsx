@@ -229,6 +229,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const operationActionIdsRef = useRef(new Map<string, string>())
   const mutationIdentitiesRef = useRef(new Map<string, string>())
   const evidenceIdsRef = useRef(new Map<string, string>())
+  const containerRef = useRef<HTMLDivElement>(null)
   draftRef.current = draft
 
   const selectedProject = projects.find((project) => project.id === ticket.projectId)
@@ -636,7 +637,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div ref={containerRef} className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 border-b border-border bg-background px-4 py-3">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -833,6 +834,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
         defaultExpanded={shouldExpandLog}
         variant="bottom"
         className="px-4 pb-2"
+        resizeContainerRef={containerRef}
       />
 
       {!historical && (

@@ -918,7 +918,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'PRD coverage is advisory and collapsed by default; improvement context and both description/provenance previews are also opt-in disclosures.',
       'Retry notes for normal bead failures remain separate from typed Manual QA origin data.',
       'The status title is version-free. The version selector appears only when more than one checklist-backed round exists, and historical rounds remain selectable read-only after the ticket loops back to Coding or advances.',
-      'The phase log is collapsed by default and follows the selected checklist-backed version, including submission, AI/tool, child-creation, completion, and error milestones.',
+      'The phase log is collapsed by default and follows the selected checklist-backed version, including submission, AI/tool, child-creation, completion, and error milestones. When expanded, its height can be manually adjusted up or down.',
     ],
   },
   INTEGRATING_CHANGES: {
@@ -1502,7 +1502,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_MANUAL_QA',
     label: 'Manual QA',
-    description: 'LoopTroop is waiting for user-run verification in an autosaved checklist with collapsed logs, explicit Not applicable PRD coverage, configurable Improvement tickets, and AI-planned full QA-fix beads for failed checks.',
+    description: 'LoopTroop is waiting for user-run verification in an autosaved checklist with collapsed resizable logs, explicit Not applicable PRD coverage, configurable Improvement tickets, and AI-planned full QA-fix beads for failed checks.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_MANUAL_QA,
     kanbanPhase: 'needs_input',
     groupId: 'post_implementation',

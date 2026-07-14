@@ -91,7 +91,7 @@ describe.concurrent('workflow metadata', () => {
       'LoopTroop is preparing a human-facing Manual QA checklist with live checkpoint, context, model/tool, validation, and persistence milestones; the completed checklist opens as a readable artifact with an exact Raw view.',
     )
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.description).toBe(
-      'LoopTroop is waiting for user-run verification in an autosaved checklist with collapsed logs, explicit Not applicable PRD coverage, configurable Improvement tickets, and AI-planned full QA-fix beads for failed checks.',
+      'LoopTroop is waiting for user-run verification in an autosaved checklist with collapsed resizable logs, explicit Not applicable PRD coverage, configurable Improvement tickets, and AI-planned full QA-fix beads for failed checks.',
     )
   })
 
