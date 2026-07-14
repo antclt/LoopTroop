@@ -63,7 +63,7 @@ describe('CollapsiblePhaseLogSection', () => {
 
   it('renders expanded by default as a bottom-anchored log drawer', () => {
     const { container } = renderWithProviders(<CollapsiblePhaseLogSection phase="CODING" />)
-    const root = container.firstElementChild as HTMLElement
+    const root = container.querySelector('.min-w-0') as HTMLElement
 
     expect(root).toHaveClass('mt-auto')
 
