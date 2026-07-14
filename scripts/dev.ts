@@ -244,7 +244,7 @@ async function printLanSharingDetails() {
     printSummaryBlock('', wslLanAccess.setupCommands)
     printSummaryBlock('After setup', wslLanAccess.frontendUrls)
     if (wslLanAccess.docsUrls.length > 0) {
-      printSummaryBlock('Docs setup', wslLanAccess.docsUrls)
+      printSummaryBlock('Docs setup', wslLanAccess.docsUrls.map((url) => `${url}/docs/`))
     }
     const primaryWslFrontendUrl = wslLanAccess.frontendUrls[0]
     if (primaryWslFrontendUrl) {
@@ -268,7 +268,7 @@ async function printLanSharingDetails() {
 
   printSummaryBlock('LAN URLs', frontendLanUrls)
   if (docsLanUrls.length > 0) {
-    printSummaryBlock('Docs LAN', docsLanUrls)
+    printSummaryBlock('Docs LAN', docsLanUrls.map((url) => `${url}/docs/`))
   }
 
   await printMobileQr(primaryFrontendLanUrl)
@@ -323,7 +323,7 @@ const services: DevService[] = [
 printDivider('Startup Summary')
 printSummaryLine('Frontend', `http://localhost:${frontendPort}`)
 printSummaryLine('Backend', `http://localhost:${backendPort}`)
-printSummaryLine('Docs', effectiveDocsOrigin)
+printSummaryLine('Docs', `${effectiveDocsOrigin}/docs/`)
 printSummaryLine('OpenCode', baseUrl)
 printSummaryLine('LAN sharing', formatLanSharingSummary())
 await printLanSharingDetails()

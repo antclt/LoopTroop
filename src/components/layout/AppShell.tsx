@@ -71,7 +71,7 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
   const theme = state.theme
   const queryClient = useQueryClient()
   const [isRefreshing, setIsRefreshing] = useState(false)
-  const docsOrigin = __LOOPTROOP_DOCS_ORIGIN__
+  const docsOrigin = `${__LOOPTROOP_DOCS_ORIGIN__}/`
   const { isOffline } = useBackendHealth()
   const activeTriageFilterSummaries = getActiveTriageFilterSummaries(state.filters)
   const activeTriageFilterCount = activeTriageFilterSummaries.length

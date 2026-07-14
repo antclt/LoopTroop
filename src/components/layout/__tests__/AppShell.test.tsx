@@ -139,7 +139,7 @@ describe('AppShell', () => {
     renderShell(uiValue)
 
     const docsLink = screen.getByRole('link', { name: /docs/i })
-    expect(docsLink).toHaveAttribute('href', __LOOPTROOP_DOCS_ORIGIN__)
+    expect(docsLink).toHaveAttribute('href', `${__LOOPTROOP_DOCS_ORIGIN__}/`)
     expect(docsLink).toHaveAttribute('target', '_blank')
     expect(docsLink).toHaveAttribute('rel', expect.stringContaining('noopener'))
   })

@@ -205,7 +205,7 @@ Default local service addresses:
 | --- | --- |
 | Frontend | `http://localhost:5173` |
 | Backend | `http://127.0.0.1:3000` |
-| Docs | `http://localhost:5174` |
+| Docs | `http://localhost:5174/docs/` |
 | OpenCode | `http://127.0.0.1:4096` |
 
 Default port resolution and origin building are implemented in `shared/appConfig.ts`, which validates environment variables and provides fallback defaults for all four services.

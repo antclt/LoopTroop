@@ -25,7 +25,7 @@ if (devHostMode.enabled) {
   vitepressArgs.push('--host', devHostMode.bindHost)
 }
 
-console.log(`[dev-docs] Starting VitePress docs at ${docsOrigin}.`)
+console.log(`[dev-docs] Starting VitePress docs at ${docsOrigin}/docs/.`)
 
 const child = spawn(vitepressBin, vitepressArgs, {
   cwd: repoRoot,
