@@ -39,8 +39,11 @@ export function CollapsiblePhaseLogSection({
   const panelId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
 
+  const hasResizeHandle = variant === 'bottom' && isExpanded && Boolean(resizeContainerRef)
+
   const rootClassName = cn(
     'min-w-0 flex flex-col',
+    !hasResizeHandle && 'border-t border-border/40 pt-1.5',
     variant === 'fill' ? 'mt-auto shrink-0' : 'shrink-0',
     className,
   )

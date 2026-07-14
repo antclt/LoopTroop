@@ -385,7 +385,7 @@ export function DraftView({ ticket }: DraftViewProps) {
       </div>
 
       {isStartAttemptActive && (
-        <div className="shrink-0 border-t border-border bg-background px-4 pb-3 pt-2">
+        <div className="shrink-0 bg-background px-4 pb-3">
           <CollapsiblePhaseLogSection
             phase="DRAFT"
             ticket={ticket}

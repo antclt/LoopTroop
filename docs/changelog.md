@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added a subtle top border to the collapsible log section when collapsed or expanded, ensuring visual separation from the content above it in the ticket workspace views.
 - Manual QA Pass and Waive submissions now finish without evidence requirements or stale file-reference failures.
 - Development restarts now open tickets safely without mixing stale and current React dependency generations.
 - Council voting phases now show a live `X/Y complete · Leading/Winner: <model> · <pts>` tally appended inline to the council card's description line (e.g. "Council members are scoring all prd drafts. · 2/4 complete · Leading: …") while scoring is in progress.
@@ -51,6 +52,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed the collapsed log element lacking visual separation in ticket workspace views by adding a subtle top border (`border-t border-border/40`) to `CollapsiblePhaseLogSection` by default when there is no active resize handle, and removed the duplicate top border from the parent container in `DraftView.tsx`.
 - Fixed Manual QA submission races by waiting for active evidence uploads/removals, retaining valid durably stored files, and safely dropping dangling optional references before Pass or Waive completes. Any remaining file-integrity error now identifies the checklist item number/title and human filename instead of exposing an internal evidence ID.
 - Fixed the first lazy ticket workspace opened after a development-server restart crashing with a null React hook dispatcher. Vite now finishes an explicit frontend dependency bundle before serving, marks dev resources `no-store`, deduplicates the React/React Query graph, and performs a cooldown-limited development-only reload if an already-restored tab still reports two dependency generations.
 - Fixed Manual QA Add files collapsing the ticket to its header/loading state by retaining the mounted workspace during backend recovery, keeping the liveness probe outside the normal read-rate budget, recognizing rate-limited health responses as reachable, and opening the native picker from a dedicated button. Successful uploads continue to appear in the active checklist item immediately.
