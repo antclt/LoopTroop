@@ -87,7 +87,7 @@ flowchart LR
     G -.->|"Retry"| E
 ```
 
-LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries. An optional Manual QA checkpoint can be enabled globally and overridden per project or Draft ticket. After final tests, LoopTroop generates a versioned checklist, then waits while **you** run and control the application. Checklist items start Pending and autosave without a separate Save action. Passing, waiving, or skipping continues to integration; failures become normal QA-fix beads and return through coding and fresh final tests, while inline Improvement observations become independent Draft backlog tickets. Skip archives anything already entered as read-only but deliberately creates none of that follow-up work.
+LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries. An optional Manual QA checkpoint can be enabled globally and overridden per project or Draft ticket. After final tests, LoopTroop generates a versioned checklist, then waits while **you** run and control the application. Checklist items start Pending and autosave without a separate Save action. Pass and Waive need no evidence, and completion waits for any active file upload/removal before retaining the durably stored files. Passing, waiving, or skipping continues to integration; failures become normal QA-fix beads and return through coding and fresh final tests, while inline Improvement observations become independent Draft backlog tickets. Skip archives anything already entered as read-only but deliberately creates none of that follow-up work.
 
 ## Core ideas
 

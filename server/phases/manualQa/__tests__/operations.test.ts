@@ -375,6 +375,47 @@ describe('Manual QA submission recovery and integrity', () => {
     expect(skipEvent).toHaveBeenCalledWith({ type: 'MANUAL_QA_SKIPPED' })
   })
 
+  it.each([
+    { outcome: 'pass', expectedSummaryOutcome: 'passed' },
+    { outcome: 'waive', expectedSummaryOutcome: 'waived_through' },
+  ] as const)('drops stale optional evidence references for $outcome while retaining stored evidence', async ({
+    outcome,
+    expectedSummaryOutcome,
+  }) => {
+    const setup = prepareFixture()
+    const evidence = await streamManualQaEvidence({
+      ticketDir: setup.paths.ticketDir,
+      version: 1,
+      itemId: 'item-one',
+      evidenceId: 'evidence-valid',
+      originalName: 'result.png',
+      mediaType: 'image/png',
+      body: byteStream(new TextEncoder().encode('stored evidence')),
+    })
+    setup.draft.evidence = [evidence]
+    setup.draft.results[0] = {
+      ...setup.draft.results[0]!,
+      outcome,
+      evidenceIds: [evidence.id, 'evidence:stale-upload'],
+    }
+
+    const summary = await submitManualQa({
+      ticketId: setup.ticket.id,
+      version: 1,
+      draft: setup.draft,
+      guard: setup.guard,
+      sendEvent: vi.fn(),
+    })
+
+    expect(summary).toMatchObject({
+      outcome: expectedSummaryOutcome,
+      evidenceCount: 1,
+    })
+    expect(readManualQaResults(setup.paths.ticketDir, 1)?.results[0]?.evidenceIds).toEqual([
+      evidence.id,
+    ])
+  })
+
   it('skips with incomplete Fail and Improvement data while preserving the draft and creating no work', async () => {
     const setup = prepareFixture([
       checklistItem('incomplete-failure'),
@@ -483,7 +524,7 @@ describe('Manual QA submission recovery and integrity', () => {
       draft: setup.draft,
       guard: setup.guard,
       sendEvent: vi.fn(),
-    })).rejects.toThrow('does not belong to checklist item item-one')
+    })).rejects.toThrow('Item 1 Verify item-one references file "observation.txt", but that file belongs to item 2 Verify item-two.')
   })
 
   it('creates one restart-idempotent improvement ticket with human-readable context and structured provenance', async () => {

@@ -186,23 +186,29 @@ function validateSubmission(
   draft: ManualQaDraft,
   storedEvidence: ManualQaEvidenceRef[],
 ): void {
-  const items = new Map(checklist.items.map((item) => [item.id, item]))
+  const items = new Map(checklist.items.map((item, index) => [item.id, { item, index }]))
+  const itemLabel = (itemId: string) => {
+    const entry = items.get(itemId)
+    return entry
+      ? `Item ${entry.index + 1} ${entry.item.title?.trim() || entry.item.behavior}`
+      : `Checklist item ${itemId}`
+  }
   const results = new Map<string, ManualQaItemResult>()
   for (const result of draft.results) {
     if (!items.has(result.itemId)) throw new Error(`Result references unknown checklist item: ${result.itemId}`)
-    if (results.has(result.itemId)) throw new Error(`Duplicate result for checklist item: ${result.itemId}`)
+    if (results.has(result.itemId)) throw new Error(`${itemLabel(result.itemId)} has more than one result.`)
     results.set(result.itemId, result)
   }
   for (const item of checklist.items) {
     const outcome = results.get(item.id)?.outcome ?? 'pending'
     if (item.severity === 'required' && !['pass', 'fail', 'waive', 'improvement'].includes(outcome)) {
-      throw new Error(`Required checklist item ${item.id} must be passed, failed, waived, or recorded as an improvement.`)
+      throw new Error(`${itemLabel(item.id)} is required and must be passed, failed, waived, or recorded as an improvement.`)
     }
   }
 
   for (const result of draft.results) {
     if (result.outcome === 'fail' && !result.observation.trim()) {
-      throw new Error(`Failed checklist item ${result.itemId} requires an observation.`)
+      throw new Error(`${itemLabel(result.itemId)} is marked Fail and requires an observation.`)
     }
   }
 
@@ -211,30 +217,35 @@ function validateSubmission(
     if (result.outcome !== 'improvement') continue
     const improvement = result.improvementDraftId ? improvementById.get(result.improvementDraftId) : null
     if (!improvement || improvement.itemId !== result.itemId) {
-      throw new Error(`Improvement result ${result.itemId} does not have a matching reviewed draft.`)
+      throw new Error(`${itemLabel(result.itemId)} is marked Improvement but does not have a matching reviewed draft.`)
     }
-    if (!improvement.title.trim()) throw new Error(`Improvement result ${result.itemId} requires a title.`)
-    if (!improvement.description.trim()) throw new Error(`Improvement result ${result.itemId} requires a description.`)
+    if (!improvement.title.trim()) throw new Error(`${itemLabel(result.itemId)} is marked Improvement and requires a title.`)
+    if (!improvement.description.trim()) throw new Error(`${itemLabel(result.itemId)} is marked Improvement and requires a description.`)
     if (improvement.contextOverride !== undefined && !improvement.contextOverride.trim()) {
-      throw new Error(`Improvement result ${result.itemId} cannot have empty Manual QA context.`)
+      throw new Error(`${itemLabel(result.itemId)} is marked Improvement and cannot have empty Manual QA context.`)
     }
   }
 
   const canonicalEvidence = new Map(storedEvidence.map((entry) => [entry.id, entry]))
   for (const draftEvidence of draft.evidence) {
     const stored = canonicalEvidence.get(draftEvidence.id)
-    if (!stored) throw new Error(`Manual QA draft references unknown evidence: ${draftEvidence.id}`)
+    if (!stored) {
+      throw new Error(`${itemLabel(draftEvidence.itemId)} references file "${draftEvidence.originalName}", but that file is no longer available.`)
+    }
     if (
       stored.itemId !== draftEvidence.itemId
       || stored.sha256 !== draftEvidence.sha256
       || stored.storedName !== draftEvidence.storedName
-    ) throw new Error(`Manual QA draft evidence metadata changed: ${draftEvidence.id}`)
+    ) throw new Error(`${itemLabel(draftEvidence.itemId)} could not use file "${draftEvidence.originalName}" because its saved metadata changed; reload Manual QA and try again.`)
   }
   const assertEvidenceBelongsToItem = (evidenceId: string, itemId: string) => {
     const evidence = canonicalEvidence.get(evidenceId)
-    if (!evidence) throw new Error(`Manual QA draft references unknown evidence: ${evidenceId}`)
+    const draftEvidence = draft.evidence.find((entry) => entry.id === evidenceId)
+    if (!evidence) {
+      throw new Error(`${itemLabel(itemId)} references file "${draftEvidence?.originalName ?? 'Unknown file'}", but that file is no longer available.`)
+    }
     if (evidence.itemId !== itemId) {
-      throw new Error(`Manual QA evidence ${evidenceId} does not belong to checklist item ${itemId}.`)
+      throw new Error(`${itemLabel(itemId)} references file "${evidence.originalName}", but that file belongs to ${itemLabel(evidence.itemId).replace(/^Item/, 'item')}.`)
     }
   }
   for (const result of draft.results) {
@@ -242,6 +253,42 @@ function validateSubmission(
   }
   for (const improvement of draft.improvements) {
     for (const evidenceId of improvement.evidenceIds) assertEvidenceBelongsToItem(evidenceId, improvement.itemId)
+  }
+}
+
+function canonicalizeSubmissionEvidence(
+  checklist: ManualQaChecklist,
+  draft: ManualQaDraft,
+  storedEvidence: ManualQaEvidenceRef[],
+): ManualQaDraft {
+  const canonicalById = new Map(storedEvidence.map((entry) => [entry.id, entry]))
+  const itemById = new Map(checklist.items.map((item, index) => [item.id, { item, index }]))
+  const itemLabel = (itemId: string) => {
+    const entry = itemById.get(itemId)
+    return entry
+      ? `Item ${entry.index + 1} ${entry.item.title?.trim() || entry.item.behavior}`
+      : `Checklist item ${itemId}`
+  }
+  const canonicalEvidenceIds = (evidenceIds: string[], itemId: string) => [...new Set(evidenceIds)].filter((evidenceId) => {
+    const evidence = canonicalById.get(evidenceId)
+    if (!evidence) return false
+    if (evidence.itemId !== itemId) {
+      throw new Error(`${itemLabel(itemId)} references file "${evidence.originalName}", but that file belongs to ${itemLabel(evidence.itemId).replace(/^Item/, 'item')}.`)
+    }
+    return true
+  })
+
+  return {
+    ...draft,
+    results: draft.results.map((result) => ({
+      ...result,
+      evidenceIds: canonicalEvidenceIds(result.evidenceIds, result.itemId),
+    })),
+    improvements: draft.improvements.map((improvement) => ({
+      ...improvement,
+      evidenceIds: canonicalEvidenceIds(improvement.evidenceIds, improvement.itemId),
+    })),
+    evidence: storedEvidence,
   }
 }
 
@@ -993,11 +1040,12 @@ export async function submitManualQa(input: {
     })
     return existingSummary
   }
-  const draft = ManualQaDraftSchema.parse(input.draft)
-  assertMutationGuard(input.ticketId, paths.ticketDir, input.version, draft, input.guard)
+  const parsedDraft = ManualQaDraftSchema.parse(input.draft)
+  assertMutationGuard(input.ticketId, paths.ticketDir, input.version, parsedDraft, input.guard)
   const checklist = readManualQaChecklist(paths.ticketDir, input.version)
   if (!checklist) throw new Error('Manual QA checklist was not found.')
   const evidence = readManualQaEvidenceIndex(paths.ticketDir, input.version)
+  const draft = canonicalizeSubmissionEvidence(checklist, parsedDraft, evidence)
   validateSubmission(checklist, draft, evidence)
   const drift = detectManualQaWorkspaceDrift(input.ticketId, input.version)
   if (drift.drifted) {

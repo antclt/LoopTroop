@@ -218,6 +218,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [openLinkEditors, setOpenLinkEditors] = useState<Set<string>>(new Set())
   const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string | undefined>>({})
   const [pendingEvidenceUploads, setPendingEvidenceUploads] = useState<Record<string, PendingEvidenceUpload[]>>({})
+  const [uploadingEvidenceKeys, setUploadingEvidenceKeys] = useState<Set<string>>(new Set())
   const [uploadedEvidence, setUploadedEvidence] = useState<ManualQaEvidence[]>([])
   const [removedEvidenceIds, setRemovedEvidenceIds] = useState<Set<string>>(new Set())
   const [expandedEvidenceItems, setExpandedEvidenceItems] = useState<Set<string>>(new Set())
@@ -386,11 +387,13 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const validation = useMemo(() => Object.fromEntries(
     items.map((item) => [item.id, validateManualQaItem(item, resultFor(draft, item.id))]),
   ), [draft, items])
-  const allErrors = Object.values(validation).flat()
+  const allErrors = items.flatMap((item, index) => (validation[item.id] ?? []).map((message) =>
+    `Item ${index + 1} ${item.title?.trim() || item.behavior}: ${message}`))
   const mergeGroupErrors = useMemo(() => validateManualQaMergeGroups(items, draft), [draft, items])
   const hasFailures = items.some((item) => resultFor(draft, item.id).status === 'fail')
   const incompleteRequired = items.filter((item) => item.severity === 'required' && resultFor(draft, item.id).status === 'pending').length
   const coverageSourceItemTotal = round ? Object.values(round.coverageSummary.sourceItemCounts).reduce((sum, count) => sum + count, 0) : 0
+  const evidenceMutationInProgress = uploadingEvidenceKeys.size > 0 || removingEvidenceIds.size > 0
 
   const mutationBase = useCallback((actionId = newManualQaActionId('manual-qa')) => ({
     ticketId: ticket.id,
@@ -462,6 +465,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     const base = stableMutationBase(key, 'manual-qa-evidence-upload')
     const evidenceId = evidenceIdsRef.current.get(key) ?? newManualQaActionId('evidence')
     evidenceIdsRef.current.set(key, evidenceId)
+    setUploadingEvidenceKeys((current) => new Set(current).add(key))
     try {
       const saved = await uploadEvidence.mutateAsync({ ...base, itemId, file, evidenceId })
       setUploadedEvidence((current) => [...current.filter((entry) => entry.id !== saved.id), saved])
@@ -487,6 +491,12 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
         version,
         file,
         message: error instanceof Error ? error.message : 'Upload failed',
+      })
+    } finally {
+      setUploadingEvidenceKeys((current) => {
+        const next = new Set(current)
+        next.delete(key)
+        return next
       })
     }
   }
@@ -550,6 +560,10 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const handleSubmit = async () => {
     if (version === null || !round) return
     setSubmitError(null)
+    if (evidenceMutationInProgress) {
+      setSubmitError('Wait for evidence files to finish uploading or being removed before submitting.')
+      return
+    }
     if (mergeGroupErrors.length > 0) {
       setSubmitError(mergeGroupErrors.join(' '))
       return
@@ -570,6 +584,10 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const handleSkip = async () => {
     if (version === null || !round || (submissionInProgress && resumableOperationType !== 'skip')) return
     setSubmitError(null)
+    if (evidenceMutationInProgress) {
+      setSubmitError('Wait for evidence files to finish uploading or being removed before skipping Manual QA.')
+      return
+    }
     if (submissionInProgress) {
       try {
         const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, { ...round, evidence }, draftRef.current, latestDraftRevisionRef.current)
@@ -772,10 +790,10 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
               </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submissionInProgress || submit.isPending || skip.isPending || saveState === 'conflict'}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA…</Button>
+              <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submissionInProgress || submit.isPending || skip.isPending || saveState === 'conflict' || evidenceMutationInProgress}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA…</Button>
               {resumableOperationType === 'skip'
                 ? <Button onClick={handleSkip} disabled={skip.isPending}>{skip.isPending ? <LoadingText text="Resuming skip" /> : <><RefreshCw className="mr-1 h-4 w-4" />Resume skip</>}</Button>
-                : <Button onClick={handleSubmit} disabled={submit.isPending || saveState === 'conflict' || round.workspaceDrift?.detected === true}>{submit.isPending ? <LoadingText text="Creating work" /> : submissionInProgress ? <><RefreshCw className="mr-1 h-4 w-4" />Resume submission</> : <><CheckCircle2 className="mr-1 h-4 w-4" />Submit QA</>}</Button>}
+                : <Button onClick={handleSubmit} disabled={submit.isPending || saveState === 'conflict' || round.workspaceDrift?.detected === true || evidenceMutationInProgress}>{submit.isPending ? <LoadingText text="Creating work" /> : submissionInProgress ? <><RefreshCw className="mr-1 h-4 w-4" />Resume submission</> : <><CheckCircle2 className="mr-1 h-4 w-4" />Submit QA</>}</Button>}
             </div>
           </div>
           {submitError && <p role="alert" className="mx-auto mt-2 max-w-4xl text-right text-xs text-destructive">{submitError}</p>}
@@ -787,7 +805,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
         <DialogContent>
           <DialogHeader><DialogTitle>Skip Manual QA?</DialogTitle><DialogDescription>Your entered results, notes, links, and files will be saved in the archived draft and cannot be edited later. No fix bead or improvement ticket will be created, and the workflow will continue to integration.</DialogDescription></DialogHeader>
           <div><label className="text-sm font-medium">Reason <span className="font-normal text-muted-foreground">(optional)</span></label><textarea value={skipReason} onChange={(event) => setSkipReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
-          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSkipOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handleSkip} disabled={skip.isPending || saveState === 'conflict'}>{skip.isPending ? <LoadingText text="Skipping" /> : 'Skip and integrate'}</Button></div>
+          <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSkipOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handleSkip} disabled={skip.isPending || saveState === 'conflict' || evidenceMutationInProgress}>{skip.isPending ? <LoadingText text="Skipping" /> : 'Skip and integrate'}</Button></div>
         </DialogContent>
       </Dialog>
     </div>

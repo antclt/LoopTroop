@@ -143,6 +143,17 @@ describe('ManualQAView recovery behavior', () => {
     expect(document.querySelector('input[type="file"]')).toBeNull()
   })
 
+  it('names the checklist number and title in submission validation', async () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Item 1 Submit checkout: Required checks must be marked Pass, Fail, Waive, or Improvement.',
+    )
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+
   it('edits an Improvement inline with secondary context and previews collapsed', () => {
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
@@ -370,6 +381,46 @@ describe('ManualQAView recovery behavior', () => {
     expect(mocks.remove.mock.calls[1]![0].actionId).toBe(mocks.remove.mock.calls[0]![0].actionId)
     expect(mocks.remove.mock.calls[0]![0].expectedDraftRevision).toBe(0)
     expect(mocks.remove.mock.calls[1]![0].expectedDraftRevision).toBe(8)
+  })
+
+  it('blocks completion while evidence removal settles and submits without the removed reference', async () => {
+    const evidenceRound = {
+      ...round,
+      evidence: [{ id: 'evidence-1', itemId: 'item-1', name: 'screen.png', size: 10, sha256: 'a'.repeat(64), mediaType: 'image/png', previewable: true }],
+    }
+    mocks.round.mockReturnValue({ data: evidenceRound, isLoading: false, error: null, refetch: mocks.refetchRound })
+    mocks.uiState.mockReturnValue({
+      data: {
+        scope: 'manual_qa_draft:v1',
+        exists: true,
+        data: { results: { 'item-1': { itemId: 'item-1', status: 'pass', evidenceIds: ['evidence-1'] } } },
+        revision: 1,
+        clientRevision: null,
+        updatedAt: new Date().toISOString(),
+      },
+      refetch: mocks.refetchUiState,
+    })
+    let resolveRemoval!: (value: { success: boolean }) => void
+    mocks.remove.mockImplementationOnce(() => new Promise((resolve) => { resolveRemoval = resolve }))
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove screen.png' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Waive' }))
+
+    expect(screen.getByRole('button', { name: 'Submit QA' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Skip Manual QA…' })).toBeDisabled()
+    fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
+    expect(mocks.submit).not.toHaveBeenCalled()
+
+    resolveRemoval({ success: true })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Submit QA' })).toBeEnabled())
+    fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
+
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalled())
+    expect(mocks.submit.mock.calls[0]![0].draft.results[0]).toMatchObject({
+      outcome: 'waive',
+      evidenceIds: [],
+    })
   })
 
   it('allows an empty optional waiver reason and submits it', async () => {
