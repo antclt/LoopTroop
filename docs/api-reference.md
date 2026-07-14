@@ -22,13 +22,13 @@ When `LOOPTROOP_API_TOKEN` is configured, every `/api/*` route requires either `
 
 Invalid or missing credentials return `401`. If auth is required but no backend token is configured and unauthenticated mode is not allowed, the middleware returns `503`.
 
-All `/api/*` routes share a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. When a limit is exceeded, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying. Forwarded client IP headers are ignored unless `LOOPTROOP_TRUST_PROXY=1` is set, so local development typically uses a single shared `local` bucket identity.
+API routes use a global per-client rate limit, with separate buckets for read requests, normal write actions, and UI-state autosave writes. The default local-tool budget is 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. The lightweight `GET /api/health` liveness probe is exempt so reachability checks remain available after the normal read budget is exhausted; authentication still applies. When another route exceeds its limit, the backend returns `429` with a JSON error body and a `Retry-After` header containing the number of seconds to wait before retrying. Forwarded client IP headers are ignored unless `LOOPTROOP_TRUST_PROXY=1` is set, so local development typically uses a single shared `local` bucket identity.
 
 ## Health, Models, Workflow Meta, And Streaming
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| `GET` | `/api/health` | Basic process health |
+| `GET` | `/api/health` | Basic process health; exempt from the normal read-rate bucket |
 | `GET` | `/api/health/opencode` | OpenCode reachability and version |
 | `GET` | `/api/health/startup` | Startup recovery and restore status |
 | `POST` | `/api/health/startup/restore-notice/dismiss` | Dismiss startup restore notice |

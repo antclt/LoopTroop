@@ -70,7 +70,9 @@ export function createApiRateLimitMiddleware(options: ApiRateLimitOptions = {}) 
   }
 
   return async (c: Context, next: Next) => {
-    if (c.req.method === 'OPTIONS') {
+    // Liveness probes must remain available when the normal read budget is exhausted.
+    // They are used only to establish reachability; auth middleware still runs afterward.
+    if (c.req.method === 'OPTIONS' || (c.req.method === 'GET' && c.req.path === '/api/health')) {
       await next()
       return
     }

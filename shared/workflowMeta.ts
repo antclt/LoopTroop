@@ -888,7 +888,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Focused Default: Pending is the first and default result. It shows only brief guidance; result-specific notes, evidence, waiver, merge-group, and improvement controls appear only after the user chooses another result.',
       'Autosaved Draft: Pass, Fail, Waive, Improvement, Pending, notes, merge groups, improvement drafts, and evidence references save through revision-checked UI state. There is no manual Save action: the workspace reports that saving is automatic and shows a relative last-save time with the exact timestamp available on hover.',
       'Result Validation: Submit requires each required item to be resolved as Pass, Fail, Waive, or Improvement. Fail requires an observation, while a waiver reason is optional and every Improvement requires a reviewed title and description draft.',
-      'Evidence Handling: Extra evidence offers matching Add link and Add files actions; link and Details fields appear only after Add link is chosen. New uploads appear immediately without a refresh, and each item initially shows five evidence entries with Show more/Show less for the rest. Only safe raster formats preview inline; unsafe or unknown content is always served as an attachment.',
+      'Evidence Handling: Extra evidence offers matching Add link and Add files actions; link and Details fields appear only after Add link is chosen. Add files opens the native picker from a dedicated button without unmounting or reloading the checklist. New uploads appear immediately without a refresh, and each item initially shows five evidence entries with Show more/Show less for the rest. Only safe raster formats preview inline; unsafe or unknown content is always served as an attachment.',
       'Failure Merge Groups: A failed item can select one or more other checklist items by number and title, including items not yet marked Fail. Submit is blocked until every selected member is also Fail, with each unresolved member identified in the validation message.',
       'Inline Improvement: Improvement editing stays inside the checklist item. Manual QA context, final-description preview, and evidence/provenance preview are collapsed by default, as is the workspace’s advisory PRD coverage.',
       'Workspace Drift Gate: Before Submit or Skip, LoopTroop compares project files with the saved QA baseline. Audited application-created drift must be explicitly included in a checkpoint or discarded before the action can continue.',
@@ -1497,7 +1497,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_MANUAL_QA',
     label: 'Manual QA',
-    description: 'LoopTroop is waiting for user-run verification in an autosaved Manual QA checklist: items start Pending, Submit validates completed results, and Skip archives entered data without creating QA work.',
+    description: 'LoopTroop is waiting for user-run verification in an autosaved Manual QA checklist: items start Pending, evidence selection keeps the checklist open, Submit validates completed results, and Skip archives entered data without creating QA work.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_MANUAL_QA,
     kanbanPhase: 'needs_input',
     groupId: 'post_implementation',

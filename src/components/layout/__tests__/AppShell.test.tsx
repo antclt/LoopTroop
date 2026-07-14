@@ -239,22 +239,22 @@ describe('AppShell', () => {
     })
   })
 
-  it('does not show the reconnecting banner when backend is reachable', () => {
+  it('does not show the reconnecting banner or arm a reload when backend is reachable', () => {
     vi.mocked(useBackendHealth).mockReturnValue({ isOffline: false })
 
     renderShell(uiValue)
 
     expect(screen.queryByTestId('backend-reconnecting-banner')).not.toBeInTheDocument()
-    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('backend-reconnect', false)
+    expect(useRecoveryAutoReloadMock).not.toHaveBeenCalled()
   })
 
-  it('shows the reconnecting banner when backend is unreachable', () => {
+  it('shows the reconnecting banner without arming a destructive reload when backend is unreachable', () => {
     vi.mocked(useBackendHealth).mockReturnValue({ isOffline: true })
 
     renderShell(uiValue)
 
     expect(screen.getByTestId('backend-reconnecting-banner')).toBeInTheDocument()
     expect(screen.getByText(/reconnecting to server/i)).toBeInTheDocument()
-    expect(useRecoveryAutoReloadMock).toHaveBeenCalledWith('backend-reconnect', true)
+    expect(useRecoveryAutoReloadMock).not.toHaveBeenCalled()
   })
 })

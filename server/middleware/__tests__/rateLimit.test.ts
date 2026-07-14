@@ -13,12 +13,23 @@ function createRateLimitApp(options: Parameters<typeof createApiRateLimitMiddlew
   }))
   app.put('/api/tickets/:id/ui-state', (c) => c.json({ ok: true, kind: 'autosave' }))
   app.post('/api/tickets/:id/start', (c) => c.json({ ok: true, kind: 'workflow' }))
+  app.get('/api/health', (c) => c.json({ ok: true }))
+  app.get('/api/tickets', (c) => c.json([]))
   return app
 }
 
 const TEST_TICKET_ROUTE = '/api/tickets/test-ticket-1'
 
 describe('API rate limit middleware', () => {
+  it('keeps the liveness probe available after the normal read budget is exhausted', async () => {
+    const app = createRateLimitApp({ readLimitMax: 1 })
+
+    expect((await app.request('/api/tickets')).status).toBe(200)
+    expect((await app.request('/api/tickets')).status).toBe(429)
+    expect((await app.request('/api/health')).status).toBe(200)
+    expect((await app.request('/api/health')).status).toBe(200)
+  })
+
   it('allows a normal autosave cadence within the default local-tool budget', async () => {
     const app = createRateLimitApp()
 

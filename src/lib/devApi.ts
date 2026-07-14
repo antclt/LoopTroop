@@ -93,7 +93,9 @@ export async function pingDevBackend() {
       cache: 'no-store',
       signal: controller.signal,
     }))
-    return response.ok
+    // A rate-limit response still proves that the backend and Vite proxy are reachable.
+    // Treating it as downtime starts a readiness-probe storm and can mask the real 429.
+    return response.ok || response.status === 429
   } catch {
     return false
   } finally {

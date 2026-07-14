@@ -262,7 +262,7 @@ describe('ManualQAView recovery behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
 
     const addLink = screen.getByRole('button', { name: 'Add link' })
-    const addFiles = screen.getByText('Add files').closest('label')!
+    const addFiles = screen.getByRole('button', { name: 'Add files' })
     expect(addLink.compareDocumentPosition(addFiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(screen.queryByLabelText(/Evidence link for item-1/i)).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Evidence link details for item-1/i)).not.toBeInTheDocument()
@@ -271,6 +271,22 @@ describe('ManualQAView recovery behavior', () => {
     expect(screen.getByLabelText(/Evidence link for item-1/i)).toBeInTheDocument()
     expect(screen.getByLabelText(/Evidence link details for item-1/i)).toBeInTheDocument()
     expect(screen.queryByText(/label \(optional\)/i)).not.toBeInTheDocument()
+  })
+
+  it('opens the native file picker from a real button without starting an upload or unmounting Manual QA', () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
+    const input = screen.getByLabelText('Choose evidence files for item-1') as HTMLInputElement
+    const inputClick = vi.spyOn(input, 'click')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add files' }))
+
+    expect(inputClick).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('heading', { name: 'Manual QA · Round v1' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit QA' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add files' })).toBeInTheDocument()
+    expect(input).toBeInTheDocument()
+    expect(mocks.upload).not.toHaveBeenCalled()
   })
 
   it('renders a successful upload immediately without requiring a refresh', async () => {

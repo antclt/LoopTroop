@@ -223,7 +223,7 @@ LoopTroop accepts API tokens through either `x-looptroop-token` or `Authorizatio
 
 ## 7. API Rate Limits
 
-The backend applies a global per-client rate limit to `/api/*` routes. Read requests, normal write actions, and UI-state autosaves use separate buckets so frequent draft saves do not exhaust the workflow-action budget. Defaults are 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. If a client exceeds a limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
+The backend applies a global per-client rate limit to API routes. Read requests, normal write actions, and UI-state autosaves use separate buckets so frequent draft saves do not exhaust the workflow-action budget. Defaults are 200 reads/minute, 120 normal writes/minute, and 300 autosaves/minute per client. The lightweight `GET /api/health` liveness probe is exempt from the read bucket so the UI can distinguish rate limiting from an unreachable backend; authentication still applies. If a client exceeds another limit, the API returns `429` with a `Retry-After` response header in seconds. Wait for that interval before retrying requests or refreshing aggressively.
 
 Forwarded client IP headers are ignored unless `LOOPTROOP_TRUST_PROXY=1` is set. This keeps local clients from bypassing limits by spoofing `x-forwarded-for`.
 

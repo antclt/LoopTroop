@@ -9,7 +9,6 @@ import { WORKFLOW_GROUPS, WORKFLOW_PHASE_MAP } from '@/lib/workflowMeta'
 import { useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useBackendHealth } from '@/hooks/useBackendHealth'
-import { useRecoveryAutoReload } from '@/hooks/useRecoveryAutoReload'
 import { DashboardSearch } from './DashboardSearch'
 import { cn } from '@/lib/utils'
 
@@ -76,7 +75,6 @@ export function AppShell({ children, onOpenProfile, onOpenProject, onOpenTicket,
   const { isOffline } = useBackendHealth()
   const activeTriageFilterSummaries = getActiveTriageFilterSummaries(state.filters)
   const activeTriageFilterCount = activeTriageFilterSummaries.length
-  useRecoveryAutoReload('backend-reconnect', isOffline)
 
   const handleRefresh = async () => {
     setIsRefreshing(true)
