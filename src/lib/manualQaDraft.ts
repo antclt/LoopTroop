@@ -9,6 +9,7 @@ import {
   composeManualQaImprovementDescription,
   createManualQaImprovementDraftId,
 } from '@shared/manualQaImprovement'
+import { buildManualQaMergeGroupIds } from '@shared/manualQaMergeGroups'
 
 function resultFor(draft: ManualQaDraft, itemId: string): ManualQaItemResult {
   return draft.results[itemId] ?? { itemId, status: 'pending', evidenceIds: [] }
@@ -20,7 +21,6 @@ export function validateManualQaItem(item: ManualQaChecklistItem, result: Manual
     errors.push('Required checks must be marked Pass, Fail, Waive, or Improvement.')
   }
   if (result.status === 'fail' && !result.observation?.trim()) errors.push('Describe what you observed for this failure.')
-  if (result.status === 'waive' && !result.waiverReason?.trim()) errors.push('Explain why this check is being waived.')
   if (result.status === 'improvement') {
     if (!result.improvement?.title.trim()) errors.push('Improvement title is required.')
     if (!result.improvement?.description.trim()) errors.push('Improvement description is required.')
@@ -34,9 +34,29 @@ export function validateManualQaItem(item: ManualQaChecklistItem, result: Manual
   return errors
 }
 
-function canonicalId(value: string) {
-  const normalized = value.replace(/[^A-Za-z0-9._:-]+/g, '-').replace(/^-+|-+$/g, '')
-  return (normalized || 'item').slice(0, 120)
+export function validateManualQaMergeGroups(
+  items: ManualQaChecklistItem[],
+  draft: ManualQaDraft,
+): string[] {
+  const itemById = new Map(items.map((item, index) => [item.id, { item, index }]))
+  const errors: string[] = []
+  for (const [index, item] of items.entries()) {
+    const result = resultFor(draft, item.id)
+    if (result.status !== 'fail') continue
+    const invalid = [...new Set(result.mergeWithItemIds ?? [])]
+      .map((itemId) => itemById.get(itemId))
+      .filter((entry): entry is { item: ManualQaChecklistItem; index: number } => Boolean(entry))
+      .filter((entry) => resultFor(draft, entry.item.id).status !== 'fail')
+    if (invalid.length === 0) continue
+    const sourceTitle = item.title?.trim() || item.behavior
+    const invalidLabels = invalid.map(({ item: selected, index: selectedIndex }) =>
+      `item ${selectedIndex + 1} ${selected.title?.trim() || selected.behavior}`)
+    const joined = invalidLabels.length === 1
+      ? invalidLabels[0]
+      : `${invalidLabels.slice(0, -1).join(', ')} and ${invalidLabels.at(-1)}`
+    errors.push(`Item ${index + 1} ${sourceTitle} has ${joined} in its merge group, but ${invalid.length === 1 ? 'that item was' : 'those items were'} not marked as Fail.`)
+  }
+  return errors
 }
 
 export function buildCanonicalManualQaDraft(
@@ -45,6 +65,10 @@ export function buildCanonicalManualQaDraft(
   uiDraft: ManualQaDraft,
   draftRevision: number,
 ) {
+  const mergeGroupIds = buildManualQaMergeGroupIds((round.checklist?.items ?? []).map((item) => {
+    const result = resultFor(uiDraft, item.id)
+    return { itemId: item.id, status: result.status, mergeWithItemIds: result.mergeWithItemIds }
+  }))
   const improvements: Array<{
     id: string
     itemId: string
@@ -79,7 +103,7 @@ export function buildCanonicalManualQaDraft(
       evidenceIds: result.evidenceIds ?? [],
       links: result.links ?? [],
       ...(improvementId ? { improvementDraftId: improvementId } : {}),
-      ...(result.mergeGroup?.trim() ? { mergeGroupId: `qa-merge-${canonicalId(result.mergeGroup.trim())}` } : {}),
+      ...(mergeGroupIds.get(item.id) ? { mergeGroupId: mergeGroupIds.get(item.id) } : {}),
     }
   })
   return {

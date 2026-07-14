@@ -200,12 +200,23 @@ function validateSubmission(
     }
   }
 
+  for (const result of draft.results) {
+    if (result.outcome === 'fail' && !result.observation.trim()) {
+      throw new Error(`Failed checklist item ${result.itemId} requires an observation.`)
+    }
+  }
+
   const improvementById = new Map(draft.improvements.map((improvement) => [improvement.id, improvement]))
   for (const result of draft.results) {
     if (result.outcome !== 'improvement') continue
     const improvement = result.improvementDraftId ? improvementById.get(result.improvementDraftId) : null
     if (!improvement || improvement.itemId !== result.itemId) {
       throw new Error(`Improvement result ${result.itemId} does not have a matching reviewed draft.`)
+    }
+    if (!improvement.title.trim()) throw new Error(`Improvement result ${result.itemId} requires a title.`)
+    if (!improvement.description.trim()) throw new Error(`Improvement result ${result.itemId} requires a description.`)
+    if (improvement.contextOverride !== undefined && !improvement.contextOverride.trim()) {
+      throw new Error(`Improvement result ${result.itemId} cannot have empty Manual QA context.`)
     }
   }
 

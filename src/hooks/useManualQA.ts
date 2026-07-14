@@ -64,7 +64,7 @@ export interface ManualQaItemResult {
   waiverReason?: string
   evidenceIds?: string[]
   improvement?: ManualQaImprovementDraft
-  mergeGroup?: string | null
+  mergeWithItemIds?: string[]
   links?: Array<{ id: string; url: string; label?: string }>
 }
 
@@ -205,7 +205,7 @@ function normalizeDraft(value: unknown): ManualQaDraft | null {
       observation: typeof result.observation === 'string' ? result.observation : undefined,
       waiverReason: typeof result.waiverReason === 'string' ? result.waiverReason : typeof result.reason === 'string' ? result.reason : undefined,
       evidenceIds: Array.isArray(result.evidenceIds) ? result.evidenceIds.map(String) : [],
-      mergeGroup: typeof result.mergeGroup === 'string' ? result.mergeGroup : typeof result.mergeGroupId === 'string' ? result.mergeGroupId : null,
+      mergeWithItemIds: Array.isArray(result.mergeWithItemIds) ? result.mergeWithItemIds.map(String) : [],
       links: Array.isArray(result.links) ? result.links.map((linkValue) => {
         const link = asRecord(linkValue)
         return { id: String(link.id ?? ''), url: String(link.url ?? ''), label: typeof link.label === 'string' ? link.label : undefined }

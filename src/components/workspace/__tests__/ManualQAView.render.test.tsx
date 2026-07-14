@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '@/test/renderHelpers'
 import { makeTicket } from '@/test/factories'
@@ -7,6 +7,7 @@ import type { ManualQaRound } from '@/hooks/useManualQA'
 const mocks = vi.hoisted(() => ({
   index: vi.fn(),
   round: vi.fn(),
+  uiState: vi.fn(),
   save: vi.fn(),
   refetchUiState: vi.fn(),
   submit: vi.fn(),
@@ -22,10 +23,7 @@ vi.mock('@/hooks/useTickets', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/hooks/useTickets')>()
   return {
     ...actual,
-    useTicketUIState: () => ({
-      data: { scope: 'manual_qa_draft:v1', exists: false, data: null, revision: 0, clientRevision: null, updatedAt: null },
-      refetch: mocks.refetchUiState,
-    }),
+    useTicketUIState: mocks.uiState,
     useSaveTicketUIState: () => ({ mutateAsync: mocks.save }),
   }
 })
@@ -73,6 +71,28 @@ const round: ManualQaRound = {
   draftRevision: 0,
 }
 
+function checklistItem(id: string, title: string, severity: 'required' | 'optional' = 'optional') {
+  return {
+    ...round.checklist!.items[0]!,
+    id,
+    lineageId: id,
+    title,
+    severity,
+  }
+}
+
+function evidenceFile(index: number) {
+  return {
+    id: `evidence-${index}`,
+    itemId: 'item-1',
+    name: `evidence-${index}.png`,
+    size: index * 10,
+    sha256: String(index).repeat(64).slice(0, 64),
+    mediaType: 'image/png',
+    previewable: true,
+  }
+}
+
 function waitingTicket() {
   return makeTicket({
     status: 'WAITING_MANUAL_QA',
@@ -93,9 +113,13 @@ describe('ManualQAView recovery behavior', () => {
       isLoading: false,
       error: null,
     })
+    mocks.uiState.mockReturnValue({
+      data: { scope: 'manual_qa_draft:v1', exists: false, data: null, revision: 0, clientRevision: null, updatedAt: null },
+      refetch: mocks.refetchUiState,
+    })
     mocks.refetchRound.mockResolvedValue({ data: round })
     mocks.round.mockReturnValue({ data: round, isLoading: false, error: null, refetch: mocks.refetchRound })
-    mocks.save.mockResolvedValue({ conflict: false, revision: 1 })
+    mocks.save.mockResolvedValue({ conflict: false, revision: 1, updatedAt: new Date().toISOString() })
     mocks.refetchUiState.mockResolvedValue({ data: { data: { results: {} }, revision: 2 } })
     mocks.submit.mockResolvedValue({})
     mocks.skip.mockResolvedValue({})
@@ -106,17 +130,56 @@ describe('ManualQAView recovery behavior', () => {
 
   afterEach(() => cleanup())
 
-  it('offers a non-blocking Improvement result for required checks', () => {
+  it('defaults required checks to Pending first without showing result-specific fields', () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    const pending = screen.getByRole('button', { name: 'Pending' })
+    const pass = screen.getByRole('button', { name: 'Pass' })
+    expect(pending).toHaveAttribute('data-selected', 'true')
+    expect(pending.compareDocumentPosition(pass) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.getByText(/select pass if.*fail if.*waive/i)).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Evidence' })).not.toBeInTheDocument()
+    expect(document.querySelector('textarea')).toBeNull()
+    expect(document.querySelector('input[type="file"]')).toBeNull()
+  })
+
+  it('edits an Improvement inline with secondary context and previews collapsed', () => {
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
     expect(screen.getByText('Required')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Improvement' })).toHaveLength(1)
     fireEvent.click(screen.getByRole('button', { name: 'Improvement' }))
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('Improvement backlog ticket')
-    const contextEditor = screen.getByText('Manual QA context').parentElement?.querySelector('textarea')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.getByText(/^Title/).parentElement?.querySelector('input')).toBeInTheDocument()
+    expect(screen.getByText(/^Description/).parentElement?.querySelector('textarea')).toBeInTheDocument()
+    for (const name of ['Manual QA context', 'Final description preview', 'Evidence and provenance preview']) {
+      expect(screen.getByRole('button', { name })).toHaveAttribute('aria-expanded', 'false')
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Manual QA context' }))
+    const contextEditor = screen.getByRole('button', { name: 'Manual QA context' }).parentElement?.parentElement?.querySelector('textarea')
     expect(contextEditor?.value).toContain('## Manual QA Context')
     expect(screen.queryByText(/required check.*incomplete/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps PRD coverage collapsed by default', () => {
+    mocks.round.mockReturnValue({
+      data: {
+        ...round,
+        coverage: [{ criterionRef: 'EP-1/ST-1/AC-1', criterion: 'Checkout succeeds', status: 'covered', itemIds: ['item-1'] }],
+        coverageSummary: { ...round.coverageSummary, coveredCount: 1, sourceItemCounts: { ...round.coverageSummary.sourceItemCounts, prd: 1 } },
+      },
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    })
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    const coverage = screen.getByRole('button', { name: /PRD coverage/i })
+    expect(coverage).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByText('Checkout succeeds')).not.toBeInTheDocument()
+    fireEvent.click(coverage)
+    expect(screen.getByText('Checkout succeeds')).toBeInTheDocument()
   })
 
   it('blocks submission after an autosave conflict and offers an explicit reload', async () => {
@@ -126,7 +189,7 @@ describe('ManualQAView recovery behavior', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
 
-    expect(await screen.findByText(/newer draft exists/i)).toBeInTheDocument()
+    expect(await screen.findByText(/newer draft.*reload/i)).toBeInTheDocument()
     expect(mocks.submit).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: /reload latest draft/i })).toBeInTheDocument()
   })
@@ -145,7 +208,7 @@ describe('ManualQAView recovery behavior', () => {
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
     expect(screen.getByRole('button', { name: 'Pass' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Skip Manual QA' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Skip Manual QA…' })).toBeDisabled()
     expect(document.querySelector('input[type="file"]')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Resume submission' }))
 
@@ -177,20 +240,67 @@ describe('ManualQAView recovery behavior', () => {
 
   it('keeps each successful file linked when a later upload fails', async () => {
     mocks.upload
-      .mockResolvedValueOnce({ id: 'evidence-1', itemId: 'item-1', name: 'first.png' })
+      .mockResolvedValueOnce({ ...evidenceFile(1), name: 'first.png' })
       .mockRejectedValueOnce(new Error('too large'))
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const first = new File(['first'], 'first.png', { type: 'image/png' })
     const second = new File(['second'], 'second.bin', { type: 'application/octet-stream' })
     fireEvent.change(input, { target: { files: [first, second] } })
 
+    expect(await screen.findByText('first.png')).toBeInTheDocument()
     expect(await screen.findByText(/confirmed uploads remain linked/i)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
     fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
     await waitFor(() => expect(mocks.submit).toHaveBeenCalled())
     expect(mocks.submit.mock.calls[0]![0].draft.results[0].evidenceIds).toEqual(['evidence-1'])
+  })
+
+  it('shows matching Add link and Add files actions and reveals Link and Details only on request', () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
+
+    const addLink = screen.getByRole('button', { name: 'Add link' })
+    const addFiles = screen.getByText('Add files').closest('label')!
+    expect(addLink.compareDocumentPosition(addFiles) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByLabelText(/Evidence link for item-1/i)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Evidence link details for item-1/i)).not.toBeInTheDocument()
+
+    fireEvent.click(addLink)
+    expect(screen.getByLabelText(/Evidence link for item-1/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/Evidence link details for item-1/i)).toBeInTheDocument()
+    expect(screen.queryByText(/label \(optional\)/i)).not.toBeInTheDocument()
+  })
+
+  it('renders a successful upload immediately without requiring a refresh', async () => {
+    mocks.upload.mockResolvedValue({ ...evidenceFile(1), name: 'receipt.png' })
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    fireEvent.change(input, { target: { files: [new File(['image'], 'receipt.png', { type: 'image/png' })] } })
+
+    expect(await screen.findByText('receipt.png')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove receipt.png' })).toBeInTheDocument()
+    expect(mocks.refetchRound).not.toHaveBeenCalled()
+  })
+
+  it('shows five evidence files initially and expands and collapses the remainder', () => {
+    const files = Array.from({ length: 7 }, (_, index) => evidenceFile(index + 1))
+    mocks.round.mockReturnValue({ data: { ...round, evidence: files }, isLoading: false, error: null, refetch: mocks.refetchRound })
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
+
+    for (const file of files.slice(0, 5)) expect(screen.getByText(file.name)).toBeInTheDocument()
+    expect(screen.queryByText(files[5]!.name)).not.toBeInTheDocument()
+    expect(screen.queryByText(files[6]!.name)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /show .*more/i }))
+    expect(screen.getByText(files[5]!.name)).toBeInTheDocument()
+    expect(screen.getByText(files[6]!.name)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /show less/i }))
+    expect(screen.queryByText(files[5]!.name)).not.toBeInTheDocument()
   })
 
   it('reuses upload identities with refreshed CAS guards from the explicit retry state', async () => {
@@ -198,6 +308,7 @@ describe('ManualQAView recovery behavior', () => {
     mocks.refetchRound.mockResolvedValue({ data: { ...round, draftRevision: 7 } })
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const file = new File(['same'], 'same.bin', { type: 'application/octet-stream', lastModified: 123 })
     fireEvent.change(input, { target: { files: [file] } })
@@ -215,6 +326,7 @@ describe('ManualQAView recovery behavior', () => {
     mocks.upload.mockRejectedValue(new Error('connection lost'))
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
     const input = document.querySelector('input[type="file"]') as HTMLInputElement
     const first = new File(['aaaa'], 'same.bin', { type: 'application/octet-stream', lastModified: 123 })
     const second = new File(['bbbb'], 'same.bin', { type: 'application/octet-stream', lastModified: 123 })
@@ -232,6 +344,7 @@ describe('ManualQAView recovery behavior', () => {
     mocks.refetchRound.mockResolvedValue({ data: { ...evidenceRound, draftRevision: 8 } })
     mocks.remove.mockRejectedValue(new Error('connection lost'))
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Pass' }))
 
     fireEvent.click(screen.getByRole('button', { name: 'Remove screen.png' }))
     expect(await screen.findByText(/same action identity with the latest draft revision/i)).toBeInTheDocument()
@@ -241,6 +354,84 @@ describe('ManualQAView recovery behavior', () => {
     expect(mocks.remove.mock.calls[1]![0].actionId).toBe(mocks.remove.mock.calls[0]![0].actionId)
     expect(mocks.remove.mock.calls[0]![0].expectedDraftRevision).toBe(0)
     expect(mocks.remove.mock.calls[1]![0].expectedDraftRevision).toBe(8)
+  })
+
+  it('allows an empty optional waiver reason and submits it', async () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Waive' }))
+
+    const reason = screen.getByText(/Waiver reason/i).parentElement?.querySelector('textarea')
+    expect(reason).toBeInTheDocument()
+    expect(reason!.parentElement).toHaveTextContent(/optional/i)
+    expect(reason!.parentElement).not.toHaveTextContent('*')
+    expect(screen.queryByText(/explain why this check is being waived/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Submit QA' }))
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalled())
+    expect(mocks.submit.mock.calls[0]![0].draft.results[0]).toMatchObject({ outcome: 'waive' })
+  })
+
+  it('selects multiple numbered merge items and blocks submit until every selected item fails', async () => {
+    const items = [
+      checklistItem('item-1', 'Submit checkout', 'required'),
+      checklistItem('item-2', 'Calculate shipping'),
+      checklistItem('item-3', 'Send confirmation'),
+    ]
+    mocks.round.mockReturnValue({
+      data: { ...round, checklist: { ...round.checklist!, items } },
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    })
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    const firstCard = screen.getByText('1. Submit checkout').closest('[class*="rounded-xl"]') ?? screen.getByText('1. Submit checkout').parentElement!.parentElement!.parentElement
+    fireEvent.click(within(firstCard as HTMLElement).getByRole('button', { name: 'Fail' }))
+    fireEvent.change(within(firstCard as HTMLElement).getByPlaceholderText(/What happened/i), { target: { value: 'Checkout remained open.' } })
+
+    const shipping = within(firstCard as HTMLElement).getByRole('button', { name: '2. Calculate shipping' })
+    const confirmation = within(firstCard as HTMLElement).getByRole('button', { name: '3. Send confirmation' })
+    fireEvent.click(shipping)
+    fireEvent.click(confirmation)
+    expect(shipping).toHaveAttribute('data-selected', 'true')
+    expect(confirmation).toHaveAttribute('data-selected', 'true')
+
+    fireEvent.click(screen.getByRole('button', { name: /Submit/ }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Item 1 Submit checkout has item 2 Calculate shipping and item 3 Send confirmation in its merge group, but those items were not marked as Fail.')
+    expect(mocks.submit).not.toHaveBeenCalled()
+  })
+
+  it('shows autosave status beside completion and has no manual Save action', () => {
+    const savedAt = new Date(Date.now() - 20_000)
+    mocks.uiState.mockReturnValue({
+      data: { scope: 'manual_qa_draft:v1', exists: true, data: { results: {} }, revision: 1, clientRevision: null, updatedAt: savedAt.toISOString() },
+      refetch: mocks.refetchUiState,
+    })
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    expect(screen.getByText(/1 required check incomplete/i).parentElement).toHaveTextContent(/Autosave on/i)
+    const lastSave = screen.getByText(/last save.*20 seconds ago/i)
+    expect(lastSave).toHaveAttribute('title', savedAt.toLocaleString())
+    expect(screen.queryByRole('button', { name: /Save now/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit QA' })).toBeInTheDocument()
+  })
+
+  it('archives entered invalid result data when Skip Manual QA is confirmed', async () => {
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Fail' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Skip Manual QA…' }))
+    const dialog = screen.getByRole('dialog')
+    expect(dialog).toHaveTextContent(/no.*bead.*or.*improvement.*will be created/i)
+    expect(dialog).toHaveTextContent(/entered results.*will be saved.*cannot be edited/i)
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Skip and integrate' }))
+
+    await waitFor(() => expect(mocks.skip).toHaveBeenCalled())
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({ results: expect.objectContaining({ 'item-1': expect.objectContaining({ status: 'fail' }) }) }),
+    }))
+    expect(mocks.skip.mock.calls[0]![0].draft.results[0]).toMatchObject({ outcome: 'fail' })
+    expect(mocks.submit).not.toHaveBeenCalled()
   })
 
   it('shows drift failures and retries the decision with the same action identity', async () => {
@@ -283,6 +474,7 @@ describe('ManualQAView recovery behavior', () => {
     expect(screen.getByText(/1m 5s/)).toBeInTheDocument()
     expect(screen.getByText(/QA-v1-1/)).toBeInTheDocument()
     expect(screen.getByText(/APP-9/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /PRD coverage/i }))
     expect(screen.getByText('Checkout succeeds')).toBeInTheDocument()
     expect(screen.getByText('implementation diff: 3')).toBeInTheDocument()
   })
@@ -296,7 +488,9 @@ describe('ManualQAView recovery behavior', () => {
     })
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
 
-    expect(screen.getByText('PRD coverage')).toBeInTheDocument()
+    const coverage = screen.getByRole('button', { name: /PRD coverage/i })
+    expect(coverage).toHaveAttribute('aria-expanded', 'false')
+    fireEvent.click(coverage)
     expect(screen.getByText('implementation diff: 2')).toBeInTheDocument()
   })
 

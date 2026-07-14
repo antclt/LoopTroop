@@ -87,7 +87,7 @@ flowchart LR
     G -.->|"Retry"| E
 ```
 
-LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries. An optional Manual QA checkpoint can be enabled globally and overridden per project or Draft ticket. After final tests, LoopTroop generates a versioned checklist, then waits while **you** run and control the application. Passing, waiving, or skipping continues to integration; failures become normal QA-fix beads and return through coding and fresh final tests, while improvement observations become independent Draft backlog tickets.
+LoopTroop keeps workflow state outside the model, stores durable artifacts, and asks for approval at important boundaries. An optional Manual QA checkpoint can be enabled globally and overridden per project or Draft ticket. After final tests, LoopTroop generates a versioned checklist, then waits while **you** run and control the application. Checklist items start Pending and autosave without a separate Save action. Passing, waiving, or skipping continues to integration; failures become normal QA-fix beads and return through coding and fresh final tests, while inline Improvement observations become independent Draft backlog tickets. Skip archives anything already entered as read-only but deliberately creates none of that follow-up work.
 
 ## Core ideas
 
@@ -163,7 +163,7 @@ Read more: [System Architecture](https://www.looptroop.ovh/docs/system-architect
 
 LoopTroop keeps you in control of critical state transitions. You actively review and sign off on planning specs, execution blueprints, and final pull request deliverables. *(Note: Human approval gates will become optional in future releases).*
 
-For tickets with Manual QA enabled, the post-test gate is intentionally hands-off: LoopTroop prepares the checklist and stores evidence, but never launches, previews, stops, or otherwise controls your application. Checklist drafts autosave, historical rounds remain reviewable, and workspace changes caused while testing must be explicitly included or discarded before submission.
+For tickets with Manual QA enabled, the post-test gate is intentionally hands-off: LoopTroop prepares the checklist and stores evidence, but never launches, previews, stops, or otherwise controls your application. Checklist drafts autosave and report when they were last saved, historical rounds remain reviewable, and workspace changes caused while testing must be explicitly included or discarded before submission. Skip can archive an incomplete draft without creating QA-fix beads or Improvement tickets.
 
 Read more: [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow)
 

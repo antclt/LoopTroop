@@ -67,9 +67,9 @@ export const ManualQaEvidenceRefSchema = z.object({
 export const ManualQaImprovementDraftSchema = z.object({
   id: IdString,
   itemId: IdString,
-  title: NonEmptyString.max(500),
-  description: NonEmptyString.max(10_000),
-  contextOverride: NonEmptyString.max(10_000).optional(),
+  title: z.string().max(500),
+  description: z.string().max(10_000),
+  contextOverride: z.string().max(10_000).optional(),
   evidenceIds: z.array(IdString).default([]),
 }).strict()
 
@@ -92,17 +92,7 @@ export const ManualQaItemResultSchema = z.object({
   links: z.array(ManualQaEvidenceLinkSchema).default([]),
   improvementDraftId: IdString.optional(),
   mergeGroupId: IdString.optional(),
-}).strict().superRefine((result, ctx) => {
-  if (result.outcome === 'fail' && !result.observation.trim()) {
-    ctx.addIssue({ code: 'custom', path: ['observation'], message: 'A failed item requires an observation.' })
-  }
-  if (result.outcome === 'waive' && !result.reason.trim()) {
-    ctx.addIssue({ code: 'custom', path: ['reason'], message: 'A waived item requires a reason.' })
-  }
-  if (result.outcome === 'improvement' && !result.improvementDraftId) {
-    ctx.addIssue({ code: 'custom', path: ['improvementDraftId'], message: 'An improvement requires a reviewed ticket draft.' })
-  }
-})
+}).strict()
 
 export const ManualQaDraftSchema = z.object({
   schemaVersion: z.literal(MANUAL_QA_SCHEMA_VERSION),
@@ -183,7 +173,7 @@ export const ManualQaSummarySchema = z.object({
   createdFixBeadIds: z.array(IdString),
   improvementTicketIds: z.array(NonEmptyString),
   waivedItemIds: z.array(IdString),
-  waivedItems: z.array(z.object({ itemId: IdString, reason: NonEmptyString }).strict()),
+  waivedItems: z.array(z.object({ itemId: IdString, reason: z.string().max(20_000) }).strict()),
   skipReason: z.string().max(20_000).optional(),
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime(),

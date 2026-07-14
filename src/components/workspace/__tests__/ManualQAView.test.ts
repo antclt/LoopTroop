@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { buildCanonicalManualQaDraft, buildManualQaImprovementContextPreview, validateManualQaItem } from '@/lib/manualQaDraft'
+import {
+  buildCanonicalManualQaDraft,
+  buildManualQaImprovementContextPreview,
+  validateManualQaItem,
+  validateManualQaMergeGroups,
+} from '@/lib/manualQaDraft'
 import type { ManualQaChecklistItem, ManualQaItemResult, ManualQaRound } from '@/hooks/useManualQA'
 
 const item: ManualQaChecklistItem = {
@@ -25,9 +30,10 @@ describe('Manual QA result validation', () => {
     expect(validateManualQaItem(item, result('pass'))).toEqual([])
   })
 
-  it('requires observations, waiver reasons, and reviewed improvement drafts', () => {
+  it('requires failure observations and reviewed improvement drafts while keeping waiver reasons optional', () => {
     expect(validateManualQaItem(item, result('fail'))).toContain('Describe what you observed for this failure.')
-    expect(validateManualQaItem(item, result('waive'))).toContain('Explain why this check is being waived.')
+    expect(validateManualQaItem(item, result('waive'))).toEqual([])
+    expect(validateManualQaItem(item, result('waive', { waiverReason: 'Accepted for this delivery.' }))).toEqual([])
     expect(validateManualQaItem({ ...item, severity: 'optional' }, result('improvement'))).toEqual([
       'Improvement title is required.',
       'Improvement description is required.',
@@ -37,12 +43,30 @@ describe('Manual QA result validation', () => {
     }))).toEqual([])
   })
 
-  it('builds the strict submission draft without changing the autosave shape', () => {
+  it('builds connected merge groups without changing the autosave shape', () => {
+    const paymentItem: ManualQaChecklistItem = {
+      ...item,
+      id: 'v1-item-2',
+      lineageId: 'payment-confirmation',
+      title: 'Confirm payment',
+    }
+    const receiptItem: ManualQaChecklistItem = {
+      ...item,
+      id: 'v1-item-3',
+      lineageId: 'receipt-delivery',
+      title: 'Deliver receipt',
+    }
+    const unrelatedItem: ManualQaChecklistItem = {
+      ...item,
+      id: 'v1-item-4',
+      lineageId: 'account-history',
+      title: 'Show account history',
+    }
     const round: ManualQaRound = {
       version: 2,
       status: 'waiting',
       checklistHash: 'a'.repeat(64),
-      checklist: { schemaVersion: 1, version: 2, items: [item] },
+      checklist: { schemaVersion: 1, version: 2, items: [item, paymentItem, receiptItem, unrelatedItem] },
       coverage: [],
       coverageSummary: { coveredCount: 0, partiallyCoveredCount: 0, uncoveredCount: 0, sourceItemCounts: { prd: 0, bead: 0, previousQa: 0, implementationDiff: 0 } },
       evidence: [],
@@ -50,7 +74,13 @@ describe('Manual QA result validation', () => {
     }
     const uiDraft = {
       results: {
-        [item.id]: result('fail', { observation: 'The button stayed disabled.', mergeGroup: 'checkout failures' }),
+        [item.id]: result('fail', {
+          observation: 'The button stayed disabled.',
+          mergeWithItemIds: [paymentItem.id],
+        }),
+        [paymentItem.id]: { ...result('fail', { observation: 'Payment did not complete.' }), itemId: paymentItem.id, mergeWithItemIds: [receiptItem.id] },
+        [receiptItem.id]: { ...result('fail', { observation: 'No receipt arrived.' }), itemId: receiptItem.id },
+        [unrelatedItem.id]: { ...result('pass'), itemId: unrelatedItem.id },
       },
     }
 
@@ -61,14 +91,47 @@ describe('Manual QA result validation', () => {
       ticketId: 'ticket-1',
       version: 2,
       draftRevision: 5,
-      results: [{
-        itemId: item.id,
-        outcome: 'fail',
-        observation: 'The button stayed disabled.',
-        mergeGroupId: 'qa-merge-checkout-failures',
-      }],
     })
+    const checkout = canonical.results[0]!
+    const payment = canonical.results[1]!
+    const receipt = canonical.results[2]!
+    const unrelated = canonical.results[3]!
+    expect(checkout).toMatchObject({ itemId: item.id, outcome: 'fail', observation: 'The button stayed disabled.' })
+    expect(checkout.mergeGroupId).toMatch(/^qa-merge-[0-9a-f]{8}$/)
+    expect(payment.mergeGroupId).toBe(checkout.mergeGroupId)
+    expect(receipt.mergeGroupId).toBe(checkout.mergeGroupId)
+    expect(unrelated).not.toHaveProperty('mergeGroupId')
     expect(uiDraft.results[item.id]).not.toHaveProperty('outcome')
+    expect(uiDraft.results[item.id]).not.toHaveProperty('mergeGroupId')
+  })
+
+  it('names every selected non-failed item by checklist number and title', () => {
+    const secondItem: ManualQaChecklistItem = {
+      ...item,
+      id: 'v1-item-2',
+      lineageId: 'payment-confirmation',
+      title: 'Confirm payment',
+    }
+    const thirdItem: ManualQaChecklistItem = {
+      ...item,
+      id: 'v1-item-3',
+      lineageId: 'receipt-delivery',
+      title: 'Deliver receipt',
+    }
+    const draft = {
+      results: {
+        [item.id]: result('fail', {
+          observation: 'The button stayed disabled.',
+          mergeWithItemIds: [secondItem.id, thirdItem.id],
+        }),
+        [secondItem.id]: { ...result('pass'), itemId: secondItem.id },
+        [thirdItem.id]: { ...result('pending'), itemId: thirdItem.id },
+      },
+    }
+
+    expect(validateManualQaMergeGroups([item, secondItem, thirdItem], draft)).toEqual([
+      'Item 1 Submit checkout has item 2 Confirm payment and item 3 Deliver receipt in its merge group, but those items were not marked as Fail.',
+    ])
   })
 
   it('previews the human-readable context that future planning receives', () => {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, Download, FileUp, Loader2, RefreshCw, Save, ShieldCheck, SkipForward, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Download, FileUp, Link2, Loader2, RefreshCw, ShieldCheck, SkipForward, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -18,13 +18,15 @@ import {
   useSubmitManualQa,
   useUploadManualQaEvidence,
   type ManualQaDraft,
+  type ManualQaEvidence,
   type ManualQaItemResult,
   type ManualQaResultStatus,
   type ManualQaSummary,
 } from '@/hooks/useManualQA'
 import { cn } from '@/lib/utils'
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
-import { buildCanonicalManualQaDraft, buildDefaultManualQaImprovementContext, composeManualQaImprovementPreview, validateManualQaItem } from '@/lib/manualQaDraft'
+import { CollapsibleSection } from '@/components/workspace/ArtifactContentViewer'
+import { buildCanonicalManualQaDraft, buildDefaultManualQaImprovementContext, composeManualQaImprovementPreview, validateManualQaItem, validateManualQaMergeGroups } from '@/lib/manualQaDraft'
 
 interface ManualQAViewProps {
   ticket: Ticket
@@ -39,11 +41,11 @@ interface PendingEvidenceUpload {
 }
 
 const RESULT_OPTIONS: Array<{ value: ManualQaResultStatus; label: string; className: string }> = [
+  { value: 'pending', label: 'Pending', className: 'data-[selected=true]:bg-muted data-[selected=true]:text-foreground' },
   { value: 'pass', label: 'Pass', className: 'data-[selected=true]:border-green-500 data-[selected=true]:bg-green-500/10 data-[selected=true]:text-green-700 dark:data-[selected=true]:text-green-300' },
   { value: 'fail', label: 'Fail', className: 'data-[selected=true]:border-red-500 data-[selected=true]:bg-red-500/10 data-[selected=true]:text-red-700 dark:data-[selected=true]:text-red-300' },
   { value: 'waive', label: 'Waive', className: 'data-[selected=true]:border-amber-500 data-[selected=true]:bg-amber-500/10 data-[selected=true]:text-amber-700 dark:data-[selected=true]:text-amber-300' },
   { value: 'improvement', label: 'Improvement', className: 'data-[selected=true]:border-blue-500 data-[selected=true]:bg-blue-500/10 data-[selected=true]:text-blue-700 dark:data-[selected=true]:text-blue-300' },
-  { value: 'pending', label: 'Pending', className: 'data-[selected=true]:bg-muted data-[selected=true]:text-foreground' },
 ]
 
 const SAFE_RASTER_MEDIA_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif'])
@@ -88,6 +90,16 @@ function durationLabel(milliseconds: number) {
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`
 }
 
+function relativeSaveLabel(savedAt: Date, now: number) {
+  const seconds = Math.max(0, Math.floor((now - savedAt.getTime()) / 1000))
+  if (seconds < 5) return 'just now'
+  if (seconds < 60) return `${seconds} seconds ago`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
+  const hours = Math.floor(minutes / 60)
+  return `${hours} hour${hours === 1 ? '' : 's'} ago`
+}
+
 function ManualQaRoundSummary({ summary }: { summary: ManualQaSummary }) {
   const counts = summary.itemCounts
   return (
@@ -104,7 +116,7 @@ function ManualQaRoundSummary({ summary }: { summary: ManualQaSummary }) {
           {summary.startedAt && <><dt className="text-muted-foreground">Started</dt><dd>{new Date(summary.startedAt).toLocaleString()}</dd></>}
           {summary.completedAt && <><dt className="text-muted-foreground">Completed</dt><dd>{new Date(summary.completedAt).toLocaleString()}</dd></>}
         </dl>
-        {summary.waivedItems.length > 0 && <div><p className="font-medium">Waivers</p><ul className="mt-1 list-disc pl-5 text-muted-foreground">{summary.waivedItems.map((item) => <li key={item.itemId}><code>{item.itemId}</code>: {item.reason}</li>)}</ul></div>}
+        {summary.waivedItems.length > 0 && <div><p className="font-medium">Waivers</p><ul className="mt-1 list-disc pl-5 text-muted-foreground">{summary.waivedItems.map((item) => <li key={item.itemId}><code>{item.itemId}</code>{item.reason ? `: ${item.reason}` : ''}</li>)}</ul></div>}
         {summary.skipReason && <p><span className="font-medium">Skip reason:</span> {summary.skipReason}</p>}
         {summary.createdFixBeadIds.length > 0 && <p><span className="font-medium">Fix beads:</span> <span className="font-mono">{summary.createdFixBeadIds.join(', ')}</span></p>}
         {summary.improvementTicketIds.length > 0 && <p><span className="font-medium">Improvement tickets:</span> <span className="font-mono">{summary.improvementTicketIds.join(', ')}</span></p>}
@@ -177,12 +189,17 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [skipReason, setSkipReason] = useState('')
   const [skipOpen, setSkipOpen] = useState(false)
-  const [improvementItemId, setImprovementItemId] = useState<string | null>(null)
   const [linkDrafts, setLinkDrafts] = useState<Record<string, { url: string; label: string; error?: string }>>({})
+  const [openLinkEditors, setOpenLinkEditors] = useState<Set<string>>(new Set())
   const [evidenceErrors, setEvidenceErrors] = useState<Record<string, string | undefined>>({})
   const [pendingEvidenceUploads, setPendingEvidenceUploads] = useState<Record<string, PendingEvidenceUpload[]>>({})
+  const [uploadedEvidence, setUploadedEvidence] = useState<ManualQaEvidence[]>([])
+  const [removedEvidenceIds, setRemovedEvidenceIds] = useState<Set<string>>(new Set())
+  const [expandedEvidenceItems, setExpandedEvidenceItems] = useState<Set<string>>(new Set())
   const [driftError, setDriftError] = useState<string | null>(null)
   const [removingEvidenceIds, setRemovingEvidenceIds] = useState<Set<string>>(new Set())
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const draftRef = useRef(draft)
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const latestDraftRevisionRef = useRef(0)
@@ -208,6 +225,11 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     round?.draftRevision ?? 0,
   )
   const items = useMemo(() => checklist?.items ?? [], [checklist?.items])
+  const evidence = useMemo(() => {
+    const byId = new Map((round?.evidence ?? []).map((file) => [file.id, file]))
+    for (const file of uploadedEvidence) byId.set(file.id, file)
+    return [...byId.values()].filter((file) => !removedEvidenceIds.has(file.id))
+  }, [removedEvidenceIds, round?.evidence, uploadedEvidence])
 
   useEffect(() => {
     if (!round || version === null) return
@@ -219,11 +241,25 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     setDraftSourceKey(key)
     setDirty(false)
     setSaveState('idle')
-  }, [draftSourceKey, round, uiState.data?.data, version])
+    setUploadedEvidence([])
+    setRemovedEvidenceIds(new Set())
+    setExpandedEvidenceItems(new Set())
+    setOpenLinkEditors(new Set())
+    setLastSavedAt(uiState.data?.updatedAt ? new Date(uiState.data.updatedAt) : null)
+  }, [draftSourceKey, round, uiState.data?.data, uiState.data?.updatedAt, version])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 5_000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     latestDraftRevisionRef.current = expectedDraftRevision
   }, [expectedDraftRevision, version])
+
+  useEffect(() => {
+    if (uiState.data?.updatedAt) setLastSavedAt(new Date(uiState.data.updatedAt))
+  }, [uiState.data?.updatedAt, version])
 
   const persistDraft = useCallback((keepalive = false) => {
     if (!editable || version === null || !dirty) {
@@ -241,6 +277,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       const saved = await saveUiState.mutateAsync({ ticketId: ticket.id, scope, data: current })
       if (saved.conflict) throw new Error('Manual QA draft conflict')
       latestDraftRevisionRef.current = saved.revision
+      if (saved.updatedAt) setLastSavedAt(new Date(saved.updatedAt))
       return true
     }
     const pending = saveQueueRef.current.then(run, run).then((confirmed) => {
@@ -285,6 +322,27 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     setSaveState('idle')
   }, [])
 
+  const toggleMergeItem = useCallback((sourceItemId: string, targetItemId: string) => {
+    setDraft((current) => {
+      const source = resultFor(current, sourceItemId)
+      const target = resultFor(current, targetItemId)
+      const selected = (source.mergeWithItemIds ?? []).includes(targetItemId)
+      const toggle = (values: string[] | undefined, itemId: string) => selected
+        ? (values ?? []).filter((value) => value !== itemId)
+        : [...new Set([...(values ?? []), itemId])]
+      return {
+        ...current,
+        results: {
+          ...current.results,
+          [sourceItemId]: { ...source, mergeWithItemIds: toggle(source.mergeWithItemIds, targetItemId) },
+          [targetItemId]: { ...target, mergeWithItemIds: toggle(target.mergeWithItemIds, sourceItemId) },
+        },
+      }
+    })
+    setDirty(true)
+    setSaveState('idle')
+  }, [])
+
   const appendEvidenceId = useCallback((itemId: string, evidenceId: string) => {
     setDraft((current) => {
       const existing = resultFor(current, itemId)
@@ -304,9 +362,9 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     items.map((item) => [item.id, validateManualQaItem(item, resultFor(draft, item.id))]),
   ), [draft, items])
   const allErrors = Object.values(validation).flat()
+  const mergeGroupErrors = useMemo(() => validateManualQaMergeGroups(items, draft), [draft, items])
   const hasFailures = items.some((item) => resultFor(draft, item.id).status === 'fail')
   const incompleteRequired = items.filter((item) => item.severity === 'required' && resultFor(draft, item.id).status === 'pending').length
-  const improvementItem = items.find((item) => item.id === improvementItemId) ?? null
   const coverageSourceItemTotal = round ? Object.values(round.coverageSummary.sourceItemCounts).reduce((sum, count) => sum + count, 0) : 0
 
   const mutationBase = useCallback((actionId = newManualQaActionId('manual-qa')) => ({
@@ -381,6 +439,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     evidenceIdsRef.current.set(key, evidenceId)
     try {
       const saved = await uploadEvidence.mutateAsync({ ...base, itemId, file, evidenceId })
+      setUploadedEvidence((current) => [...current.filter((entry) => entry.id !== saved.id), saved])
       appendEvidenceId(itemId, saved.id)
       clearPendingEvidenceUpload(itemId, key)
       mutationIdentitiesRef.current.delete(key)
@@ -391,6 +450,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       rememberRefetchedRevision(refreshed.data)
       const reconciled = refreshed.data?.evidence.find((entry) => entry.id === evidenceId && entry.itemId === itemId)
       if (reconciled) {
+        setUploadedEvidence((current) => [...current.filter((entry) => entry.id !== reconciled.id), reconciled])
         appendEvidenceId(itemId, reconciled.id)
         clearPendingEvidenceUpload(itemId, key)
         mutationIdentitiesRef.current.delete(key)
@@ -414,6 +474,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     try {
       await removeEvidence.mutateAsync({ ...stableMutationBase(key, 'manual-qa-evidence-remove'), itemId, evidenceId })
       mutationIdentitiesRef.current.delete(key)
+      setRemovedEvidenceIds((current) => new Set(current).add(evidenceId))
       updateResult(itemId, { evidenceIds: (resultFor(draftRef.current, itemId).evidenceIds ?? []).filter((id) => id !== evidenceId) })
     } catch (error) {
       const refreshed = await roundQuery.refetch()
@@ -421,6 +482,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       const stillExists = refreshed.data?.evidence.some((entry) => entry.id === evidenceId && entry.itemId === itemId)
       if (!stillExists) {
         mutationIdentitiesRef.current.delete(key)
+        setRemovedEvidenceIds((current) => new Set(current).add(evidenceId))
         updateResult(itemId, { evidenceIds: (resultFor(draftRef.current, itemId).evidenceIds ?? []).filter((id) => id !== evidenceId) })
       } else {
         setEvidenceErrors((current) => ({ ...current, [itemId]: `${error instanceof Error ? error.message : 'Removal failed'}. Retry keeps the same action identity with the latest draft revision.` }))
@@ -454,17 +516,26 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     setDraft(restored)
     setSkipReason(restored.skipReason ?? '')
     latestDraftRevisionRef.current = getUiRevision(refreshed.data, round?.draftRevision ?? 0)
+    setLastSavedAt(refreshed.data?.updatedAt ? new Date(refreshed.data.updatedAt) : null)
     setDirty(false)
     setSaveState('idle')
     setSubmitError(null)
   }
 
   const handleSubmit = async () => {
-    if (version === null || allErrors.length > 0 || !round) return
+    if (version === null || !round) return
     setSubmitError(null)
+    if (mergeGroupErrors.length > 0) {
+      setSubmitError(mergeGroupErrors.join(' '))
+      return
+    }
+    if (allErrors.length > 0) {
+      setSubmitError(allErrors.join(' '))
+      return
+    }
     try {
       await persistDraft()
-      const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, round, draftRef.current, latestDraftRevisionRef.current)
+      const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, { ...round, evidence }, draftRef.current, latestDraftRevisionRef.current)
       await submit.mutateAsync({ ...mutationBase(resumableActionId('submit')), draft: canonicalDraft })
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Manual QA submission failed.')
@@ -476,7 +547,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     setSubmitError(null)
     if (submissionInProgress) {
       try {
-        const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, round, draftRef.current, latestDraftRevisionRef.current)
+        const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, { ...round, evidence }, draftRef.current, latestDraftRevisionRef.current)
         await skip.mutateAsync({ ...mutationBase(resumableActionId('skip')), reason: skipReason.trim() || undefined, draft: canonicalDraft })
       } catch (error) {
         setSubmitError(error instanceof Error ? error.message : 'Manual QA skip recovery failed.')
@@ -489,7 +560,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       const saved = await saveUiState.mutateAsync({ ticketId: ticket.id, scope, data: skippedDraft })
       if (saved.conflict) throw new Error('Manual QA draft conflict')
       latestDraftRevisionRef.current = saved.revision
-      const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, round, skippedDraft, saved.revision)
+      const canonicalDraft = buildCanonicalManualQaDraft(ticket.externalId, { ...round, evidence }, skippedDraft, saved.revision)
       await skip.mutateAsync({ ...mutationBase(resumableActionId('skip')), reason: skipReason.trim() || undefined, draft: canonicalDraft })
       setSkipOpen(false)
     } catch (error) {
@@ -497,7 +568,7 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     }
   }
 
-  if (indexLoading || (isGenerating && selectedVersion === null) || (version !== null && roundLoading)) {
+  if (indexLoading || (isGenerating && selectedVersion === null) || (version !== null && roundLoading && !round)) {
     return <ManualQaGeneration versions={(index?.versions ?? []).filter((entry) => entry.version !== activeVersion)} onSelectVersion={setSelectedVersion} />
   }
 
@@ -546,15 +617,6 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                 {index?.versions.map((entry) => <option key={entry.version} value={entry.version}>Round v{entry.version} · {entry.outcome ?? entry.status}</option>)}
               </select>
             )}
-            {editable && (
-              <span className={cn('text-xs', saveState === 'error' || saveState === 'conflict' ? 'text-destructive' : 'text-muted-foreground')}>
-                {saveState === 'saving' && 'Saving…'}
-                {saveState === 'saved' && 'Saved'}
-                {saveState === 'conflict' && 'A newer draft exists. Reload to reconcile.'}
-                {saveState === 'error' && 'Autosave failed'}
-                {saveState === 'idle' && dirty && 'Unsaved changes'}
-              </span>
-            )}
             {editable && saveState === 'conflict' && (
               <Button type="button" size="sm" variant="outline" onClick={() => void reloadConflictingDraft()}>
                 <RefreshCw className="mr-1 h-3.5 w-3.5" />Reload latest draft
@@ -583,9 +645,8 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
           {round.summary && <ManualQaRoundSummary summary={round.summary} />}
 
           {(round.coverage.length > 0 || coverageSourceItemTotal > 0) && (
-            <Card>
-              <CardHeader><CardTitle className="text-sm">PRD coverage <Badge variant="outline" className="ml-2">Advisory</Badge></CardTitle></CardHeader>
-              <CardContent className="space-y-3">
+            <CollapsibleSection title={<span>PRD coverage <Badge variant="outline" className="ml-2">Advisory</Badge></span>} scrollOnOpen={false}>
+              <div className="space-y-3 pt-1">
                 <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                   <span>{round.coverageSummary.coveredCount} covered</span><span>·</span><span>{round.coverageSummary.partiallyCoveredCount} partial</span><span>·</span><span>{round.coverageSummary.uncoveredCount} uncovered</span>
                 </div>
@@ -600,17 +661,26 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CollapsibleSection>
           )}
 
           {items.map((item, indexNumber) => {
             const result = resultFor(draft, item.id)
             const errors = validation[item.id] ?? []
-            const evidence = round.evidence.filter((file) => file.itemId === item.id)
+            const itemEvidence = evidence.filter((file) => file.itemId === item.id)
+            const visibleEvidence = expandedEvidenceItems.has(item.id) ? itemEvidence : itemEvidence.slice(0, 5)
             const pendingUploads = (pendingEvidenceUploads[item.id] ?? []).filter((entry) => entry.version === version)
+            const improvement = result.improvement ?? { title: '', description: '' }
+            const preview = result.status === 'improvement'
+              ? composeManualQaImprovementPreview(item, { ...result, improvement })
+              : null
+            const editableContext = result.status === 'improvement'
+              ? improvement.contextOverride ?? buildDefaultManualQaImprovementContext(item, { ...result, improvement })
+              : ''
+            const evidenceFiles = itemEvidence.filter((file) => (result.evidenceIds ?? []).includes(file.id))
             return (
-              <Card key={item.id} className={cn(errors.length > 0 && editable && 'border-destructive/50')}>
+              <Card key={item.id} className={cn(errors.length > 0 && result.status !== 'pending' && editable && 'border-destructive/50')}>
                 <CardHeader className="space-y-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
@@ -634,33 +704,34 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
                     <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Result</h5>
                     <div className="flex flex-wrap gap-2">
                       {RESULT_OPTIONS.map((option) => (
-                        <button key={option.value} type="button" data-selected={result.status === option.value} disabled={!editable} onClick={() => { updateResult(item.id, { status: option.value }); if (option.value === 'improvement') setImprovementItemId(item.id) }} className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}>{option.label}</button>
+                        <button key={option.value} type="button" data-selected={result.status === option.value} disabled={!editable} onClick={() => updateResult(item.id, { status: option.value })} className={cn('rounded-md border border-input px-3 py-1.5 text-xs text-muted-foreground transition-colors disabled:cursor-not-allowed disabled:opacity-70', option.className)}>{option.label}</button>
                       ))}
                     </div>
                   </div>
 
-                  {result.status === 'fail' && <div><label className="text-xs font-medium">Observed behavior <span className="text-destructive">*</span></label><textarea disabled={!editable} value={result.observation ?? ''} onChange={(event) => updateResult(item.id, { observation: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="What happened, and how did it differ from the expected result?" /><label className="mt-2 block text-xs font-medium">Merge group <span className="font-normal text-muted-foreground">(optional; matching names create one fix bead)</span></label><input disabled={!editable} value={result.mergeGroup ?? ''} onChange={(event) => updateResult(item.id, { mergeGroup: event.target.value || null })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="e.g. checkout-errors" /></div>}
-                  {result.status === 'waive' && <div><label className="text-xs font-medium">Waiver reason <span className="text-destructive">*</span></label><textarea disabled={!editable} value={result.waiverReason ?? ''} onChange={(event) => updateResult(item.id, { waiverReason: event.target.value })} className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
+                  {result.status === 'pending' && <p className="text-xs text-muted-foreground">Not reviewed yet. Select Pass if it works, Fail if it does not, Waive to skip this check, or Improvement to create follow-up work.</p>}
+                  {result.status === 'fail' && <div><label className="text-xs font-medium">Observed behavior <span className="text-destructive">*</span></label><textarea disabled={!editable} value={result.observation ?? ''} onChange={(event) => updateResult(item.id, { observation: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="What happened, and how did it differ from the expected result?" /><div className="mt-3"><p className="text-xs font-medium">Merge with other QA items <span className="font-normal text-muted-foreground">(optional)</span></p><p className="mt-1 text-xs text-muted-foreground">Select related items that should create one fix bead. Every selected item must be marked Fail before Submit.</p><div className="mt-2 flex flex-wrap gap-2">{items.filter((candidate) => candidate.id !== item.id).map((candidate) => { const candidateIndex = items.findIndex((entry) => entry.id === candidate.id); const selected = (result.mergeWithItemIds ?? []).includes(candidate.id); return <button key={candidate.id} type="button" data-selected={selected} disabled={!editable} onClick={() => toggleMergeItem(item.id, candidate.id)} className="rounded-md border border-input px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors data-[selected=true]:border-red-500 data-[selected=true]:bg-red-500/10 data-[selected=true]:text-foreground disabled:opacity-70">{candidateIndex + 1}. {candidate.title || candidate.behavior}</button> })}</div></div></div>}
+                  {result.status === 'waive' && <div><label className="text-xs font-medium">Waiver reason <span className="font-normal text-muted-foreground">(optional)</span></label><textarea disabled={!editable} value={result.waiverReason ?? ''} onChange={(event) => updateResult(item.id, { waiverReason: event.target.value })} className="mt-1 min-h-16 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
                   {result.status === 'pass' && <div><label className="text-xs font-medium">Notes <span className="font-normal text-muted-foreground">(optional)</span></label><textarea disabled={!editable} value={result.note ?? ''} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-14 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>}
-                  {result.status === 'improvement' && <div className="rounded-md border border-blue-500/30 bg-blue-500/5 p-3"><div className="flex items-center justify-between gap-2"><div><p className="text-sm font-medium">{result.improvement?.title || 'Improvement draft incomplete'}</p><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{result.improvement?.description || 'Add a reviewed title and description before submission.'}</p></div>{editable && <Button size="sm" variant="outline" onClick={() => setImprovementItemId(item.id)}>Edit draft</Button>}</div></div>}
+                  {result.status === 'improvement' && preview && <div className="space-y-3 rounded-md border border-blue-500/30 bg-blue-500/5 p-3"><p className="text-xs text-muted-foreground">Submitting creates one Normal-priority Draft ticket in this project.</p><div><label className="text-xs font-medium">Title <span className="text-destructive">*</span></label><input value={improvement.title} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, title: event.target.value } })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><div><label className="text-xs font-medium">Description <span className="text-destructive">*</span></label><textarea value={improvement.description} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><CollapsibleSection title="Manual QA context" scrollOnOpen={false} className="bg-background"><p className="mb-2 text-muted-foreground">This context is appended to the ticket description. Edit it only when the generated details need correction.</p><textarea value={editableContext} disabled={!editable} onChange={(event) => updateResult(item.id, { improvement: { ...improvement, contextOverride: event.target.value } })} className="min-h-48 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" /></CollapsibleSection><div><label className="text-xs font-medium">Improvement note <span className="font-normal text-muted-foreground">(optional)</span></label><textarea value={result.note ?? ''} disabled={!editable} onChange={(event) => updateResult(item.id, { note: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div><CollapsibleSection title="Final description preview" scrollOnOpen={false} className="bg-background"><pre className="max-h-64 overflow-auto whitespace-pre-wrap font-sans text-muted-foreground">{preview.description}</pre><p className={cn('mt-2', preview.omittedCharacters > 0 ? 'text-amber-600' : 'text-muted-foreground')}>{preview.requestedLength.toLocaleString()} / 10,000 projected characters{preview.omittedCharacters > 0 ? ` — ${preview.omittedCharacters.toLocaleString()} lower-priority characters will be omitted and reported.` : ''}</p></CollapsibleSection><CollapsibleSection title="Evidence and provenance preview" scrollOnOpen={false} className="bg-background"><p className="text-muted-foreground">This structured audit metadata is stored outside future implementation prompt context.</p><dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1"><dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{ticket.externalId}</dd><dt className="text-muted-foreground">Project</dt><dd>{ticket.projectId}</dd><dt className="text-muted-foreground">Round</dt><dd>v{version}</dd><dt className="text-muted-foreground">Checklist item</dt><dd>{item.title || item.behavior} <code className="text-[10px]">{item.id}</code></dd><dt className="text-muted-foreground">Lineage</dt><dd className="font-mono">{item.lineageId}</dd><dt className="text-muted-foreground">Result type</dt><dd>improvement</dd><dt className="text-muted-foreground">PRD refs</dt><dd>{item.prdRefs.map((reference) => reference.ref).join(', ') || 'None'}</dd><dt className="text-muted-foreground">Bead refs</dt><dd>{item.beadRefs?.join(', ') || 'None'}</dd><dt className="text-muted-foreground">Evidence plan</dt><dd>{evidenceFiles.length} uploaded file{evidenceFiles.length === 1 ? '' : 's'} and {result.links?.length ?? 0} HTTP link{(result.links?.length ?? 0) === 1 ? '' : 's'}</dd></dl></CollapsibleSection></div>}
 
-                  <section>
-                    <div className="flex items-center justify-between gap-2"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h5>{editable && <label className="inline-flex cursor-pointer items-center rounded-md border border-input px-2 py-1 text-xs hover:bg-accent"><FileUp className="mr-1 h-3 w-3" />Add files<input type="file" multiple className="sr-only" onChange={async (event) => {
+                  {result.status !== 'pending' && <section>
+                    <div className="flex flex-wrap items-center justify-between gap-2"><h5 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Evidence</h5>{editable && <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setOpenLinkEditors((current) => { const next = new Set(current); next.add(item.id); return next })}><Link2 className="mr-1 h-3 w-3" />Add link</Button><Button asChild size="sm" variant="outline"><label className="cursor-pointer"><FileUp className="mr-1 h-3 w-3" />Add files<input type="file" multiple className="sr-only" onChange={async (event) => {
                       const files = Array.from(event.target.files ?? [])
                       setEvidenceErrors((current) => ({ ...current, [item.id]: undefined }))
                       for (const file of files) {
                         await uploadEvidenceFile(item.id, file, newManualQaActionId('pending-evidence-upload'))
                       }
                       event.target.value = ''
-                    }} /></label>}</div>
-                    {evidence.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No evidence attached. Any file type is accepted up to 250 MiB per file.</p> : <div className="mt-2 grid gap-2 sm:grid-cols-2">{evidence.map((file) => { const downloadUrl = file.downloadUrl ?? manualQaEvidenceUrl(ticket.id, version, item.id, file.id); const previewUrl = manualQaEvidenceUrl(ticket.id, version, item.id, file.id, true); const canPreview = file.previewable && SAFE_RASTER_MEDIA_TYPES.has(file.mediaType); const removing = removingEvidenceIds.has(file.id); return <div key={file.id} className="overflow-hidden rounded-md border border-border bg-muted/20">{canPreview && <a href={downloadUrl} target="_blank" rel="noreferrer"><img src={previewUrl} alt={file.name} className="max-h-40 w-full object-contain bg-black/5" /></a>}<div className="flex items-center gap-2 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{file.name}</p><p className="text-[10px] text-muted-foreground">{evidenceSize(file.size)} · {file.mediaType || 'unknown type'}</p></div><a href={downloadUrl} download={file.name} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${file.name}`}><Download className="h-3.5 w-3.5" /></a>{editable && <button type="button" disabled={removing} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" aria-label={`Remove ${file.name}`} onClick={() => void removeEvidenceFile(item.id, file.id)}>{removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>}</div></div> })}</div>}
+                    }} /></label></Button></div>}</div>
+                    {itemEvidence.length === 0 ? <p className="mt-1 text-xs text-muted-foreground">No evidence attached. Any file type is accepted up to 250 MiB per file.</p> : <><div className="mt-2 grid gap-2 sm:grid-cols-2">{visibleEvidence.map((file) => { const downloadUrl = file.downloadUrl ?? manualQaEvidenceUrl(ticket.id, version, item.id, file.id); const previewUrl = manualQaEvidenceUrl(ticket.id, version, item.id, file.id, true); const canPreview = file.previewable && SAFE_RASTER_MEDIA_TYPES.has(file.mediaType); const removing = removingEvidenceIds.has(file.id); return <div key={file.id} className="overflow-hidden rounded-md border border-border bg-muted/20">{canPreview && <a href={downloadUrl} target="_blank" rel="noreferrer"><img src={previewUrl} alt={file.name} className="max-h-40 w-full object-contain bg-black/5" /></a>}<div className="flex items-center gap-2 p-2"><div className="min-w-0 flex-1"><p className="truncate text-xs font-medium">{file.name}</p><p className="text-[10px] text-muted-foreground">{evidenceSize(file.size)} · {file.mediaType || 'unknown type'}</p></div><a href={downloadUrl} download={file.name} className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label={`Download ${file.name}`}><Download className="h-3.5 w-3.5" /></a>{editable && <button type="button" disabled={removing} className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:opacity-50" aria-label={`Remove ${file.name}`} onClick={() => void removeEvidenceFile(item.id, file.id)}>{removing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}</button>}</div></div> })}</div>{itemEvidence.length > 5 && <Button type="button" size="sm" variant="ghost" className="mt-2" onClick={() => setExpandedEvidenceItems((current) => { const next = new Set(current); if (next.has(item.id)) next.delete(item.id); else next.add(item.id); return next })}>{expandedEvidenceItems.has(item.id) ? 'Show less' : `Show ${itemEvidence.length - 5} more`}</Button>}</>}
                     {(result.links?.length ?? 0) > 0 && <div className="mt-2 space-y-1">{result.links?.map((link) => <div key={link.id} className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-xs"><a href={link.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-primary hover:underline">{link.label || link.url}</a>{editable && <button type="button" aria-label={`Remove link ${link.label || link.url}`} onClick={() => updateResult(item.id, { links: result.links?.filter((entry) => entry.id !== link.id) })} className="rounded p-1 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></button>}</div>)}</div>}
-                    {editable && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input aria-label={`Evidence link for ${item.id}`} value={linkDrafts[item.id]?.url ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { label: '' }), url: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="https://…" /><input aria-label={`Evidence link label for ${item.id}`} value={linkDrafts[item.id]?.label ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { url: '' }), label: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="Label (optional)" /><Button type="button" size="sm" variant="outline" onClick={() => { const pending = linkDrafts[item.id] ?? { url: '', label: '' }; try { const parsed = new URL(pending.url); if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(); const link = { id: newManualQaActionId('link'), url: parsed.toString(), label: pending.label.trim() || undefined }; updateResult(item.id, { links: [...(result.links ?? []), link] }); setLinkDrafts((current) => ({ ...current, [item.id]: { url: '', label: '' } })) } catch { setLinkDrafts((current) => ({ ...current, [item.id]: { ...pending, error: 'Use an HTTP or HTTPS link.' } })) } }}>Add link</Button>{linkDrafts[item.id]?.error && <p role="alert" className="text-xs text-destructive sm:col-span-3">{linkDrafts[item.id]?.error}</p>}</div>}
+                    {editable && openLinkEditors.has(item.id) && <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]"><input aria-label={`Evidence link for ${item.id}`} value={linkDrafts[item.id]?.url ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { label: '' }), url: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="https://…" /><input aria-label={`Evidence link details for ${item.id}`} value={linkDrafts[item.id]?.label ?? ''} onChange={(event) => setLinkDrafts((current) => ({ ...current, [item.id]: { ...(current[item.id] ?? { url: '' }), label: event.target.value, error: undefined } }))} className="rounded-md border border-input bg-background px-2 py-1.5 text-xs" placeholder="Details (optional)" /><Button type="button" size="sm" variant="outline" onClick={() => { const pending = linkDrafts[item.id] ?? { url: '', label: '' }; try { const parsed = new URL(pending.url); if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error(); const link = { id: newManualQaActionId('link'), url: parsed.toString(), label: pending.label.trim() || undefined }; updateResult(item.id, { links: [...(result.links ?? []), link] }); setLinkDrafts((current) => ({ ...current, [item.id]: { url: '', label: '' } })); setOpenLinkEditors((current) => { const next = new Set(current); next.delete(item.id); return next }) } catch { setLinkDrafts((current) => ({ ...current, [item.id]: { ...pending, error: 'Use an HTTP or HTTPS link.' } })) } }}>Save link</Button>{linkDrafts[item.id]?.error && <p role="alert" className="text-xs text-destructive sm:col-span-3">{linkDrafts[item.id]?.error}</p>}</div>}
                     {pendingUploads.length > 0 && <div role="alert" className="mt-2 space-y-2 rounded-md border border-destructive/30 bg-destructive/5 p-2"><p className="text-xs text-destructive">Some uploads need attention. Confirmed uploads remain linked; Retry keeps each file&apos;s action and evidence identity while refreshing CAS guards.</p>{pendingUploads.map((pending) => <div key={pending.key} className="flex flex-wrap items-center gap-2 rounded border border-destructive/20 bg-background px-2 py-1.5 text-xs"><div className="min-w-0 flex-1"><p className="truncate font-medium">{pending.file.name}</p><p className="text-destructive">{pending.message}</p></div><Button type="button" size="sm" variant="outline" disabled={uploadEvidence.isPending} onClick={() => void uploadEvidenceFile(item.id, pending.file, pending.key)}>{uploadEvidence.isPending ? <LoadingText text="Retrying" /> : 'Retry upload'}</Button><Button type="button" size="sm" variant="ghost" disabled={uploadEvidence.isPending} onClick={() => dismissPendingEvidenceUpload(item.id, pending.key)}>Dismiss</Button></div>)}</div>}
                     {evidenceErrors[item.id] && <p role="alert" className="mt-2 text-xs text-destructive">Evidence removal could not be completed. Confirmed uploads remain linked. {evidenceErrors[item.id]}</p>}
-                  </section>
+                  </section>}
 
-                  {errors.length > 0 && editable && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{errors.map((message) => <p key={message}>{message}</p>)}</div>}
+                  {errors.length > 0 && result.status !== 'pending' && editable && <div role="alert" className="rounded-md border border-destructive/30 bg-destructive/5 p-2 text-xs text-destructive">{errors.map((message) => <p key={message}>{message}</p>)}</div>}
                 </CardContent>
               </Card>
             )
@@ -671,15 +742,17 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       {!historical && (
         <div className="shrink-0 border-t border-border bg-background p-3">
           <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-muted-foreground">
-              {incompleteRequired > 0 ? `${incompleteRequired} required check${incompleteRequired === 1 ? '' : 's'} incomplete` : hasFailures ? 'Failures will create Manual QA fix beads and return the ticket to Coding.' : 'Ready to submit for integration.'}
+            <div className="space-y-0.5 text-xs text-muted-foreground">
+              <p>{incompleteRequired > 0 ? `${incompleteRequired} required check${incompleteRequired === 1 ? '' : 's'} incomplete` : hasFailures ? 'Failures will create Manual QA fix beads and return the ticket to Coding.' : 'Ready to submit for integration.'}</p>
+              <p title={lastSavedAt?.toLocaleString()}>
+                Autosave on · {saveState === 'saving' ? 'Saving…' : saveState === 'conflict' ? 'A newer draft must be reloaded' : saveState === 'error' ? 'Autosave failed' : dirty ? 'Changes save automatically' : lastSavedAt ? `Last save ${relativeSaveLabel(lastSavedAt, nowMs)}` : 'Changes save automatically'}
+              </p>
             </div>
             <div className="flex gap-2">
-              <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submissionInProgress || submit.isPending || skip.isPending || saveState === 'conflict'}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA</Button>
-              <Button variant="outline" onClick={() => void persistDraft()} disabled={submissionInProgress || !dirty || saveState === 'saving'}><Save className="mr-1 h-4 w-4" />Save now</Button>
+              <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submissionInProgress || submit.isPending || skip.isPending || saveState === 'conflict'}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA…</Button>
               {resumableOperationType === 'skip'
                 ? <Button onClick={handleSkip} disabled={skip.isPending}>{skip.isPending ? <LoadingText text="Resuming skip" /> : <><RefreshCw className="mr-1 h-4 w-4" />Resume skip</>}</Button>
-                : <Button onClick={handleSubmit} disabled={allErrors.length > 0 || submit.isPending || saveState === 'conflict' || round.workspaceDrift?.detected === true}>{submit.isPending ? <LoadingText text="Creating work" /> : submissionInProgress ? <><RefreshCw className="mr-1 h-4 w-4" />Resume submission</> : hasFailures ? <><XCircle className="mr-1 h-4 w-4" />Submit failures</> : <><CheckCircle2 className="mr-1 h-4 w-4" />Submit QA</>}</Button>}
+                : <Button onClick={handleSubmit} disabled={submit.isPending || saveState === 'conflict' || round.workspaceDrift?.detected === true}>{submit.isPending ? <LoadingText text="Creating work" /> : submissionInProgress ? <><RefreshCw className="mr-1 h-4 w-4" />Resume submission</> : <><CheckCircle2 className="mr-1 h-4 w-4" />Submit QA</>}</Button>}
             </div>
           </div>
           {submitError && <p role="alert" className="mx-auto mt-2 max-w-4xl text-right text-xs text-destructive">{submitError}</p>}
@@ -687,73 +760,9 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
         </div>
       )}
 
-      <Dialog open={improvementItem !== null} onOpenChange={(open) => { if (!open) setImprovementItemId(null) }}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Improvement backlog ticket</DialogTitle><DialogDescription>Review the title and description. One DRAFT ticket with Normal priority will be created in this project when you submit Manual QA.</DialogDescription></DialogHeader>
-          {improvementItem && (() => {
-            const result = resultFor(draft, improvementItem.id)
-            const improvement = result.improvement ?? { title: '', description: '' }
-            const preview = composeManualQaImprovementPreview(improvementItem, { ...result, improvement })
-            const editableContext = improvement.contextOverride ?? buildDefaultManualQaImprovementContext(improvementItem, { ...result, improvement })
-            const evidenceFiles = round.evidence.filter((file) => (result.evidenceIds ?? []).includes(file.id))
-            return (
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Title</label>
-                  <input autoFocus value={improvement.title} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, title: event.target.value } })} className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Description</label>
-                  <textarea value={improvement.description} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, description: event.target.value } })} className="mt-1 min-h-40 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Manual QA context</label>
-                  <p className="mt-1 text-xs text-muted-foreground">This context is appended to the ticket description. Edit it only when the generated details need correction; untouched context is enriched by the server during submission.</p>
-                  <textarea value={editableContext} onChange={(event) => updateResult(improvementItem.id, { status: 'improvement', improvement: { ...improvement, contextOverride: event.target.value } })} className="mt-1 min-h-56 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Improvement note <span className="font-normal text-muted-foreground">(optional)</span></label>
-                  <textarea value={result.note ?? ''} onChange={(event) => updateResult(improvementItem.id, { note: event.target.value })} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" placeholder="Add an observation or extra guidance for future implementation." />
-                </div>
-                <div className="rounded-md border border-border bg-muted/30 p-3 text-xs">
-                  <p className="font-medium">Final description preview</p>
-                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-sans text-muted-foreground">{preview.description}</pre>
-                  <p className={cn('mt-2', preview.omittedCharacters > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
-                    {preview.requestedLength.toLocaleString()} / 10,000 projected characters{preview.omittedCharacters > 0 ? ` — ${preview.omittedCharacters.toLocaleString()} lower-priority characters will be omitted and reported.` : ''}
-                  </p>
-                </div>
-                <div className="rounded-md border border-border p-3 text-xs">
-                  <p className="font-medium">Evidence and provenance preview</p>
-                  <p className="mt-1 text-muted-foreground">This structured audit metadata is stored outside future implementation prompt context.</p>
-                  <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-                    <dt className="text-muted-foreground">Source ticket</dt><dd className="font-mono">{ticket.externalId}</dd>
-                    <dt className="text-muted-foreground">Project</dt><dd>{ticket.projectId}</dd>
-                    <dt className="text-muted-foreground">Round</dt><dd>v{version}</dd>
-                    <dt className="text-muted-foreground">Checklist item</dt><dd>{improvementItem.title || improvementItem.behavior} <code className="text-[10px]">{improvementItem.id}</code></dd>
-                    <dt className="text-muted-foreground">Lineage</dt><dd className="font-mono">{improvementItem.lineageId}</dd>
-                    <dt className="text-muted-foreground">Result type</dt><dd>improvement</dd>
-                    <dt className="text-muted-foreground">PRD refs</dt><dd>{improvementItem.prdRefs.map((reference) => reference.ref).join(', ') || 'None'}</dd>
-                    <dt className="text-muted-foreground">Bead refs</dt><dd>{improvementItem.beadRefs?.join(', ') || 'None'}</dd>
-                    <dt className="text-muted-foreground">Evidence plan</dt><dd>{evidenceFiles.length} uploaded file{evidenceFiles.length === 1 ? '' : 's'} and {result.links?.length ?? 0} HTTP link{(result.links?.length ?? 0) === 1 ? '' : 's'} selected for provenance</dd>
-                  </dl>
-                  {evidenceFiles.length > 0 ? (
-                    <ul className="mt-2 list-disc pl-5 text-muted-foreground">
-                      {evidenceFiles.map((file) => <li key={file.id}>{file.name} · {evidenceSize(file.size)}</li>)}
-                    </ul>
-                  ) : <p className="mt-2 text-muted-foreground">No uploaded evidence selected.</p>}
-                  {(result.links?.length ?? 0) > 0 && <ul className="mt-2 list-disc pl-5 text-muted-foreground">{result.links?.map((link) => <li key={link.id}>{link.label || link.url}</li>)}</ul>}
-                  <p className="mt-2 text-muted-foreground">Copied and omitted evidence is finalized during submission and recorded in the created ticket&apos;s origin receipt.</p>
-                </div>
-                <div className="flex justify-end"><Button onClick={() => setImprovementItemId(null)} disabled={!improvement.title.trim() || !improvement.description.trim() || (improvement.contextOverride !== undefined && !improvement.contextOverride.trim())}>Done</Button></div>
-              </div>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={skipOpen} onOpenChange={setSkipOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Skip Manual QA?</DialogTitle><DialogDescription>The current draft will be archived. Drafted improvements and failures will not create tickets or beads, and the workflow will continue to integration.</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Skip Manual QA?</DialogTitle><DialogDescription>Your entered results, notes, links, and files will be saved in the archived draft and cannot be edited later. No fix bead or improvement ticket will be created, and the workflow will continue to integration.</DialogDescription></DialogHeader>
           <div><label className="text-sm font-medium">Reason <span className="font-normal text-muted-foreground">(optional)</span></label><textarea value={skipReason} onChange={(event) => setSkipReason(event.target.value)} className="mt-1 min-h-20 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" /></div>
           <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSkipOpen(false)}>Cancel</Button><Button variant="destructive" onClick={handleSkip} disabled={skip.isPending || saveState === 'conflict'}>{skip.isPending ? <LoadingText text="Skipping" /> : 'Skip and integrate'}</Button></div>
         </DialogContent>

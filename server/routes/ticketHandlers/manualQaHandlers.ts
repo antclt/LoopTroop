@@ -21,6 +21,7 @@ import {
   submitManualQa,
   skipManualQa,
   readManualQaEvidenceIndex,
+  readManualQaChecklist,
   getManualQaStoragePaths,
   readManualQaEvidenceActionReceipt,
   persistManualQaEvidenceActionReceipt,
@@ -29,6 +30,7 @@ import {
 import { readTicketUiState } from './uiStateHandlers'
 import { getRequiredRouteParam, getTicketParam } from './routeUtils'
 import { createManualQaImprovementDraftId } from '../../../shared/manualQaImprovement'
+import { buildManualQaMergeGroupIds } from '../../../shared/manualQaMergeGroups'
 
 function parseVersion(c: Context): number {
   const version = Number(getRequiredRouteParam(c, 'version'))
@@ -72,6 +74,7 @@ function toCanonicalDraft(input: {
   version: number
   checklistHash: string
   revision: number
+  validateMergeGroups?: boolean
 }) {
   const direct = ManualQaDraftSchema.safeParse(input.raw)
   if (direct.success) return direct.data
@@ -80,7 +83,7 @@ function toCanonicalDraft(input: {
     ? raw.results as Record<string, unknown>
     : {}
   const improvements: Array<{ id: string; itemId: string; title: string; description: string; contextOverride?: string; evidenceIds: string[] }> = []
-  const results = Object.entries(resultRecord).map(([itemId, rawValue]) => {
+  const rawResults = Object.entries(resultRecord).map(([itemId, rawValue]) => {
     const value = rawValue && typeof rawValue === 'object' && !Array.isArray(rawValue) ? rawValue as Record<string, unknown> : {}
     const improvement = value.improvement && typeof value.improvement === 'object' && !Array.isArray(value.improvement)
       ? value.improvement as Record<string, unknown>
@@ -107,9 +110,37 @@ function toCanonicalDraft(input: {
       evidenceIds: Array.isArray(value.evidenceIds) ? value.evidenceIds.map(String) : [],
       links: Array.isArray(value.links) ? value.links : [],
       ...(improvementDraftId ? { improvementDraftId } : {}),
-      ...(typeof value.mergeGroup === 'string' && value.mergeGroup ? { mergeGroupId: value.mergeGroup } : {}),
+      mergeWithItemIds: Array.isArray(value.mergeWithItemIds) ? value.mergeWithItemIds.map(String) : [],
     }
   })
+  const mergeGroupIds = buildManualQaMergeGroupIds(rawResults.map((result) => ({
+    itemId: result.itemId,
+    status: result.outcome,
+    mergeWithItemIds: result.mergeWithItemIds,
+  })))
+  if (input.validateMergeGroups) {
+    const checklist = readManualQaChecklist(input.ticketDir, input.version)
+    if (!checklist) throw new Error(`Manual QA checklist v${input.version} was not found.`)
+    const itemIndex = new Map(checklist.items.map((item, index) => [item.id, { item, index }]))
+    const resultById = new Map(rawResults.map((result) => [result.itemId, result]))
+    for (const result of rawResults) {
+      if (result.outcome !== 'fail') continue
+      const source = itemIndex.get(result.itemId)
+      const invalid = [...new Set(result.mergeWithItemIds)]
+        .map((itemId) => itemIndex.get(itemId))
+        .filter((entry) => !entry || resultById.get(entry.item.id)?.outcome !== 'fail')
+      if (invalid.length === 0) continue
+      const labels = invalid.map((entry) => entry
+        ? `item ${entry.index + 1} ${entry.item.title}`
+        : 'an unknown item')
+      const joined = labels.length === 1 ? labels[0] : `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`
+      throw new Error(`Item ${(source?.index ?? -1) + 1} ${source?.item.title ?? result.itemId} has ${joined} in its merge group, but ${invalid.length === 1 ? 'that item was' : 'those items were'} not marked as Fail.`)
+    }
+  }
+  const results = rawResults.map(({ mergeWithItemIds: _mergeWithItemIds, ...result }) => ({
+    ...result,
+    ...(mergeGroupIds.get(result.itemId) ? { mergeGroupId: mergeGroupIds.get(result.itemId) } : {}),
+  }))
   return ManualQaDraftSchema.parse({
     schemaVersion: 1,
     artifact: 'manual_qa_draft',
@@ -458,6 +489,7 @@ export async function handleSubmitManualQa(c: Context) {
       version,
       checklistHash: guard.expectedChecklistHash,
       revision: guard.expectedDraftRevision,
+      validateMergeGroups: true,
     })
     ensureActorForTicket(resolved.ticketId)
     const summary = await submitManualQa({

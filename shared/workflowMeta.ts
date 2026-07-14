@@ -882,15 +882,18 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   WAITING_MANUAL_QA: {
-    overview: 'LoopTroop waits in the interactive Manual QA workspace while the user runs the application, records results and evidence, and verifies the generated checklist. Draft work autosaves, but no integration, fix bead, or improvement ticket is created until the user explicitly submits or skips the round.',
+    overview: 'LoopTroop waits in the interactive Manual QA workspace while the user runs the application, records results and evidence, and verifies the generated checklist. Every item starts Pending with no result-specific fields, draft work autosaves with a visible last-save time, and only Submit or Skip completes the round.',
     steps: [
       'User-Run Verification: The user starts and controls the application outside LoopTroop, follows each item’s prerequisites and actions, and compares observed behavior with the expected result and watch notes.',
-      'Autosaved Draft: Pass, Fail, Waive, Improvement, Pending, notes, merge groups, improvement drafts, and evidence references save through revision-checked UI state. The five-second debounce and page-unload keepalive preserve in-progress work.',
-      'Result Validation: Required items must be Pass, Fail, or Waive; optional items may remain Pending. Fail requires an observation, Waive requires a reason, and every Improvement requires a reviewed title and description draft.',
-      'Evidence Handling: Arbitrary local evidence can be uploaded and downloaded. Only safe raster formats preview inline; unsafe or unknown content is always served as an attachment and never rendered by the application.',
+      'Focused Default: Pending is the first and default result. It shows only brief guidance; result-specific notes, evidence, waiver, merge-group, and improvement controls appear only after the user chooses another result.',
+      'Autosaved Draft: Pass, Fail, Waive, Improvement, Pending, notes, merge groups, improvement drafts, and evidence references save through revision-checked UI state. There is no manual Save action: the workspace reports that saving is automatic and shows a relative last-save time with the exact timestamp available on hover.',
+      'Result Validation: Submit requires each required item to be resolved as Pass, Fail, Waive, or Improvement. Fail requires an observation, while a waiver reason is optional and every Improvement requires a reviewed title and description draft.',
+      'Evidence Handling: Extra evidence offers matching Add link and Add files actions; link and Details fields appear only after Add link is chosen. New uploads appear immediately without a refresh, and each item initially shows five evidence entries with Show more/Show less for the rest. Only safe raster formats preview inline; unsafe or unknown content is always served as an attachment.',
+      'Failure Merge Groups: A failed item can select one or more other checklist items by number and title, including items not yet marked Fail. Submit is blocked until every selected member is also Fail, with each unresolved member identified in the validation message.',
+      'Inline Improvement: Improvement editing stays inside the checklist item. Manual QA context, final-description preview, and evidence/provenance preview are collapsed by default, as is the workspace’s advisory PRD coverage.',
       'Workspace Drift Gate: Before Submit or Skip, LoopTroop compares project files with the saved QA baseline. Audited application-created drift must be explicitly included in a checkpoint or discarded before the action can continue.',
       'Submission Journal: Final submission durably stages results, receipts, deterministic QA fix beads, and one independent Draft backlog ticket per Improvement. Restart retries resume the same action without duplicating work.',
-      'Waiver and Skip Paths: Required waivers are recorded in a `waived_through` outcome. Skip preserves the current draft and optional reason but creates no drafted improvements or QA fix beads.',
+      'Waiver and Skip Paths: Required waivers are recorded in a `waived_through` outcome. Skip… warns that no QA fix bead or improvement ticket will be created, then archives every entered result, note, merge-group choice, improvement draft, and evidence reference as read-only even when normal Submit validation is incomplete.',
       'Loop Outcome: Passing, waived-through, or skipped rounds advance to integration. Any explicit Fail creates QA fix work, archives the current round attempts, and returns the ticket to Coding; successful fixes receive fresh final tests and a new checklist version.',
     ],
     outputs: [
@@ -901,13 +904,14 @@ const WORKFLOW_PHASE_DETAILS = {
     transitions: [
       'Pass or Optional-Pending Completion → Preparing Final Commit: With no failures and no required waivers, submission records `passed` and advances to integration.',
       'Required Waivers → Preparing Final Commit: Submission records `waived_through` and advances to integration.',
-      'Skip → Preparing Final Commit: Skip archives the partial draft, records `skipped`, creates no work, and advances to integration.',
+      'Skip → Preparing Final Commit: Skip bypasses normal result and merge-group validation, archives all entered data read-only, records `skipped`, creates no improvement or QA fix work, and advances to integration.',
       'Any Failure → Implementing: Submission creates deterministic Manual QA fix beads, records `created_fixes`, and returns to Coding. Improvements submitted in the same action remain independent backlog tickets.',
       'System Failure → Stays Waiting or Blocked Error: Restart-safe creation failures remain in this gate for resumption; unrecoverable workflow errors use Blocked Error.',
     ],
     notes: [
       'This status is the interactive consumer of the checklist artifact produced by Preparing Manual QA; the producer phase itself remains a concise artifact-and-log review surface.',
       'LoopTroop never starts, stops, previews, or otherwise controls the user’s application.',
+      'PRD coverage is advisory and collapsed by default; improvement context and both description/provenance previews are also opt-in disclosures.',
       'Retry notes for normal bead failures remain separate from typed Manual QA origin data.',
       'Historical checklist versions remain selectable read-only after the ticket loops back to Coding or advances.',
     ],
@@ -1493,7 +1497,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'WAITING_MANUAL_QA',
     label: 'Manual QA',
-    description: 'LoopTroop is waiting in the interactive Manual QA workspace for the user to record results and evidence, then complete, waive, skip, or submit the checklist before final integration.',
+    description: 'LoopTroop is waiting for user-run verification in an autosaved Manual QA checklist: items start Pending, Submit validates completed results, and Skip archives entered data without creating QA work.',
     details: WORKFLOW_PHASE_DETAILS.WAITING_MANUAL_QA,
     kanbanPhase: 'needs_input',
     groupId: 'post_implementation',

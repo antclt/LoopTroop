@@ -91,7 +91,7 @@ describe.concurrent('workflow metadata', () => {
       'LoopTroop is preparing a human-facing Manual QA checklist from approved context and focused implementation evidence, with generation status, logs, and the produced checklist artifact available in the phase workspace.',
     )
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.description).toBe(
-      'LoopTroop is waiting in the interactive Manual QA workspace for the user to record results and evidence, then complete, waive, skip, or submit the checklist before final integration.',
+      'LoopTroop is waiting for user-run verification in an autosaved Manual QA checklist: items start Pending, Submit validates completed results, and Skip archives entered data without creating QA work.',
     )
   })
 

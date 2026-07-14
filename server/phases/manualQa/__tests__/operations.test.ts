@@ -332,16 +332,20 @@ describe('Manual QA submission recovery and integrity', () => {
     expect(readManualQaResults(setup.paths.ticketDir, 1)?.submittedAt).toBe('2026-07-13T12:00:00.000Z')
   })
 
-  it('supports required waiver, optional pending, and skip completion paths', async () => {
+  it('supports a required waiver without a reason, optional pending, and skip completion paths', async () => {
     const waived = prepareFixture()
-    waived.draft.results[0] = { ...waived.draft.results[0]!, outcome: 'waive', reason: 'Accepted for this delivery.' }
-    expect((await submitManualQa({
+    waived.draft.results[0] = { ...waived.draft.results[0]!, outcome: 'waive', reason: '' }
+    expect(await submitManualQa({
       ticketId: waived.ticket.id,
       version: 1,
       draft: waived.draft,
       guard: waived.guard,
       sendEvent: vi.fn(),
-    })).outcome).toBe('waived_through')
+    })).toMatchObject({
+      outcome: 'waived_through',
+      waivedItemIds: ['item-one'],
+      waivedItems: [{ itemId: 'item-one', reason: '' }],
+    })
 
     const optional = prepareFixture([checklistItem('optional-pending', false)])
     optional.draft.results[0] = { ...optional.draft.results[0]!, outcome: 'pending' }
@@ -369,6 +373,51 @@ describe('Manual QA submission recovery and integrity', () => {
       modelCapability: { imageEvidenceMode: 'references_only' },
     })
     expect(skipEvent).toHaveBeenCalledWith({ type: 'MANUAL_QA_SKIPPED' })
+  })
+
+  it('skips with incomplete Fail and Improvement data while preserving the draft and creating no work', async () => {
+    const setup = prepareFixture([
+      checklistItem('incomplete-failure'),
+      checklistItem('incomplete-improvement'),
+    ])
+    setup.draft.results = [
+      {
+        ...setup.draft.results[0]!,
+        itemId: 'incomplete-failure',
+        outcome: 'fail',
+        observation: '',
+      },
+      {
+        ...setup.draft.results[1]!,
+        itemId: 'incomplete-improvement',
+        outcome: 'improvement',
+      },
+    ]
+    setup.draft.improvements = []
+
+    const summary = await skipManualQa({
+      ticketId: setup.ticket.id,
+      version: 1,
+      draft: setup.draft,
+      guard: { ...setup.guard, actionId: 'skip-incomplete-work', operationType: 'skip' },
+      sendEvent: vi.fn(),
+    })
+
+    expect(summary).toMatchObject({
+      outcome: 'skipped',
+      createdFixBeadIds: [],
+      improvementTicketIds: [],
+      itemCounts: { pass: 0, fail: 1, waive: 0, improvement: 1, pending: 0 },
+    })
+    const snapshot = readFileSync(
+      resolve(getManualQaStoragePaths(setup.paths.ticketDir, 1).versionDir, 'manual-qa-draft.yaml'),
+      'utf8',
+    )
+    expect(snapshot).toContain('itemId: incomplete-failure')
+    expect(snapshot).toContain('outcome: fail')
+    expect(snapshot).toContain('itemId: incomplete-improvement')
+    expect(snapshot).toContain('outcome: improvement')
+    expect(readJsonl<Bead>(setup.paths.beadsPath).filter((bead) => bead.qaOrigin)).toEqual([])
   })
 
   it('resumes a failed round without duplicating fresh phase attempts', async () => {

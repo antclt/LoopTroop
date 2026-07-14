@@ -16,6 +16,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Provider changes now appear after a lightweight Configuration reload without restarting OpenCode or interrupting active tickets.
 - Simplified Manual QA configuration with consistent Enabled/Disabled choices at global, project, and ticket levels.
 - Added a spec-aligned, ticket-locked Manual QA checkpoint with a distinct artifact-and-log preparation view and interactive verification handoff, turning failures into traceable fix beads and reviewed improvements into context-rich backlog tickets without controlling the user's application.
+- Streamlined Manual QA with Pending-first items, inline Improvements, immediate evidence feedback, safer merge groups, autosave-only submission, and lossless skipping.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
 
@@ -34,6 +35,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Changed Manual QA items to start with a field-free Pending choice, made waiver reasons optional, collapsed advisory PRD coverage and Improvement context/previews by default, and moved Improvement editing inline with the checklist item.
+- Reworked extra evidence into matching Add link/Add files actions, delayed Link and Details fields until requested, limited the initial evidence list to five entries, and added Show more/Show less disclosure.
+- Replaced the separate Manual QA Save action with automatic saving, a relative last-save indicator and exact hover timestamp, while retaining Submit as the only primary completion action.
+- Changed failure merge groups to multi-select checklist number/title buttons that may be assembled in advance but block Submit with named diagnostics until every selected member is marked Fail.
+- Changed Skip Manual QA… to warn that no follow-up work will be created, bypass ordinary incomplete-result/group warnings, and archive all entered data read-only without creating QA-fix beads or Improvement tickets.
 - Compacted the new-ticket and Draft-ticket Manual QA controls into a single row, retained their contextual `?` documentation links, and removed redundant effective-setting/source text.
 - Removed the visible `Inherit` choice from Manual QA settings, restored the checkpoint selector for all new and Draft tickets, and made new project/ticket saves persist an explicit Enabled/Disabled value while safely resolving legacy unset values.
 - Updated the Kanban triage control bar to support showing or hiding mock tickets (marked with `(M)`). This setting can be persisted in Kanban filter presets and defaults to showing mocks.
@@ -43,6 +49,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed successful Manual QA file uploads remaining visually stuck until a page refresh by publishing the acknowledged evidence into the active checklist item immediately.
 - Fixed the first Manual QA handoff showing `Manual QA version not found` until refresh by deferring reserved-version reads until the checklist is handed off and reconciling Manual QA queries on artifact, status, and stream-recovery events; Preparing Manual QA now exposes the exact checklist as a clickable artifact beside its status and log instead of duplicating the interactive Manual QA screen.
 - Fixed the Configuration model-refresh icon to spin and remain disabled for the full provider/model refresh instead of stopping before the refresh request completes.
 - Fixed stale provider/model discovery after OpenCode credentials change: Configuration reload now disposes only LoopTroop's catalog/root OpenCode instance before refetching the catalog, while leaving `opencode serve` and active ticket worktree instances running.
@@ -59,6 +66,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
+- Updated the Manual QA status details and reference guides for Pending-first results, optional waiver reasons, collapsed disclosures, inline Improvements, evidence controls, merge-group validation, autosave status, and lossless Skip semantics.
 - Documented Manual QA configuration/inheritance, strict checklist/result contracts, Submit-versus-Skip artifact semantics, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, context-rich Improvements, self-contained QA origins, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.
 - Added **Skip Reason Auditability** to the [High Priority roadmap](roadmap.md#high-priority): users can provide an optional reason when skipping any step, prompt, or approval gate, and the reason is persisted in the relevant ticket artifact.
 
