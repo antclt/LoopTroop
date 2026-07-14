@@ -396,6 +396,8 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     `Item ${index + 1} ${item.title?.trim() || item.behavior}: ${message}`))
   const mergeGroupErrors = useMemo(() => validateManualQaMergeGroups(items, draft), [draft, items])
   const hasFailures = items.some((item) => resultFor(draft, item.id).status === 'fail')
+  const isSubmitting = submit.isPending || (submissionInProgress && resumableOperationType === 'submit')
+  const shouldExpandLog = isSubmitting && hasFailures
   const incompleteRequired = items.filter((item) => item.severity === 'required' && resultFor(draft, item.id).status === 'pending').length
   const coverageSourceItemTotal = round ? Object.values(round.coverageSummary.sourceItemCounts).reduce((sum, count) => sum + count, 0) : 0
   const evidenceMutationInProgress = uploadingEvidenceKeys.size > 0 || removingEvidenceIds.size > 0
@@ -823,11 +825,12 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
       </div>
 
       <CollapsiblePhaseLogSection
+        key={shouldExpandLog ? 'log-expanded' : 'log-collapsed'}
         phase="WAITING_MANUAL_QA"
         ticket={ticket}
         phaseAttempt={selectedVersionEntry?.phaseAttempt ?? undefined}
         logMode={historical ? 'snapshot' : 'live'}
-        defaultExpanded={false}
+        defaultExpanded={shouldExpandLog}
         variant="bottom"
         className="px-4 pb-2"
       />

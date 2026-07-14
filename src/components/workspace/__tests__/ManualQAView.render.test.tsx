@@ -258,6 +258,28 @@ describe('ManualQAView recovery behavior', () => {
     }), undefined)
   })
 
+  it('automatically expands the Manual QA log when submission is in progress with failures', () => {
+    mocks.round.mockReturnValue({
+      data: {
+        ...round,
+        draft: { results: { 'item-1': { itemId: 'item-1', status: 'fail', observation: 'Failed result.' } } },
+        operation: { actionId: 'manual-qa-submit:resume-1', state: 'creating_beads', status: 'creating_beads', operationType: 'submit' },
+      },
+      isLoading: false,
+      error: null,
+      refetch: mocks.refetchRound,
+    })
+
+    renderWithProviders(<ManualQAView ticket={waitingTicket()} />)
+
+    expect(mocks.logSection).toHaveBeenLastCalledWith(expect.objectContaining({
+      phase: 'WAITING_MANUAL_QA',
+      phaseAttempt: 1,
+      logMode: 'live',
+      defaultExpanded: true,
+    }), undefined)
+  })
+
   it('blocks submission after an autosave conflict and offers an explicit reload', async () => {
     mocks.save.mockResolvedValueOnce({ conflict: true, revision: 2, data: { results: {} } })
     renderWithProviders(<ManualQAView ticket={waitingTicket()} />)

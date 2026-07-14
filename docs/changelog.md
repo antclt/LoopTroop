@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Modified Manual QA submission with failures to automatically expand the log drawer so users can monitor the QA-fix bead generation.
 - Improved Manual QA with reliable canonical parsing, version-consistent status/history UI, richer logs and artifacts, reasoned PRD applicability, configurable Improvements, and repository-aware full QA-fix beads.
 - Fixed application documentation links to consistently include the VitePress trailing slash base path, resolving public base URL mismatches when opening local docs from the header link, console summary, or documentation guides.
 - Fixed `CLEANING_ENV` failures by recursively ensuring write permissions before deleting cached read-only files (like Go module caches) and added a hover tooltip to the Cleanup status in the Ticket Details dialog showing the exact cleanup warnings.
@@ -44,6 +45,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Modified Manual QA submission to automatically expand the live log drawer at the bottom of the workspace when a failed result triggers a QA-fix coding round.
 - Changed Manual QA status titles to remain version-free and show the established selector only for multiple checklist-backed rounds; Preparing now reports live milestones and presents structured/Raw artifacts, while Manual QA logs default collapsed and follow the selected version.
 - Changed failed Manual QA Submit to require focused read-only repository inspection and full normal-bead candidates. Model/tool/parser failure now creates no children, enters recoverable Blocked Error, and resumes the stored submission action on Retry.
 - Changed Manual QA items to start with a field-free Pending choice, made waiver reasons optional, collapsed advisory PRD coverage and Improvement context/previews by default, and moved Improvement editing inline with the checklist item.
