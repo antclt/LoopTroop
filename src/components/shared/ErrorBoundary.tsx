@@ -1,4 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { requestRecoveryReload } from '@/lib/recoveryReload'
+import { shouldRecoverMixedViteReactDependencyError } from '@/lib/viteDependencyRecovery'
 
 export interface ErrorBoundaryDetails {
   error: Error | null
@@ -29,6 +31,14 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
+    if (
+      shouldRecoverMixedViteReactDependencyError(error, import.meta.env.DEV)
+      && requestRecoveryReload('vite-react-dependency-generation')
+    ) {
+      console.warn('[ErrorBoundary] Reloading after mixed Vite React dependency generations.')
+      return
+    }
+
     console.error('[ErrorBoundary] Caught rendering error:', error, info.componentStack)
     this.setState({ componentStack: info.componentStack ?? null })
   }

@@ -122,6 +122,8 @@ All scripts are available with `npm run <name>`.
 | `docs:preview` | Serve the last static docs build locally. |
 | `site:build` | Build the docs site and assemble the static marketing site bundle. |
 
+The frontend dev server pre-optimizes its complete declared browser dependency set before serving the app and disables browser storage of dev resources. This makes a process restart safe even when the browser restores a previously open LoopTroop tab: the restored document cannot retain an old React dependency graph while a lazy ticket workspace loads from the new process. The dependency policy is checked against production imports in the localized Vite configuration test.
+
 ### Operational Tools
 
 | Script | Purpose |

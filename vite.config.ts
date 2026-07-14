@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { getBackendOrigin, getDocsBaseUrl, getFrontendPort } from './shared/appConfig'
 import { resolveDevHostMode } from './scripts/dev-host-mode'
+import {
+  DEV_SERVER_RESOURCE_HEADERS,
+  FRONTEND_DEDUPED_DEPENDENCIES,
+  frontendOptimizeDeps,
+} from './scripts/vite-optimize-deps'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const backendOrigin = getBackendOrigin()
@@ -73,13 +78,9 @@ export default defineConfig({
       '@server': resolve(__dirname, './server'),
       '@shared': resolve(__dirname, './shared'),
     },
-    dedupe: [
-      '@codemirror/state',
-      '@codemirror/view',
-      '@codemirror/language',
-      '@codemirror/commands',
-    ],
+    dedupe: [...FRONTEND_DEDUPED_DEPENDENCIES],
   },
+  optimizeDeps: frontendOptimizeDeps,
   build: {
     sourcemap: false,
     chunkSizeWarningLimit: 2100,
@@ -110,6 +111,7 @@ export default defineConfig({
   },
   appType: 'spa',
   server: {
+    headers: DEV_SERVER_RESOURCE_HEADERS,
     host: devHostMode.enabled ? devHostMode.bindHost : undefined,
     port: getFrontendPort(),
     strictPort: true,

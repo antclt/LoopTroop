@@ -12,11 +12,11 @@ The UI is data-driven from:
 - workflow metadata in `shared/workflowMeta.ts`
 - ticket artifacts and runtime state from the backend
 
-In development, same-origin `/api/*` calls go through the Vite proxy. When `npm run dev` generates or receives `LOOPTROOP_API_TOKEN`, the proxy supplies the token to the backend server-side so the browser bundle does not contain the secret.
+In development, same-origin `/api/*` calls go through the Vite proxy. When `npm run dev` generates or receives `LOOPTROOP_API_TOKEN`, the proxy supplies the token to the backend server-side so the browser bundle does not contain the secret. Vite completes one explicit optimization pass for every production browser dependency before accepting requests, and dev resources use `Cache-Control: no-store`. This prevents a restored tab from combining cached React/React Query modules from an earlier server process with a newly loaded workspace module.
 
 The app shell also polls `/api/health` for the global reconnecting banner. After the backend has been reached once, a failed health probe is confirmed by two more probes spaced 1.5 seconds apart before the banner appears. A `429` probe still proves that the backend is reachable, and the basic liveness route does not consume the normal read-rate budget. Backend reconnects retain the mounted workspace and recover through normal query/SSE retries instead of forcing a page reload, so native file pickers, hidden tabs, and transient proxy pressure cannot discard the active screen. Guarded reloads remain limited to sustained post-initial ticket-data recovery and recoverable lazy-chunk failures.
 
-Most modal routes and workspace views are also lazy-loaded through `lazyWithChunkReload()`. Recoverable chunk-load failures trigger at most one full-page reload per surface, using `sessionStorage` markers so the browser does not loop forever on a broken import.
+Most modal routes and workspace views are also lazy-loaded through `lazyWithChunkReload()`. Recoverable chunk-load failures trigger at most one full-page reload per surface, using `sessionStorage` markers so the browser does not loop forever on a broken import. The app-wide error boundary also recognizes the exact development-only signature produced when one React or React Query module appears under two Vite dependency generations; it requests one cooldown-limited recovery reload while leaving ordinary render errors and all production behavior unchanged.
 
 ## 1. Top-Level Composition
 

@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Development restarts now open tickets safely without mixing stale and current React dependency generations.
 - Council voting phases now show a live `X/Y complete · Leading/Winner: <model> · <pts>` tally appended inline to the council card's description line (e.g. "Council members are scoring all prd drafts. · 2/4 complete · Leading: …") while scoring is in progress.
 - Provider changes now appear after a lightweight Configuration reload without restarting OpenCode or interrupting active tickets.
 - Simplified Manual QA configuration with consistent Enabled/Disabled choices at global, project, and ticket levels.
@@ -49,6 +50,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed the first lazy ticket workspace opened after a development-server restart crashing with a null React hook dispatcher. Vite now finishes an explicit frontend dependency bundle before serving, marks dev resources `no-store`, deduplicates the React/React Query graph, and performs a cooldown-limited development-only reload if an already-restored tab still reports two dependency generations.
 - Fixed Manual QA Add files collapsing the ticket to its header/loading state by retaining the mounted workspace during backend recovery, keeping the liveness probe outside the normal read-rate budget, recognizing rate-limited health responses as reachable, and opening the native picker from a dedicated button. Successful uploads continue to appear in the active checklist item immediately.
 - Fixed the first Manual QA handoff showing `Manual QA version not found` until refresh by deferring reserved-version reads until the checklist is handed off and reconciling Manual QA queries on artifact, status, and stream-recovery events; Preparing Manual QA now exposes the exact checklist as a clickable artifact beside its status and log instead of duplicating the interactive Manual QA screen.
 - Fixed the Configuration model-refresh icon to spin and remain disabled for the full provider/model refresh instead of stopping before the refresh request completes.
