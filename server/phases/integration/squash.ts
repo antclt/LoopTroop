@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { resolveBaseBranchRef } from '../../git/repository'
+import { readWorktreeGitHookPolicy, shouldBypassGitHooks } from '../../git/hookPolicy'
 import { getErrorMessage } from '@shared/typeGuards'
 
 import { createRequire } from 'node:module'
@@ -170,7 +171,7 @@ export function prepareSquashCandidate(
       '-c',
       'user.email=looptroop@local',
       'commit',
-      '--no-verify',
+      ...(shouldBypassGitHooks(readWorktreeGitHookPolicy(worktreePath)) ? ['--no-verify'] : []),
       '-m',
       `${ticketId}: ${ticketTitle}`,
     ])
@@ -304,7 +305,7 @@ export function rewriteCandidateCommitWithFiles(
       '-c',
       'user.email=looptroop@local',
       'commit',
-      '--no-verify',
+      ...(shouldBypassGitHooks(readWorktreeGitHookPolicy(worktreePath)) ? ['--no-verify'] : []),
       '-m',
       `${ticketId}: ${ticketTitle}`,
     ])
@@ -343,8 +344,9 @@ export interface PushResult {
 const MAX_PUSH_RETRIES = 3
 
 export function pushSquashedCandidate(worktreePath: string): PushResult {
+  const bypassHooks = shouldBypassGitHooks(readWorktreeGitHookPolicy(worktreePath))
   for (let attempt = 1; attempt <= MAX_PUSH_RETRIES; attempt++) {
-    const fullArgs = ['-C', worktreePath, 'push']
+    const fullArgs = ['-C', worktreePath, 'push', ...(bypassHooks ? ['--no-verify'] : [])]
     const result = spawnSync('git', fullArgs, { encoding: 'utf8' })
     const stdout = (result.stdout ?? '').trim()
     const stderr = (result.stderr ?? '').trim()

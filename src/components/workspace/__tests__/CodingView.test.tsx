@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeTicket, TEST } from '@/test/factories'
+import { makeTicket, TEST, type RuntimeBeadInput } from '@/test/factories'
 import type { LogContextValue, LogEntry } from '@/context/logUtils'
 import type { Ticket } from '@/hooks/useTickets'
 import { useLogs } from '@/context/useLogContext'
@@ -67,7 +67,7 @@ vi.mock('../VerificationSummaryPanel', () => ({
 import { CodingView } from '../CodingView'
 
 type CodingTestOverrides = Omit<Partial<Ticket>, 'runtime'> & {
-  runtime?: Partial<Ticket['runtime']>
+  runtime?: Omit<Partial<Ticket['runtime']>, 'beads'> & { beads?: RuntimeBeadInput[] }
 }
 
 function renderCoding(overrides: CodingTestOverrides = {}) {
@@ -136,7 +136,7 @@ describe('CodingView', () => {
           tests: ['renders fresh details'],
           testCommands: ['npm test'],
           contextGuidance: { patterns: ['refresh bead state'], anti_patterns: [] },
-          notes: ['updated'],
+          failedIterationNotes: [{ timestamp: TEST.timestamp, iteration: 1, content: 'updated' }],
         },
       ]), { status: 200 }),
     )
@@ -441,14 +441,22 @@ describe('CodingView', () => {
     })
   })
 
-  it('renders persisted bead notes from string storage and shows the active iteration label', () => {
+  it('renders separate structured bead note histories and strips ANSI from machine notes', () => {
     renderCoding({
       runtime: {
         activeBeadId: 'bead-1',
         activeBeadIteration: 2,
         maxIterationsPerBead: 5,
         beads: [
-          { id: 'bead-1', title: 'Retry bead', status: 'error', iteration: 2, notes: 'first note\n\n---\n\nsecond note' },
+          {
+            id: 'bead-1',
+            title: 'Retry bead',
+            status: 'error',
+            iteration: 2,
+            failedIterationNotes: [{ timestamp: TEST.timestamp, iteration: 1, content: '\u001b[31mfirst note\u001b[0m' }],
+            userRetryNotes: [{ timestamp: TEST.timestamp, iteration: 2, content: 'user note' }],
+            finalizationFailureNotes: [{ timestamp: TEST.timestamp, iteration: 2, content: 'finalization note', errorCode: 'COMMIT_FAILED' }],
+          },
         ],
       },
     })
@@ -458,7 +466,11 @@ describe('CodingView', () => {
     fireEvent.click(screen.getByRole('button', { name: /Retry bead/ }))
 
     expect(screen.getByText(/first note/)).toBeTruthy()
-    expect(screen.getByText(/second note/)).toBeTruthy()
+    expect(screen.getByText('User Retry Notes')).toBeTruthy()
+    expect(screen.getByText(/user note/)).toBeTruthy()
+    expect(screen.getByText('Finalization Failure Notes')).toBeTruthy()
+    expect(screen.getByText(/finalization note/)).toBeTruthy()
+    expect(screen.getByText('first note').textContent).toBe('first note')
   })
 
   it('overlays live runtime retry metadata onto stale fetched bead details', async () => {
@@ -513,7 +525,7 @@ describe('CodingView', () => {
             title: 'Retry bead',
             status: 'error',
             iteration: 2,
-            notes: 'retry note after timeout',
+            failedIterationNotes: [{ timestamp: TEST.timestamp, iteration: 2, content: 'retry note after timeout' }],
           },
         ],
       },
@@ -976,7 +988,7 @@ describe('CodingView', () => {
             title: 'Add show_matched_attributes to GET query struct',
             status: 'error',
             iteration: 5,
-            notes: 'retry note',
+            failedIterationNotes: [{ timestamp: TEST.timestamp, iteration: 5, content: 'retry note' }],
           },
         ],
       },

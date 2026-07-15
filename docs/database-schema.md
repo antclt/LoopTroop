@@ -60,6 +60,7 @@ Important columns:
 - timeout settings in milliseconds: `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`
 - coverage controls: `coverage_follow_up_budget_percent`, `max_coverage_passes`, `max_prd_coverage_passes`, `max_beads_coverage_passes`
 - Manual QA baseline: `manual_qa_enabled` (non-null boolean, default `false`)
+- internal Git behavior: `git_hook_policy` (non-null text, default `validate_explicitly`)
 - OpenCode retry controls: `opencode_retry_limit`, `opencode_retry_delay`, `opencode_steps`
 - tool log truncation limits: `tool_input_max_chars`, `tool_output_max_chars`, `tool_error_max_chars`
 
@@ -106,7 +107,7 @@ The project database is the operational store for one attached repository. LoopT
 Important columns:
 
 - display/identity: `name`, `shortname`, `icon`, `color`, `folder_path`
-- nullable overrides: `council_members`, `max_iterations`, `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`, `min_council_quorum`, `interview_questions`, `manual_qa_override`
+- nullable overrides: `council_members`, `max_iterations`, `per_iteration_timeout`, `execution_setup_timeout`, `council_response_timeout`, `min_council_quorum`, `interview_questions`, `manual_qa_override`, `git_hook_policy`
 - sequencing: `ticket_counter`
 - metadata: `profile_id`
 
@@ -116,6 +117,7 @@ Operational notes:
 - `council_members` is a JSON array string when present
 - `profile_id` is **not** a cross-database foreign key; SQLite cannot enforce a foreign key into the separate app DB, so this column is metadata only
 - project-level overrides are read directly from this row at runtime; they do not require joining back into the app DB
+- `git_hook_policy` resolves project → profile and is then locked into the approved ticket setup plan; it never rewrites the target repository's Git configuration
 
 ### `tickets`
 

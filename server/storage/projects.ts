@@ -92,6 +92,7 @@ function ensureLocalProject(projectRoot: string, input?: {
   profileId?: number
   councilMembers?: string
   manualQaOverride?: boolean | null
+  gitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only' | null
   maxIterations?: number
   perIterationTimeout?: number
   executionSetupTimeout?: number
@@ -123,6 +124,7 @@ function ensureLocalProject(projectRoot: string, input?: {
       profileId: input.profileId ?? null,
       councilMembers: input.councilMembers ?? null,
       manualQaOverride: input.manualQaOverride ?? null,
+      gitHookPolicy: input.gitHookPolicy ?? null,
       maxIterations: input.maxIterations ?? null,
       perIterationTimeout: input.perIterationTimeout ?? null,
       executionSetupTimeout: input.executionSetupTimeout ?? null,
@@ -149,6 +151,7 @@ export function attachProject(input: {
   profileId?: number
   councilMembers?: string
   manualQaOverride?: boolean | null
+  gitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only' | null
   maxIterations?: number
   perIterationTimeout?: number
   executionSetupTimeout?: number
@@ -265,7 +268,7 @@ export function getProjectContextById(id: number): ProjectContext | undefined {
   return { attached, projectRoot, projectDb: db, project }
 }
 
-export function updateProject(id: number, patch: Partial<Pick<LocalProjectRow, 'name' | 'icon' | 'color' | 'councilMembers' | 'manualQaOverride' | 'maxIterations' | 'perIterationTimeout' | 'executionSetupTimeout' | 'councilResponseTimeout' | 'minCouncilQuorum' | 'interviewQuestions'>>): PublicProject | undefined {
+export function updateProject(id: number, patch: Partial<Pick<LocalProjectRow, 'name' | 'icon' | 'color' | 'councilMembers' | 'manualQaOverride' | 'gitHookPolicy' | 'maxIterations' | 'perIterationTimeout' | 'executionSetupTimeout' | 'councilResponseTimeout' | 'minCouncilQuorum' | 'interviewQuestions'>>): PublicProject | undefined {
   const context = getProjectContextById(id)
   if (!context) return undefined
   context.projectDb.update(projects)

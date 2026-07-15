@@ -27,7 +27,9 @@ function makeBead(overrides: Partial<Bead> = {}): Bead {
     labels: [],
     dependencies: { blocked_by: [], blocks: [] },
     targetFiles: [],
-    notes: '',
+    failedIterationNotes: [],
+    userRetryNotes: [],
+    finalizationFailureNotes: [],
     iteration: 0,
     createdAt: TEST.timestamp,
     updatedAt: TEST.timestamp,
@@ -62,7 +64,7 @@ describe('ticket runtime projection', () => {
       makeBead({
         status: 'in_progress',
         iteration: 2,
-        notes: 'retry with refreshed context',
+        failedIterationNotes: [{ timestamp: TEST.timestamp, iteration: 2, content: 'retry with refreshed context' }],
       }),
     ])
 
@@ -74,13 +76,15 @@ describe('ticket runtime projection', () => {
     const state = yaml.load(readFileSync(statePath, 'utf8')) as {
       ticket: { status: string }
       runtime: { activeBeadId: string | null; activeBeadIteration: number | null }
-      beads: Array<{ id: string; notes: string }>
+      beads: Array<{ id: string; failedIterationNotes: Bead['failedIterationNotes'] }>
     }
 
     expect(state.ticket.status).toBe('CODING')
     expect(state.runtime.activeBeadId).toBe('bead-1')
     expect(state.runtime.activeBeadIteration).toBe(2)
-    expect(state.beads[0]?.notes).toBe('retry with refreshed context')
+    expect(state.beads[0]?.failedIterationNotes).toEqual([
+      { timestamp: TEST.timestamp, iteration: 2, content: 'retry with refreshed context' },
+    ])
   })
 
   it('removes state.yaml for terminal tickets', () => {

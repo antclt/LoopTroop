@@ -142,6 +142,31 @@ export const executionSetupPlanSchema = z.object({
     gaps: z.array(z.string()),
   }).strict(),
   tempRoots: z.array(z.string()),
+  workspaceProbes: z.array(z.object({
+    id: z.string(),
+    command: z.string(),
+    purpose: z.string(),
+  }).strict()).default([]),
+  gitHooks: z.object({
+    policy: z.enum(['validate_explicitly', 'use_on_internal_commits', 'ignore_internal_only']),
+    detected: z.array(z.object({
+      name: z.string(),
+      path: z.string(),
+      source: z.string(),
+      executable: z.boolean(),
+      managerHint: z.string().optional(),
+    }).strict()),
+    validationCommands: z.array(z.object({
+      id: z.string(),
+      hook: z.string(),
+      command: z.string(),
+      purpose: z.string(),
+    }).strict()),
+  }).strict().default({
+    policy: 'validate_explicitly',
+    detected: [],
+    validationCommands: [],
+  }),
   steps: z.array(
     z.object({
       id: z.string(),

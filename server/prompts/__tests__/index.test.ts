@@ -108,6 +108,7 @@ describe.concurrent('structured prompt hardening', () => {
 
     expect(prompt).toContain('EXISTING SESSION:')
     expect(prompt).toContain('continuing in an existing session')
+    expect(prompt).toContain('Failed Iteration Notes entry')
     expect(prompt).not.toContain('CONTEXT REFRESH:')
     expect(prompt).not.toContain('fresh session with no prior conversation history')
   })
@@ -365,6 +366,9 @@ describe.concurrent('structured prompt hardening', () => {
     expect(prompt).toContain('plain-language status updates')
     expect(prompt).toContain('Final Self-Check')
     expect(prompt).toContain('quality gates')
+    expect(prompt).toContain('A `done/pass` marker is only a candidate completion')
+    expect(prompt).toContain('independently rerun every declared `testCommands` entry')
+    expect(prompt).toContain('deterministic failure receipt to this same session')
     expect(PROM_CODING.contextInputs).toEqual(['bead_data', 'bead_notes'])
   })
 

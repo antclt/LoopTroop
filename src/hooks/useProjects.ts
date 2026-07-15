@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { clearPersistedTicketLogs } from '@/context/logUtils'
 import { clearErrorTicketSeen } from '@/lib/errorTicketSeen'
 import { getTicketArtifactsQueryKey } from './useTicketArtifacts'
+import type { GitHookPolicy } from '@/lib/executionSetupPlan'
 
 interface Project {
   id: number
@@ -15,6 +16,7 @@ interface Project {
   maxIterations: number | null
   perIterationTimeout: number | null
   executionSetupTimeout: number | null
+  gitHookPolicy: GitHookPolicy | null
   councilResponseTimeout: number | null
   minCouncilQuorum: number | null
   interviewQuestions: number | null
@@ -42,6 +44,7 @@ interface CreateProjectInput {
   color?: string
   profileId?: number
   executionSetupTimeout?: number
+  gitHookPolicy?: GitHookPolicy | null
   manualQaOverride?: boolean | null
 }
 
@@ -104,7 +107,7 @@ async function createProject(input: CreateProjectInput): Promise<Project> {
   return res.json()
 }
 
-async function updateProject(id: number, input: Partial<Pick<Project, 'name' | 'icon' | 'color' | 'executionSetupTimeout' | 'manualQaOverride'>>): Promise<Project> {
+async function updateProject(id: number, input: Partial<Pick<Project, 'name' | 'icon' | 'color' | 'executionSetupTimeout' | 'gitHookPolicy' | 'manualQaOverride'>>): Promise<Project> {
   const res = await fetch(`/api/projects/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -156,7 +159,7 @@ export function useDeleteProject() {
 export function useUpdateProject() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: number } & Partial<Pick<Project, 'name' | 'icon' | 'color' | 'executionSetupTimeout' | 'manualQaOverride'>>) =>
+    mutationFn: ({ id, ...input }: { id: number } & Partial<Pick<Project, 'name' | 'icon' | 'color' | 'executionSetupTimeout' | 'gitHookPolicy' | 'manualQaOverride'>>) =>
       updateProject(id, input),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['projects'] })

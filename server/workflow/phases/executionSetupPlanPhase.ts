@@ -37,6 +37,7 @@ import {
   PROM_EXECUTION_SETUP_PLAN,
   PROM_EXECUTION_SETUP_PLAN_REGENERATE,
 } from '../../prompts/index'
+import { enrichGeneratedExecutionSetupPlan } from '../../phases/executionSetupPlan/hookEvidence'
 
 function buildExecutionSetupPlanReport(input: {
   generatedBy: string
@@ -79,6 +80,12 @@ function buildRegenerateContext(baseContext: PromptPart[], currentPlan: Executio
           gaps: currentPlan.readiness.gaps,
         },
         temp_roots: currentPlan.tempRoots,
+        workspace_probes: currentPlan.workspaceProbes,
+        git_hooks: {
+          policy: currentPlan.gitHooks.policy,
+          detected: currentPlan.gitHooks.detected,
+          validation_commands: currentPlan.gitHooks.validationCommands,
+        },
         steps: currentPlan.steps,
         project_commands: {
           prepare: currentPlan.projectCommands.prepare,
@@ -212,6 +219,10 @@ async function generateAndPersistExecutionSetupPlan(input: {
       },
     },
   )
+
+  if (generation.plan) {
+    generation.plan = enrichGeneratedExecutionSetupPlan(input.ticketId, generation.plan)
+  }
 
   const report = buildExecutionSetupPlanReport({
     generatedBy: planModelId,

@@ -47,6 +47,16 @@ describe('projectRouter project cleanup', () => {
     expect(updateProject(project.id, { manualQaOverride: null })?.manualQaOverride).toBeNull()
   })
 
+  it('persists nullable project Git hook policy overrides', () => {
+    const repoDir = repoManager.createRepo()
+    const project = attachProject({ folderPath: repoDir, name: 'Hooks project', shortname: 'HKS' })
+    expect(project.gitHookPolicy).toBeNull()
+    expect(updateProject(project.id, { gitHookPolicy: 'validate_explicitly' })?.gitHookPolicy).toBe('validate_explicitly')
+    expect(updateProject(project.id, { gitHookPolicy: 'use_on_internal_commits' })?.gitHookPolicy).toBe('use_on_internal_commits')
+    expect(updateProject(project.id, { gitHookPolicy: 'ignore_internal_only' })?.gitHookPolicy).toBe('ignore_internal_only')
+    expect(updateProject(project.id, { gitHookPolicy: null })?.gitHookPolicy).toBeNull()
+  })
+
   beforeEach(() => {
     clearProjectDatabaseCache()
     initializeDatabase()

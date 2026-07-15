@@ -20,6 +20,12 @@ describe('parseExecutionSetupResult', () => {
         temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
         bootstrap_commands: ['project bootstrap'],
         tooling_probe_commands: ['./.ticket/runtime/execution-setup/run go version'],
+        workspace_probes: [{ id: 'workspace-1', command: 'go list ./...', purpose: 'load packages' }],
+        git_hooks: {
+          policy: 'validate_explicitly',
+          detected: [{ name: 'pre-commit', path: '.husky/pre-commit', source: 'core.hooksPath', executable: true, manager_hint: 'husky' }],
+          validation_commands: [{ id: 'hook-1', hook: 'pre-commit', command: 'project check', purpose: 'validate commit' }],
+        },
         tool_requirements: [
           {
             launcher: 'project-tool',
@@ -76,6 +82,12 @@ describe('parseExecutionSetupResult', () => {
       '.ticket/runtime/execution-setup/run',
     ])
     expect(parsed.result?.profile.toolingProbeCommands).toEqual(['./.ticket/runtime/execution-setup/run go version'])
+    expect(parsed.result?.profile.workspaceProbes).toEqual([{ id: 'workspace-1', command: 'go list ./...', purpose: 'load packages' }])
+    expect(parsed.result?.profile.gitHooks).toEqual({
+      policy: 'validate_explicitly',
+      detected: [{ name: 'pre-commit', path: '.husky/pre-commit', source: 'core.hooksPath', executable: true, managerHint: 'husky' }],
+      validationCommands: [{ id: 'hook-1', hook: 'pre-commit', command: 'project check', purpose: 'validate commit' }],
+    })
     expect(parsed.result?.profile.toolRequirements).toEqual([
       {
         launcher: 'project-tool',
@@ -107,6 +119,12 @@ describe('parseExecutionSetupResult', () => {
       tempRoots: ['.ticket/runtime/execution-setup'],
       bootstrapCommands: [],
       toolingProbeCommands: ['./.ticket/runtime/execution-setup/run go version'],
+      workspaceProbes: [],
+      gitHooks: {
+        policy: 'validate_explicitly',
+        detected: [],
+        validationCommands: [],
+      },
       reusableArtifacts: [],
       projectCommands: {
         prepare: [],

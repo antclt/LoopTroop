@@ -3,6 +3,7 @@
 import { spawnSync } from 'node:child_process'
 import { getCurrentBranch } from '../../git/repository'
 import { pushBranchRef } from '../../git/push'
+import { readWorktreeGitHookPolicy, shouldBypassGitHooks } from '../../git/hookPolicy'
 import {
   buildGeneratedNoiseWarning,
   classifyWorktreePath,
@@ -218,7 +219,15 @@ export function commitBeadChanges(
   }
 
   const commitMsg = `bead(${beadId}): ${beadTitle}`
-  const commitResult = runGitOpSafe(worktreePath, ['commit', '-m', commitMsg, '--', ...committableFiles])
+  const bypassHooks = shouldBypassGitHooks(readWorktreeGitHookPolicy(worktreePath))
+  const commitResult = runGitOpSafe(worktreePath, [
+    'commit',
+    ...(bypassHooks ? ['--no-verify'] : []),
+    '-m',
+    commitMsg,
+    '--',
+    ...committableFiles,
+  ])
   if (!commitResult.ok) {
     return { committed: false, pushed: false, error: `git commit failed: ${commitResult.error}` }
   }
@@ -233,6 +242,7 @@ export function commitBeadChanges(
     destinationBranch: currentBranch,
     sourceRef: 'HEAD',
     maxRetries: 3,
+    bypassHooks,
   })
   if (!pushResult.pushed) {
     return {

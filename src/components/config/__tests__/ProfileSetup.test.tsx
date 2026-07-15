@@ -31,6 +31,7 @@ const existingProfile = {
   toolOutputMaxChars: 12000,
   toolErrorMaxChars: 6000,
   manualQaEnabled: false,
+  gitHookPolicy: 'use_on_internal_commits' as const,
   createdAt: '2026-03-08T14:28:53.309Z',
   updatedAt: '2026-03-11T10:49:38.623Z',
 }
@@ -140,6 +141,7 @@ describe('ProfileSetup', () => {
     expect(screen.getByLabelText('OpenCode Retry Limit')).toHaveValue(7)
     expect(screen.getByLabelText('OpenCode Retry Grace Window')).toHaveValue(45)
     expect(screen.getByText('Execution Setup Timeout (s)')).toBeInTheDocument()
+    expect(screen.getByLabelText('Git hook policy')).toHaveValue('use_on_internal_commits')
     expect(screen.queryByText('Profile')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
     expect(screen.queryByText('Icon')).not.toBeInTheDocument()

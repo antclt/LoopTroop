@@ -4,7 +4,6 @@ import { ArchivedArtifactWriteError, assertCurrentEditablePhaseAttempt } from '.
 import {
   readExecutionSetupPlan,
   saveExecutionSetupPlan,
-  saveExecutionSetupPlanRawContent,
 } from '../../phases/executionSetupPlan/document'
 import {
   EXECUTION_SETUP_PLAN_RESULT_END,
@@ -12,6 +11,7 @@ import {
   serializeExecutionSetupPlan,
 } from '../../phases/executionSetupPlan/types'
 import { regenerateExecutionSetupPlanDraft } from '../../workflow/phases/executionSetupPlanPhase'
+import { lockExecutionSetupPlanDetectedHooks } from '../../phases/executionSetupPlan/hookEvidence'
 import { normalizeExecutionSetupPlanOutput } from '../../structuredOutput'
 import { getErrorMessage } from '@shared/typeGuards'
 import { writeUserEditReceipt } from '../../workflow/artifactEditReceipts'
@@ -140,7 +140,12 @@ export async function handlePutExecutionSetupPlan(c: Context) {
 
     try {
       const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
-      const { raw, contentSha256, plan } = saveExecutionSetupPlanRawContent(ticketId, rawParsed.data.content)
+      const normalized = normalizeRawSetupPlanContent(rawParsed.data.content)
+      if (!normalized.ok) throw new Error(normalized.error)
+      const { raw, contentSha256, plan } = saveExecutionSetupPlan(
+        ticketId,
+        lockExecutionSetupPlanDetectedHooks(ticketId, normalized.value),
+      )
       writeUserEditReceipt({
         ticketId,
         artifactType: 'execution_setup_plan',
@@ -179,7 +184,10 @@ export async function handlePutExecutionSetupPlan(c: Context) {
 
   try {
     const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
-    const { raw, contentSha256, plan } = saveExecutionSetupPlan(ticketId, structuredParsed.data.plan)
+    const { raw, contentSha256, plan } = saveExecutionSetupPlan(
+      ticketId,
+      lockExecutionSetupPlanDetectedHooks(ticketId, structuredParsed.data.plan),
+    )
     writeUserEditReceipt({
       ticketId,
       artifactType: 'execution_setup_plan',

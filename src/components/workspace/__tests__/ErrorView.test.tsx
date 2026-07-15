@@ -103,6 +103,35 @@ describe('ErrorView', () => {
     })
   })
 
+  it('shows each append-only bead note history under its own heading', () => {
+    const base = makeLiveCodingErrorTicket()
+    const ticket = makeTicket({
+      ...base,
+      runtime: {
+        ...base.runtime,
+        lastFailedBeadId: 'bead-1',
+        beads: [{
+          id: 'bead-1',
+          title: 'Failed bead',
+          status: 'failed',
+          iteration: 2,
+          failedIterationNotes: [{ timestamp: '2026-01-01T00:00:00.000Z', iteration: 1, content: 'iteration failed' }],
+          userRetryNotes: [{ timestamp: '2026-01-01T00:01:00.000Z', iteration: 2, content: 'try the alternate path' }],
+          finalizationFailureNotes: [{ timestamp: '2026-01-01T00:02:00.000Z', iteration: 2, content: 'commit failed', errorCode: 'COMMIT_FAILED' }],
+        }],
+      },
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('Failed Iteration Notes')).toBeInTheDocument()
+    expect(screen.getByText('User Retry Notes')).toBeInTheDocument()
+    expect(screen.getByText('Finalization Failure Notes')).toBeInTheDocument()
+    expect(screen.getByText('iteration failed')).toBeInTheDocument()
+    expect(screen.getByText('try the alternate path')).toBeInTheDocument()
+    expect(screen.getByText('commit failed')).toBeInTheDocument()
+  })
+
   it('shows a coding-specific retry label when the active error exhausted the bead retry budget', () => {
     const ticket = makeTicket({
       status: 'BLOCKED_ERROR',

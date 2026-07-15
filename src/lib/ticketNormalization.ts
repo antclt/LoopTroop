@@ -53,6 +53,19 @@ function numberOrFallback(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
 }
 
+function normalizeBeadNoteEntries(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry))
+    .map((entry) => ({
+      timestamp: stringOrFallback(entry.timestamp, ''),
+      iteration: numberOrFallback(entry.iteration, 0),
+      content: stringOrFallback(entry.content, ''),
+      ...(typeof entry.errorCode === 'string' ? { errorCode: entry.errorCode } : {}),
+    }))
+    .filter((entry) => entry.content.trim().length > 0)
+}
+
 function normalizeRuntimeBeads(value: unknown): TicketRuntime['beads'] {
   if (!Array.isArray(value)) return []
   return value
@@ -62,7 +75,9 @@ function normalizeRuntimeBeads(value: unknown): TicketRuntime['beads'] {
       title: stringOrFallback(bead.title, 'Untitled'),
       status: stringOrFallback(bead.status, 'pending'),
       iteration: numberOrFallback(bead.iteration, 0),
-      notes: typeof bead.notes === 'string' ? bead.notes : undefined,
+      failedIterationNotes: normalizeBeadNoteEntries(bead.failedIterationNotes),
+      userRetryNotes: normalizeBeadNoteEntries(bead.userRetryNotes),
+      finalizationFailureNotes: normalizeBeadNoteEntries(bead.finalizationFailureNotes),
       startedAt: typeof bead.startedAt === 'string' ? bead.startedAt : null,
       updatedAt: typeof bead.updatedAt === 'string' ? bead.updatedAt : null,
     }))

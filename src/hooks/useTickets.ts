@@ -63,6 +63,13 @@ export interface ManualQaBeadOrigin {
   imageDelivery?: 'attached' | 'references_only'
 }
 
+export interface BeadNoteEntry {
+  timestamp: string
+  iteration: number
+  content: string
+  errorCode?: string
+}
+
 export interface ManualQaImprovementOrigin {
   schemaVersion: 1
   source: 'manual_qa_improvement'
@@ -105,7 +112,9 @@ interface TicketRuntime {
     title: string
     status: string
     iteration: number
-    notes?: string
+    failedIterationNotes: BeadNoteEntry[]
+    userRetryNotes: BeadNoteEntry[]
+    finalizationFailureNotes: BeadNoteEntry[]
     startedAt?: string | null
     updatedAt?: string | null
     qaOrigin?: ManualQaBeadOrigin | null

@@ -1,0 +1,48 @@
+import { db as appDb } from '../../db'
+import { PROFILE_DEFAULTS } from '../../db/defaults'
+import { profiles } from '../../db/schema'
+import { discoverGitHooks } from '../../git/hookDiscovery'
+import { isGitHookPolicy } from '../../git/hookPolicy'
+import { getProjectContextById } from '../../storage/projects'
+import { getTicketPaths, getTicketStorageContext } from '../../storage/tickets'
+import type { ExecutionSetupPlan } from './types'
+
+function resolveConfiguredPolicy(ticketId: string): ExecutionSetupPlan['gitHooks']['policy'] {
+  const storage = getTicketStorageContext(ticketId)
+  const projectPolicy = storage ? getProjectContextById(storage.projectId)?.project.gitHookPolicy : null
+  if (isGitHookPolicy(projectPolicy)) return projectPolicy
+  const profilePolicy = appDb.select().from(profiles).limit(1).get()?.gitHookPolicy
+  return isGitHookPolicy(profilePolicy) ? profilePolicy : PROFILE_DEFAULTS.gitHookPolicy
+}
+
+export function lockExecutionSetupPlanDetectedHooks(ticketId: string, plan: ExecutionSetupPlan): ExecutionSetupPlan {
+  const paths = getTicketPaths(ticketId)
+  if (!paths) return plan
+  return {
+    ...plan,
+    gitHooks: {
+      ...plan.gitHooks,
+      detected: discoverGitHooks(paths.worktreePath).detected,
+    },
+  }
+}
+
+export function enrichGeneratedExecutionSetupPlan(ticketId: string, plan: ExecutionSetupPlan): ExecutionSetupPlan {
+  const paths = getTicketPaths(ticketId)
+  if (!paths) return plan
+  const discovery = discoverGitHooks(paths.worktreePath)
+  const commands = [...plan.gitHooks.validationCommands]
+  for (const suggestion of discovery.suggestedValidationCommands) {
+    if (!commands.some((command) => command.id === suggestion.id || command.command === suggestion.command)) {
+      commands.push(suggestion)
+    }
+  }
+  return {
+    ...plan,
+    gitHooks: {
+      policy: resolveConfiguredPolicy(ticketId),
+      detected: discovery.detected,
+      validationCommands: commands,
+    },
+  }
+}

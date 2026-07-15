@@ -7,6 +7,9 @@ import type {
   ExecutionSetupProvisioningAttemptPayload,
   ExecutionSetupResultPayload,
   ExecutionSetupToolRequirementStatus,
+  ExecutionSetupCommandProbePayload,
+  ExecutionSetupGitHooksPayload,
+  GitHookPolicy,
   FinalTestCommandPayload,
   FinalTestFileEffect,
   FinalTestFileEffectIntent,
@@ -413,6 +416,69 @@ function normalizeExecutionSetupQualityGatePolicy(value: unknown, fieldLabel: st
   }
 }
 
+function normalizeGitHookPolicy(value: unknown): GitHookPolicy {
+  const raw = typeof value === 'string' ? normalizeKey(value) : ''
+  if (raw === 'useoninternalcommits') return 'use_on_internal_commits'
+  if (raw === 'ignoreinternalonly') return 'ignore_internal_only'
+  if (!raw || raw === 'validateexplicitly') return 'validate_explicitly'
+  throw new Error(`Invalid Git hook policy: ${String(value)}`)
+}
+
+function normalizeExecutionSetupCommandProbes(value: unknown, label: string): ExecutionSetupCommandProbePayload[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error(`${label} must be a list`)
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`${label}[${index}] must be an object`)
+    return {
+      id: getRequiredString(entry, ['id'], `${label}[${index}].id`),
+      command: getRequiredString(entry, ['command'], `${label}[${index}].command`),
+      purpose: getRequiredString(entry, ['purpose'], `${label}[${index}].purpose`),
+    }
+  })
+}
+
+function normalizeExecutionSetupGitHooks(value: unknown): ExecutionSetupGitHooksPayload {
+  if (value === undefined || value === null) {
+    return { policy: 'validate_explicitly', detected: [], validationCommands: [] }
+  }
+  if (!isRecord(value)) throw new Error('git_hooks must be an object')
+  const rawDetected = getValueByAliases(value, ['detected', 'detectedhooks'])
+  const detected = rawDetected === undefined || rawDetected === null
+    ? []
+    : Array.isArray(rawDetected)
+      ? rawDetected.map((entry, index) => {
+          if (!isRecord(entry)) throw new Error(`git_hooks.detected[${index}] must be an object`)
+          const managerHint = toOptionalString(getValueByAliases(entry, ['managerhint', 'manager']))
+          return {
+            name: getRequiredString(entry, ['name', 'hook'], `git_hooks.detected[${index}].name`),
+            path: normalizeExecutionSetupPath(getValueByAliases(entry, ['path']), `git_hooks.detected[${index}].path`),
+            source: getRequiredString(entry, ['source'], `git_hooks.detected[${index}].source`),
+            executable: Boolean(getValueByAliases(entry, ['executable', 'isexecutable'])),
+            ...(managerHint ? { managerHint } : {}),
+          }
+        })
+      : (() => { throw new Error('git_hooks.detected must be a list') })()
+  const rawCommands = getValueByAliases(value, ['validationcommands', 'commands'])
+  const validationCommands = rawCommands === undefined || rawCommands === null
+    ? []
+    : Array.isArray(rawCommands)
+      ? rawCommands.map((entry, index) => {
+          if (!isRecord(entry)) throw new Error(`git_hooks.validation_commands[${index}] must be an object`)
+          return {
+            id: getRequiredString(entry, ['id'], `git_hooks.validation_commands[${index}].id`),
+            hook: getRequiredString(entry, ['hook'], `git_hooks.validation_commands[${index}].hook`),
+            command: getRequiredString(entry, ['command'], `git_hooks.validation_commands[${index}].command`),
+            purpose: getRequiredString(entry, ['purpose'], `git_hooks.validation_commands[${index}].purpose`),
+          }
+        })
+      : (() => { throw new Error('git_hooks.validation_commands must be a list') })()
+  return {
+    policy: normalizeGitHookPolicy(getValueByAliases(value, ['policy'])),
+    detected,
+    validationCommands,
+  }
+}
+
 function normalizeExecutionSetupPlanReadiness(
   value: unknown,
   defaults: { status: 'ready' | 'partial' | 'missing'; actionsRequired: boolean },
@@ -541,6 +607,11 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
     'Execution setup plan quality_gate_policy',
   )
   const cautions = toStringArray(getValueByAliases(value, ['cautions', 'warnings', 'notes']))
+  const workspaceProbes = normalizeExecutionSetupCommandProbes(
+    getValueByAliases(value, ['workspaceprobes']),
+    'workspace_probes',
+  )
+  const gitHooks = normalizeExecutionSetupGitHooks(getValueByAliases(value, ['githooks']))
 
   return {
     schemaVersion,
@@ -550,6 +621,8 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
     summary,
     readiness,
     tempRoots: [...new Set(tempRoots)],
+    workspaceProbes,
+    gitHooks,
     steps,
     projectCommands,
     qualityGatePolicy,
@@ -643,6 +716,11 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     'probecommands',
     'verificationcommands',
   ]))
+  const workspaceProbes = normalizeExecutionSetupCommandProbes(
+    getValueByAliases(value, ['workspaceprobes']),
+    'workspace_probes',
+  )
+  const gitHooks = normalizeExecutionSetupGitHooks(getValueByAliases(value, ['githooks']))
   const toolRequirements = normalizeExecutionSetupToolRequirements(getValueByAliases(value, [
     'toolrequirements',
     'toolrequirement',
@@ -682,6 +760,8 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     tempRoots: [...new Set(tempRoots)],
     bootstrapCommands,
     toolingProbeCommands,
+    workspaceProbes,
+    gitHooks,
     ...(toolRequirements ? { toolRequirements } : {}),
     reusableArtifacts,
     projectCommands,
@@ -722,6 +802,18 @@ function toCanonicalExecutionSetupPlanPayload(value: ExecutionSetupPlanPayload):
       gaps: value.readiness.gaps,
     },
     temp_roots: value.tempRoots,
+    workspace_probes: value.workspaceProbes,
+    git_hooks: {
+      policy: value.gitHooks.policy,
+      detected: value.gitHooks.detected.map((hook) => ({
+        name: hook.name,
+        path: hook.path,
+        source: hook.source,
+        executable: hook.executable,
+        ...(hook.managerHint ? { manager_hint: hook.managerHint } : {}),
+      })),
+      validation_commands: value.gitHooks.validationCommands,
+    },
     steps: value.steps.map((step) => ({
       id: step.id,
       title: step.title,
@@ -760,6 +852,20 @@ function toCanonicalExecutionSetupResultPayload(value: ExecutionSetupResultPaylo
       temp_roots: value.profile.tempRoots,
       bootstrap_commands: value.profile.bootstrapCommands,
       tooling_probe_commands: value.profile.toolingProbeCommands,
+      workspace_probes: value.profile.workspaceProbes,
+      ...(value.profile.workspaceProbeReceipts ? { workspace_probe_receipts: value.profile.workspaceProbeReceipts } : {}),
+      git_hooks: {
+        policy: value.profile.gitHooks.policy,
+        detected: value.profile.gitHooks.detected.map((hook) => ({
+          name: hook.name,
+          path: hook.path,
+          source: hook.source,
+          executable: hook.executable,
+          ...(hook.managerHint ? { manager_hint: hook.managerHint } : {}),
+        })),
+        validation_commands: value.profile.gitHooks.validationCommands,
+        ...(value.profile.gitHooks.validationReceipts ? { validation_receipts: value.profile.gitHooks.validationReceipts } : {}),
+      },
       ...(value.profile.toolRequirements
         ? {
             tool_requirements: value.profile.toolRequirements.map((requirement) => ({

@@ -49,6 +49,11 @@ export interface ExecutionSetupPlanReport {
 }
 
 export function serializeExecutionSetupPlan(plan: ExecutionSetupPlan): string {
+  const gitHooks = plan.gitHooks ?? {
+    policy: 'validate_explicitly' as const,
+    detected: [],
+    validationCommands: [],
+  }
   return JSON.stringify({
     schema_version: plan.schemaVersion,
     ticket_id: plan.ticketId,
@@ -62,6 +67,18 @@ export function serializeExecutionSetupPlan(plan: ExecutionSetupPlan): string {
       gaps: plan.readiness.gaps,
     },
     temp_roots: plan.tempRoots,
+    workspace_probes: plan.workspaceProbes ?? [],
+    git_hooks: {
+      policy: gitHooks.policy,
+      detected: gitHooks.detected.map((hook) => ({
+        name: hook.name,
+        path: hook.path,
+        source: hook.source,
+        executable: hook.executable,
+        ...(hook.managerHint ? { manager_hint: hook.managerHint } : {}),
+      })),
+      validation_commands: gitHooks.validationCommands,
+    },
     steps: plan.steps.map((step) => ({
       id: step.id,
       title: step.title,

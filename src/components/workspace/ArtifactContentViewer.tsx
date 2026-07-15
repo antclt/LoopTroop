@@ -4583,6 +4583,9 @@ function ExecutionSetupPlanView({
   const requiredStepCount = plan.steps.filter((step) => step.required).length
   const optionalStepCount = Math.max(stepCount - requiredStepCount, 0)
   const commandCount = plan.steps.reduce((total, step) => total + step.commands.length, 0)
+  const workspaceProbeCount = plan.workspaceProbes.length
+  const detectedHookCount = plan.gitHooks.detected.length
+  const hookValidationCount = plan.gitHooks.validationCommands.length
   const generatedAtLabel = formatArtifactTimestampLabel(report?.generatedAt)
   const readinessLabel = labelExecutionSetupReadiness(plan.readiness.status)
   const readinessTone = plan.readiness.status === 'ready'
@@ -4715,14 +4718,43 @@ function ExecutionSetupPlanView({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-9 gap-3">
           <MetadataCard label="Readiness" value={readinessLabel} tone={readinessTone} />
           <MetadataCard label="Actions" value={plan.readiness.actionsRequired ? 'Yes' : 'No'} tone={plan.readiness.actionsRequired ? 'warning' : 'success'} />
           <MetadataCard label="Steps" value={stepCount.toLocaleString()} tone="info" />
           <MetadataCard label="Required" value={requiredStepCount.toLocaleString()} tone={requiredStepCount > 0 ? 'success' : 'default'} />
           <MetadataCard label="Optional" value={optionalStepCount.toLocaleString()} tone={optionalStepCount > 0 ? 'warning' : 'default'} />
           <MetadataCard label="Commands" value={commandCount.toLocaleString()} tone={commandCount > 0 ? 'info' : 'default'} />
+          <MetadataCard label="Workspace Probes" value={workspaceProbeCount.toLocaleString()} tone={workspaceProbeCount > 0 ? 'info' : 'warning'} />
+          <MetadataCard label="Detected Hooks" value={detectedHookCount.toLocaleString()} tone={detectedHookCount > 0 ? 'info' : 'default'} />
+          <MetadataCard label="Hook Checks" value={hookValidationCount.toLocaleString()} tone={hookValidationCount > 0 ? 'success' : 'default'} />
         </div>
+
+        <CollapsibleSection title="Workspace Verification" defaultOpen>
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <ArtifactListSection
+              title="Workspace Probes"
+              items={plan.workspaceProbes.map((probe) => `${probe.id}: ${probe.command}${probe.purpose ? ` — ${probe.purpose}` : ''}`)}
+              emptyLabel="No repository-level workspace probes were recorded."
+              tone="default"
+            />
+            <div className="space-y-3">
+              <MetadataCard label="Git Hook Policy" value={plan.gitHooks.policy.replaceAll('_', ' ')} tone="info" />
+              <ArtifactListSection
+                title="Detected Git Hooks"
+                items={plan.gitHooks.detected.map((hook) => `${hook.name}: ${hook.path} (${hook.source || 'unknown source'}; ${hook.executable ? 'executable' : 'not executable'}${hook.managerHint ? `; ${hook.managerHint}` : ''})`)}
+                emptyLabel="No Git hooks were detected."
+                tone="default"
+              />
+              <ArtifactListSection
+                title="Git Hook Validation Commands"
+                items={plan.gitHooks.validationCommands.map((entry) => `${entry.hook || 'hook'}: ${entry.command}${entry.purpose ? ` — ${entry.purpose}` : ''}`)}
+                emptyLabel="No explicit hook validations were approved; hook validation will be recorded as skipped."
+                tone="default"
+              />
+            </div>
+          </div>
+        </CollapsibleSection>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <ArtifactListSection
@@ -5019,6 +5051,8 @@ function ExecutionSetupProfileSummary({
   const statusTone = statusReady
     ? 'border-green-300 bg-green-50 text-green-950 dark:border-green-900/60 dark:bg-green-950/20 dark:text-green-100'
     : 'border-blue-300 bg-blue-50 text-blue-950 dark:border-blue-900/60 dark:bg-blue-950/20 dark:text-blue-100'
+  const workspacePassed = profile.workspaceProbeReceipts.filter((receipt) => receipt.status === 'passed').length
+  const hooksPassed = profile.gitHooks.validationReceipts.filter((receipt) => receipt.status === 'passed').length
 
   return (
     <div className="space-y-4">
@@ -5036,14 +5070,52 @@ function ExecutionSetupProfileSummary({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-10 gap-3">
         <MetadataCard label="Status" value={profile.status || 'Unknown'} tone={statusReady ? 'success' : 'info'} />
         <MetadataCard label="Temp Roots" value={profile.tempRoots.length.toLocaleString()} tone="info" />
         <MetadataCard label="Bootstrap" value={profile.bootstrapCommands.length.toLocaleString()} tone={profile.bootstrapCommands.length > 0 ? 'info' : 'default'} />
         <MetadataCard label="Probes" value={profile.toolingProbeCommands.length.toLocaleString()} tone={profile.toolingProbeCommands.length > 0 ? 'success' : 'default'} />
+        <MetadataCard label="Workspace Probes" value={profile.workspaceProbes.length.toLocaleString()} tone={profile.workspaceProbes.length > 0 ? 'success' : 'warning'} />
+        <MetadataCard label="Hook Checks" value={profile.gitHooks.validationCommands.length.toLocaleString()} tone={profile.gitHooks.validationCommands.length > 0 ? 'success' : 'default'} />
+        <MetadataCard label="Workspace Results" value={`${workspacePassed}/${profile.workspaceProbeReceipts.length}`} tone={workspacePassed === profile.workspaceProbeReceipts.length && workspacePassed > 0 ? 'success' : 'default'} />
+        <MetadataCard label="Hook Results" value={`${hooksPassed}/${profile.gitHooks.validationReceipts.length}`} tone={hooksPassed === profile.gitHooks.validationReceipts.length && hooksPassed > 0 ? 'success' : 'default'} />
         <MetadataCard label="Reusable" value={profile.reusableArtifacts.length.toLocaleString()} tone={profile.reusableArtifacts.length > 0 ? 'success' : 'default'} />
         <MetadataCard label="Ticket" value={profile.ticketId || 'Unknown'} mono />
       </div>
+
+      <CollapsibleSection title="Workspace and Git Hook Verification" defaultOpen>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          <ArtifactListSection
+            title="Workspace Probes"
+            items={profile.workspaceProbes.map((probe) => `${probe.id}: ${probe.command}${probe.purpose ? ` — ${probe.purpose}` : ''}`)}
+            emptyLabel="No repository-level workspace probes were recorded."
+          />
+          <ArtifactListSection
+            title="Workspace Probe Outcomes"
+            items={profile.workspaceProbeReceipts.map((receipt) => `${receipt.id}: ${receipt.status} (${receipt.durationMs}ms${receipt.exitCode == null ? '' : `; exit ${receipt.exitCode}`})${receipt.outputExcerpt ? ` — ${receipt.outputExcerpt}` : ''}`)}
+            emptyLabel="No workspace probe outcomes were recorded."
+            tone="default"
+          />
+          <div className="space-y-3">
+            <MetadataCard label="Git Hook Policy" value={profile.gitHooks.policy.replaceAll('_', ' ')} tone="info" />
+            <ArtifactListSection
+              title="Detected Git Hooks"
+              items={profile.gitHooks.detected.map((hook) => `${hook.name}: ${hook.path} (${hook.source || 'unknown source'})`)}
+              emptyLabel="No Git hooks were detected."
+            />
+            <ArtifactListSection
+              title="Git Hook Validation Commands"
+              items={profile.gitHooks.validationCommands.map((entry) => `${entry.hook || 'hook'}: ${entry.command}`)}
+              emptyLabel="No explicit hook validation commands were approved."
+            />
+            <ArtifactListSection
+              title="Git Hook Validation Outcomes"
+              items={profile.gitHooks.validationReceipts.map((receipt) => `${receipt.id}: ${receipt.status} (${receipt.durationMs}ms${receipt.exitCode == null ? '' : `; exit ${receipt.exitCode}`})${receipt.outputExcerpt ? ` — ${receipt.outputExcerpt}` : ''}`)}
+              emptyLabel="No Git-hook validation outcomes were recorded."
+            />
+          </div>
+        </div>
+      </CollapsibleSection>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <ArtifactListSection
@@ -5293,10 +5365,12 @@ function ExecutionSetupReportView({ content, runtimeLabel = false }: { content: 
           <CollapsibleSection title="Profile Snapshot" defaultOpen>
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground leading-5">{report.profile.summary || 'No profile summary was recorded.'}</p>
-              <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 xl:grid-cols-7 gap-3">
                 <MetadataCard label="Temp Roots" value={report.profile.tempRoots.length.toLocaleString()} tone="info" />
                 <MetadataCard label="Bootstrap" value={report.profile.bootstrapCommands.length.toLocaleString()} tone={report.profile.bootstrapCommands.length > 0 ? 'info' : 'default'} />
                 <MetadataCard label="Probes" value={report.profile.toolingProbeCommands.length.toLocaleString()} tone={report.profile.toolingProbeCommands.length > 0 ? 'success' : 'default'} />
+                <MetadataCard label="Workspace Probes" value={report.profile.workspaceProbes.length.toLocaleString()} tone={report.profile.workspaceProbes.length > 0 ? 'success' : 'warning'} />
+                <MetadataCard label="Hook Checks" value={report.profile.gitHooks.validationCommands.length.toLocaleString()} tone={report.profile.gitHooks.validationCommands.length > 0 ? 'success' : 'default'} />
                 <MetadataCard label="Reusable" value={report.profile.reusableArtifacts.length.toLocaleString()} tone={report.profile.reusableArtifacts.length > 0 ? 'success' : 'default'} />
                 <MetadataCard label="Status" value={report.profile.status || 'Unknown'} tone={report.profile.status === 'ready' ? 'success' : 'default'} />
               </div>

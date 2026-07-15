@@ -8,6 +8,7 @@ export const profiles = sqliteTable('profiles', {
   councilMembers: text('council_members'), // JSON array of model IDs
   councilMemberVariants: text('council_member_variants'), // JSON map: { "provider/model": "variant" }
   manualQaEnabled: integer('manual_qa_enabled', { mode: 'boolean' }).notNull().default(PROFILE_DEFAULTS.manualQaEnabled),
+  gitHookPolicy: text('git_hook_policy').notNull().default(PROFILE_DEFAULTS.gitHookPolicy),
   minCouncilQuorum: integer('min_council_quorum').default(PROFILE_DEFAULTS.minCouncilQuorum),
   perIterationTimeout: integer('per_iteration_timeout').default(PROFILE_DEFAULTS.perIterationTimeout),
   executionSetupTimeout: integer('execution_setup_timeout').default(PROFILE_DEFAULTS.executionSetupTimeout),
@@ -52,6 +53,7 @@ export const projects = sqliteTable('projects', {
   profileId: integer('profile_id'),
   councilMembers: text('council_members'), // JSON array, nullable override
   manualQaOverride: integer('manual_qa_override', { mode: 'boolean' }),
+  gitHookPolicy: text('git_hook_policy'),
   maxIterations: integer('max_iterations'),
   perIterationTimeout: integer('per_iteration_timeout'),
   executionSetupTimeout: integer('execution_setup_timeout'),

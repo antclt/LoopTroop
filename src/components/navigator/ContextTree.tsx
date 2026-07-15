@@ -93,9 +93,9 @@ const CONTEXT_LABELS: Record<string, ContextItem> = {
   },
   bead_notes: {
     id: 'bead_notes',
-    label: 'Bead Notes',
+    label: 'Bead Note Histories',
     icon: '📓',
-    description: 'Iteration notes and prior-attempt context.',
+    description: 'Failed Iteration Notes, User Retry Notes, and Finalization Failure Notes.',
   },
   execution_setup_plan: {
     id: 'execution_setup_plan',
@@ -220,7 +220,7 @@ const PHASE_OUTPUTS: Record<string, ContextItem[]> = {
   ],
   CODING: [
     outputItem('code-changes', 'Code Changes', 'bead_data', 'Repository changes from beads.'),
-    outputItem('bead-notes', 'Bead Notes', 'bead_notes', 'Retry context if a bead fails.'),
+    outputItem('bead-notes', 'Bead Note Histories', 'bead_notes', 'Separate append-only failure, user retry, and finalization histories.'),
   ],
   RUNNING_FINAL_TEST: [
     outputItem('test-report', 'Test Report', 'tests', 'Final verification for integration.'),

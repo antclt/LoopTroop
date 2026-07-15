@@ -19,6 +19,12 @@ function buildPlanPayload(steps: unknown[]) {
       gaps: ['Dependencies are missing.'],
     },
     temp_roots: ['.ticket/runtime/execution-setup'],
+    workspace_probes: [{ id: 'workspace-1', command: 'project inspect', purpose: 'load the repository project' }],
+    git_hooks: {
+      policy: 'validate_explicitly',
+      detected: [],
+      validation_commands: [],
+    },
     steps,
     project_commands: {
       prepare: ['project bootstrap'],
@@ -52,6 +58,8 @@ describe('parseExecutionSetupPlanResult', () => {
     ]))
 
     expect(parsed.errors).toEqual([])
+    expect(parsed.plan?.workspaceProbes).toEqual([{ id: 'workspace-1', command: 'project inspect', purpose: 'load the repository project' }])
+    expect(parsed.plan?.gitHooks.policy).toBe('validate_explicitly')
     expect(parsed.plan?.steps[0]).toMatchObject({
       id: 'setup-step-1',
       title: 'Install locked dependencies before running project-native tests.',

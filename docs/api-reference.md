@@ -83,6 +83,7 @@ Example profile update payload:
   "mainImplementerVariant": "high",
   "councilMembers": "[\"openai/gpt-5.4\",\"anthropic/claude-sonnet-4\"]",
   "councilMemberVariants": "{\"openai/gpt-5.4\": \"high\"}",
+  "gitHookPolicy": "validate_explicitly",
   "minCouncilQuorum": 2,
   "perIterationTimeout": 1200000,
   "executionSetupTimeout": 1200000,
@@ -121,6 +122,7 @@ Selected validation ranges that are easy to miss when calling the API directly:
 | `maxCoveragePasses` | `1` to `10` | Shared generic coverage loop |
 | `maxPrdCoveragePasses`, `maxBeadsCoveragePasses` | `2` to `20` | PRD and beads coverage loops have a stricter lower bound |
 | `maxIterations` | `0` to `20` | `0` is allowed for tickets that should not iterate |
+| `gitHookPolicy` | `validate_explicitly`, `use_on_internal_commits`, `ignore_internal_only` | Controls LoopTroop-owned commits and pushes; it does not alter repository Git configuration |
 | `toolInputMaxChars`, `toolErrorMaxChars` | `500` to `50000` | Applied to OpenCode tool transcript truncation |
 | `toolOutputMaxChars` | `1000` to `100000` | Higher lower bound because tool output is usually larger |
 
@@ -169,6 +171,7 @@ Create and update routes also accept optional project-level overrides for future
 ```json
 {
   "councilMembers": "[\"openai/gpt-5.4\",\"anthropic/claude-sonnet-4\"]",
+  "gitHookPolicy": "use_on_internal_commits",
   "maxIterations": 7,
   "perIterationTimeout": 1500000,
   "executionSetupTimeout": 1800000,
@@ -396,7 +399,9 @@ The Retry endpoint accepts an empty body for ordinary recovery. It also accepts 
 }
 ```
 
-`note` must contain at least one non-whitespace character and must not exceed 20,000 characters. The user's text is preserved unchanged beneath a `User retry note` label and ISO timestamp, appended after any existing bead notes with the standard `---` divider. Before writing the note or resuming, LoopTroop must identify and successfully reset the same failed or paused bead used by ordinary Retry. If the bead cannot be recovered safely, the request fails, no note is appended, and the ticket remains blocked. Note-bearing requests for historical errors, non-CODING failures, blank notes, or oversized notes are rejected. Omitting `note` preserves the existing Retry behavior.
+`note` must contain at least one non-whitespace character and must not exceed 20,000 characters. After LoopTroop proves it can reset the same failed or paused bead, it appends a structured `userRetryNotes` entry containing the ISO timestamp, iteration, and the user's text unchanged. It never overwrites, merges, or deduplicates earlier entries and never writes user guidance into the machine-generated failure histories. If recovery fails, no entry is appended and the ticket remains blocked. Note-bearing requests for historical errors, non-CODING failures, blank notes, or oversized notes are rejected. Omitting `note` preserves the existing Retry behavior.
+
+Bead API/read-model payloads expose three independent append-only arrays: `failedIterationNotes`, `userRetryNotes`, and `finalizationFailureNotes`. Each entry contains `timestamp`, `iteration`, `content`, and optional `errorCode`. LoopTroop strips ANSI terminal sequences from machine-generated failed-iteration and finalization content; user retry content is preserved exactly.
 
 The final-test file-effects recovery endpoints are available only from `BLOCKED_ERROR` when the active error code is `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` and the previous status is `INTEGRATING_CHANGES`. `include-final-test-files` writes a `final_test_file_effects_override` artifact with `include_unclassified_as_candidate`; `discard-final-test-files` removes/reverts only files listed by the latest `final_test_file_effects_audit` as produced or changed during final testing, then writes a `discard_unclassified` override. Both routes dispatch `RETRY` into a fresh integration attempt and do not use the OpenCode `/continue` session path.
 
@@ -535,6 +540,26 @@ Execution setup plan read response:
       "gaps": []
     },
     "tempRoots": [".looptroop/worktrees/AUTH-12"],
+    "workspaceProbes": [
+      {
+        "id": "workspace-test",
+        "command": "npm test -- --runInBand",
+        "purpose": "Prove the repository test runner can load the project."
+      }
+    ],
+    "gitHooks": {
+      "policy": "validate_explicitly",
+      "detected": [
+        {
+          "name": "pre-commit",
+          "path": ".husky/pre-commit",
+          "source": "core.hooksPath",
+          "executable": true,
+          "managerHint": "husky"
+        }
+      ],
+      "validationCommands": []
+    },
     "steps": [
       {
         "id": "setup-1",
@@ -566,6 +591,8 @@ Execution setup plan read response:
 Execution setup plan reads may select archived versions with `phaseAttempt`. Archived reads stay available, but explicit writes to non-current phase attempts return `409` because archived versions are read-only. Invalid `phaseAttempt` values return `400`. Successful manual saves write `user_edit_receipt:execution_setup_plan`.
 
 Successful `PUT /execution-setup-plan` responses return the saved `raw`, normalized `plan`, `contentSha256`, and current route state (`status`, `state`, `ticket`) so the client does not need an immediate follow-up fetch.
+
+`workspaceProbes` and `gitHooks.validationCommands` are ordered editable lists. `gitHooks.detected` is refreshed from repository/Git evidence and cannot be changed through the plan editor. An empty validation-command list is valid; no waiver field or secondary confirmation is required.
 
 `PUT /execution-setup-plan` and `POST /regenerate-execution-setup-plan` are normally accepted only while the ticket is in `WAITING_EXECUTION_SETUP_APPROVAL`. They are also accepted from `PREPARING_EXECUTION_ENV` as a one-step runtime rewind: LoopTroop stops active runtime setup, archives the approved setup-plan attempt and current runtime attempt with `execution_setup_runtime_rewind`, clears stale setup profile/runtime outputs while preserving `.ticket/runtime/execution-setup/tool-cache`, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and requires approval again. During that route-driven rewind, the restored approval actor does not auto-draft from the empty fresh attempt; manual edits save the supplied plan, and regenerate starts only the requested commented generation. `POST /regenerate-execution-setup-plan` returns immediately after scheduling background regeneration; the new draft then arrives through normal artifact/log/SSE updates. These routes still reject from `CODING` and later statuses.
 

@@ -131,7 +131,7 @@ describe('WorkspacePhaseSummary', () => {
     )
 
     expect(screen.getByRole('button', { name: 'Implementing (working on bead 2 of 4)' })).toBeInTheDocument()
-    expect(screen.getByText(/AI coding agent executes beads one at a time/)).toBeInTheDocument()
+    expect(screen.getByText(/Executes beads one at a time, independently runs every declared test command/)).toBeInTheDocument()
   })
 
   it('shows live coding bead and iteration progress in the main title', () => {

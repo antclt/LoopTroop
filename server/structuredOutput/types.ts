@@ -147,6 +147,42 @@ export interface ExecutionSetupPlanReadinessPayload {
   gaps: string[]
 }
 
+export type GitHookPolicy = 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only'
+
+export interface ExecutionSetupCommandProbePayload {
+  id: string
+  command: string
+  purpose: string
+}
+
+export interface ExecutionSetupCommandReceiptPayload {
+  id: string
+  command: string
+  status: 'passed' | 'failed' | 'timed_out' | 'skipped'
+  exitCode: number | null
+  durationMs: number
+  outputExcerpt: string
+}
+
+export interface DetectedGitHookPayload {
+  name: string
+  path: string
+  source: string
+  executable: boolean
+  managerHint?: string
+}
+
+export interface GitHookValidationCommandPayload extends ExecutionSetupCommandProbePayload {
+  hook: string
+}
+
+export interface ExecutionSetupGitHooksPayload {
+  policy: GitHookPolicy
+  detected: DetectedGitHookPayload[]
+  validationCommands: GitHookValidationCommandPayload[]
+  validationReceipts?: ExecutionSetupCommandReceiptPayload[]
+}
+
 export interface ExecutionSetupPlanPayload {
   schemaVersion: number
   ticketId: string
@@ -155,6 +191,8 @@ export interface ExecutionSetupPlanPayload {
   summary: string
   readiness: ExecutionSetupPlanReadinessPayload
   tempRoots: string[]
+  workspaceProbes: ExecutionSetupCommandProbePayload[]
+  gitHooks: ExecutionSetupGitHooksPayload
   steps: ExecutionSetupPlanStepPayload[]
   projectCommands: {
     prepare: string[]
@@ -180,6 +218,9 @@ export interface ExecutionSetupProfilePayload {
   tempRoots: string[]
   bootstrapCommands: string[]
   toolingProbeCommands: string[]
+  workspaceProbes: ExecutionSetupCommandProbePayload[]
+  workspaceProbeReceipts?: ExecutionSetupCommandReceiptPayload[]
+  gitHooks: ExecutionSetupGitHooksPayload
   toolRequirements?: ExecutionSetupToolRequirementPayload[]
   reusableArtifacts: ExecutionSetupReusableArtifactPayload[]
   projectCommands: {

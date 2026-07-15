@@ -9,7 +9,7 @@ This stage is intentionally conservative: final testing can still block delivery
 | `RUNNING_FINAL_TEST` | Generate and run ticket-level verification against the completed implementation. | `final_test_report`, `final_test_retry_notes`, `final_test_file_effects_audit` |
 | `GENERATING_QA_CHECKLIST` | Prepare a clean checkpoint and human checklist with live milestones when Manual QA is locked on. | structured/Raw `manual_qa_checklist`, four-state coverage, reservation, workspace baseline |
 | `WAITING_MANUAL_QA` | Wait for user-run verification, evidence, configurable Improvements, AI-planned QA fixes, submit/skip, and drift decisions. | draft/results/summary, evidence refs, `fix-beads.yaml`, normal QA beads, improvement tickets |
-| `INTEGRATING_CHANGES` | Turn bead-level commits into one local candidate commit. | `integration_report` |
+| `INTEGRATING_CHANGES` | Apply the approved Git-hook policy and turn bead-level commits into one local candidate commit. | `integration_report` with hook-validation outcomes |
 | `CREATING_PULL_REQUEST` | Audit the final candidate files, push the candidate SHA, and create or update the draft PR. | `candidate_file_audit`, `candidate_diff`, `pull_request_report`, optional `git_recovery_receipt` on failure |
 | `WAITING_PR_REVIEW` | Pause automation for the final human review and merge/finish decision. | `merge_report` |
 | `CLEANING_ENV` | Remove temporary runtime state while preserving audit history. | `cleanup_report` |
@@ -141,9 +141,13 @@ Integration is a deterministic git phase. It does not ask the model to rediscove
 
 Before creating a candidate commit, LoopTroop resolves the latest `final_test_file_effects_audit` and any user override. If unclassified final-test files still exist and no override is present, integration blocks immediately instead of guessing.
 
-### 3.2 Squashing bead history into one candidate
+### 3.2 Approved Git-hook policy gate
 
-Once the final-test audit is clear, LoopTroop:
+Integration reads the ticket's accepted execution setup profile. Under `validate_explicitly`, it reruns the exact approved ordered hook-validation commands through the setup wrapper with timeouts, output receipts, and before/after tracked-file auditing. A failed command blocks integration; file effects are recorded rather than silently absorbed. `use_on_internal_commits` leaves hooks active for LoopTroop's Git operations, while `ignore_internal_only` bypasses them and records the skipped outcome. Unknown or detected hooks with no approved command remain visible as skipped evidence.
+
+### 3.3 Squashing bead history into one candidate
+
+Once the final-test and hook-policy gates are clear, LoopTroop:
 
 1. resolves the merge base and pre-squash head
 2. soft-resets the ticket branch back to the merge base
@@ -152,7 +156,7 @@ Once the final-test audit is clear, LoopTroop:
 
 The resulting `integration_report` is the handoff contract for PR creation. It records the candidate SHA, merge base, pre-squash head, commit count, completion time, and whether remote push is still deferred.
 
-### 3.3 What integration intentionally does **not** do
+### 3.4 What integration intentionally does **not** do
 
 At the end of `INTEGRATING_CHANGES`, the candidate commit is still **local**. The branch push and PR creation happen only in the next phase.
 
@@ -281,7 +285,7 @@ Cleanup writes a `cleanup_report` with `status: clean` or `status: warning`. A w
 | `manual_qa_checklist` / `manual_qa_coverage` | `GENERATING_QA_CHECKLIST` | Versioned instructions and advisory approved-PRD coverage |
 | `manual_qa_draft` / `manual_qa_results` / `manual_qa_summary` | `WAITING_MANUAL_QA` | Immutable action snapshot and outcome; `manual_qa_results` is present only after Submit, not Skip |
 | Manual QA reservation/baseline/drift/submission receipts | Both Manual QA statuses | Restart idempotency, clean-workspace proof, and include/discard/create audit |
-| `integration_report` | `INTEGRATING_CHANGES` | Candidate commit metadata used by PR creation |
+| `integration_report` | `INTEGRATING_CHANGES` | Candidate commit metadata plus explicit Git-hook validation executed/skipped outcomes and tracked-file effects |
 | `candidate_file_audit` | `CREATING_PULL_REQUEST` | Include/exclude/review decisions for the final diff before push |
 | `candidate_diff` | `CREATING_PULL_REQUEST` | Net diff for the final candidate after any audit rewrite |
 | `pull_request_report` | `CREATING_PULL_REQUEST` | Stored PR metadata and generated title/body |

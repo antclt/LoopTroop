@@ -58,6 +58,10 @@ import {
 } from '../../git/worktreeChanges'
 import { isMockOpenCodeMode } from '../../opencode/factory'
 import { quoteShellArg, runShellCommand } from '../../lib/shellCommand'
+import { existsSync, readFileSync } from 'node:fs'
+import { discoverGitHooks } from '../../git/hookDiscovery'
+import type { ExecutionSetupCommandReceiptPayload } from '../../structuredOutput/types'
+import { isVersionOnlyWorkspaceProbeCommand } from '../../phases/executionSetup/workspaceProbe'
 
 const SETUP_WRAPPER_VALIDATION_TIMEOUT_MS = 10_000
 const SETUP_PROBE_TIMEOUT_MS = 30_000
@@ -121,13 +125,40 @@ function summarizeSetupCommandFailure(input: {
   return `${input.label}: ${input.command} (${status})${output ? `\n${output}` : ''}`
 }
 
+function hasDeclaredBeadTestCommands(beadsPath: string): boolean {
+  if (!existsSync(beadsPath)) return false
+  try {
+    return readFileSync(beadsPath, 'utf8').split('\n').filter(Boolean).some((line) => {
+      const bead = JSON.parse(line) as { testCommands?: unknown }
+      return Array.isArray(bead.testCommands) && bead.testCommands.some((command) => typeof command === 'string' && command.trim())
+    })
+  } catch {
+    return false
+  }
+}
+
+function toCommandReceipt(id: string, command: string, result: Awaited<ReturnType<typeof runShellCommand>>): ExecutionSetupCommandReceiptPayload {
+  const outputExcerpt = [result.stderr.trim(), result.stdout.trim()].filter(Boolean).join('\n').slice(0, 2000)
+  return {
+    id,
+    command,
+    status: result.timedOut ? 'timed_out' : result.exitCode === 0 ? 'passed' : 'failed',
+    exitCode: result.exitCode,
+    durationMs: result.durationMs,
+    outputExcerpt,
+  }
+}
+
 async function validateExecutionSetupRuntimeProfile(input: {
   ticketId: string
   worktreePath: string
+  beadsPath: string
   profile: ExecutionSetupProfile
   signal: AbortSignal
-}): Promise<string[]> {
+}): Promise<{ errors: string[]; profile: ExecutionSetupProfile }> {
   const errors: string[] = []
+  const workspaceProbeReceipts: ExecutionSetupCommandReceiptPayload[] = []
+  const hookValidationReceipts: ExecutionSetupCommandReceiptPayload[] = []
   const wrapperPath = getExecutionSetupCommandWrapper(input.profile)
   const declaresReusableExecution = Boolean(wrapperPath) || hasExecutionSetupProjectCommands(input.profile)
 
@@ -157,7 +188,7 @@ async function validateExecutionSetupRuntimeProfile(input: {
         durationMs: result.durationMs,
         timedOut: result.timedOut,
       }))
-      return errors
+      return { errors, profile: input.profile }
     }
   }
 
@@ -181,7 +212,93 @@ async function validateExecutionSetupRuntimeProfile(input: {
     }
   }
 
-  return errors
+  const requiresWorkspaceProbe = hasExecutionSetupProjectCommands(input.profile)
+    || hasDeclaredBeadTestCommands(input.beadsPath)
+  const functionalWorkspaceProbes = input.profile.workspaceProbes.filter(
+    (probe) => !isVersionOnlyWorkspaceProbeCommand(probe.command),
+  )
+  if (requiresWorkspaceProbe && functionalWorkspaceProbes.length === 0) {
+    errors.push('Execution setup profile must include at least one repository-level workspace_probe when project commands or bead test commands are declared; tool version probes alone are insufficient.')
+  }
+  for (const probe of input.profile.workspaceProbes) {
+    throwIfAborted(input.signal, input.ticketId)
+    const result = await runShellCommand({
+      command: probe.command,
+      cwd: input.worktreePath,
+      timeoutMs: SETUP_PROBE_TIMEOUT_MS,
+      ...(wrapperPath ? { commandWrapper: wrapperPath } : {}),
+    })
+    workspaceProbeReceipts.push(toCommandReceipt(probe.id, probe.command, result))
+    if (result.exitCode !== 0 || result.timedOut) {
+      errors.push(summarizeSetupCommandFailure({
+        label: `Execution setup workspace probe failed (${probe.id})`,
+        command: probe.command,
+        exitCode: result.exitCode,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        durationMs: result.durationMs,
+        timedOut: result.timedOut,
+      }))
+    }
+  }
+
+  if (input.profile.gitHooks.policy === 'validate_explicitly') {
+    for (const validation of input.profile.gitHooks.validationCommands) {
+      throwIfAborted(input.signal, input.ticketId)
+      const result = await runShellCommand({
+        command: validation.command,
+        cwd: input.worktreePath,
+        timeoutMs: SETUP_PROBE_TIMEOUT_MS,
+        ...(wrapperPath ? { commandWrapper: wrapperPath } : {}),
+      })
+      hookValidationReceipts.push(toCommandReceipt(validation.id, validation.command, result))
+      if (result.exitCode !== 0 || result.timedOut) {
+        errors.push(summarizeSetupCommandFailure({
+          label: `Explicit Git hook validation failed (${validation.hook})`,
+          command: validation.command,
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          durationMs: result.durationMs,
+          timedOut: result.timedOut,
+        }))
+      }
+    }
+  }
+  if (input.profile.gitHooks.policy !== 'validate_explicitly' && input.profile.gitHooks.validationCommands.length > 0) {
+    hookValidationReceipts.push(...input.profile.gitHooks.validationCommands.map((validation) => ({
+      id: validation.id,
+      command: validation.command,
+      status: 'skipped' as const,
+      exitCode: null,
+      durationMs: 0,
+      outputExcerpt: `Explicit validation is disabled by policy ${input.profile.gitHooks.policy}.`,
+    })))
+  }
+  if (hookValidationReceipts.length === 0) {
+    hookValidationReceipts.push({
+      id: 'git-hook-policy',
+      command: '',
+      status: 'skipped',
+      exitCode: null,
+      durationMs: 0,
+      outputExcerpt: input.profile.gitHooks.policy === 'validate_explicitly'
+        ? 'No explicit Git hook validation commands were approved.'
+        : `Explicit validation is disabled by policy ${input.profile.gitHooks.policy}.`,
+    })
+  }
+
+  return {
+    errors,
+    profile: {
+      ...input.profile,
+      workspaceProbeReceipts,
+      gitHooks: {
+        ...input.profile.gitHooks,
+        validationReceipts: hookValidationReceipts,
+      },
+    },
+  }
 }
 
 function validateExecutionSetupToolingFailureEvidence(input: {
@@ -336,6 +453,19 @@ export async function handleExecutionSetup(
             const worktreeWarnings: string[] = []
             let profile = result?.profile ?? null
 
+            if (profile) {
+              const hookDiscovery = discoverGitHooks(paths.worktreePath)
+              profile = {
+                ...profile,
+                workspaceProbes: approvedPlan.workspaceProbes,
+                gitHooks: {
+                  policy: approvedPlan.gitHooks.policy,
+                  detected: hookDiscovery.detected,
+                  validationCommands: approvedPlan.gitHooks.validationCommands,
+                },
+              }
+            }
+
             if (result && !allChecksPass(result)) {
               errors.push('Execution setup checks must all pass before the setup profile can be accepted.')
             }
@@ -349,12 +479,15 @@ export async function handleExecutionSetup(
               }
 
               if (result && allChecksPass(result) && errors.length === 0) {
-                errors.push(...await validateExecutionSetupRuntimeProfile({
+                const validation = await validateExecutionSetupRuntimeProfile({
                   ticketId,
                   worktreePath: paths.worktreePath,
+                  beadsPath: paths.beadsPath,
                   profile,
                   signal,
-                }))
+                })
+                errors.push(...validation.errors)
+                profile = validation.profile
               }
 
               try {

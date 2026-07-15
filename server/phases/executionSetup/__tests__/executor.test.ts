@@ -64,6 +64,12 @@ function buildToolingFailureReport(
       tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
       bootstrapCommands: [],
       toolingProbeCommands: [],
+      workspaceProbes: [],
+      gitHooks: {
+        policy: 'validate_explicitly',
+        detected: [],
+        validationCommands: [],
+      },
       toolRequirements: [
         {
           launcher: 'go',

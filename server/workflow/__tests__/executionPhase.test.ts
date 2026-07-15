@@ -91,7 +91,9 @@ function makePendingBead(id: string, priority: number, extra: Partial<Bead> = {}
     labels: [],
     dependencies: { blocked_by: [], blocks: [] },
     targetFiles: [],
-    notes: '',
+    failedIterationNotes: [],
+    userRetryNotes: [],
+    finalizationFailureNotes: [],
     iteration: 1,
     createdAt: '',
     updatedAt: '2026-01-01T00:00:00.000Z',
@@ -109,6 +111,10 @@ function makeDoneBead(id: string, priority: number): Bead {
     startedAt: '2026-01-01T00:00:00.000Z',
     iteration: 1,
   })
+}
+
+function makeNote(content: string, iteration = 1) {
+  return { timestamp: '2026-01-01T00:00:00.000Z', iteration, content }
 }
 
 describe('handleCoding', () => {
@@ -443,7 +449,7 @@ describe('handleCoding', () => {
         model: string
         onContextWipe: (entry: {
           beadId: string
-          notes: string
+          failedIterationNotes: Bead['failedIterationNotes']
           iteration: number
           reason: 'failure' | 'iteration_timeout'
           attempt: number
@@ -455,7 +461,7 @@ describe('handleCoding', () => {
       // Simulate context wipe persistence before executeBead returns.
       await callbacks.onContextWipe({
         beadId: 'bead-1',
-        notes: 'context wiped — retrying with notes',
+        failedIterationNotes: [makeNote('context wiped — retrying with notes')],
         iteration: 1,
         reason: 'failure',
         attempt: 1,
@@ -484,7 +490,7 @@ describe('handleCoding', () => {
     // The fresh-reload in handleCoding must not wipe callback-persisted notes.
     const finalBeads = readTicketBeads(ticket.id)
     const executedBead = finalBeads.find((b) => b.id === 'bead-1')
-    expect(executedBead?.notes).toBe('context wiped — retrying with notes')
+    expect(executedBead?.failedIterationNotes).toEqual([makeNote('context wiped — retrying with notes')])
     expect(executedBead?.status).toBe('done')
   })
 
@@ -511,7 +517,7 @@ describe('handleCoding', () => {
         onSessionCreated?: (sessionId: string, iteration: number) => void
         onContextWipe: (entry: {
           beadId: string
-          notes: string
+          failedIterationNotes: Bead['failedIterationNotes']
           iteration: number
           reason: 'failure' | 'iteration_timeout'
           attempt: number
@@ -523,7 +529,7 @@ describe('handleCoding', () => {
       callbacks.onSessionCreated?.('session-1', 1)
       await expect(callbacks.onContextWipe({
         beadId: 'bead-1',
-        notes: 'retry note after timeout',
+        failedIterationNotes: [makeNote('retry note after timeout')],
         iteration: 1,
         reason: 'failure',
         attempt: 1,
@@ -541,13 +547,13 @@ describe('handleCoding', () => {
     const executedBead = finalBeads.find((b) => b.id === 'bead-1')
     expect(executedBead?.status).toBe('error')
     expect(executedBead?.iteration).toBe(2)
-    expect(executedBead?.notes).toBe('retry note after timeout')
+    expect(executedBead?.failedIterationNotes).toEqual([makeNote('retry note after timeout')])
 
     const recoveredBead = recoverFailedCodingBead(ticket.id)
     expect(recoveredBead?.id).toBe('bead-1')
     expect(recoveredBead?.status).toBe('pending')
     expect(recoveredBead?.iteration).toBe(2)
-    expect(recoveredBead?.notes).toBe('retry note after timeout')
+    expect(recoveredBead?.failedIterationNotes).toEqual([makeNote('retry note after timeout')])
   })
 
   // --- Throw paths ---
@@ -591,7 +597,7 @@ describe('handleCoding', () => {
       makePendingBead('bead-1', 1, {
         status: 'in_progress',
         iteration: 2,
-        notes: 'prior interrupted attempt',
+        failedIterationNotes: [makeNote('prior interrupted attempt')],
         beadStartCommit: 'start-sha',
       }),
     ])
@@ -616,7 +622,7 @@ describe('handleCoding', () => {
     )
     const executedBead = executeBeadMock.mock.calls[0]![1] as Bead
     expect(executedBead.status).toBe('in_progress')
-    expect(executedBead.notes).toBe('prior interrupted attempt')
+    expect(executedBead.failedIterationNotes).toEqual([makeNote('prior interrupted attempt')])
     expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
   })
 
@@ -628,7 +634,7 @@ describe('handleCoding', () => {
       makePendingBead('bead-1', 1, {
         status: 'in_progress',
         iteration: 2,
-        notes: 'prior interrupted attempt',
+        failedIterationNotes: [makeNote('prior interrupted attempt')],
         beadStartCommit: 'start-sha',
       }),
     ])
@@ -655,7 +661,7 @@ describe('handleCoding', () => {
       id: 'bead-1',
       status: 'in_progress',
       iteration: 2,
-      notes: 'prior interrupted attempt',
+      failedIterationNotes: [makeNote('prior interrupted attempt')],
       beadStartCommit: 'start-sha',
     })
     expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
@@ -940,12 +946,15 @@ describe('handleCoding', () => {
 
   it('keeps the bead retryable and blocks progress when finalization throws', async () => {
     commitBeadChangesMock.mockImplementation(() => {
-      throw new Error('git commit failed')
+      throw new Error('\u001b[31mgit commit failed\u001b[0m')
     })
     const { ticket, context } = createInitializedTestTicket(repoManager, {
       title: 'commitBeadChanges throws',
     })
-    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1)])
+    const existingFinalizationNote = { ...makeNote('Earlier finalization failure'), errorCode: 'BEAD_FINALIZATION_FAILED' }
+    writeTicketBeads(ticket.id, [makePendingBead('bead-1', 1, {
+      finalizationFailureNotes: [existingFinalizationNote],
+    })])
     const sendEvent = vi.fn()
 
     executeBeadMock.mockResolvedValueOnce({
@@ -969,7 +978,15 @@ describe('handleCoding', () => {
     const finalBeads = readTicketBeads(ticket.id)
     const failedBead = finalBeads.find((b) => b.id === 'bead-1')
     expect(failedBead?.status).toBe('error')
-    expect(failedBead?.notes).toContain('Finalization failed after successful implementation: git commit failed')
+    expect(failedBead?.finalizationFailureNotes).toEqual([
+      existingFinalizationNote,
+      expect.objectContaining({
+        iteration: 1,
+        content: expect.stringContaining('Finalization failed after successful implementation: git commit failed'),
+        errorCode: 'BEAD_FINALIZATION_FAILED',
+      }),
+    ])
+    expect(failedBead?.finalizationFailureNotes[1]?.content).not.toContain('\u001b[')
   })
 
   it('keeps the bead retryable and blocks progress when local commit returns an error', async () => {
@@ -1091,7 +1108,7 @@ describe('handleCoding', () => {
       makePendingBead('bead-1', 1, {
         status: 'error',
         iteration: 2,
-        notes: 'retry guidance',
+        failedIterationNotes: [makeNote('retry guidance', 2)],
         beadStartCommit: 'abc123',
       }),
       makePendingBead('bead-2', 2, {
@@ -1104,7 +1121,7 @@ describe('handleCoding', () => {
     expect(recoveredBead?.id).toBe('bead-1')
     expect(recoveredBead?.status).toBe('pending')
     expect(recoveredBead?.iteration).toBe(2)
-    expect(recoveredBead?.notes).toBe('retry guidance')
+    expect(recoveredBead?.failedIterationNotes).toEqual([makeNote('retry guidance', 2)])
     expect(recoveredBead?.beadStartCommit).toBe('abc123')
   })
 
@@ -1116,16 +1133,16 @@ describe('handleCoding', () => {
       makePendingBead('bead-1', 1, {
         status: 'error',
         iteration: 2,
-        notes: 'Existing iteration note',
+        failedIterationNotes: [makeNote('Existing iteration note', 2)],
         beadStartCommit: 'abc123',
       }),
       makePendingBead('bead-2', 2, {
         status: 'pending',
-        notes: 'Unrelated bead note',
+        failedIterationNotes: [makeNote('Unrelated bead note')],
       }),
     ])
 
-    const userRetryNote = 'Keep this line exactly.\n  Preserve this indentation.  '
+    const userRetryNote = '\u001b[35mKeep this line exactly.\u001b[0m\n  Preserve this indentation.  '
     const recoveredBead = recoverCodingBeadWithReset(ticket.id, {
       worktreePath: paths.worktreePath,
       requireReset: true,
@@ -1134,13 +1151,14 @@ describe('handleCoding', () => {
 
     expect(recoveredBead?.id).toBe('bead-1')
     expect(recoveredBead?.status).toBe('pending')
-    expect(recoveredBead?.notes).toMatch(
-      /^Existing iteration note\n\n---\n\n\[User retry note — \d{4}-\d{2}-\d{2}T.*Z\]\nKeep this line exactly\.\n {2}Preserve this indentation\. {2}$/,
-    )
-    expect(readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-2')?.notes)
-      .toBe('Unrelated bead note')
-    expect(getTicketByRef(ticket.id)?.runtime.beads?.find((bead) => bead.id === 'bead-1')?.notes)
-      .toBe(recoveredBead?.notes)
+    expect(recoveredBead?.failedIterationNotes).toEqual([makeNote('Existing iteration note', 2)])
+    expect(recoveredBead?.userRetryNotes).toEqual([
+      expect.objectContaining({ iteration: 2, content: userRetryNote }),
+    ])
+    expect(readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-2')?.failedIterationNotes)
+      .toEqual([makeNote('Unrelated bead note')])
+    expect(getTicketByRef(ticket.id)?.runtime.beads?.find((bead) => bead.id === 'bead-1')?.userRetryNotes)
+      .toEqual(recoveredBead?.userRetryNotes)
   })
 
   it('does not mutate bead state or notes when the required reset fails', () => {
@@ -1149,7 +1167,7 @@ describe('handleCoding', () => {
     })
     const originalBead = makePendingBead('bead-1', 1, {
       status: 'error',
-      notes: 'Existing note only',
+      failedIterationNotes: [makeNote('Existing note only')],
       beadStartCommit: 'abc123',
     })
     writeTicketBeads(ticket.id, [originalBead])
@@ -1174,7 +1192,7 @@ describe('handleCoding', () => {
       makePendingBead('bead-1', 1, {
         status: 'in_progress',
         iteration: 2,
-        notes: 'retry guidance',
+        failedIterationNotes: [makeNote('retry guidance', 2)],
         beadStartCommit: 'abc123',
       }),
     ])
@@ -1184,7 +1202,7 @@ describe('handleCoding', () => {
     expect(recoveredBead?.id).toBe('bead-1')
     expect(recoveredBead?.status).toBe('pending')
     expect(recoveredBead?.iteration).toBe(2)
-    expect(recoveredBead?.notes).toBe('retry guidance')
+    expect(recoveredBead?.failedIterationNotes).toEqual([makeNote('retry guidance', 2)])
     expect(recoveredBead?.beadStartCommit).toBe('abc123')
   })
 })

@@ -40,6 +40,13 @@ export interface QaOrigin {
   imageDelivery?: 'attached' | 'references_only'
 }
 
+export interface BeadNoteEntry {
+  timestamp: string
+  iteration: number
+  content: string
+  errorCode?: string
+}
+
 export interface Bead {
   // Subset fields (draft phase — PROM20)
   id: string                              // Field 1 (draft uses simple kebab-case; PROM25 assigns hierarchical ID)
@@ -59,14 +66,16 @@ export interface Bead {
   labels: string[]                        // Field 8 — must map to at least one epic and story
   dependencies: BeadDependencies          // Field 12 — blocked_by + blocks
   targetFiles: string[]                   // Field 13
-  notes: string                           // Field 16 — append-only, empty on first attempt
-  iteration: number                       // Field 17 — starts at 1 for the first execution attempt
-  createdAt: string                       // Field 18 — set when beads are approved
-  updatedAt: string                       // Field 19
-  completedAt: string                     // Field 20 — filled when status=done
-  startedAt: string                       // Field 21 — set on first iteration, preserved across retries
-  beadStartCommit: string | null          // Field 22 — git SHA for worktree reset
-  qaOrigin?: QaOrigin                     // Typed Manual QA provenance; retry notes remain in notes.
+  failedIterationNotes: BeadNoteEntry[]   // Field 16 — machine-generated Ralph-loop history
+  userRetryNotes: BeadNoteEntry[]         // Field 17 — user-authored retry guidance
+  finalizationFailureNotes: BeadNoteEntry[] // Field 18 — machine-generated finalization diagnostics
+  iteration: number                       // Field 19 — starts at 1 for the first execution attempt
+  createdAt: string                       // Field 20 — set when beads are approved
+  updatedAt: string                       // Field 21
+  completedAt: string                     // Field 22 — filled when status=done
+  startedAt: string                       // Field 23 — set on first iteration, preserved across retries
+  beadStartCommit: string | null          // Field 24 — git SHA for worktree reset
+  qaOrigin?: QaOrigin                     // Typed Manual QA provenance.
 }
 
 export type BeadSubset = Pick<Bead, 'id' | 'title' | 'prdRefs' | 'description' | 'contextGuidance' | 'acceptanceCriteria' | 'tests' | 'testCommands'>

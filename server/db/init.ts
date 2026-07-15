@@ -41,6 +41,7 @@ function migrateLegacyProfilesTable() {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         main_implementer TEXT,
         manual_qa_enabled INTEGER NOT NULL DEFAULT 0,
+        git_hook_policy TEXT NOT NULL DEFAULT '${PROFILE_DEFAULTS.gitHookPolicy}',
         council_members TEXT,
         min_council_quorum INTEGER DEFAULT ${PROFILE_DEFAULTS.minCouncilQuorum},
         per_iteration_timeout INTEGER DEFAULT ${PROFILE_DEFAULTS.perIterationTimeout},
@@ -64,6 +65,7 @@ function migrateLegacyProfilesTable() {
         id,
         main_implementer,
         manual_qa_enabled,
+        git_hook_policy,
         council_members,
         min_council_quorum,
         per_iteration_timeout,
@@ -86,6 +88,7 @@ function migrateLegacyProfilesTable() {
         id,
         ${selectLegacyProfileColumn(columnSet, 'main_implementer')},
         ${selectLegacyProfileValue(columnSet, 'manual_qa_enabled', 0)},
+        ${selectLegacyProfileExpression(columnSet, 'git_hook_policy', `'${PROFILE_DEFAULTS.gitHookPolicy}'`)},
         ${selectLegacyProfileColumn(columnSet, 'council_members')},
         ${selectLegacyProfileValue(columnSet, 'min_council_quorum', PROFILE_DEFAULTS.minCouncilQuorum)},
         ${selectLegacyProfileValue(columnSet, 'per_iteration_timeout', PROFILE_DEFAULTS.perIterationTimeout)},
@@ -119,6 +122,7 @@ export function initializeDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       main_implementer TEXT,
       manual_qa_enabled INTEGER NOT NULL DEFAULT 0,
+      git_hook_policy TEXT NOT NULL DEFAULT '${PROFILE_DEFAULTS.gitHookPolicy}',
       council_members TEXT,
       min_council_quorum INTEGER DEFAULT ${PROFILE_DEFAULTS.minCouncilQuorum},
       per_iteration_timeout INTEGER DEFAULT ${PROFILE_DEFAULTS.perIterationTimeout},
@@ -155,6 +159,7 @@ export function initializeDatabase() {
   migrateLegacyProfilesTable()
   ensureColumn('profiles', 'coverage_follow_up_budget_percent', `INTEGER DEFAULT ${PROFILE_DEFAULTS.coverageFollowUpBudgetPercent}`)
   ensureColumn('profiles', 'manual_qa_enabled', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn('profiles', 'git_hook_policy', `TEXT NOT NULL DEFAULT '${PROFILE_DEFAULTS.gitHookPolicy}'`)
   ensureColumn('profiles', 'max_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxCoveragePasses}`)
   ensureColumn('profiles', 'max_prd_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxPrdCoveragePasses}`)
   ensureColumn('profiles', 'max_beads_coverage_passes', `INTEGER DEFAULT ${PROFILE_DEFAULTS.maxBeadsCoveragePasses}`)

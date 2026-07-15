@@ -96,6 +96,12 @@ function readyExecutionSetupReport(ticketId: string): ExecutionSetupReport {
       tempRoots: ['.ticket/runtime/execution-setup'],
       bootstrapCommands: [],
       toolingProbeCommands: [],
+      workspaceProbes: [],
+      gitHooks: {
+        policy: 'validate_explicitly',
+        detected: [],
+        validationCommands: [],
+      },
       reusableArtifacts: [],
       projectCommands: {
         prepare: [],
@@ -574,7 +580,7 @@ describe('handleExecutionSetup', () => {
 
     expect(sendEvent).toHaveBeenCalledWith({
       type: 'EXECUTION_SETUP_FAILED',
-      errors: [expect.stringContaining('tooling_probe_commands')],
+      errors: expect.arrayContaining([expect.stringContaining('tooling_probe_commands')]),
     })
     expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
   })
@@ -665,7 +671,7 @@ describe('handleExecutionSetup', () => {
 
     expect(sendEvent).toHaveBeenCalledWith({
       type: 'EXECUTION_SETUP_FAILED',
-      errors: [expect.stringContaining('Execution setup tooling probe failed')],
+      errors: expect.arrayContaining([expect.stringContaining('Execution setup tooling probe failed')]),
     })
     expect(sendEvent).not.toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
   })

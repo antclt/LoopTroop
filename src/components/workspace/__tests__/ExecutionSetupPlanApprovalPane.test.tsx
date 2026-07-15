@@ -46,6 +46,8 @@ function buildPlan(summary = 'Prepare the workspace runtime.') {
       gaps: ['Workspace setup outputs still need to be prepared.'],
     },
     tempRoots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
+    workspaceProbes: [{ id: 'workspace', command: 'project test --list', purpose: 'Load the workspace.' }],
+    gitHooks: { policy: 'validate_explicitly' as const, detected: [], validationCommands: [] },
     steps: [
       {
         id: 'bootstrap-workspace',
@@ -87,6 +89,8 @@ function buildRawPlan(summary = 'Prepare the workspace runtime.') {
       gaps: ['Workspace setup outputs still need to be prepared.'],
     },
     temp_roots: ['.ticket/runtime/execution-setup', '.ticket/runtime/execution-setup/tool-cache'],
+    workspace_probes: [{ id: 'workspace', command: 'project test --list', purpose: 'Load the workspace.' }],
+    git_hooks: { policy: 'validate_explicitly', detected: [], validation_commands: [] },
     steps: [
       {
         id: 'bootstrap-workspace',

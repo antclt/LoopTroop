@@ -19,6 +19,29 @@ export interface ExecutionSetupPlanReadiness {
   gaps: string[]
 }
 
+export type GitHookPolicy = 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only'
+
+export interface ExecutionSetupWorkspaceProbe {
+  id: string
+  command: string
+  purpose: string
+}
+
+export interface ExecutionSetupDetectedGitHook {
+  name: string
+  path: string
+  source: string
+  executable: boolean
+  managerHint?: string
+}
+
+export interface ExecutionSetupGitHookValidationCommand {
+  id: string
+  hook: string
+  command: string
+  purpose: string
+}
+
 export interface ExecutionSetupPlan {
   schemaVersion: number
   ticketId: string
@@ -27,6 +50,12 @@ export interface ExecutionSetupPlan {
   summary: string
   readiness: ExecutionSetupPlanReadiness
   tempRoots: string[]
+  workspaceProbes: ExecutionSetupWorkspaceProbe[]
+  gitHooks: {
+    policy: GitHookPolicy
+    detected: ExecutionSetupDetectedGitHook[]
+    validationCommands: ExecutionSetupGitHookValidationCommand[]
+  }
   steps: ExecutionSetupPlanStep[]
   projectCommands: {
     prepare: string[]
@@ -62,6 +91,12 @@ function normalizeReadinessStatus(value: unknown): ExecutionSetupPlanReadiness['
   return 'ready'
 }
 
+function normalizeGitHookPolicy(value: unknown): GitHookPolicy {
+  return value === 'use_on_internal_commits' || value === 'ignore_internal_only'
+    ? value
+    : 'validate_explicitly'
+}
+
 function toExecutionSetupPlan(value: unknown): ExecutionSetupPlan | null {
   if (!isRecord(value)) return null
 
@@ -76,6 +111,44 @@ function toExecutionSetupPlan(value: unknown): ExecutionSetupPlan | null {
     : isRecord(value.quality_gate_policy)
       ? value.quality_gate_policy
       : {}
+
+  const gitHooks = isRecord(value.gitHooks)
+    ? value.gitHooks
+    : isRecord(value.git_hooks)
+      ? value.git_hooks
+      : {}
+
+  const workspaceProbesRaw = value.workspaceProbes ?? value.workspace_probes
+  const workspaceProbes = Array.isArray(workspaceProbesRaw)
+    ? workspaceProbesRaw.flatMap((probe) => !isRecord(probe) ? [] : [{
+        id: typeof probe.id === 'string' ? probe.id : '',
+        command: typeof probe.command === 'string' ? probe.command : '',
+        purpose: typeof probe.purpose === 'string' ? probe.purpose : '',
+      } satisfies ExecutionSetupWorkspaceProbe])
+    : []
+
+  const detectedRaw = gitHooks.detected
+  const detected = Array.isArray(detectedRaw)
+    ? detectedRaw.flatMap((hook) => !isRecord(hook) ? [] : [{
+        name: typeof hook.name === 'string' ? hook.name : '',
+        path: typeof hook.path === 'string' ? hook.path : '',
+        source: typeof hook.source === 'string' ? hook.source : '',
+        executable: hook.executable === true,
+        ...(typeof (hook.managerHint ?? hook.manager_hint) === 'string'
+          ? { managerHint: String(hook.managerHint ?? hook.manager_hint) }
+          : {}),
+      } satisfies ExecutionSetupDetectedGitHook])
+    : []
+
+  const validationCommandsRaw = gitHooks.validationCommands ?? gitHooks.validation_commands
+  const validationCommands = Array.isArray(validationCommandsRaw)
+    ? validationCommandsRaw.flatMap((entry) => !isRecord(entry) ? [] : [{
+        id: typeof entry.id === 'string' ? entry.id : '',
+        hook: typeof entry.hook === 'string' ? entry.hook : '',
+        command: typeof entry.command === 'string' ? entry.command : '',
+        purpose: typeof entry.purpose === 'string' ? entry.purpose : '',
+      } satisfies ExecutionSetupGitHookValidationCommand])
+    : []
 
   const steps = Array.isArray(value.steps)
     ? value.steps.flatMap((step) => {
@@ -129,6 +202,12 @@ function toExecutionSetupPlan(value: unknown): ExecutionSetupPlan | null {
       gaps: toStringArray(readinessRecord?.gaps),
     },
     tempRoots: toStringArray(value.tempRoots ?? value.temp_roots),
+    workspaceProbes,
+    gitHooks: {
+      policy: normalizeGitHookPolicy(gitHooks.policy),
+      detected,
+      validationCommands,
+    },
     steps,
     projectCommands: {
       prepare: toStringArray(projectCommands.prepare),
@@ -200,6 +279,18 @@ export function serializeExecutionSetupPlan(plan: ExecutionSetupPlan): string {
       gaps: plan.readiness.gaps,
     },
     temp_roots: plan.tempRoots,
+    workspace_probes: plan.workspaceProbes,
+    git_hooks: {
+      policy: plan.gitHooks.policy,
+      detected: plan.gitHooks.detected.map((hook) => ({
+        name: hook.name,
+        path: hook.path,
+        source: hook.source,
+        executable: hook.executable,
+        ...(hook.managerHint ? { manager_hint: hook.managerHint } : {}),
+      })),
+      validation_commands: plan.gitHooks.validationCommands,
+    },
     steps: plan.steps,
     project_commands: {
       prepare: plan.projectCommands.prepare,

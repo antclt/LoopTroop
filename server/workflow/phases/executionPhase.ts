@@ -9,20 +9,28 @@ import { throwIfAborted } from '../../council/types'
 import { broadcaster } from '../../sse/broadcaster'
 import { withCommandLoggingAsync, withCommandLoggingFieldsAsync } from '../../log/commandLogger'
 import { adapter } from './state'
-import { emitPhaseLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStreamEvent, emitOpenCodePromptLog, createOpenCodeStreamState, resolveExecutionRuntimeSettings, resolveStructuredRetryRuntimeSettings } from './helpers'
+import { emitPhaseLog, emitDebugLog, emitAiMilestone, emitOpenCodeSessionLogs, emitOpenCodeStreamEvent, emitOpenCodePromptLog, createOpenCodeStreamState, resolveExecutionRuntimeSettings, resolveStructuredRetryRuntimeSettings } from './helpers'
 import type { OpenCodeStreamState } from './types'
 import { readTicketBeads, recoverCodingBeadWithReset, writeTicketBeads, updateTicketProgressFromBeads } from './beadsPhase'
 import { recordBeadMetric } from '../../storage/executionTelemetry'
 import { hasPendingSessionContinuationForTicketPhase } from '../../opencode/sessionContinuation'
 import { ensureLocalGitExclude } from '../../git/repository'
-import { writeFileSync, rmSync } from 'fs'
+import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { resolve } from 'path'
+import { EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE, EXECUTION_SETUP_PROFILE_MIRROR } from '../../phases/executionSetup/types'
+import { getExecutionSetupCommandWrapperFromContent } from '../../phases/executionSetup/runtimeProfile'
+
+const ESCAPE_CHARACTER = String.fromCharCode(27)
+const BELL_CHARACTER = String.fromCharCode(7)
+const ANSI_OSC_SEQUENCE = new RegExp(`${ESCAPE_CHARACTER}\\][^${BELL_CHARACTER}]*(?:${BELL_CHARACTER}|${ESCAPE_CHARACTER}\\\\)`, 'g')
+const ANSI_CSI_SEQUENCE = new RegExp(`${ESCAPE_CHARACTER}\\[[0-?]*[ -/]*[@-~]`, 'g')
+const ANSI_SINGLE_SEQUENCE = new RegExp(`${ESCAPE_CHARACTER}[@-_]`, 'g')
 
 function mergeBeadRetryMetadata(
   beads: Bead[],
   beadId: string,
   options: {
-    notes: string
+    failedIterationNotes: Bead['failedIterationNotes']
     iteration: number
     status: Bead['status']
     updatedAt?: string
@@ -34,11 +42,42 @@ function mergeBeadRetryMetadata(
     return {
       ...bead,
       status: options.status,
-      notes: options.notes,
+      failedIterationNotes: options.failedIterationNotes,
       iteration: Math.max(bead.iteration ?? 0, options.iteration),
       updatedAt,
     }
   })
+}
+
+function resolveCodingCommandWrapper(ticketId: string, worktreePath: string): string | undefined {
+  const profileArtifact = getLatestPhaseArtifact(
+    ticketId,
+    EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE,
+    'PREPARING_EXECUTION_ENV',
+  )
+  const artifactWrapper = getExecutionSetupCommandWrapperFromContent(profileArtifact?.content)
+  if (artifactWrapper) return artifactWrapper
+
+  const profileMirrorPath = resolve(worktreePath, EXECUTION_SETUP_PROFILE_MIRROR)
+  if (!existsSync(profileMirrorPath)) return undefined
+  try {
+    return getExecutionSetupCommandWrapperFromContent(readFileSync(profileMirrorPath, 'utf8')) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
+function stripAnsiSequences(text: string): string {
+  return text
+    .replace(ANSI_OSC_SEQUENCE, '')
+    .replace(ANSI_CSI_SEQUENCE, '')
+    .replace(ANSI_SINGLE_SEQUENCE, '')
+}
+
+function conciseFinalizationFailure(message: string): string {
+  const clean = stripAnsiSequences(message).trim()
+  const excerpt = clean.length <= 1_000 ? clean : `${clean.slice(0, 1_000)}...`
+  return `Finalization failed after successful implementation: ${excerpt || 'Unknown error'}`
 }
 
 function compareBeadRecoveryOrder(left: Bead, right: Bead) {
@@ -186,16 +225,22 @@ function markBeadFinalizationFailed(input: {
   sendEvent: (event: TicketEvent) => void
   message: string
 }) {
-  const failureNote = `Finalization failed after successful implementation: ${input.message}`
+  const failedAt = new Date().toISOString()
+  const failureNote = conciseFinalizationFailure(input.message)
   const failedBeads = input.freshBeads.map((bead) => bead.id === input.finalizingBead.id
     ? {
         ...bead,
         status: 'error' as const,
         iteration: input.result.iteration,
-        notes: [
-          bead.notes,
-          failureNote,
-        ].filter(Boolean).join('\n\n'),
+        finalizationFailureNotes: [
+          ...bead.finalizationFailureNotes,
+          {
+            timestamp: failedAt,
+            iteration: input.result.iteration,
+            content: failureNote,
+            errorCode: 'BEAD_FINALIZATION_FAILED',
+          },
+        ],
       }
     : bead)
 
@@ -422,6 +467,32 @@ export async function handleCoding(
           limit: executionSettings.opencodeRetryLimit,
           delayMs: executionSettings.opencodeRetryDelayMs,
         },
+        commandWrapper: resolveCodingCommandWrapper(ticketId, paths.worktreePath),
+        onVerificationCommand: ({ beadId, iteration, receipt, stdout, stderr }) => {
+          emitPhaseLog(
+            ticketId,
+            context.externalId,
+            'CODING',
+            receipt.passed ? 'info' : 'error',
+            receipt.passed
+              ? `Verified declared test command for bead ${beadId}: ${receipt.command}`
+              : `Declared test command failed for bead ${beadId}: ${receipt.command}`,
+            {
+              source: 'system',
+              modelId: codingModelId,
+              beadId,
+              beadIteration: iteration,
+              verificationCommand: receipt,
+            },
+          )
+          emitDebugLog(ticketId, 'CODING', 'bead.verification_command', {
+            beadId,
+            beadIteration: iteration,
+            receipt,
+            stdout,
+            stderr,
+          })
+        },
         onSessionCreated: (sessionId, iteration) => {
           const currentBeads = readTicketBeads(ticketId)
           const attemptStartedAt = new Date().toISOString()
@@ -501,7 +572,7 @@ export async function handleCoding(
             { source: 'system', modelId: codingModelId, beadId, beadIteration: iteration },
           )
         },
-        onContextWipe: async ({ beadId, notes, iteration, reason, attempt, nextAttempt, maxAttempts }) => {
+        onContextWipe: async ({ beadId, failedIterationNotes, iteration, reason, attempt, nextAttempt, maxAttempts }) => {
           const nextIteration = iteration + 1
           if (!beadStartCommit) {
             throw new Error(`Cannot reset bead ${beadId} for attempt ${nextIteration}: missing bead start commit`)
@@ -518,7 +589,7 @@ export async function handleCoding(
             )
           } catch (err) {
             const preservedFailureBeads = mergeBeadRetryMetadata(beadsBeforeReset, beadId, {
-              notes,
+              failedIterationNotes,
               iteration: nextIteration,
               status: 'error',
               updatedAt: retryUpdatedAt,
@@ -536,7 +607,7 @@ export async function handleCoding(
           }
 
           const updated = mergeBeadRetryMetadata(beadsBeforeReset, beadId, {
-            notes,
+            failedIterationNotes,
             iteration: nextIteration,
             status: 'pending',
             updatedAt: retryUpdatedAt,

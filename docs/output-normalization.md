@@ -579,6 +579,8 @@ Each quality gate (`tests`, `lint`, `typecheck`, `qualitative`) accepts multiple
 
 Any other string value is kept as-is (lowercased).
 
+Normalization decides whether the response is a valid completion *candidate*; it does not mark the bead complete. After a valid `done` marker, LoopTroop independently executes every declared `testCommands` entry in order. A command failure returns a deterministic receipt to the same coding session, and only an all-passing sequence permits Git finalization. The marker's lint, typecheck, and qualitative values remain self-reported unless their commands are explicitly part of `testCommands`.
+
 **Accepted wrapper keys:** `beadstatus`, `bead_status`, `statusmarker`, `marker`, `result`, `output`, `data`.
 
 **Key aliases for quality gates:**
@@ -704,6 +706,8 @@ Execution setup artifacts use explicit XML envelopes:
 - `<EXECUTION_SETUP_RESULT>…</EXECUTION_SETUP_RESULT>`
 
 The plan normalizer accepts wrapper keys such as `execution_setup_plan`, `plan`, `data`, and `result`. The result normalizer accepts `execution_setup_result`, `result`, `output`, and `data`.
+
+Both artifacts carry ordered `workspace_probes` entries with required `id`, `command`, and `purpose`. Their `git_hooks` object contains a strict policy enum, read-only detected-hook records (`name`, normalized `path`, `source`, `executable`, optional `manager_hint`), and ordered validation commands (`id`, `hook`, `command`, `purpose`). An empty validation-command list is valid and preserved exactly; the parser never synthesizes a command for an unknown hook.
 
 **Status normalization**
 

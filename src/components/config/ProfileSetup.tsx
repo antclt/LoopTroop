@@ -55,6 +55,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
     toolOutputMaxChars: profile?.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
     toolErrorMaxChars: profile?.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
     manualQaEnabled: profile?.manualQaEnabled ?? false,
+    gitHookPolicy: profile?.gitHookPolicy ?? 'validate_explicitly',
   })
 
   const [rawNumeric, setRawNumeric] = useState<Record<string, string>>(() => buildInitialRawNumeric({ ...formData }))
@@ -108,6 +109,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
       toolOutputMaxChars: profile.toolOutputMaxChars ?? PROFILE_DEFAULTS.toolOutputMaxChars,
       toolErrorMaxChars: profile.toolErrorMaxChars ?? PROFILE_DEFAULTS.toolErrorMaxChars,
       manualQaEnabled: profile.manualQaEnabled ?? false,
+      gitHookPolicy: profile.gitHookPolicy ?? 'validate_explicitly',
     })
     setRawNumeric(buildInitialRawNumeric({
       perIterationTimeout: profile.perIterationTimeout ?? PROFILE_DEFAULTS.perIterationTimeout,
@@ -451,6 +453,22 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
               hint="Timeout for the one-time execution setup phase before coding starts (0–3600s)."
               tooltip="Runs a one-time setup step after pre-flight and before coding. It can install toolchains, warm caches, and prepare repository-local runtime artifacts when the approved setup plan requires them."
             />
+          </div>
+          <div className="mt-3 space-y-1.5">
+            <label htmlFor="profile-git-hook-policy" className="text-sm font-medium">Git hook policy</label>
+            <select
+              id="profile-git-hook-policy"
+              value={formData.gitHookPolicy ?? 'validate_explicitly'}
+              onChange={(event) => updateField('gitHookPolicy', event.target.value as NonNullable<CreateProfileInput['gitHookPolicy']>)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="validate_explicitly">Validate explicitly (recommended)</option>
+              <option value="use_on_internal_commits">Run on internal commits</option>
+              <option value="ignore_internal_only">Ignore for internal commits</option>
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Explicit validation discovers hooks during workspace setup and runs the approved validation commands as visible checks.
+            </p>
           </div>
 
           <Separator />

@@ -66,6 +66,7 @@ interface PushBranchRefParams {
   remote?: string
   forceWithLease?: boolean
   maxRetries?: number
+  bypassHooks?: boolean
 }
 
 function readRemoteBranchSha(projectPath: string, remote: string, branch: string): string | null {
@@ -84,6 +85,7 @@ export function pushBranchRef({
   remote = 'origin',
   forceWithLease = false,
   maxRetries = 3,
+  bypassHooks = false,
 }: PushBranchRefParams): PushBranchRefResult {
   const refspec = `${sourceRef}:refs/heads/${destinationBranch}`
   let leaseArg: string[] = []
@@ -102,7 +104,7 @@ export function pushBranchRef({
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      runGit(projectPath, ['push', ...leaseArg, remote, refspec])
+      runGit(projectPath, ['push', ...(bypassHooks ? ['--no-verify'] : []), ...leaseArg, remote, refspec])
       return { pushed: true }
     } catch (error) {
       const detail = getErrorMessage(error)

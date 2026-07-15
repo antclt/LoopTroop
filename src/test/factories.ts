@@ -27,7 +27,24 @@ export const TEST = {
 // ---------------------------------------------------------------------------
 // Client Ticket factory
 // ---------------------------------------------------------------------------
-export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
+type TicketRuntime = Ticket['runtime']
+type RuntimeBead = NonNullable<TicketRuntime['beads']>[number]
+export type RuntimeBeadInput = Omit<RuntimeBead, 'failedIterationNotes' | 'userRetryNotes' | 'finalizationFailureNotes'> & Partial<Pick<RuntimeBead, 'failedIterationNotes' | 'userRetryNotes' | 'finalizationFailureNotes'>>
+type TicketOverrides = Omit<Partial<Ticket>, 'runtime'> & {
+  runtime?: Omit<Partial<TicketRuntime>, 'beads'> & { beads?: RuntimeBeadInput[] }
+}
+
+export function makeRuntimeBead(overrides: RuntimeBeadInput): RuntimeBead {
+  return {
+    ...overrides,
+    failedIterationNotes: overrides.failedIterationNotes ?? [],
+    userRetryNotes: overrides.userRetryNotes ?? [],
+    finalizationFailureNotes: overrides.finalizationFailureNotes ?? [],
+  }
+}
+
+export function makeTicket(overrides: TicketOverrides = {}): Ticket {
+  const { runtime: runtimeOverrides, ...ticketOverrides } = overrides
   return {
     id: TEST.ticketId,
     externalId: TEST.externalId,
@@ -75,7 +92,6 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
       activeBeadIteration: null,
       lastFailedBeadId: null,
       artifactRoot: '/tmp/test-ticket',
-      beads: [],
       candidateCommitSha: null,
       preSquashHead: null,
       finalTestStatus: 'pending',
@@ -83,12 +99,14 @@ export function makeTicket(overrides: Partial<Ticket> = {}): Ticket {
       prUrl: null,
       prState: null,
       prHeadSha: null,
+      ...runtimeOverrides,
+      beads: runtimeOverrides?.beads?.map(makeRuntimeBead) ?? [],
     },
     startedAt: null,
     plannedDate: null,
     createdAt: TEST.timestamp,
     updatedAt: TEST.timestamp,
-    ...overrides,
+    ...ticketOverrides,
   }
 }
 
@@ -179,7 +197,9 @@ export function makeBead(overrides: Record<string, unknown> = {}) {
     labels: [`ticket:${TEST.shortname}-1`],
     dependencies: { blocked_by: [], blocks: [] },
     targetFiles: ['src/test/example.ts'],
-    notes: '',
+    failedIterationNotes: [],
+    userRetryNotes: [],
+    finalizationFailureNotes: [],
     iteration: 1,
     createdAt: '',
     updatedAt: TEST.timestamp,

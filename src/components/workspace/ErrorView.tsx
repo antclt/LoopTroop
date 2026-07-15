@@ -149,12 +149,11 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const activeRuntimeBead = ticket.runtime.activeBeadId
     ? ticket.runtime.beads?.find((bead) => bead.id === ticket.runtime.activeBeadId) ?? null
     : null
-  const failedBeadNotes = typeof failedBead?.notes === 'string'
-    ? failedBead.notes
-        .split(/\n\s*---\s*\n/g)
-        .map((entry) => entry.trim())
-        .filter(Boolean)
-    : []
+  const failedBeadNoteGroups = [
+    { title: 'Failed Iteration Notes', notes: failedBead?.failedIterationNotes ?? [] },
+    { title: 'User Retry Notes', notes: failedBead?.userRetryNotes ?? [] },
+    { title: 'Finalization Failure Notes', notes: failedBead?.finalizationFailureNotes ?? [] },
+  ].filter((group) => group.notes.length > 0)
   const visibleOccurrence = occurrence ?? getActiveErrorOccurrence(ticket)
   const retryActionLabel = (
     visibleOccurrence?.blockedFromStatus === 'CODING'
@@ -361,13 +360,22 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                   <div>
                     Retryable: {ticket.availableActions.includes('retry') ? 'yes' : 'no'}
                   </div>
-                  {failedBeadNotes.length > 0 && (
+                  {failedBeadNoteGroups.length > 0 && (
                     <div className="space-y-1">
-                      <div className="text-[10px] uppercase tracking-wider">Preserved notes</div>
-                      {failedBeadNotes.map((note) => (
-                        <p key={note} className="font-mono text-[10px] whitespace-pre-wrap text-muted-foreground/90">
-                          {note}
-                        </p>
+                      {failedBeadNoteGroups.map((group) => (
+                        <div key={group.title} className="space-y-1">
+                          <div className="text-[10px] uppercase tracking-wider">{group.title}</div>
+                          {group.notes.map((note, index) => (
+                            <div key={`${note.timestamp}-${note.iteration}-${index}`} className="rounded border border-border/60 p-1.5">
+                              <div className="mb-0.5 flex flex-wrap gap-1.5 text-[9px] uppercase tracking-wide">
+                                {note.iteration > 0 ? <span>Iteration {note.iteration}</span> : null}
+                                {note.timestamp ? <span>{note.timestamp}</span> : null}
+                                {note.errorCode ? <span className="font-mono">{note.errorCode}</span> : null}
+                              </div>
+                              <p className="font-mono text-[10px] whitespace-pre-wrap text-muted-foreground/90">{note.content}</p>
+                            </div>
+                          ))}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -501,7 +509,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
           <DialogHeader>
             <DialogTitle>Retry implementation with an extra note</DialogTitle>
             <DialogDescription id="retry-note-description">
-              Add guidance for the next fresh implementation attempt. The note will be appended to the bead&apos;s existing notes; nothing already there will be replaced.
+              Add guidance for the next fresh implementation attempt. The note will be appended to User Retry Notes; nothing already there will be replaced.
             </DialogDescription>
           </DialogHeader>
           <form

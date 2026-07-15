@@ -74,6 +74,7 @@ describe('profileRouter numeric validation', () => {
 
     expect(response.status).toBe(201)
     await expect(response.json()).resolves.toMatchObject({
+      gitHookPolicy: 'validate_explicitly',
       structuredRetryCount: 1,
       opencodeRetryLimit: 10,
       opencodeRetryDelay: 60_000,
@@ -81,9 +82,27 @@ describe('profileRouter numeric validation', () => {
 
     const stored = db.select().from(profiles).get()
     expect(stored?.structuredRetryCount).toBe(1)
+    expect(stored?.gitHookPolicy).toBe('validate_explicitly')
     expect(stored?.manualQaEnabled).toBe(false)
     expect(stored?.opencodeRetryLimit).toBe(10)
     expect(stored?.opencodeRetryDelay).toBe(60_000)
+  })
+
+  it('persists each supported Git hook policy', async () => {
+    db.insert(profiles).values({
+      mainImplementer: 'openai/gpt-5.4',
+      councilMembers: '["openai/gpt-5.4"]',
+    }).run()
+    const app = createProfileApp()
+    for (const gitHookPolicy of ['validate_explicitly', 'use_on_internal_commits', 'ignore_internal_only'] as const) {
+      const response = await app.request('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ gitHookPolicy }),
+      })
+      expect(response.status).toBe(200)
+      await expect(response.json()).resolves.toMatchObject({ gitHookPolicy })
+    }
   })
 
   it('persists the global Manual QA toggle', async () => {

@@ -28,7 +28,7 @@ import type { ExecutionSetupPlanGenerationResult } from './types'
 
 const EXECUTION_SETUP_PLAN_SCHEMA_REMINDER = [
   'Return exactly one <EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN> block and nothing else.',
-  'Inside the marker, return a single JSON or YAML object with top-level keys: schema_version, ticket_id, artifact, status, summary, readiness, temp_roots, steps, project_commands, quality_gate_policy, cautions.',
+  'Inside the marker, return a single JSON or YAML object with top-level keys: schema_version, ticket_id, artifact, status, summary, readiness, temp_roots, workspace_probes, git_hooks, steps, project_commands, quality_gate_policy, cautions.',
   'artifact must be execution_setup_plan.',
   'status must be draft.',
   'readiness.status must be ready, partial, or missing.',

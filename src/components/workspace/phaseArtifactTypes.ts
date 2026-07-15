@@ -406,6 +406,28 @@ export interface ExecutionSetupReusableArtifactData {
   purpose: string
 }
 
+export interface ExecutionSetupCommandProbeData {
+  id: string
+  command: string
+  purpose: string
+}
+
+export interface ExecutionSetupCommandReceiptData {
+  id: string
+  command: string
+  status: 'passed' | 'failed' | 'timed_out' | 'skipped'
+  exitCode: number | null
+  durationMs: number
+  outputExcerpt: string
+}
+
+export interface ExecutionSetupGitHooksData {
+  policy: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only'
+  detected: Array<{ name: string; path: string; source: string; executable: boolean; managerHint?: string }>
+  validationCommands: Array<{ id: string; hook: string; command: string; purpose: string }>
+  validationReceipts: ExecutionSetupCommandReceiptData[]
+}
+
 export interface ExecutionSetupProfileData {
   schemaVersion?: number
   ticketId?: string
@@ -415,6 +437,9 @@ export interface ExecutionSetupProfileData {
   tempRoots: string[]
   bootstrapCommands: string[]
   toolingProbeCommands: string[]
+  workspaceProbes: ExecutionSetupCommandProbeData[]
+  workspaceProbeReceipts: ExecutionSetupCommandReceiptData[]
+  gitHooks: ExecutionSetupGitHooksData
   reusableArtifacts: ExecutionSetupReusableArtifactData[]
   projectCommands: {
     prepare: string[]
@@ -1104,12 +1129,17 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
   const reusableArtifactsRaw = getValueByAliases(record, ['reusableArtifacts', 'reusable_artifacts'])
   const projectCommandsRaw = getValueByAliases(record, ['projectCommands', 'project_commands'])
   const qualityGatePolicyRaw = getValueByAliases(record, ['qualityGatePolicy', 'quality_gate_policy'])
+  const workspaceProbesRaw = getValueByAliases(record, ['workspaceProbes', 'workspace_probes'])
+  const gitHooksRaw = getValueByAliases(record, ['gitHooks', 'git_hooks'])
+  const workspaceProbeReceiptsRaw = getValueByAliases(record, ['workspaceProbeReceipts', 'workspace_probe_receipts'])
 
   if (
     artifact !== 'execution_setup_profile'
     && tempRoots.length === 0
     && bootstrapCommands.length === 0
     && toolingProbeCommands.length === 0
+    && !Array.isArray(workspaceProbesRaw)
+    && !isRecord(gitHooksRaw)
     && !isRecord(projectCommandsRaw)
     && !isRecord(qualityGatePolicyRaw)
   ) {
@@ -1118,6 +1148,33 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
 
   const projectCommands = isRecord(projectCommandsRaw) ? projectCommandsRaw : {}
   const qualityGatePolicy = isRecord(qualityGatePolicyRaw) ? qualityGatePolicyRaw : {}
+  const gitHooks = isRecord(gitHooksRaw) ? gitHooksRaw : {}
+
+  const workspaceProbes = Array.isArray(workspaceProbesRaw)
+    ? workspaceProbesRaw.filter((entry): entry is Record<string, unknown> => isRecord(entry)).map((entry) => ({
+        id: normalizeOptionalString(getValueByAliases(entry, ['id'])) ?? '',
+        command: normalizeOptionalString(getValueByAliases(entry, ['command'])) ?? '',
+        purpose: normalizeOptionalString(getValueByAliases(entry, ['purpose'])) ?? '',
+      }))
+    : []
+  const detectedRaw = getValueByAliases(gitHooks, ['detected'])
+  const validationCommandsRaw = getValueByAliases(gitHooks, ['validationCommands', 'validation_commands'])
+  const validationReceiptsRaw = getValueByAliases(gitHooks, ['validationReceipts', 'validation_receipts'])
+  const parseReceipts = (value: unknown): ExecutionSetupCommandReceiptData[] => Array.isArray(value)
+    ? value.filter((entry): entry is Record<string, unknown> => isRecord(entry)).map((entry) => {
+        const rawStatus = getValueByAliases(entry, ['status'])
+        const status: ExecutionSetupCommandReceiptData['status'] = rawStatus === 'failed' || rawStatus === 'timed_out' || rawStatus === 'skipped' ? rawStatus : 'passed'
+        const exitCodeRaw = getValueByAliases(entry, ['exitCode', 'exit_code'])
+        return {
+          id: normalizeOptionalString(getValueByAliases(entry, ['id'])) ?? '',
+          command: normalizeOptionalString(getValueByAliases(entry, ['command'])) ?? '',
+          status,
+          exitCode: typeof exitCodeRaw === 'number' && Number.isFinite(exitCodeRaw) ? exitCodeRaw : null,
+          durationMs: normalizeNumber(getValueByAliases(entry, ['durationMs', 'duration_ms'])) ?? 0,
+          outputExcerpt: normalizeOptionalString(getValueByAliases(entry, ['outputExcerpt', 'output_excerpt'])) ?? '',
+        }
+      })
+    : []
 
   const reusableArtifacts = Array.isArray(reusableArtifactsRaw)
     ? reusableArtifactsRaw
@@ -1139,6 +1196,33 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
     tempRoots,
     bootstrapCommands,
     toolingProbeCommands,
+    workspaceProbes,
+    workspaceProbeReceipts: parseReceipts(workspaceProbeReceiptsRaw),
+    gitHooks: {
+      policy: getValueByAliases(gitHooks, ['policy']) === 'use_on_internal_commits' || getValueByAliases(gitHooks, ['policy']) === 'ignore_internal_only'
+        ? getValueByAliases(gitHooks, ['policy']) as ExecutionSetupGitHooksData['policy']
+        : 'validate_explicitly',
+      detected: Array.isArray(detectedRaw)
+        ? detectedRaw.filter((entry): entry is Record<string, unknown> => isRecord(entry)).map((entry) => ({
+            name: normalizeOptionalString(getValueByAliases(entry, ['name'])) ?? '',
+            path: normalizeOptionalString(getValueByAliases(entry, ['path'])) ?? '',
+            source: normalizeOptionalString(getValueByAliases(entry, ['source'])) ?? '',
+            executable: getValueByAliases(entry, ['executable']) === true,
+            ...(normalizeOptionalString(getValueByAliases(entry, ['managerHint', 'manager_hint']))
+              ? { managerHint: normalizeOptionalString(getValueByAliases(entry, ['managerHint', 'manager_hint']))! }
+              : {}),
+          }))
+        : [],
+      validationCommands: Array.isArray(validationCommandsRaw)
+        ? validationCommandsRaw.filter((entry): entry is Record<string, unknown> => isRecord(entry)).map((entry) => ({
+            id: normalizeOptionalString(getValueByAliases(entry, ['id'])) ?? '',
+            hook: normalizeOptionalString(getValueByAliases(entry, ['hook'])) ?? '',
+            command: normalizeOptionalString(getValueByAliases(entry, ['command'])) ?? '',
+            purpose: normalizeOptionalString(getValueByAliases(entry, ['purpose'])) ?? '',
+          }))
+        : [],
+      validationReceipts: parseReceipts(validationReceiptsRaw),
+    },
     reusableArtifacts,
     projectCommands: {
       prepare: normalizeStringArray(getValueByAliases(projectCommands, ['prepare'])),

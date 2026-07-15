@@ -26,6 +26,7 @@ import {
   type CandidateFileAuditReport,
 } from '../../phases/integration/candidateFileAudit'
 import { pushBranchRef } from '../../git/push'
+import { readWorktreeGitHookPolicy, shouldBypassGitHooks } from '../../git/hookPolicy'
 import {
   captureGitRecoveryReceipt,
   createOrUpdateDraftPullRequest,
@@ -995,6 +996,7 @@ export async function handleCreatePullRequest(
           sourceRef: candidateCommitSha,
           forceWithLease: true,
           maxRetries: 1,
+          bypassHooks: shouldBypassGitHooks(readWorktreeGitHookPolicy(worktreePath)),
         })
         if (!pushResult.pushed) {
           throw new Error(pushResult.error ?? `Failed to update remote branch ${headBranch}.`)

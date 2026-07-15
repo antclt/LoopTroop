@@ -43,7 +43,7 @@ vi.mock('@/components/shared/useToast', () => ({
 }))
 
 vi.mock('@/hooks/useProfile', () => ({
-  useProfile: () => ({ data: { manualQaEnabled: false } }),
+  useProfile: () => ({ data: { manualQaEnabled: false, gitHookPolicy: 'validate_explicitly' } }),
 }))
 
 vi.mock('../FolderPicker', () => ({
@@ -104,6 +104,8 @@ describe('ProjectForm', () => {
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
     )
+    expect(screen.getByLabelText('Git hook policy')).toHaveValue('')
+    expect(screen.getByRole('option', { name: 'Inherit profile (validate explicitly)' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText(/Project Name/i), { target: { value: 'Mounted Repo' } })
     fireEvent.change(screen.getByLabelText(/Short Name/i), { target: { value: 'MNT' } })
@@ -132,6 +134,7 @@ describe('ProjectForm', () => {
           maxIterations: null,
           perIterationTimeout: null,
           executionSetupTimeout: null,
+          gitHookPolicy: null,
           councilResponseTimeout: null,
           minCouncilQuorum: null,
           interviewQuestions: null,

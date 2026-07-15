@@ -707,10 +707,17 @@ function parseJsonLines(content: string): unknown[] {
     .map((line) => JSON.parse(line))
 }
 
-function normalizeNotesField(value: unknown): string {
-  if (typeof value === 'string') return value
-  if (Array.isArray(value)) return value.filter(item => typeof item === 'string').join('\n')
-  return ''
+function normalizeNoteHistory(value: unknown): Bead['failedIterationNotes'] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((entry) => {
+    if (!isRecord(entry)) return []
+    const timestamp = typeof entry.timestamp === 'string' ? entry.timestamp.trim() : ''
+    const iteration = Number(entry.iteration)
+    const content = typeof entry.content === 'string' ? entry.content : ''
+    const errorCode = typeof entry.errorCode === 'string' ? entry.errorCode.trim() : ''
+    if (!timestamp || !Number.isInteger(iteration) || iteration < 1 || !content.trim()) return []
+    return [{ timestamp, iteration, content, ...(errorCode ? { errorCode } : {}) }]
+  })
 }
 
 function normalizeBeadRecord(value: unknown, index: number, repairWarnings: string[]): Bead {
@@ -753,7 +760,9 @@ function normalizeBeadRecord(value: unknown, index: number, repairWarnings: stri
     labels: toStringArray(getValueByAliases(value, ['labels'])),
     dependencies,
     targetFiles: toStringArray(getValueByAliases(value, ['targetfiles', 'target_files'])),
-    notes: normalizeNotesField(getValueByAliases(value, ['notes'])),
+    failedIterationNotes: normalizeNoteHistory(getValueByAliases(value, ['failediterationnotes', 'failed_iteration_notes'])),
+    userRetryNotes: normalizeNoteHistory(getValueByAliases(value, ['userretrynotes', 'user_retry_notes'])),
+    finalizationFailureNotes: normalizeNoteHistory(getValueByAliases(value, ['finalizationfailurenotes', 'finalization_failure_notes'])),
     iteration: Number(getValueByAliases(value, ['iteration']) ?? 1),
     createdAt: typeof getValueByAliases(value, ['createdat', 'created_at']) === 'string'
       ? String(getValueByAliases(value, ['createdat', 'created_at'])).trim()

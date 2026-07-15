@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Added language-agnostic workspace and Git-hook validation, backend-enforced bead test commands, and separate append-only implementation note histories.
 - Added a copy button next to the ticket description tab in the backlog workspace when clicking on the "Raw" view.
 - Made ticket cancellation confirmation mandatory in every state, including Draft and Blocked Error, preventing accidental one-click cancellation.
 - Added optional user guidance when retrying a blocked implementation bead, so the next fresh attempt can act on extra context without replacing existing notes.
@@ -36,6 +37,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added repository-level workspace probes and configurable explicit Git-hook validation with visible setup-plan evidence, editable validation commands, and audited internal-hook policies.
+- Added backend-owned verification receipts for every declared bead test command so structured model completion claims are accepted only after the repository commands actually pass.
 - Added a copy button next to the description's "Raw" tab in both DraftView (tickets in backlog before starting) and PhaseReviewView (backlog/DRAFT phase of started tickets).
 - Added **Retry with extra note** to live implementation errors, with a required multiline note that is appended to the recoverable bead's existing context before the next fresh attempt.
 - Added reasoned **Not applicable to Manual QA** PRD coverage, P1–P5 and Manual QA settings for Improvement tickets, and strict repository-aware `<MANUAL_QA_FIX_BEADS>` generation persisted before child creation.
@@ -53,6 +56,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Split bead history into append-only **Failed Iteration Notes**, **User Retry Notes**, and **Finalization Failure Notes**, keeping each source clearly labelled in execution context and workspace views.
+- Changed execution setup readiness to require functional repository probes, audit configured Git hooks without assuming an ecosystem, and use explicit validation by default instead of allowing hidden hook failures during LoopTroop-owned commits.
 - Extended implementation retry recovery and `POST /api/tickets/:id/retry` with optional user guidance, CODING-only validation, safe reset-before-append ordering, and append-only timestamped bead notes.
 - Bolded the live voting-result tally details (e.g. `2/4 complete · Leading: <model> · <pts>`) in the Council card description line.
 - Updated the description display when revisiting the Backlog (Draft) phase on a started ticket to show the pretty Markdown view by default with a tab toggle to view raw text.
@@ -75,6 +80,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Prevented ANSI terminal control sequences from leaking into machine-generated bead notes while retaining complete raw command output in execution logs.
 - Routed all ticket cancellation controls through the shared confirmation dialog, with existing optional artifact, worktree, and log cleanup choices preserved.
 - Corrected workflow Details to consistently describe ticket prompt context as the saved title and description only, keeping Manual QA Improvement provenance, evidence, priority, project data, and settings informational.
 - Fixed canonical Manual QA YAML being corrupted by model-output repairs when scalar identifiers contained colons, and preserved YAML-sensitive checklist prose such as hex-color values through safe quoting/repair.

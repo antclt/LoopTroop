@@ -12,6 +12,8 @@ import { withCommandLoggingAsync } from '../../log/commandLogger'
 import { CancelledError } from '../../council/types'
 import { ManualQaSummarySchema } from '../../phases/manualQa/types'
 import { readManualQaDeliverySummary as readCanonicalManualQaDeliverySummary } from '../../phases/manualQa/delivery'
+import { EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE } from '../../phases/executionSetup/types'
+import { runExplicitGitHookValidation } from '../../phases/executionSetup/hookValidation'
 
 function readFinalTestFilesToStage(ticketId: string): string[] {
   const artifact = getLatestPhaseArtifact(ticketId, 'final_test_report', 'RUNNING_FINAL_TEST')
@@ -86,6 +88,46 @@ export async function handleIntegration(
 
   if (signal?.aborted) throw new CancelledError(ticketId)
 
+  const setupProfileArtifact = getLatestPhaseArtifact(
+    ticketId,
+    EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE,
+    'PREPARING_EXECUTION_ENV',
+  )
+  const hookValidation = setupProfileArtifact
+    ? await runExplicitGitHookValidation({
+        profileContent: setupProfileArtifact.content,
+        worktreePath: paths.worktreePath,
+        signal,
+      })
+    : {
+        policy: 'validate_explicitly' as const,
+        receipts: [{
+          id: 'git-hook-policy', command: '', status: 'skipped' as const, exitCode: null, durationMs: 0,
+          outputExcerpt: 'No execution setup profile was available for explicit Git hook validation.',
+        }],
+        errors: [],
+        fileAudit: { mutated: false, candidatePaths: [], temporaryPaths: [], internalPaths: [] },
+      }
+  if (hookValidation.errors.length > 0) {
+    const message = `Explicit Git hook validation failed before integration: ${hookValidation.errors.join('; ')}`
+    insertPhaseArtifact(ticketId, {
+      phase: 'INTEGRATING_CHANGES',
+      artifactType: 'integration_report',
+      content: JSON.stringify({
+        status: 'blocked',
+        completedAt: new Date().toISOString(),
+        baseBranch: paths.baseBranch,
+        gitHookValidation: hookValidation,
+        message,
+      }),
+    })
+    emitPhaseLog(ticketId, context.externalId, 'INTEGRATING_CHANGES', 'error', message, {
+      source: 'system', audience: 'all', gitHookValidation: hookValidation,
+    })
+    sendEvent({ type: 'ERROR', message, codes: ['GIT_HOOK_VALIDATION_FAILED'] })
+    return
+  }
+
   emitPhaseLog(ticketId, context.externalId, 'INTEGRATING_CHANGES', 'info',
     'Analyzing ticket branch for squash...', { source: 'system', audience: 'all' })
 
@@ -150,6 +192,7 @@ export async function handleIntegration(
     pushDeferred: squash.success,
     pushError: null,
     manualQa: readManualQaDeliverySummary(ticketId),
+    gitHookValidation: hookValidation,
     message: squash.success
       ? 'Integration phase completed. Draft pull request creation is next.'
       : squash.message,

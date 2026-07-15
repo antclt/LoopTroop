@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import type { GitHookPolicy } from '@/lib/executionSetupPlan'
 
 interface Profile {
   id: number
@@ -24,6 +25,7 @@ interface Profile {
   toolOutputMaxChars: number
   toolErrorMaxChars: number
   manualQaEnabled: boolean
+  gitHookPolicy: GitHookPolicy
   createdAt: string
   updatedAt: string
 }
@@ -51,6 +53,7 @@ interface CreateProfileInput {
   toolOutputMaxChars?: number
   toolErrorMaxChars?: number
   manualQaEnabled?: boolean
+  gitHookPolicy?: GitHookPolicy
 }
 
 async function fetchProfile(): Promise<Profile | null> {

@@ -28,6 +28,7 @@ import { EXECUTION_BAND_STATUSES } from '../workflow/executionBand'
 import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 import { isContinuableBlockedError } from '../opencode/sessionContinuation'
 import { computeEtaRange, type EtaRange } from '../workflow/eta/computeEta'
+import type { BeadNoteEntry } from '../phases/beads/types'
 import { bucketForBeadCount, getThroughputSamples, getTicketBeadSamples } from './executionTelemetry'
 import {
   ManualQaImprovementOriginSchema,
@@ -179,7 +180,9 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
       title: string
       status: string
       iteration: number
-      notes?: string
+      failedIterationNotes: BeadNoteEntry[]
+      userRetryNotes: BeadNoteEntry[]
+      finalizationFailureNotes: BeadNoteEntry[]
       startedAt?: string | null
       updatedAt?: string | null
       qaOrigin?: QaOrigin | null
@@ -934,7 +937,9 @@ function buildRuntime(
       title: bead.title,
       status: bead.status,
       iteration: bead.iteration,
-      notes: bead.notes,
+      failedIterationNotes: bead.failedIterationNotes,
+      userRetryNotes: bead.userRetryNotes,
+      finalizationFailureNotes: bead.finalizationFailureNotes,
       startedAt: bead.startedAt,
       qaOrigin: bead.qaOrigin,
     })),
@@ -961,7 +966,9 @@ function readRuntimeBeads(projectRoot: string, externalId: string, baseBranch: s
           title: typeof bead.title === 'string' ? bead.title : 'Untitled',
           status: typeof bead.status === 'string' ? bead.status : 'pending',
           iteration: typeof bead.iteration === 'number' ? bead.iteration : 0,
-          notes: typeof bead.notes === 'string' ? bead.notes : '',
+          failedIterationNotes: Array.isArray(bead.failedIterationNotes) ? bead.failedIterationNotes : [],
+          userRetryNotes: Array.isArray(bead.userRetryNotes) ? bead.userRetryNotes : [],
+          finalizationFailureNotes: Array.isArray(bead.finalizationFailureNotes) ? bead.finalizationFailureNotes : [],
           updatedAt: typeof bead.updatedAt === 'string' ? bead.updatedAt : null,
           startedAt: typeof bead.startedAt === 'string' ? bead.startedAt : null,
           qaOrigin: qaOrigin.success ? qaOrigin.data : null,

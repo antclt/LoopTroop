@@ -59,6 +59,8 @@ The setup-plan artifact is structured around a small, explicit contract:
 | --- | --- |
 | `readiness` | Whether the environment is already `ready`, only `partial`, or still `missing` key requirements, plus supporting evidence and gaps. |
 | `temp_roots` | Repository-local or runtime-owned paths the next phase may use for temporary setup work. |
+| `workspace_probes` | Ordered repository-level commands that prove the prepared checkout can actually perform project work; each entry has an `id`, `command`, and `purpose`. |
+| `git_hooks` | The resolved policy, read-only detected-hook evidence, and an ordered editable list of explicit validation commands. |
 | `steps` | Ordered setup actions with `id`, `title`, `purpose`, `commands`, `required`, `rationale`, and step-level `cautions`. |
 | `project_commands` | Discovered project-wide command families such as prepare, full test, lint, and typecheck. |
 | `quality_gate_policy` | The default policy later coding and final-test phases should follow for tests, lint, typecheck, and full-project fallback behavior. |
@@ -84,7 +86,7 @@ The generation report also preserves:
 
 ### 2.3 Approval handoff and rewind behavior
 
-Approving the plan stores an approval receipt with the reviewed `content_sha256`, step count, and command count. Stale approvals fail with `409` instead of silently approving newer content.
+Approving the plan stores an approval receipt with the reviewed `content_sha256`, step count, command count, selected Git-hook policy, detected-hook evidence, workspace probes, and the exact hook-validation command list. Stale approvals fail with `409` instead of silently approving newer content. Detected hooks are read-only, while validation commands can be added, edited, reordered, or all removed; removing every command is itself a valid reviewed decision and requires no separate waiver.
 
 While the ticket is still in `PREPARING_EXECUTION_ENV`, editing or regenerating the setup plan triggers a **runtime rewind** rather than an in-place overwrite:
 
@@ -110,7 +112,7 @@ flowchart TD
     C -- No --> D[Emit reusable execution setup profile]
     C -- Yes --> E[Run approved temporary setup commands]
     E --> F[Record wrappers probes and reusable artifacts]
-    D --> G[Validate wrapper and tooling probes]
+    D --> G[Validate wrapper tooling workspace and hook probes]
     F --> G
     G --> H{All checks pass?}
     H -- Yes --> I[Advance to CODING]
@@ -137,12 +139,20 @@ LoopTroop does not trust a superficially valid setup response. A setup result is
 - the structured result parses and all setup checks pass
 - declared wrappers can launch a no-op command successfully
 - declared `tooling_probe_commands` exist and succeed
+- approved `workspace_probes` run in order through the setup wrapper and succeed; when repository command families or bead test commands exist, at least one probe must exercise the repository rather than only print a tool version
+- approved Git-hook validation commands run with the same wrapper, timeout, output capture, and tracked-file audit rules when the policy is `validate_explicitly`
 - profiles that declare wrappers or project command families include non-mutating probes
 - failed tooling results include durable `tool_requirements` evidence:
   - either at least two distinct `provisioning_attempts` strategies with real commands
   - or a `not_provisionable` result with a concrete `failure_reason`
 
-LoopTroop also audits the worktree after each ready-looking attempt. Committable project changes left behind by setup fail the attempt. Generated noise is kept as a warning and copied into the profile cautions with suggested `.gitignore` entries.
+LoopTroop also audits the worktree after each ready-looking attempt. Committable project changes left behind by setup fail the attempt. Generated noise is kept as a warning and copied into the profile cautions with suggested `.gitignore` entries. Ignored files from the primary checkout are never copied into a ticket worktree to make setup pass: a missing prerequisite must be produced by an approved repository-native command or reported as a setup failure.
+
+Hook discovery is evidence, not an ecosystem assumption. LoopTroop inspects Git's resolved hook path, standard hook files, committed hook directories, and recognizable manager configuration. Known managers may supply a hint, but unknown hooks remain visible without an invented command. The approved policy controls LoopTroop-owned Git operations:
+
+- `validate_explicitly` (default) bypasses hooks for internal commits and pushes, runs the approved commands during setup, and reruns them before integration
+- `use_on_internal_commits` leaves normal Git hook execution enabled
+- `ignore_internal_only` bypasses hooks and records that explicit validation was skipped
 
 ### 3.3 Setup-scoped web tools, retries, and reset behavior
 
@@ -164,8 +174,8 @@ Successful or failed setup attempts produce durable artifacts:
 
 | Artifact or path | Purpose |
 | --- | --- |
-| `execution_setup_profile` | Canonical reusable profile containing temp roots, bootstrap commands, tooling probes, optional tool-requirement evidence, reusable artifacts, discovered project commands, and quality-gate policy. |
-| `execution_setup_report` | Final status, attempt history, retry notes, structured-output diagnostics, worktree warnings, raw attempts, and the diff between approved-plan commands and any audited execution-time additions. |
+| `execution_setup_profile` | Canonical reusable profile containing temp roots, bootstrap commands, tooling and workspace probes, resolved Git-hook policy/evidence/validation commands, optional tool-requirement evidence, reusable artifacts, discovered project commands, and quality-gate policy. |
+| `execution_setup_report` | Final status, attempt history, retry notes, probe and hook outcomes, structured-output diagnostics, worktree warnings, raw attempts, and the diff between approved-plan commands and any audited execution-time additions. |
 | `.ticket/runtime/execution-setup-profile.json` | Mirror of the accepted profile for later phases that prefer reading a file path instead of loading the artifact body inline. |
 | `.ticket/runtime/execution-setup/**` | Runtime-owned temp state such as `env.sh`, `run`, caches, and tool downloads. |
 
@@ -175,7 +185,8 @@ Pre-implementation directly shapes later execution:
 
 - **Coding** receives the reusable setup profile path instead of rediscovering environment state from scratch.
 - **Final testing** reuses the validated wrapper from the setup profile when generating commands.
-- **Bead commits** ignore setup-owned runtime roots so prepared toolchains and caches do not become implementation diffs.
+- **Bead commits** ignore setup-owned runtime roots so prepared toolchains and caches do not become implementation diffs, and apply the approved hook policy consistently.
+- **Integration** reruns approved explicit hook validations before incorporating the candidate and exposes executed or skipped outcomes in final review.
 - **Cleanup** removes the temporary runtime roots at ticket end while leaving the audit artifacts and execution log intact.
 
 ---

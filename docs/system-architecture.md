@@ -108,14 +108,15 @@ Execution is built around beads, not around one monolithic coding prompt.
 
 1. `PRE_FLIGHT_CHECK` verifies the ticket can enter pre-implementation setup, including worktree cleanliness before setup starts.
 2. `WAITING_EXECUTION_SETUP_APPROVAL` pauses for setup-plan review before setup commands run.
-3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots, exposing setup-scoped OpenCode `websearch`/`webfetch` for unresolved official launcher artifact lookup, validating declared wrappers and `tooling_probe_commands`, requiring `tool_requirements.provisioning_attempts` evidence for failed launcher provisioning, and rejecting ready results that leave committable project changes behind.
+3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots, exposing setup-scoped OpenCode `websearch`/`webfetch` for unresolved official launcher artifact lookup, validating declared wrappers, tooling probes, functional workspace probes, and approved Git-hook commands, requiring `tool_requirements.provisioning_attempts` evidence for failed launcher provisioning, and rejecting ready results that leave committable project changes behind.
 4. `CODING` selects the next runnable bead from the scheduler.
 5. `executeBead()` starts or reattaches to the owned OpenCode session for that bead attempt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path instead of silently progressing.
-7. If the attempt stalls or fails, LoopTroop generates a context wipe note, resets the worktree to the bead start commit, and retries in fresh context.
-8. When the bead succeeds, LoopTroop finalizes it locally before marking it done: changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures route to `BLOCKED_ERROR`.
-9. `RUNNING_FINAL_TEST`, optional Manual QA, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery, with final-test commands automatically reusing a validated setup wrapper and PR creation auditing the final candidate files before anything is pushed.
-10. During all non-terminal execution states, runtime projections and execution logs are updated so a restarted backend or reloaded browser can restore the ticket from durable state rather than from memory.
+7. A valid `done/pass` marker is only a completion candidate. The same session stays active while LoopTroop executes every declared bead test command sequentially through the setup wrapper, persists command/timing/exit/timeout/output receipts, and sends the first failure back to that session for correction within the original iteration deadline.
+8. If the shared coding/verification deadline expires, LoopTroop appends a structured Failed Iteration Note, abandons the session, resets the worktree to the bead start commit, and retries in fresh context.
+9. Only after all declared commands pass does LoopTroop finalize the bead locally. Changed work must be committed, true no-op work may complete without a commit, push failures are warnings, and fatal finalization failures append a separate ANSI-free Finalization Failure Note before routing to manual `BLOCKED_ERROR` recovery.
+10. `RUNNING_FINAL_TEST`, optional Manual QA, `INTEGRATING_CHANGES`, and `CREATING_PULL_REQUEST` package the result for post-implementation delivery. The approved Git-hook policy controls internal commits/pushes; explicit validation is rerun before integration and surfaced in final review.
+11. During all non-terminal execution states, runtime projections and execution logs are updated so a restarted backend or reloaded browser can restore the ticket from durable state rather than from memory.
 
 See [Beads & Execution](beads.md).
 
@@ -130,7 +131,7 @@ Recovery is a first-class architectural concern.
 | Concurrent/stale autosave | Server serializes each ticket/scope and compare-and-set rejects revision conflicts with the latest state; Manual QA keeps its five-second debounce/unload keepalive and derives its last-save age/exact timestamp from acknowledged saves |
 | Crash during atomic write or append | Startup promotes orphan `.tmp` files, repairs trailing corrupt JSONL lines when safe, and rebuilds runtime projections |
 | Invalid model output | Retry with repair or explicit re-prompt, depending on phase |
-| Bead execution stall | Generate context wipe note, reset worktree, retry in fresh session |
+| Bead execution or deterministic verification deadline | Append a Failed Iteration Note, reset worktree, abandon the session, and retry in fresh context |
 | OpenCode reconnect gap | Validate the exact owned session against remote sessions and recreate only when ownership can no longer be proven |
 | Backend process restart | Reconcile persisted XState snapshots, hydrate ticket actors from durable ticket state, and immediately process restored active snapshots |
 | User edits approved interview or PRD | Archive the active approved generation and downstream attempts, cancel downstream sessions intentionally, clear stale downstream artifacts/UI state, persist a `user_edit_receipt:*`, and restart from the next drafting phase |
@@ -138,7 +139,7 @@ Recovery is a first-class architectural concern.
 | Stale approval | Return `409` with the expected and current SHA-256 hashes, keeping the ticket at the approval gate |
 | Manual QA generation/submission restart | Reuse the reserved checklist version or submission operation journal; deterministic action/origin/bead IDs prevent duplicate child work |
 | Application-created drift during QA | Stay in `WAITING_MANUAL_QA` and require include/discard for exactly audited paths before submit/skip |
-| Bead finalization failure | Keep the bead retryable, avoid `bead_complete`, send `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED`, and route to `BLOCKED_ERROR` |
+| Bead finalization failure | Append a concise Finalization Failure Note, keep the bead retryable, avoid `bead_complete`, send `BEAD_ERROR` with `BEAD_FINALIZATION_FAILED`, and route to manual `BLOCKED_ERROR` recovery |
 | Cleanup warning | Persist a `cleanup_report` with `status: warning`, expose the cleanup summary on the ticket, and still complete the ticket |
 | Terminal blockage | Enter `BLOCKED_ERROR` with persisted error occurrence history |
 

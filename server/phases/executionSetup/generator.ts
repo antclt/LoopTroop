@@ -30,6 +30,7 @@ const EXECUTION_SETUP_SCHEMA_REMINDER = [
   'profile.artifact must be execution_setup_profile.',
   'profile.temp_roots and profile.reusable_artifacts[].path should prefer approved runtime-owned setup paths under .ticket/runtime/execution-setup/**.',
   'profile.tool_requirements is optional for passing setup, but required as evidence when checks.tooling is fail.',
+  'profile must include workspace_probes and git_hooks copied from the approved setup plan; workspace probes are functional repository checks, not tool version probes.',
   'failed tool_requirements evidence uses provisioning_attempts objects with distinct strategies and command lists, not flat provisioning_commands.',
   'Wrapper creation, cache inspection, PATH edits, and version/info probes do not count as provisioning strategies; failed launcher evidence must include real attempts to obtain, install, or activate the required launcher under approved temp roots.',
   'checks must contain exactly: workspace, tooling, temp_scope, policy.',

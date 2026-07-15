@@ -46,6 +46,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       profile_id INTEGER,
       council_members TEXT,
       manual_qa_override INTEGER,
+      git_hook_policy TEXT,
       max_iterations INTEGER,
       per_iteration_timeout INTEGER,
       execution_setup_timeout INTEGER,
@@ -225,6 +226,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
   ensureColumn(sqlite, 'ticket_error_occurrences', 'diagnostic_details', 'TEXT')
   ensureColumn(sqlite, 'projects', 'execution_setup_timeout', 'INTEGER')
   ensureColumn(sqlite, 'projects', 'manual_qa_override', 'INTEGER')
+  ensureColumn(sqlite, 'projects', 'git_hook_policy', 'TEXT')
   ensureColumn(sqlite, 'phase_artifacts', 'phase_attempt', 'INTEGER NOT NULL DEFAULT 1')
   ensureColumn(sqlite, 'phase_artifacts', 'updated_at', 'TEXT')
 

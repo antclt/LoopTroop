@@ -518,13 +518,33 @@ Once coverage is clean or this cap is reached, LoopTroop advances to `EXPANDING_
 
 ## Execution Phase
 
+### Git Hook Policy
+
+**Type:** enum
+**Default:** `validate_explicitly`
+**Values:** `validate_explicitly`, `use_on_internal_commits`, `ignore_internal_only`
+
+Controls how LoopTroop-owned commits and pushes interact with hooks from the target repository. The profile supplies the default and each project may override it; the approved execution setup plan locks the value used for that ticket.
+
+| Policy | Internal Git behavior | Explicit validation |
+| --- | --- | --- |
+| `validate_explicitly` | Bypass hooks | Run the approved ordered hook commands during setup and again before integration |
+| `use_on_internal_commits` | Let Git run hooks normally | No additional automatic hook-equivalent command is required |
+| `ignore_internal_only` | Bypass hooks | Record that validation was skipped |
+
+Execution setup shows detected hooks as read-only evidence and lets you freely add, edit, reorder, or remove validation commands. An unknown hook never causes LoopTroop to invent an ecosystem-specific command. Removing all validation commands is allowed and the approval receipt records that exact decision.
+
+This policy affects only LoopTroop's internal Git operations. It does not alter the repository's hook configuration for your own Git commands.
+
+---
+
 ### Per-Iteration Timeout
 
 **Type:** integer (seconds)  
 **Default:** 1200 s (20 minutes)  
 **Range:** 0–3600 s
 
-The maximum runtime for a single bead attempt in `CODING`. If a coding session is still running when this workflow-owned deadline expires, LoopTroop treats it as a failed iteration and routes it through the standard retry path. This timeout is separate from OpenCode/provider interruption handling, which can preserve an addressable session for Continue.
+The maximum runtime for a single bead attempt in `CODING`, including deterministic execution of every declared bead test command after the model reports `done/pass`. Commands run sequentially through the approved execution-setup wrapper and stop at the first failure. A failing command is sent back to the same live coding session with its exit status and concise output so the implementer can continue within the remaining time. If the shared deadline expires during coding or verification, LoopTroop treats it as a failed iteration and routes it through the standard Ralph retry path. This timeout is separate from OpenCode/provider interruption handling, which can preserve an addressable session for Continue.
 
 **What retry means here:**
 
@@ -557,7 +577,7 @@ The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` phase, wh
 
 **What execution setup does:**
 
-The setup phase can install user-space toolchains under `.ticket/runtime/execution-setup/tool-cache`, warm caches, build native dependencies, or prepare repository-local runtime artifacts — anything the approved setup plan requires. It runs in the ticket's worktree before coding, records reusable wrapper commands when prepared runtime environment variables are needed, and validates declared `tooling_probe_commands` before the workflow enters coding. If required launcher setup fails, the profile records `tool_requirements.provisioning_attempts` evidence showing distinct attempted temp-root provisioning strategies and commands, or why no safe provisioning path exists.
+The setup phase can install user-space toolchains under `.ticket/runtime/execution-setup/tool-cache`, warm caches, build native dependencies, or prepare repository-local runtime artifacts — anything the approved setup plan requires. It runs in the ticket's worktree before coding, records reusable wrapper commands when prepared runtime environment variables are needed, and validates declared tooling probes, repository-level workspace probes, and approved explicit Git-hook commands before the workflow enters coding. If required launcher setup fails, the profile records `tool_requirements.provisioning_attempts` evidence showing distinct attempted temp-root provisioning strategies and commands, or why no safe provisioning path exists.
 
 **Trade-offs:**
 

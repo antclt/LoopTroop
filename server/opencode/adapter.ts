@@ -663,8 +663,22 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
 
           if (bead) {
             state.beadData = formatBeadContext(bead)
-            const noteText = typeof bead.notes === 'string' ? bead.notes.trim() : ''
-            state.beadNotes = noteText.length > 0 ? [noteText] : []
+            const formatHistory = (title: string, entries: Bead['failedIterationNotes']) => {
+              if (entries.length === 0) return null
+              return [
+                `## ${title}`,
+                ...entries.map((entry) => [
+                  `### Iteration ${entry.iteration} — ${entry.timestamp}`,
+                  entry.errorCode ? `Error code: ${entry.errorCode}` : '',
+                  entry.content,
+                ].filter(Boolean).join('\n')),
+              ].join('\n\n')
+            }
+            state.beadNotes = [
+              formatHistory('Failed Iteration Notes', bead.failedIterationNotes),
+              formatHistory('User Retry Notes', bead.userRetryNotes),
+              formatHistory('Finalization Failure Notes', bead.finalizationFailureNotes),
+            ].filter((entry): entry is string => Boolean(entry))
           }
         }
       } catch (err) {

@@ -6,6 +6,7 @@ import { LogContext } from '@/context/logContextDef'
 import type { LogContextValue } from '@/context/logUtils'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import type { Ticket } from '@/hooks/useTickets'
+import { makeRuntimeBead, type RuntimeBeadInput } from '@/test/factories'
 
 vi.mock('@/components/ui/scroll-area', () => ({
   ScrollArea: ({
@@ -65,7 +66,7 @@ function makeLog(id: string, line: string, overrides: Partial<LogEntry> = {}): L
   }
 }
 
-function makeTicket(runtimeOverrides: Partial<Ticket['runtime']> = {}): Ticket {
+function makeTicket(runtimeOverrides: Omit<Partial<Ticket['runtime']>, 'beads'> & { beads?: RuntimeBeadInput[] } = {}): Ticket {
   const defaultRuntime: Ticket['runtime'] = {
     baseBranch: 'main',
     currentBead: 1,
@@ -117,6 +118,7 @@ function makeTicket(runtimeOverrides: Partial<Ticket['runtime']> = {}): Ticket {
     runtime: {
       ...defaultRuntime,
       ...runtimeOverrides,
+      beads: runtimeOverrides.beads?.map(makeRuntimeBead) ?? [],
     },
   }
 }

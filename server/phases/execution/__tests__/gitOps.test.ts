@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -322,6 +322,34 @@ describe('commitBeadChanges', () => {
     expect(result.committed).toBe(true)
     expect(result.pushed).toBe(false)
     expect(result.error).toMatch(/push failed/)
+  })
+
+  it.each(['validate_explicitly', 'ignore_internal_only'] as const)('bypasses failing internal hooks for %s', (policy) => {
+    const dir = makeFreshRepo()
+    const hookPath = join(dir, '.git', 'hooks', 'pre-commit')
+    writeFileSync(hookPath, '#!/bin/sh\nexit 7\n')
+    chmodSync(hookPath, 0o755)
+    mkdirSync(join(dir, '.ticket/runtime'), { recursive: true })
+    writeFileSync(join(dir, '.ticket/runtime/execution-setup-profile.json'), JSON.stringify({ git_hooks: { policy } }))
+    writeFileSync(join(dir, 'feature.ts'), `export const policy = '${policy}'\n`)
+
+    expect(commitBeadChanges(dir, 'bead-hook', 'Hook policy')).toMatchObject({ committed: true })
+  })
+
+  it('runs failing internal hooks for use_on_internal_commits', () => {
+    const dir = makeFreshRepo()
+    const hookPath = join(dir, '.git', 'hooks', 'pre-commit')
+    writeFileSync(hookPath, '#!/bin/sh\nexit 7\n')
+    chmodSync(hookPath, 0o755)
+    mkdirSync(join(dir, '.ticket/runtime'), { recursive: true })
+    writeFileSync(join(dir, '.ticket/runtime/execution-setup-profile.json'), JSON.stringify({
+      git_hooks: { policy: 'use_on_internal_commits' },
+    }))
+    writeFileSync(join(dir, 'feature.ts'), 'export const policy = true\n')
+
+    const result = commitBeadChanges(dir, 'bead-hook', 'Hook policy')
+    expect(result).toMatchObject({ committed: false, pushed: false })
+    expect(result.error).toContain('git commit failed')
   })
 
   it('pushes the current ticket branch explicitly to origin without an upstream', () => {

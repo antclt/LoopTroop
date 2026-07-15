@@ -938,11 +938,6 @@ export function recoverCodingBeadWithReset(
   return recoverCodingBead(ticketId, beads, failedBead, options.userRetryNote)
 }
 
-function appendUserRetryNote(existingNotes: string, note: string, timestamp: string): string {
-  const stampedNote = `[User retry note — ${timestamp}]\n${note}`
-  return existingNotes ? `${existingNotes}\n\n---\n\n${stampedNote}` : stampedNote
-}
-
 function recoverCodingBead(
   ticketId: string,
   beads: Bead[],
@@ -954,9 +949,16 @@ function recoverCodingBead(
     ? {
         ...bead,
         status: 'pending' as const,
-        notes: userRetryNote === undefined
-          ? bead.notes
-          : appendUserRetryNote(bead.notes, userRetryNote, now),
+        userRetryNotes: userRetryNote === undefined
+          ? bead.userRetryNotes
+          : [
+              ...bead.userRetryNotes,
+              {
+                timestamp: now,
+                iteration: bead.iteration,
+                content: userRetryNote,
+              },
+            ],
         updatedAt: now,
       }
     : bead)

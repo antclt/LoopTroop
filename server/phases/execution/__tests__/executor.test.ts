@@ -7,6 +7,9 @@ import { PROFILE_DEFAULTS } from '../../../db/defaults'
 import { patchTicket } from '../../../storage/tickets'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../../test/integration'
 import { BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR } from '../../../../shared/errorCodes'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 class SequencedMockOpenCodeAdapter extends MockOpenCodeAdapter {
   private promptCounts = new Map<string, number>()
@@ -79,7 +82,7 @@ function buildBead(overrides: Partial<Bead> = {}): Bead {
     contextGuidance: { patterns: ['Keep the retry limited to marker correction only.'], anti_patterns: ['Do not retry for non-marker issues.'] },
     acceptanceCriteria: ['Repairable marker formatting does not fail the iteration immediately.'],
     tests: ['Structured marker retry is covered by tests.'],
-    testCommands: ['npm run test:server'],
+    testCommands: [],
     priority: 1,
     status: 'pending',
     issueType: 'task',
@@ -87,7 +90,9 @@ function buildBead(overrides: Partial<Bead> = {}): Bead {
     labels: [],
     dependencies: { blocked_by: [], blocks: [] },
     targetFiles: [],
-    notes: '',
+    failedIterationNotes: [],
+    userRetryNotes: [],
+    finalizationFailureNotes: [],
     iteration: 1,
     createdAt: '',
     updatedAt: '',
@@ -104,6 +109,82 @@ describe('executeBead', () => {
   afterAll(() => {
     resetTestDb()
     repoManager.cleanup()
+  })
+
+  it('rejects a false done marker, feeds the real command failure to the same session, and records receipts', async () => {
+    const adapter = new SequencedMockOpenCodeAdapter()
+    const doneMarker = [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}',
+      '</BEAD_STATUS>',
+    ].join('\n')
+    adapter.mockResponses.set('mock-session-1#1', doneMarker)
+    adapter.mockResponses.set('mock-session-1#2', doneMarker)
+    const cwd = mkdtempSync(join(tmpdir(), 'looptroop-bead-verification-'))
+    const rawVerificationOutputs: Array<{ stdout: string; stderr: string }> = []
+
+    try {
+      const statefulCommand = 'node -e "const fs=require(\'fs\');const p=\'verification-marker\';if(fs.existsSync(p))process.exit(0);process.stderr.write(\'full raw verification failure\');fs.writeFileSync(p,\'ready\');process.exit(1)"'
+      const result = await executeBead(
+        adapter,
+        buildBead({ testCommands: [statefulCommand] }),
+        [{ type: 'text', content: 'Bead context' }],
+        cwd,
+        1,
+        PROFILE_DEFAULTS.perIterationTimeout,
+        undefined,
+        {
+          onVerificationCommand: ({ stdout, stderr }) => rawVerificationOutputs.push({ stdout, stderr }),
+        },
+      )
+
+      expect(result.success).toBe(true)
+      expect(adapter.promptCalls.map((call) => call.sessionId)).toEqual(['mock-session-1', 'mock-session-1'])
+      expect(adapter.promptCalls[1]?.parts[0]?.content).toContain('Deterministic Test Verification Failed')
+      expect(result.verificationCommands).toMatchObject([
+        { command: statefulCommand, passed: false, exitCode: 1, timedOut: false },
+        { command: statefulCommand, passed: true, exitCode: 0, timedOut: false },
+      ])
+      expect(rawVerificationOutputs[0]?.stderr).toBe('full raw verification failure')
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
+  })
+
+  it.runIf(process.platform !== 'win32')('runs declared commands sequentially through the setup wrapper', async () => {
+    const adapter = new SequencedMockOpenCodeAdapter()
+    adapter.mockResponses.set('mock-session-1#1', [
+      '<BEAD_STATUS>',
+      '{"bead_id":"bead-1","status":"done","checks":{"tests":"pass","lint":"pass","typecheck":"pass","qualitative":"pass"}}',
+      '</BEAD_STATUS>',
+    ].join('\n'))
+    const cwd = mkdtempSync(join(tmpdir(), 'looptroop-bead-wrapper-'))
+    const wrapper = join(cwd, 'run')
+    writeFileSync(wrapper, '#!/bin/sh\nexec "$@"\n')
+    chmodSync(wrapper, 0o755)
+
+    try {
+      const commands = [
+        'node -e "process.stdout.write(\'first\')"',
+        'node -e "process.stdout.write(\'second\')"',
+      ]
+      const result = await executeBead(
+        adapter,
+        buildBead({ testCommands: commands }),
+        [{ type: 'text', content: 'Bead context' }],
+        cwd,
+        1,
+        PROFILE_DEFAULTS.perIterationTimeout,
+        undefined,
+        { commandWrapper: wrapper },
+      )
+
+      expect(result.success).toBe(true)
+      expect(result.verificationCommands.map((receipt) => receipt.command)).toEqual(commands)
+      expect(result.verificationCommands.every((receipt) => receipt.passed && receipt.setupWrapperApplied)).toBe(true)
+    } finally {
+      rmSync(cwd, { recursive: true, force: true })
+    }
   })
 
   it('retries malformed completion markers in the same session', async () => {
@@ -268,9 +349,9 @@ describe('executeBead', () => {
   it('calls onContextWipe when iteration fails and PROM51 generates notes', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()
     adapter.promptFailures.set('mock-session-1#1', new Error('tests still failing'))
-    adapter.mockResponses.set('mock-session-1#2', 'Iteration 1 failed because: no completion marker output.')
+    adapter.mockResponses.set('mock-session-1#2', '\u001b[31mIteration 1 failed because: no completion marker output.\u001b[0m')
 
-    const notesUpdates: { beadId: string; notes: string }[] = []
+    const notesUpdates: { beadId: string; failedIterationNotes: Bead['failedIterationNotes'] }[] = []
     const result = await executeBead(
       adapter,
       buildBead(),
@@ -280,8 +361,8 @@ describe('executeBead', () => {
       PROFILE_DEFAULTS.perIterationTimeout,
       undefined,
       {
-        onContextWipe: async ({ beadId, notes }) => {
-          notesUpdates.push({ beadId, notes })
+        onContextWipe: async ({ beadId, failedIterationNotes }) => {
+          notesUpdates.push({ beadId, failedIterationNotes })
         },
       },
     )
@@ -289,7 +370,8 @@ describe('executeBead', () => {
     expect(result.success).toBe(false)
     expect(notesUpdates).toHaveLength(1)
     expect(notesUpdates[0]!.beadId).toBe('bead-1')
-    expect(notesUpdates[0]!.notes).toContain('failed')
+    expect(notesUpdates[0]!.failedIterationNotes[0]?.content).toContain('failed')
+    expect(notesUpdates[0]!.failedIterationNotes[0]?.content).not.toContain('\u001b[')
     expect(adapter.sessions.map((session) => session.id)).toEqual(['mock-session-1'])
     expect(result.rawAttempts).toHaveLength(1)
     expect(result.rawAttempts?.[0]).toMatchObject({
@@ -497,8 +579,9 @@ describe('executeBead', () => {
       adapter,
       bead,
       async () => {
-        contextSnapshots.push(bead.notes)
-        return [{ type: 'text', content: bead.notes ? `Bead context\n${bead.notes}` : 'Bead context' }]
+        const notes = bead.failedIterationNotes.map((entry) => entry.content).join('\n')
+        contextSnapshots.push(notes)
+        return [{ type: 'text', content: notes ? `Bead context\n${notes}` : 'Bead context' }]
       },
       '/tmp/test',
       2,
@@ -586,8 +669,9 @@ describe('executeBead', () => {
       adapter,
       bead,
       async () => {
-        contextSnapshots.push(bead.notes)
-        return [{ type: 'text', content: bead.notes ? `Bead context\n${bead.notes}` : 'Bead context' }]
+        const notes = bead.failedIterationNotes.map((entry) => entry.content).join('\n')
+        contextSnapshots.push(notes)
+        return [{ type: 'text', content: notes ? `Bead context\n${notes}` : 'Bead context' }]
       },
       '/tmp/test',
       2,

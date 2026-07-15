@@ -78,6 +78,11 @@ export function serializeExecutionSetupRetryNotes(notes: string[]): string {
 }
 
 export function toExecutionSetupProfileArtifact(profile: ExecutionSetupProfile): Record<string, unknown> {
+  const gitHooks = profile.gitHooks ?? {
+    policy: 'validate_explicitly' as const,
+    detected: [],
+    validationCommands: [],
+  }
   return {
     schema_version: profile.schemaVersion,
     ticket_id: profile.ticketId,
@@ -87,6 +92,20 @@ export function toExecutionSetupProfileArtifact(profile: ExecutionSetupProfile):
     temp_roots: profile.tempRoots,
     bootstrap_commands: profile.bootstrapCommands,
     tooling_probe_commands: profile.toolingProbeCommands,
+    workspace_probes: profile.workspaceProbes ?? [],
+    ...(profile.workspaceProbeReceipts ? { workspace_probe_receipts: profile.workspaceProbeReceipts } : {}),
+    git_hooks: {
+      policy: gitHooks.policy,
+      detected: gitHooks.detected.map((hook) => ({
+        name: hook.name,
+        path: hook.path,
+        source: hook.source,
+        executable: hook.executable,
+        ...(hook.managerHint ? { manager_hint: hook.managerHint } : {}),
+      })),
+      validation_commands: gitHooks.validationCommands,
+      ...(gitHooks.validationReceipts ? { validation_receipts: gitHooks.validationReceipts } : {}),
+    },
     ...(profile.toolRequirements
       ? {
           tool_requirements: profile.toolRequirements.map((requirement) => ({

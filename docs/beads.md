@@ -48,7 +48,9 @@ A bead is the smallest unit LoopTroop will schedule for coding. It carries enoug
 | `labels` | `string[]` | Planning labels |
 | `dependencies` | `{ blocked_by: string[]; blocks: string[] }` | Dependency graph edges |
 | `targetFiles` | `string[]` | Expected file touch set |
-| `notes` | `string` | Append-only retry/context-wipe notes |
+| `failedIterationNotes` | `BeadNoteEntry[]` | Append-only notes produced when an implementation iteration fails |
+| `userRetryNotes` | `BeadNoteEntry[]` | Append-only user guidance supplied through Retry with extra note |
+| `finalizationFailureNotes` | `BeadNoteEntry[]` | Append-only local commit/finalization diagnostics |
 | `iteration` | `number` | Current execution attempt number |
 | `createdAt` | `string` | ISO timestamp set when beads are approved |
 | `updatedAt` | `string` | ISO timestamp |
@@ -60,7 +62,7 @@ A bead is the smallest unit LoopTroop will schedule for coding. It carries enoug
 
 - **Planning fields** (`prdRefs`, `description`, `acceptanceCriteria`, `testCommands`, `targetFiles`) keep each coding session narrow.
 - **Graph fields** (`priority`, `dependencies`) let the scheduler choose work deterministically instead of letting the model decide its own sequence.
-- **Recovery fields** (`status`, `iteration`, `notes`, `startedAt`, `beadStartCommit`) make retries durable across resets, backend restarts, and blocked-error recovery.
+- **Recovery fields** (`status`, `iteration`, the three typed note histories, `startedAt`, `beadStartCommit`) make retries durable across resets, backend restarts, and blocked-error recovery without mixing distinct failure sources.
 
 ### Example Bead
 
@@ -98,7 +100,9 @@ A bead is the smallest unit LoopTroop will schedule for coding. It carries enoug
     "server/auth/sessionStore.ts",
     "server/routes/auth.ts"
   ],
-  "notes": "",
+  "failedIterationNotes": [],
+  "userRetryNotes": [],
+  "finalizationFailureNotes": [],
   "iteration": 1,
   "createdAt": "",
   "updatedAt": "2026-04-23T09:00:00.000Z",
@@ -259,17 +263,19 @@ Important consequences:
 3. **Create or reattach session** - own the OpenCode session for that bead iteration.
 4. **Prompt** - send the coding prompt and watch OpenCode stream/status events.
 5. **Enforce structured completion** - require a valid `<BEAD_STATUS>` marker instead of trusting free-form prose.
-6. **Retry inside the session when safe** - use structured retry prompts or "keep working" reminders when the marker is malformed or the gates are not yet passing.
-7. **Persist checkpoint** - write `bead_execution:{beadId}` with the execution result and checkpoint metadata.
-8. **Finalize locally** - create the bead commit when Git-visible project changes exist, or record a true no-op completion.
-9. **Capture diff and advance** - persist `bead_diff:{beadId}`, mark the bead `done`, and either choose the next runnable bead or advance to final test.
+6. **Verify declared commands** - while the session remains open, run every repository-provided `testCommands` entry sequentially through the setup wrapper and within the same iteration deadline.
+7. **Retry inside the session when safe** - send malformed markers, reported incomplete gates, or deterministic command failures back to the same session while time remains.
+8. **Persist checkpoint** - write `bead_execution:{beadId}` with the execution result, verification receipts, and checkpoint metadata.
+9. **Finalize locally** - create the bead commit when Git-visible project changes exist, or record a true no-op completion.
+10. **Capture diff and advance** - persist `bead_diff:{beadId}`, mark the bead `done`, and either choose the next runnable bead or advance to final test.
 
 ### What "done" Really Means
 
 `done` is not "the model said it finished." It means:
 
 - the completion marker passed validation
-- required checks were reported as passing
+- lint, typecheck, and qualitative checks were reported as passing
+- every declared bead test command was independently executed by LoopTroop and passed
 - local finalization succeeded
 - a bead commit exists when committable project changes were present, regardless of language or extension
 
@@ -292,7 +298,7 @@ Each bead attempt must end with exactly one `<BEAD_STATUS>...</BEAD_STATUS>` blo
 
 If the output is malformed or missing the marker, LoopTroop does **not** guess. It sends a structured retry reminder that asks for the exact schema again.
 
-If the marker shape is valid but the bead is still incomplete, LoopTroop sends a continuation reminder instructing the agent to keep editing, rerun the failing checks, and only return once the bead is actually complete.
+If the marker shape is valid but the bead is still incomplete, LoopTroop sends a continuation reminder instructing the agent to keep editing, rerun the failing checks, and only return once the bead is actually complete. A valid all-pass marker is still only a candidate: LoopTroop executes the bead's declared test commands itself, records command receipts, and sends the first deterministic failure back into the same session. Verification consumes the same per-iteration deadline, so a session that cannot repair the repository before the deadline follows the normal Ralph reset and fresh-session path.
 
 This two-stage enforcement matters:
 
@@ -312,7 +318,7 @@ When a bead attempt fails, LoopTroop does not keep piling more context into the 
 For ordinary implementation failure or a workflow-owned per-iteration timeout:
 
 1. capture a compact retry note from the failing session when possible
-2. append that note to the bead's durable `notes`
+2. append that note to the bead's durable `failedIterationNotes`
 3. hard-reset the worktree to `beadStartCommit`
 4. abandon the old session
 5. retry in a fresh session with the accumulated notes as compact guidance
@@ -346,14 +352,17 @@ If the model cannot produce a good note, LoopTroop falls back to a deterministic
 
 If the bead reaches the configured retry cap, LoopTroop marks it `error`, attaches `BEAD_RETRY_BUDGET_EXHAUSTED`, and routes the ticket to `BLOCKED_ERROR`.
 
-From the live blocked view, the normal **Retry** action resets and schedules the same failed or paused bead with its accumulated notes. **Retry with extra note** opens a multiline field for 1–20,000 characters of user guidance, then performs the same safe recovery and appends a new entry to `bead.notes`:
+From the live blocked view, the normal **Retry** action resets and schedules the same failed or paused bead with its accumulated note histories. **Retry with extra note** opens a multiline field for 1–20,000 characters of user guidance, then performs the same safe recovery and appends a structured entry to `userRetryNotes`.
 
 ```text
-[User retry note — 2026-07-15T12:34:56.789Z]
-<user text preserved unchanged>
+{
+  "timestamp": "2026-07-15T12:34:56.789Z",
+  "iteration": 2,
+  "content": "<user text preserved unchanged>"
+}
 ```
 
-Existing notes are never replaced. When notes already exist, the new entry is separated with the established `---` divider and becomes part of `bead_notes` for the next fresh coding attempt. The note is appended only after LoopTroop identifies the same recoverable bead and successfully resets it to `beadStartCommit`; if either check fails, the ticket remains blocked and its notes are unchanged. Whitespace-only or oversized notes are rejected. This action is available only for the current `BLOCKED_ERROR` that came from `CODING`, not for historical error views or failures from other phases.
+Failed iterations, user retry guidance, and local finalization failures are kept in independently append-only `failedIterationNotes`, `userRetryNotes`, and `finalizationFailureNotes` histories. New entries never replace, merge, or deduplicate earlier entries. Machine-generated content is stripped of ANSI terminal control sequences before persistence, while user text remains unchanged and raw command output stays available in execution logs. A user note is appended only after LoopTroop identifies the same recoverable bead and successfully resets it to `beadStartCommit`; if either check fails, the ticket remains blocked and every history is unchanged. Whitespace-only or oversized notes are rejected. This action is available only for the current `BLOCKED_ERROR` that came from `CODING`, not for historical error views or failures from other phases.
 
 ---
 
@@ -496,7 +505,7 @@ When an enabled Manual QA round is submitted with any explicit Fail, one locked-
 
 LoopTroop validates exact group coverage and the full candidate set, then persists canonical `fix-beads.yaml` before creating any child record. The application assigns deterministic IDs, priority/order, pending status, `qa-fix` issue type, external reference, reverse `blocks` links, timestamps, and QA provenance through the normal bead writer. If model generation, required tool activity, or parsing fails, no Improvement ticket or bead is created; the workflow enters recoverable `BLOCKED_ERROR` and Retry resumes the stored submission action. If no checks failed, this model call is skipped.
 
-Each QA bead has typed `qaOrigin` containing the Manual QA version, all source item IDs/lineages, observations, expected behavior, evidence references, deterministic origin/action identity, locked model ID/image-capability result, and Manual-QA creation timestamp. This is displayed as a **Manual QA Fix** badge in Coding, bead Details, selected-bead, artifact, and log views. It is intentionally separate from ordinary retry `notes`: a provider/test retry must not overwrite or masquerade as the user's QA observation.
+Each QA bead has typed `qaOrigin` containing the Manual QA version, all source item IDs/lineages, observations, expected behavior, evidence references, deterministic origin/action identity, locked model ID/image-capability result, and Manual-QA creation timestamp. This is displayed as a **Manual QA Fix** badge in Coding, bead Details, selected-bead, artifact, and log views. It is intentionally separate from the three execution note histories: a provider/test retry must not overwrite or masquerade as the user's QA observation.
 
 Scheduling, execution, commits, metrics, retry/reset behavior, and final tests remain the standard bead pipeline. Before the first QA bead, Manual QA generation has already checkpointed accepted final-test effects and removed/quarantined residue from the Git-visible worktree, preventing a fix bead from sweeping unrelated runtime files into its commit. When all QA-fix beads finish, the ticket receives a fresh final-test attempt and, on success, a new checklist version.
 

@@ -3,8 +3,10 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import type {
   ExecutionSetupPlan,
+  ExecutionSetupGitHookValidationCommand,
   ExecutionSetupPlanReadiness,
   ExecutionSetupPlanStep,
+  ExecutionSetupWorkspaceProbe,
 } from '@/lib/executionSetupPlan'
 
 function StringListEditor({
@@ -92,6 +94,66 @@ function PolicyField({
         className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
         placeholder={placeholder}
       />
+    </div>
+  )
+}
+
+function CommandRecordEditor<T extends { id: string; command: string; purpose: string }>({
+  title,
+  items,
+  disabled,
+  emptyLabel,
+  createItem,
+  onChange,
+  extraField,
+}: {
+  title: string
+  items: T[]
+  disabled?: boolean
+  emptyLabel: string
+  createItem: (index: number) => T
+  onChange: (items: T[]) => void
+  extraField?: { label: string; key: keyof T; placeholder: string }
+}) {
+  const updateItem = (index: number, update: Partial<T>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...update } : item))
+  const move = (index: number, direction: -1 | 1) => {
+    const target = index + direction
+    if (target < 0 || target >= items.length) return
+    const next = [...items]
+    const currentItem = next[index]
+    const targetItem = next[target]
+    if (!currentItem || !targetItem) return
+    next[index] = targetItem
+    next[target] = currentItem
+    onChange(next)
+  }
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-background p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
+          <Badge variant="outline" className="h-5 text-[10px]">{items.length}</Badge>
+        </div>
+        <Button type="button" variant="outline" size="sm" disabled={disabled} onClick={() => onChange([...items, createItem(items.length)])} className="h-7 text-xs">
+          Add
+        </Button>
+      </div>
+      {items.length === 0 ? <div className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">{emptyLabel}</div> : null}
+      {items.map((item, index) => (
+        <div key={`${item.id}-${index}`} className="space-y-2 rounded-md border border-border bg-muted/10 p-2">
+          <div className="flex items-center gap-1">
+            <input aria-label={`${title} ${index + 1} id`} value={item.id} disabled={disabled} onChange={(event) => updateItem(index, { id: event.target.value } as Partial<T>)} className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 text-xs" placeholder="Stable id" />
+            <Button type="button" variant="ghost" size="sm" aria-label={`Move ${title} ${index + 1} up`} disabled={disabled || index === 0} onClick={() => move(index, -1)} className="h-7 w-7 p-0">↑</Button>
+            <Button type="button" variant="ghost" size="sm" aria-label={`Move ${title} ${index + 1} down`} disabled={disabled || index === items.length - 1} onClick={() => move(index, 1)} className="h-7 w-7 p-0">↓</Button>
+            <Button type="button" variant="ghost" size="sm" aria-label={`Remove ${title} ${index + 1}`} disabled={disabled} onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive">×</Button>
+          </div>
+          {extraField ? (
+            <input aria-label={`${title} ${index + 1} ${extraField.label}`} value={String(item[extraField.key] ?? '')} disabled={disabled} onChange={(event) => updateItem(index, { [extraField.key]: event.target.value } as Partial<T>)} className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs" placeholder={extraField.placeholder} />
+          ) : null}
+          <textarea aria-label={`${title} ${index + 1} command`} value={item.command} disabled={disabled} onChange={(event) => updateItem(index, { command: event.target.value } as Partial<T>)} rows={2} className="w-full resize-y rounded-md border border-input bg-background px-2 py-1 font-mono text-xs" placeholder="Repository command" />
+          <input aria-label={`${title} ${index + 1} purpose`} value={item.purpose} disabled={disabled} onChange={(event) => updateItem(index, { purpose: event.target.value } as Partial<T>)} className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs" placeholder="Why this command is needed" />
+        </div>
+      ))}
     </div>
   )
 }
@@ -212,6 +274,58 @@ export function ExecutionSetupPlanEditor({ plan, disabled, onChange }: Execution
           />
         </div>
       </div>
+
+      <div className="grid gap-3 xl:grid-cols-2">
+        <CommandRecordEditor<ExecutionSetupWorkspaceProbe>
+          title="Workspace Probes"
+          items={plan.workspaceProbes}
+          disabled={disabled}
+          emptyLabel="No repository-level workspace probes are recorded."
+          createItem={(index) => ({ id: `workspace-probe-${index + 1}`, command: '', purpose: '' })}
+          onChange={(workspaceProbes) => updatePlan({ workspaceProbes })}
+        />
+        <div className="space-y-3 rounded-lg border border-border bg-background p-3">
+          <div>
+            <SectionLabel>Git Hook Policy</SectionLabel>
+            <select
+              value={plan.gitHooks.policy}
+              onChange={(event) => updatePlan({ gitHooks: { ...plan.gitHooks, policy: event.target.value as ExecutionSetupPlan['gitHooks']['policy'] } })}
+              disabled={disabled}
+              className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+            >
+              <option value="validate_explicitly">Validate explicitly</option>
+              <option value="use_on_internal_commits">Use on internal commits</option>
+              <option value="ignore_internal_only">Ignore for internal commits</option>
+            </select>
+          </div>
+          <div>
+            <SectionLabel>Detected Git Hooks (read-only)</SectionLabel>
+            {plan.gitHooks.detected.length === 0 ? (
+              <div className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">No Git hooks were detected.</div>
+            ) : (
+              <div className="space-y-2">
+                {plan.gitHooks.detected.map((hook, index) => (
+                  <div key={`${hook.path}-${index}`} className="rounded border border-border bg-muted/20 p-2 text-xs">
+                    <div className="flex flex-wrap items-center gap-2"><span className="font-semibold">{hook.name}</span><Badge variant={hook.executable ? 'outline' : 'secondary'} className="h-5 text-[10px]">{hook.executable ? 'executable' : 'not executable'}</Badge>{hook.managerHint ? <Badge variant="outline" className="h-5 text-[10px]">{hook.managerHint}</Badge> : null}</div>
+                    <div className="mt-1 break-all font-mono text-[10px] text-muted-foreground">{hook.path}</div>
+                    <div className="mt-1 text-[10px] text-muted-foreground">Source: {hook.source || 'unknown'}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <CommandRecordEditor<ExecutionSetupGitHookValidationCommand>
+        title="Git Hook Validation Commands"
+        items={plan.gitHooks.validationCommands}
+        disabled={disabled}
+        emptyLabel="No explicit Git-hook validation commands are approved. This is allowed and will be recorded as skipped."
+        createItem={(index) => ({ id: `git-hook-validation-${index + 1}`, hook: '', command: '', purpose: '' })}
+        extraField={{ label: 'hook', key: 'hook', placeholder: 'Hook name, for example pre-commit' }}
+        onChange={(validationCommands) => updatePlan({ gitHooks: { ...plan.gitHooks, validationCommands } })}
+      />
 
       <div className="grid gap-3 md:grid-cols-2">
         <div className="space-y-3 rounded-lg border border-border bg-background p-3">

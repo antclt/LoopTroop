@@ -15,6 +15,7 @@ import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
 import { ConfigurationDocsLink } from '@/components/config/ConfigurationDocsLink'
 import type { ManualQaOverride } from '@/lib/manualQaSetting'
 import { useProfile } from '@/hooks/useProfile'
+import type { GitHookPolicy } from '@/lib/executionSetupPlan'
 
 interface ProjectFormProps {
   onClose: () => void
@@ -60,6 +61,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
   const [icon, setIcon] = useState(project?.icon ?? '📦')
   const [color, setColor] = useState(project?.color ?? '#3b82f6')
   const [manualQaOverride, setManualQaOverride] = useState<ManualQaOverride>(project?.manualQaOverride ?? null)
+  const [gitHookPolicy, setGitHookPolicy] = useState<GitHookPolicy | null>(project?.gitHookPolicy ?? null)
   const [isIconPickerOpen, setIsIconPickerOpen] = useState(false)
   const [isColorPickerOpen, setIsColorPickerOpen] = useState(false)
   const [gitInfo, setGitInfo] = useState<GitCheckResponse>({ isGit: false, status: 'none' })
@@ -130,7 +132,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
     e.preventDefault()
     if (isEditing) {
       updateProject.mutate(
-        { id: project.id, name, icon, color, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
+        { id: project.id, name, icon, color, gitHookPolicy, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
         {
           onSuccess: () => {
             addToast('success', 'Project updated.')
@@ -140,7 +142,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
       )
     } else {
       createProject.mutate(
-        { name, shortname, folderPath: folder, icon, color, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
+        { name, shortname, folderPath: folder, icon, color, gitHookPolicy, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
         {
           onSuccess: () => {
             addToast('success', restoreMode ? 'Project restored from existing LoopTroop data.' : 'Project created.')
@@ -277,6 +279,23 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
                 inheritedEnabled={profile?.manualQaEnabled ?? false}
               />
             </div>
+          </div>
+          <div className="rounded-md border border-border p-3">
+            <label htmlFor="project-git-hook-policy" className="text-sm font-medium">Git hook policy</label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Choose how LoopTroop handles repository hooks. The ticket setup plan will show detected hooks and lets you edit the explicit validation commands.
+            </p>
+            <select
+              id="project-git-hook-policy"
+              value={gitHookPolicy ?? ''}
+              onChange={(event) => setGitHookPolicy(event.target.value ? event.target.value as GitHookPolicy : null)}
+              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            >
+              <option value="">Inherit profile ({(profile?.gitHookPolicy ?? 'validate_explicitly').replaceAll('_', ' ')})</option>
+              <option value="validate_explicitly">Validate explicitly (recommended)</option>
+              <option value="use_on_internal_commits">Run on internal commits</option>
+              <option value="ignore_internal_only">Ignore for internal commits</option>
+            </select>
           </div>
           {isEditing ? (
             <div className="space-y-4">

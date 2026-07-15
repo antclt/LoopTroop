@@ -114,9 +114,11 @@ Current `CodingView` composes:
 - `VerificationSummaryPanel`
 - `CollapsiblePhaseLogSection`
 
-It also merges persisted bead artifacts with runtime bead overlays from the live ticket payload so the UI can show in-progress status and notes without waiting for a full artifact refresh.
+It also merges persisted bead artifacts with runtime bead overlays from the live ticket payload so the UI can show in-progress status and notes without waiting for a full artifact refresh. Bead details render append-only **Failed Iteration Notes**, **User Retry Notes**, and **Finalization Failure Notes** sections independently, preserving their timestamp, iteration, content, and optional error code.
 
 QA-origin beads receive a **Manual QA Fix** badge and keep their version, source items, observations, expected behavior, and evidence thumbnails/references visible across Coding, Details, selected-bead, artifact, and log surfaces. Normal retry notes are presented separately.
+
+Execution setup approval exposes functional workspace probes and Git-hook handling as first-class plan fields. Detected hooks are read-only evidence; the selected policy and ordered validation commands are editable, including adding, reordering, changing, or removing every command without an additional waiver gate. The runtime/final review surfaces whether hook validation executed, failed, or was deliberately skipped.
 
 ### Manual QA workspace
 
@@ -332,6 +334,10 @@ All numeric fields are validated against min/max bounds defined in `numericField
 > Timeout and delay fields are stored in **milliseconds**. `ProfileSetup` converts those stored milliseconds to seconds for display and back to milliseconds on save. Count-style fields such as `OpenCode Max Steps` remain raw integers in both storage and UI.
 
 Profile settings are inherited by new tickets at start time. The locked copies in the ticket record are what the workflow actually uses for that run.
+
+### Git Hook Policy
+
+Configuration and Project settings expose the three language-agnostic choices documented in [Git Hook Policy](configuration.md#git-hook-policy). `validate_explicitly` is the profile default, while a project may select `use_on_internal_commits` or `ignore_internal_only`. The execution setup plan remains the ticket-specific review point for the resolved policy and explicit validation commands.
 
 ### Manual QA Settings
 

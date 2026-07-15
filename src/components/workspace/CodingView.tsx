@@ -18,7 +18,7 @@ import { filterBeadLogEntries, formatLogLine } from './logFormat'
 import { LogColorLegend } from './LogColorLegend'
 import { VerificationSummaryPanel } from './VerificationSummaryPanel'
 import { formatElapsedDuration } from './currentActivity'
-import type { Ticket } from '@/hooks/useTickets'
+import type { BeadNoteEntry, Ticket } from '@/hooks/useTickets'
 import { useTicketAction } from '@/hooks/useTickets'
 import { useTicketArtifacts } from '@/hooks/useTicketArtifacts'
 import { useTicketPhaseAttempts } from '@/hooks/useTicketPhaseAttempts'
@@ -55,7 +55,9 @@ interface TicketBead {
   targetFiles: string[]
   contextGuidance: { patterns: string[]; anti_patterns: string[] }
   dependencies: { blocked_by: string[]; blocks: string[] }
-  notes: string
+  failedIterationNotes: BeadNoteEntry[]
+  userRetryNotes: BeadNoteEntry[]
+  finalizationFailureNotes: BeadNoteEntry[]
   createdAt: string
   updatedAt: string
   completedAt: string
@@ -80,6 +82,8 @@ interface TicketBead {
     }>
   } | null
 }
+
+const ANSI_SEQUENCE_PATTERN = new RegExp(`(?:${String.fromCharCode(27)}\\[|${String.fromCharCode(155)})[0-?]*[ -/]*[@-~]`, 'g')
 
 function resolveCodingReviewStatus(ticket: Pick<Ticket, 'status' | 'previousStatus' | 'reviewCutoffStatus'>): string | null {
   if (ticket.status === 'BLOCKED_ERROR') {
@@ -107,23 +111,20 @@ function shouldShowCompletedCodingState(
   return reviewStatus ? isStatusAtOrPast(reviewStatus, 'RUNNING_FINAL_TEST') : false
 }
 
-function normalizeNotes(input: unknown): string {
-  if (typeof input === 'string') return input
-  if (Array.isArray(input)) {
-    return input
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      .join('\n\n---\n\n')
-  }
-  return ''
-}
-
-function splitRenderedNotes(notes: string): string[] {
-  const normalized = notes.trim()
-  if (!normalized) return []
-  return normalized
-    .split(/\n\s*---\s*\n/g)
-    .map((entry) => entry.trim())
-    .filter(Boolean)
+function normalizeNoteEntries(input: unknown, stripAnsi = true): BeadNoteEntry[] {
+  if (!Array.isArray(input)) return []
+  return input.flatMap((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+    const entry = item as Record<string, unknown>
+    if (typeof entry.content !== 'string' || !entry.content.trim()) return []
+    const content = stripAnsi ? entry.content.replace(ANSI_SEQUENCE_PATTERN, '') : entry.content
+    return [{
+      timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : '',
+      iteration: typeof entry.iteration === 'number' && Number.isFinite(entry.iteration) ? entry.iteration : 0,
+      content,
+      ...(typeof entry.errorCode === 'string' ? { errorCode: entry.errorCode } : {}),
+    }]
+  })
 }
 
 function formatTimestamp(iso: string): React.ReactNode {
@@ -168,6 +169,45 @@ function relativeTime(iso: string): string {
   }
 }
 
+function BeadNoteHistory({
+  title,
+  notes,
+  tone,
+}: {
+  title: string
+  notes: BeadNoteEntry[]
+  tone: 'rose' | 'amber' | 'violet'
+}) {
+  if (notes.length === 0) return null
+  const colors = {
+    rose: 'border-rose-300 dark:border-rose-700 text-rose-600 dark:text-rose-400',
+    amber: 'border-amber-300 dark:border-amber-700 text-amber-600 dark:text-amber-400',
+    violet: 'border-violet-300 dark:border-violet-700 text-violet-600 dark:text-violet-400',
+  }[tone]
+  return (
+    <div className={cn('border-l-2 pl-2', colors)}>
+      <div className="mb-1 text-[10px] font-semibold uppercase tracking-widest">{title}</div>
+      <div className="space-y-2 text-xs text-foreground">
+        {notes.map((note, index) => (
+          <div key={`${note.timestamp}-${note.iteration}-${index}`} className="rounded border border-border/50 bg-muted/50 px-2 py-1.5">
+            <div className="mb-1 flex items-center gap-2 text-[10px] text-muted-foreground/70">
+              {note.iteration > 0 ? <Badge variant="outline" className="px-1 py-0 text-[9px]">Iteration {note.iteration}</Badge> : null}
+              {note.timestamp ? (
+                <Tooltip>
+                  <TooltipTrigger asChild><span>{formatTimestamp(note.timestamp)}</span></TooltipTrigger>
+                  <TooltipContent className="max-w-xs text-center text-balance">{note.timestamp}</TooltipContent>
+                </Tooltip>
+              ) : null}
+              {note.errorCode ? <code className="font-mono">{note.errorCode}</code> : null}
+            </div>
+            <div className="whitespace-pre-wrap">{note.content}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function normalizeBead(input: {
   id: string
   title: string
@@ -185,7 +225,9 @@ function normalizeBead(input: {
   targetFiles?: string[]
   contextGuidance?: { patterns?: string[]; anti_patterns?: string[] }
   dependencies?: { blocked_by?: string[]; blocks?: string[] }
-  notes?: string | string[]
+  failedIterationNotes?: BeadNoteEntry[]
+  userRetryNotes?: BeadNoteEntry[]
+  finalizationFailureNotes?: BeadNoteEntry[]
   createdAt?: string
   updatedAt?: string | null
   completedAt?: string
@@ -230,7 +272,9 @@ function normalizeBead(input: {
     targetFiles: Array.isArray(input.targetFiles) ? input.targetFiles : [],
     contextGuidance,
     dependencies,
-    notes: normalizeNotes(input.notes),
+    failedIterationNotes: normalizeNoteEntries(input.failedIterationNotes),
+    userRetryNotes: normalizeNoteEntries(input.userRetryNotes, false),
+    finalizationFailureNotes: normalizeNoteEntries(input.finalizationFailureNotes),
     createdAt: input.createdAt ?? '',
     updatedAt: input.updatedAt ?? '',
     completedAt: input.completedAt ?? '',
@@ -264,7 +308,9 @@ function mergeBeadRuntimeOverlay(
       bead.title === runtimeBead.title
       && bead.status === runtimeBead.status
       && bead.iteration === runtimeBead.iteration
-      && bead.notes === runtimeBead.notes
+      && bead.failedIterationNotes === runtimeBead.failedIterationNotes
+      && bead.userRetryNotes === runtimeBead.userRetryNotes
+      && bead.finalizationFailureNotes === runtimeBead.finalizationFailureNotes
     ) {
       return bead
     }
@@ -274,7 +320,9 @@ function mergeBeadRuntimeOverlay(
       title: runtimeBead.title || bead.title,
       status: runtimeBead.status,
       iteration: runtimeBead.iteration,
-      notes: runtimeBead.notes,
+      failedIterationNotes: runtimeBead.failedIterationNotes,
+      userRetryNotes: runtimeBead.userRetryNotes,
+      finalizationFailureNotes: runtimeBead.finalizationFailureNotes,
     }
   })
 
@@ -309,7 +357,9 @@ async function fetchTicketBeads(ticketId: string): Promise<TicketBead[]> {
           targetFiles?: string[]
           contextGuidance?: { patterns?: string[]; anti_patterns?: string[] }
           dependencies?: { blocked_by?: string[]; blocks?: string[] }
-          notes?: string | string[]
+          failedIterationNotes?: BeadNoteEntry[]
+          userRetryNotes?: BeadNoteEntry[]
+          finalizationFailureNotes?: BeadNoteEntry[]
           createdAt?: string
           updatedAt?: string | null
           completedAt?: string
@@ -1740,36 +1790,9 @@ export function CodingView({ ticket, readOnly }: CodingViewProps) {
                   </div>
                 )}
 
-                {/* Notes */}
-                {splitRenderedNotes(viewedBead.notes).length > 0 && (
-                  <div className="border-l-2 border-rose-300 dark:border-rose-700 pl-2">
-                    <div className="text-[10px] font-semibold uppercase tracking-widest text-rose-600 dark:text-rose-400 mb-1">Notes</div>
-                    <div className="text-xs space-y-2">
-                      {splitRenderedNotes(viewedBead.notes).map((note, i) => {
-                        const headerMatch = note.match(/^\[Iteration (\d+)\s*[—–-]\s*(.+?)\]\n([\s\S]*)$/)
-                        const iterNum = headerMatch?.[1]
-                        const timestamp = headerMatch?.[2]
-                        const body = headerMatch ? headerMatch[3] : note
-                        return (
-                          <div key={i} className="bg-muted/50 rounded px-2 py-1.5 border border-border/50">
-                            {iterNum && (
-                              <div className="flex items-center gap-2 mb-1 text-[10px] text-muted-foreground/70">
-                                <Badge variant="outline" className="text-[9px] px-1 py-0">Iteration {iterNum}</Badge>
-                                {timestamp && <Tooltip>
-                                          <TooltipTrigger asChild>
-                                            <span>{formatTimestamp(timestamp)}</span>
-                                          </TooltipTrigger>
-                                          <TooltipContent className="max-w-xs text-center text-balance">{timestamp}</TooltipContent>
-                                        </Tooltip>}
-                              </div>
-                            )}
-                            <div className="whitespace-pre-wrap">{body}</div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )}
+                <BeadNoteHistory title="Failed Iteration Notes" notes={viewedBead.failedIterationNotes} tone="rose" />
+                <BeadNoteHistory title="User Retry Notes" notes={viewedBead.userRetryNotes} tone="violet" />
+                <BeadNoteHistory title="Finalization Failure Notes" notes={viewedBead.finalizationFailureNotes} tone="amber" />
               </div>
             )}
           </div>
