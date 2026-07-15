@@ -894,7 +894,7 @@ describe('TicketDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select backlog' }))
 
     await waitFor(() => {
-      expect(screen.getByText(/Ticket created but inactive; backlog item waiting for Start\./)).toBeInTheDocument()
+      expect(screen.getByText(/Ticket created but inactive; its saved title and description will seed AI context when the backlog item starts\./)).toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to live' }))
@@ -996,7 +996,7 @@ describe('TicketDashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Select backlog' }))
 
     await waitFor(() => {
-      expect(screen.queryByText(/Ticket created but inactive; backlog item waiting for Start\./)).not.toBeInTheDocument()
+      expect(screen.queryByText(/Ticket created but inactive; its saved title and description will seed AI context when the backlog item starts\./)).not.toBeInTheDocument()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Back to live' }))

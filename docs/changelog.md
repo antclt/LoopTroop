@@ -64,6 +64,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Corrected workflow Details to consistently describe ticket prompt context as the saved title and description only, keeping Manual QA Improvement provenance, evidence, priority, project data, and settings informational.
 - Fixed canonical Manual QA YAML being corrupted by model-output repairs when scalar identifiers contained colons, and preserved YAML-sensitive checklist prose such as hex-color values through safe quoting/repair.
 - Fixed recursive deletion permission errors (`EACCES`) during the `CLEANING_ENV` phase by recursively making target files and folders writable before deletion.
 - Fixed the collapsed log element lacking visual separation in ticket workspace views by adding a subtle top border (`border-t border-border/40`) to `CollapsiblePhaseLogSection` by default when there is no active resize handle, and removed the duplicate top border from the parent container in `DraftView.tsx`.

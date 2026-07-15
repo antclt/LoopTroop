@@ -23,7 +23,7 @@ import { ActiveBeadCountdown } from '../navigator/ActiveBeadCountdown'
  * by any phase’s `contextSummary` array.
  */
 const CONTEXT_KEY_LABELS: Record<WorkflowContextKey, { label: string; description: string }> = {
-  ticket_details: { label: 'Ticket Details', description: 'The ticket title, full description text, priority level, project metadata, and any user-supplied implementation notes. This is the root context that every planning phase receives.' },
+  ticket_details: { label: 'Ticket Details', description: 'The saved ticket title and full description text. This is the root user-requirement context for planning; priority, project data, settings, and structured provenance remain informational and are not included.' },
   relevant_files: { label: 'Relevant Files', description: 'Source file contents identified as relevant by the AI scan phase. Includes file paths, content excerpts, relevance ratings, and rationales explaining why each file matters to this ticket.' },
   drafts: { label: 'Competing Drafts', description: 'The set of independently generated candidate drafts from each council member. Used during voting to compare approaches side-by-side and during refinement to merge the strongest ideas from losing drafts into the winner. After drafting, Raw views show the validated draft content that downstream phases consume.' },
   interview: { label: 'Interview Results', description: 'The canonical interview artifact containing the finalized questions, user answers, skip decisions, and any follow-up rounds. This is the approved version that downstream phases treat as authoritative.' },

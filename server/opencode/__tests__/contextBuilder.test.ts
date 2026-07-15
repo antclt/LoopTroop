@@ -20,6 +20,26 @@ describe('contextBuilder interview_qa context', () => {
     expect(parts.map((part) => part.source)).toEqual(['ticket_details'])
   })
 
+  it('keeps informational ticket provenance out of future prompt context', () => {
+    const ticketState = {
+      ticketId: TEST.externalId,
+      title: 'Persist the selected filter',
+      description: 'Remember the filter after reload.',
+      manualQaOrigin: {
+        sourceTicketExternalId: 'SOURCE-99',
+        evidenceRefs: [{ originalName: 'private-evidence.png' }],
+      },
+    }
+
+    const parts = buildMinimalContext('interview_qa', ticketState)
+    const promptContext = parts.map((part) => part.content).join('\n')
+
+    expect(promptContext).toContain('Persist the selected filter')
+    expect(promptContext).toContain('Remember the filter after reload.')
+    expect(promptContext).not.toContain('SOURCE-99')
+    expect(promptContext).not.toContain('private-evidence.png')
+  })
+
   it('keeps PRD coverage focused on winner full answers and PRD only', () => {
     const parts = buildMinimalContext('prd_coverage', {
       ticketId: TEST.externalId,

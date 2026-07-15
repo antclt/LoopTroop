@@ -105,7 +105,7 @@ const WORKFLOW_PHASE_DETAILS = {
   DRAFT: {
     overview: 'The ticket exists as a backlog item only — no AI work, planning run, or execution state has started yet. Think of this as the "idea stage": the ticket is fully user-controlled and editable, giving you time to refine the title, description, priority, and project assignment before launching the automated workflow pipeline.',
     steps: [
-      'Ticket Creation: When you create a ticket, LoopTroop stores the title, description, priority, project association, and any implementation notes you provide. This metadata becomes the seed context that every downstream AI phase will reference.',
+      'Ticket Creation: When you create a ticket, LoopTroop stores the title and description as the seed context for downstream AI phases. Priority, project association, settings, and structured origin/provenance remain operational or informational metadata and are not added to Ticket Details prompt context.',
       'Council Configuration Lock: Behind the scenes, LoopTroop has already assigned a main implementer model and a set of council member models based on your project configuration. These assignments are locked at start time, not at creation — so changing project settings before starting will affect which models participate.',
       'Editable Window: While in Draft, you can freely change any ticket field. Once you press Start, the title and description become the authoritative "Ticket Details" context artifact that the scanning phase reads. Edits after Start require navigating back and may trigger cascade warnings.',
       'No AI Activity: No relevant-files scan, interview artifact, PRD, beads plan, or runtime worktree activity is performed in this state. The ticket directory in the workspace may not even exist yet until Start is triggered.',
@@ -123,7 +123,7 @@ const WORKFLOW_PHASE_DETAILS = {
     notes: [
       'This is the only phase where the ticket is intentionally inactive — no background processing occurs.',
       'No AI-owned files or workspace directories are expected to exist yet.',
-      'Context available: Ticket Details only (title, description, priority, project, implementation notes).',
+      'Context available: Ticket Details only (the saved title and description). Priority, project data, settings, and origin/provenance metadata are excluded.',
       'Tip: Take your time here to write a clear, detailed description. The quality of your ticket description directly impacts how well the AI understands your intent throughout all subsequent phases.',
     ],
   },
@@ -156,7 +156,7 @@ const WORKFLOW_PHASE_DETAILS = {
   COUNCIL_DELIBERATING: {
     overview: 'The interview council creates competing interview/question drafts so the system can compare multiple approaches before asking you anything. This is the first multi-model phase in the workflow — each configured council member works independently and in parallel, producing their own interview strategy without seeing what the others are doing. The diversity of approaches is intentional: it ensures the final interview covers angles that any single model might miss.',
     steps: [
-      'Context Loading: LoopTroop loads the ticket details (title, description, priority, implementation notes) and the relevant-files artifact (file paths, excerpts, rationales) as the shared prompt context that every council member receives identically.',
+      'Context Loading: LoopTroop loads the ticket details (saved title and description only) and the relevant-files artifact (file paths, excerpts, rationales) as the shared prompt context that every council member receives identically.',
       'Parallel Draft Generation: Each configured council model receives the same context but drafts its own interview approach independently. Models are not allowed to see or influence each other\'s outputs — this independence is key to producing genuinely diverse interview strategies.',
       'Draft Content: Each draft typically includes a set of interview questions, their types (free-text, choice-based), ordering rationale, and a strategy explanation for why these particular questions would best clarify the implementation intent.',
       'Progress Tracking: LoopTroop tracks per-model progress in real time, streaming model logs to the UI so you can see how each council member is progressing. It also monitors quorum — the minimum number of successful drafts needed to proceed.',
@@ -1192,7 +1192,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'DRAFT',
     label: 'Backlog',
-    description: 'Ticket created but inactive; backlog item waiting for Start.',
+    description: 'Ticket created but inactive; its saved title and description will seed AI context when the backlog item starts.',
     details: WORKFLOW_PHASE_DETAILS.DRAFT,
     kanbanPhase: 'todo',
     groupId: 'todo',
