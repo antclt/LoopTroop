@@ -9,6 +9,8 @@ import { useTicketPhaseAttempts } from '@/hooks/useTicketPhaseAttempts'
 
 import type { Ticket } from '@/hooks/useTickets'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { TicketDescriptionTabs, type TicketDescriptionMode } from '@/components/ticket/TicketDescriptionTabs'
+import { TicketDescriptionViewer } from '@/components/ticket/TicketDescriptionViewer'
 
 const PRIORITY_LABELS: Record<number, string> = { 1: 'Very High', 2: 'High', 3: 'Normal', 4: 'Low', 5: 'Very Low' }
 
@@ -24,6 +26,7 @@ export function PhaseReviewView({ phase, ticket }: PhaseReviewViewProps) {
   )
   const councilMemberCount = councilMemberNames.length || 3
   const isDraft = phase === 'DRAFT'
+  const [descriptionMode, setDescriptionMode] = useState<TicketDescriptionMode>('markdown')
   const { data: attempts = [] } = useTicketPhaseAttempts(ticket.id, phase)
   const [manualSelectedAttemptNumber, setManualSelectedAttemptNumber] = useState<number | null>(null)
   const selectedAttemptNumber = useMemo(() => {
@@ -94,9 +97,18 @@ export function PhaseReviewView({ phase, ticket }: PhaseReviewViewProps) {
                               </Tooltip>
               </div>
               {ticket.description && (
-                <div className="rounded-md border border-border p-3 max-h-[300px] overflow-y-auto">
-                  <h4 className="text-xs font-medium mb-1">Description</h4>
-                  <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{ticket.description}</p>
+                <div className="rounded-md border border-border p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-medium">Description</h4>
+                    <TicketDescriptionTabs mode={descriptionMode} onModeChange={setDescriptionMode} />
+                  </div>
+                  <div className="mt-2 max-h-[300px] overflow-y-auto">
+                    {descriptionMode === 'markdown' ? (
+                      <TicketDescriptionViewer description={ticket.description} className="text-xs" />
+                    ) : (
+                      <p className="text-xs text-muted-foreground whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{ticket.description}</p>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

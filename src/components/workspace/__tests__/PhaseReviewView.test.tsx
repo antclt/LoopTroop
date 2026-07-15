@@ -1,6 +1,6 @@
 import { beforeAll, afterEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode, Ref } from 'react'
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { LogProvider } from '@/context/LogContext'
 import { LOG_STORAGE_PREFIX, serverLogCache, type LogEntry } from '@/context/logUtils'
 import { makeTicket } from '@/test/factories'
@@ -145,5 +145,37 @@ describe('PhaseReviewView', () => {
     await waitFor(() => {
       expect(screen.getByText(/No log entries yet\. Logs will stream here during execution\./i)).toBeInTheDocument()
     })
+  })
+
+  it('allows toggling description between markdown (default) and raw views when in backlog', async () => {
+    const ticket = makeTicket({
+      status: 'SCANNING_RELEVANT_FILES',
+      description: 'Add a planning gate before the interview starts.',
+    })
+
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url.startsWith(`/api/files/${ticket.id}/logs`)) {
+        return createJsonResponse([])
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    renderWithProviders(
+      <LogProvider ticketId={ticket.id} currentStatus={ticket.status}>
+        <PhaseReviewView phase="DRAFT" ticket={ticket} />
+      </LogProvider>,
+    )
+
+    // Markdown view (default)
+    expect(screen.getByRole('tab', { name: /Markdown/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Raw/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /Markdown/i })).toHaveAttribute('aria-selected', 'true')
+
+    // Click Raw
+    const rawTab = screen.getByRole('tab', { name: /Raw/i })
+    fireEvent.click(rawTab)
+    expect(screen.getByRole('tab', { name: /Raw/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: /Markdown/i })).toHaveAttribute('aria-selected', 'false')
   })
 })

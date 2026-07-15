@@ -164,11 +164,13 @@ export function DraftView({ ticket }: DraftViewProps) {
   const handleCancelDescriptionEdit = () => {
     setDescriptionDraft(savedDescription)
     setDescriptionError(null)
+    setDescriptionMode('markdown')
     setIsEditingDescription(false)
   }
 
   const handleSaveDescription = async () => {
     if (!hasDescriptionChanges) {
+      setDescriptionMode('markdown')
       setIsEditingDescription(false)
       return
     }
@@ -181,6 +183,7 @@ export function DraftView({ ticket }: DraftViewProps) {
       })
       setDescriptionDraft(updated.description ?? descriptionDraft)
       setShouldSkipNextSync(true)
+      setDescriptionMode('markdown')
       setIsEditingDescription(false)
     } catch (error) {
       setDescriptionError(error instanceof Error ? error.message : 'Failed to save description.')
