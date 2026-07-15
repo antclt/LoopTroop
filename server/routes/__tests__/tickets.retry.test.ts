@@ -51,8 +51,17 @@ vi.mock('../../workflow/phases/beadsPhase', async (importOriginal) => {
   }
 })
 
+vi.mock('../../workflow/phases/executionPhase', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../workflow/phases/executionPhase')>()
+  return {
+    ...actual,
+    recoverSuccessfulExecutionCheckpointForFinalization: vi.fn(() => null),
+  }
+})
+
 import { sendTicketEvent } from '../../machines/persistence'
 import { recoverCodingBeadWithReset } from '../../workflow/phases/beadsPhase'
+import { recoverSuccessfulExecutionCheckpointForFinalization } from '../../workflow/phases/executionPhase'
 import { ticketRouter } from '../tickets'
 
 const repoManager = createFixtureRepoManager({
@@ -267,6 +276,7 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
     const response = await app.request(`/api/tickets/${ticket.id}/retry`, { method: 'POST' })
 
     expect(response.status).toBe(200)
+    expect(recoverSuccessfulExecutionCheckpointForFinalization).toHaveBeenCalledWith(ticket.id)
     expect(recoverCodingBeadWithReset).toHaveBeenCalledWith(ticket.id, expect.objectContaining({ requireReset: true }))
     expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
     expect(listPhaseAttempts(ticket.id, 'CODING')).toHaveLength(1)
@@ -275,5 +285,141 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
       state: 'active',
       archivedReason: null,
     })
+  })
+
+  it('passes a verbatim user note into CODING recovery before retrying', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'CODING' } }),
+      errorMessage: 'Bead failed',
+    })
+    const note = 'Try the smaller fix.\n  Keep this indentation.  '
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(recoverSuccessfulExecutionCheckpointForFinalization).not.toHaveBeenCalled()
+    expect(recoverCodingBeadWithReset).toHaveBeenCalledWith(ticket.id, expect.objectContaining({
+      requireReset: true,
+      userRetryNote: note,
+    }))
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
+  })
+
+  it.each([
+    { note: '   \n\t', expectedError: 'Retry note must contain non-whitespace text' },
+    { note: 'x'.repeat(20_001), expectedError: 'Retry note must be 20,000 characters or fewer' },
+  ])('rejects an invalid user retry note without recovering or resuming', async ({ note, expectedError }) => {
+    const { app, ticket } = setupRetryTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'CODING' } }),
+      errorMessage: 'Bead failed',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ error: expectedError })
+    expect(recoverCodingBeadWithReset).not.toHaveBeenCalled()
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+  })
+
+  it('rejects malformed JSON instead of treating it as a note-free retry', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'CODING' } }),
+      errorMessage: 'Bead failed',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"note":',
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toMatchObject({ error: 'Retry request body must be valid JSON' })
+    expect(recoverSuccessfulExecutionCheckpointForFinalization).not.toHaveBeenCalled()
+    expect(recoverCodingBeadWithReset).not.toHaveBeenCalled()
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+  })
+
+  it('rejects retry notes outside CODING without archiving or resuming the phase', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    ensureActivePhaseAttempt(ticket.id, 'REFINING_PRD')
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'REFINING_PRD' } }),
+      errorMessage: 'PRD refinement failed',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'This note is not valid here.' }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toMatchObject({
+      error: 'Retry notes are only available for errors blocked during implementation',
+    })
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+    expect(listPhaseAttempts(ticket.id, 'REFINING_PRD')).toHaveLength(1)
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+  })
+
+  it('does not resume when CODING recovery fails before a user note can be persisted', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'CODING' } }),
+      errorMessage: 'Bead failed',
+    })
+    vi.mocked(recoverCodingBeadWithReset).mockImplementationOnce(() => {
+      throw new Error('unsafe reset')
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Do not persist this.' }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+  })
+
+  it('does not resume when no failed or paused CODING bead can be identified', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'CODING' } }),
+      errorMessage: 'Coding stopped without an identifiable bead',
+    })
+    vi.mocked(recoverCodingBeadWithReset).mockReturnValueOnce(null)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Do not persist this.' }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+    expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
   })
 })

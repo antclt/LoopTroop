@@ -86,7 +86,7 @@ ticketState:
 | `beads` | The current expanded bead plan or semantic implementation blueprint, depending on phase. |
 | `beads_draft` | The refined semantic blueprint before it is expanded into execution-ready beads. |
 | `bead_data` | The one active bead contract: description, acceptance criteria, file targets, dependencies, and test intent. |
-| `bead_notes` | Accumulated retry notes for the active bead. These are compact failure/progress notes, not the previous transcript. |
+| `bead_notes` | Accumulated retry notes and optional user guidance for the active bead. These are compact failure/progress/steering notes, not the previous transcript. |
 | `execution_setup_profile` | Reusable setup/tooling profile from earlier runtime preparation. |
 | `execution_setup_plan` | The approved or current workspace setup plan. |
 | `execution_setup_plan_notes` | Notes from setup-plan regeneration before approval. |
@@ -238,7 +238,7 @@ The table below describes what the model receives during each status. "No model 
 | `PRE_FLIGHT_CHECK` | No planning context is sent. The status performs deterministic readiness checks and a minimal connectivity probe rather than asking a model to reason over ticket artifacts. |
 | `WAITING_EXECUTION_SETUP_APPROVAL` | Setup-plan generation receives `ticket_details`, `relevant_files`, `prd`, `beads`, optional `execution_setup_profile`, and `execution_setup_plan_notes`. Regeneration receives the same context plus the current `execution_setup_plan` and the user's regeneration note. Once the plan is ready, no model prompt runs while approval is pending. |
 | `PREPARING_EXECUTION_ENV` | `ticket_details`, `beads`, `execution_setup_plan`, `execution_setup_notes`. Setup retries get compact setup notes, not a replay of earlier setup sessions. |
-| `CODING` | `bead_data`, `bead_notes`. The model receives only the active bead and compact notes from previous failed attempts. It does not receive the full PRD, interview, full bead list, or earlier coding transcript inline. The prompt points to `.ticket/runtime/execution-setup-profile.json` for optional setup/tooling lookup when needed. |
+| `CODING` | `bead_data`, `bead_notes`. The model receives only the active bead plus compact notes from previous failed attempts and any user guidance appended through Retry with extra note. It does not receive the full PRD, interview, full bead list, or earlier coding transcript inline. The prompt points to `.ticket/runtime/execution-setup-profile.json` for optional setup/tooling lookup when needed. |
 | `RUNNING_FINAL_TEST` | `ticket_details`, `prd`, `beads`, `final_test_notes`. The final-test retry-note generator uses `ticket_details` plus `error_context` to summarize a failed attempt; the next final-test prompt receives that summary as `final_test_notes`. |
 | `INTEGRATING_CHANGES` | No normal model prompt. Integration is deterministic git/file handling using stored artifacts and the worktree state. |
 | `CREATING_PULL_REQUEST` | PR drafting receives `ticket_details` and `prd`. The pull-request phase appends narrow reports, diffs, candidate-file audit details, or final-test material as task-specific sections instead of broadening the reusable context allowlist. |
@@ -246,7 +246,7 @@ The table below describes what the model receives during each status. "No model 
 | `CLEANING_ENV` | No model prompt. Cleanup is deterministic runtime-state cleanup with preserved artifacts. |
 | `COMPLETED` | No model prompt. The ticket is terminal and artifacts remain available for review. |
 | `CANCELED` | No model prompt. The ticket is terminal; partial artifacts may remain available. |
-| `BLOCKED_ERROR` | No model prompt while blocked. `retry` re-enters the saved `previousStatus` and uses that status's normal context contract. Eligible `continue` sends exactly `continue please` into the preserved OpenCode session instead of rebuilding or appending a new broad prompt. CODING context-wipe prompts use only `bead_data` and `error_context`. |
+| `BLOCKED_ERROR` | No model prompt while blocked. `retry` re-enters the saved `previousStatus` and uses that status's normal context contract. For a live CODING block, Retry with extra note appends the user's guidance to `bead_notes` before starting the fresh attempt. Eligible `continue` sends exactly `continue please` into the preserved OpenCode session instead of rebuilding or appending a new broad prompt. CODING context-wipe prompts use only `bead_data` and `error_context`. |
 
 ## 8. Retry Behavior
 
@@ -254,7 +254,7 @@ Retries are where context engineering matters most.
 
 Structured-output retries do not turn into long conversations. They keep the same base context and append only the validation error, the failed raw response when useful, and a stricter instruction to return the corrected artifact. Accepted artifacts are stored durably; malformed bodies stay in Raw diagnostics instead of becoming future canonical context.
 
-Execution retries are even narrower. A failed bead produces a context-wipe note from `bead_data` and `error_context`. The next coding attempt starts fresh from `bead_data` and accumulated `bead_notes`, after the worktree is reset to the bead start commit when possible.
+Execution retries are even narrower. A failed bead produces a context-wipe note from `bead_data` and `error_context`. From a live implementation block, the user may also append a timestamped Retry with extra note entry without replacing prior notes. The next coding attempt starts fresh from `bead_data` and accumulated `bead_notes`, after the worktree is safely reset to the bead start commit.
 
 Provider/session continuation is intentionally different from retry. When a provider stall is continuable and the exact OpenCode session is still preserved, LoopTroop sends only `continue please` into that session. It does not splice a new transcript, regenerate the prompt, or attach unrelated artifacts.
 

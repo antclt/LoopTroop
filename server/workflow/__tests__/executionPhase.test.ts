@@ -2,8 +2,13 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bead } from '../../phases/beads/types'
 import { makeTicketContextFromTicket } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
-import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
-import { readTicketBeads, recoverFailedCodingBead, writeTicketBeads } from '../phases/beadsPhase'
+import { getLatestPhaseArtifact, getTicketByRef, upsertLatestPhaseArtifact } from '../../storage/tickets'
+import {
+  readTicketBeads,
+  recoverCodingBeadWithReset,
+  recoverFailedCodingBead,
+  writeTicketBeads,
+} from '../phases/beadsPhase'
 import { phaseIntermediate } from '../phases/state'
 import { BEAD_RETRY_BUDGET_EXHAUSTED, OPENCODE_PROVIDER_ERROR } from '../../../shared/errorCodes'
 import {
@@ -1101,6 +1106,64 @@ describe('handleCoding', () => {
     expect(recoveredBead?.iteration).toBe(2)
     expect(recoveredBead?.notes).toBe('retry guidance')
     expect(recoveredBead?.beadStartCommit).toBe('abc123')
+  })
+
+  it('appends a verbatim user retry note to the exact recovered bead', () => {
+    const { ticket, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Retry failed coding bead with user guidance',
+    })
+    writeTicketBeads(ticket.id, [
+      makePendingBead('bead-1', 1, {
+        status: 'error',
+        iteration: 2,
+        notes: 'Existing iteration note',
+        beadStartCommit: 'abc123',
+      }),
+      makePendingBead('bead-2', 2, {
+        status: 'pending',
+        notes: 'Unrelated bead note',
+      }),
+    ])
+
+    const userRetryNote = 'Keep this line exactly.\n  Preserve this indentation.  '
+    const recoveredBead = recoverCodingBeadWithReset(ticket.id, {
+      worktreePath: paths.worktreePath,
+      requireReset: true,
+      userRetryNote,
+    })
+
+    expect(recoveredBead?.id).toBe('bead-1')
+    expect(recoveredBead?.status).toBe('pending')
+    expect(recoveredBead?.notes).toMatch(
+      /^Existing iteration note\n\n---\n\n\[User retry note — \d{4}-\d{2}-\d{2}T.*Z\]\nKeep this line exactly\.\n {2}Preserve this indentation\. {2}$/,
+    )
+    expect(readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-2')?.notes)
+      .toBe('Unrelated bead note')
+    expect(getTicketByRef(ticket.id)?.runtime.beads?.find((bead) => bead.id === 'bead-1')?.notes)
+      .toBe(recoveredBead?.notes)
+  })
+
+  it('does not mutate bead state or notes when the required reset fails', () => {
+    const { ticket, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Unsafe retry reset',
+    })
+    const originalBead = makePendingBead('bead-1', 1, {
+      status: 'error',
+      notes: 'Existing note only',
+      beadStartCommit: 'abc123',
+    })
+    writeTicketBeads(ticket.id, [originalBead])
+    resetToBeadStartMock.mockImplementationOnce(() => {
+      throw new Error('reset failed')
+    })
+
+    expect(() => recoverCodingBeadWithReset(ticket.id, {
+      worktreePath: paths.worktreePath,
+      requireReset: true,
+      userRetryNote: 'This must not be appended',
+    })).toThrow('reset failed')
+
+    expect(readTicketBeads(ticket.id)).toEqual([originalBead])
   })
 
   it('requeues the latest in-progress bead when coding blocked before status flipped to error', () => {

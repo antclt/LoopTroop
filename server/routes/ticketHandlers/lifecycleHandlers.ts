@@ -55,7 +55,7 @@ import {
   rejectDisplayOnlyMockTicket,
   respondWithState,
 } from './routeUtils'
-import { cancelTicketSchema } from './schemas'
+import { cancelTicketSchema, retryTicketSchema } from './schemas'
 import type { PublicTicket } from '../../storage/tickets'
 
 function rollbackTicketStartToDraft(ticketId: string): void {
@@ -494,7 +494,7 @@ export function handleVerifyTicket(c: Context) {
   return handleMergeTicket(c)
 }
 
-export function handleRetryTicket(c: Context) {
+export async function handleRetryTicket(c: Context) {
   const ticketId = getTicketParam(c)
   const ticket = getTicketByRef(ticketId)
   if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
@@ -505,6 +505,22 @@ export function handleRetryTicket(c: Context) {
   }
   if (!ticket.previousStatus) {
     return c.json({ error: 'Retry is not available because the failed status could not be recovered' }, 409)
+  }
+
+  let body: unknown = {}
+  try {
+    const rawBody = await c.req.text()
+    body = rawBody.length === 0 ? {} : JSON.parse(rawBody)
+  } catch {
+    return c.json({ error: 'Retry request body must be valid JSON' }, 400)
+  }
+  const parsedBody = retryTicketSchema.safeParse(body)
+  if (!parsedBody.success) {
+    return c.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid retry request' }, 400)
+  }
+  const userRetryNote = parsedBody.data.note
+  if (userRetryNote !== undefined && ticket.previousStatus !== 'CODING') {
+    return c.json({ error: 'Retry notes are only available for errors blocked during implementation' }, 409)
   }
 
   if (isExecutionBandStatus(ticket.previousStatus)) {
@@ -520,10 +536,13 @@ export function handleRetryTicket(c: Context) {
       return c.json({ error: 'Retry is not available because the ticket workspace could not be resolved' }, 409)
     }
     try {
-      const recoveredBead = recoverSuccessfulExecutionCheckpointForFinalization(ticketId)
+      const recoveredBead = (userRetryNote === undefined
+        ? recoverSuccessfulExecutionCheckpointForFinalization(ticketId)
+        : null)
         ?? recoverCodingBeadWithReset(ticketId, {
           worktreePath: paths.worktreePath,
           requireReset: true,
+          userRetryNote,
         })
       if (!recoveredBead) {
         return c.json({ error: 'Retry is not available because no failed bead could be restored' }, 409)

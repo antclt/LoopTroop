@@ -1,8 +1,15 @@
 import { useState } from 'react'
-import { AlertTriangle, CirclePlay, Clock3, FilePlus2, Info, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, CirclePlay, Clock3, FilePlus2, Info, MessageSquarePlus, RotateCcw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { useTicketAction } from '@/hooks/useTickets'
 import { useLogs } from '@/context/useLogContext'
 import type { LogEntry } from '@/context/LogContext'
@@ -24,6 +31,8 @@ import {
 } from '@shared/finalTestFileEffects'
 import type { WorkflowAction } from '@shared/workflowMeta'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
+const MAX_RETRY_NOTE_LENGTH = 20_000
 
 interface ErrorViewProps {
   ticket: Ticket
@@ -127,6 +136,10 @@ function normalizeErrorText(value: string): string {
 export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewProps) {
   const { mutate: performAction, isPending } = useTicketAction()
   const [actionError, setActionError] = useState<string | null>(null)
+  const [retryNoteDialogOpen, setRetryNoteDialogOpen] = useState(false)
+  const [retryNote, setRetryNote] = useState('')
+  const [retryNoteError, setRetryNoteError] = useState<string | null>(null)
+  const [retryNoteSubmitting, setRetryNoteSubmitting] = useState(false)
   const logCtx = useLogs()
   const failedBead = ticket.runtime.lastFailedBeadId
     ? ticket.runtime.beads?.find((bead) => bead.id === ticket.runtime.lastFailedBeadId) ?? null
@@ -181,6 +194,9 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && Boolean(visibleOccurrence)
     && visibleOccurrence?.resolvedAt === null
   const canContinue = isLiveError && ticket.availableActions.includes('continue')
+  const canRetryWithNote = isLiveError
+    && visibleOccurrence?.blockedFromStatus === 'CODING'
+    && ticket.availableActions.includes('retry')
   const canIncludeFinalTestFiles = isLiveError && ticket.availableActions.includes(FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION)
   const canDiscardFinalTestFiles = isLiveError && ticket.availableActions.includes(FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION)
   const pausedCodingBead = isLiveError
@@ -208,6 +224,32 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
       {
         onError: (error: unknown) => {
           setActionError(error instanceof Error ? error.message : `Failed to ${action} ticket`)
+        },
+      },
+    )
+  }
+  const retryNoteIsBlank = retryNote.trim().length === 0
+  const isRetryNotePending = isPending || retryNoteSubmitting
+  const handleRetryWithNote = () => {
+    if (retryNoteIsBlank) {
+      setRetryNoteError('Enter an extra note before retrying.')
+      return
+    }
+
+    setRetryNoteError(null)
+    setRetryNoteSubmitting(true)
+    performAction(
+      { id: ticket.id, action: 'retry', note: retryNote },
+      {
+        onSuccess: () => {
+          setRetryNoteSubmitting(false)
+          setRetryNoteDialogOpen(false)
+          setRetryNote('')
+          setRetryNoteError(null)
+        },
+        onError: (error: unknown) => {
+          setRetryNoteSubmitting(false)
+          setRetryNoteError(error instanceof Error ? error.message : 'Failed to add note and retry ticket')
         },
       },
     )
@@ -399,6 +441,21 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                       </TooltipContent>
                     </Tooltip>
                   )}
+                  {canRetryWithNote && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRetryNoteError(null)
+                        setRetryNoteDialogOpen(true)
+                      }}
+                      disabled={isPending}
+                      className="h-7 text-xs"
+                    >
+                      <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
+                      Retry with extra note
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     onClick={() => handleAction('retry')}
@@ -431,6 +488,77 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
         defaultExpanded={false}
         className="px-4 pb-4"
       />
+
+      <Dialog
+        open={retryNoteDialogOpen}
+        onOpenChange={(open) => {
+          if (!isRetryNotePending) setRetryNoteDialogOpen(open)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Retry implementation with an extra note</DialogTitle>
+            <DialogDescription id="retry-note-description">
+              Add guidance for the next fresh implementation attempt. The note will be appended to the bead&apos;s existing notes; nothing already there will be replaced.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault()
+              handleRetryWithNote()
+            }}
+          >
+            <div className="space-y-1.5">
+              <label htmlFor="retry-note" className="text-sm font-medium">
+                Extra note <span className="text-destructive">*</span>
+              </label>
+              <textarea
+                id="retry-note"
+                value={retryNote}
+                onChange={(event) => {
+                  setRetryNote(event.target.value.slice(0, MAX_RETRY_NOTE_LENGTH))
+                }}
+                maxLength={MAX_RETRY_NOTE_LENGTH}
+                required
+                disabled={isRetryNotePending}
+                aria-describedby={`retry-note-description retry-note-count${retryNoteError ? ' retry-note-error' : ''}`}
+                aria-invalid={Boolean(retryNoteError || (retryNote.length > 0 && retryNoteIsBlank))}
+                className="min-h-36 w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                placeholder="Add context, constraints, or a different approach for the next attempt..."
+              />
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  {retryNote.length > 0 && retryNoteIsBlank && !retryNoteError && (
+                    <p role="alert" className="text-xs text-destructive">Enter an extra note before retrying.</p>
+                  )}
+                  {retryNoteError && (
+                    <p id="retry-note-error" role="alert" className="text-xs text-destructive">
+                      {retryNoteError}
+                    </p>
+                  )}
+                </div>
+                <p id="retry-note-count" className="shrink-0 text-xs text-muted-foreground">
+                  {retryNote.length.toLocaleString()} / {MAX_RETRY_NOTE_LENGTH.toLocaleString()} characters
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setRetryNoteDialogOpen(false)}
+                disabled={isRetryNotePending}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isRetryNotePending || retryNoteIsBlank}>
+                Add note and retry
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

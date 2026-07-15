@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   getTicketAutoRefreshInterval,
   getTicketsAutoRefreshInterval,
+  ticketAction,
 } from '../useTickets'
 
 describe('useTickets auto-refresh helpers', () => {
@@ -18,5 +19,37 @@ describe('useTickets auto-refresh helpers', () => {
     expect(getTicketsAutoRefreshInterval([{ status: 'COMPLETED' }] as Array<{ status: string }>)).toBe(false)
     expect(getTicketsAutoRefreshInterval([{ status: 'CODING' }, { status: 'CANCELED' }] as Array<{ status: string }>)).toBe(10000)
     expect(getTicketsAutoRefreshInterval(undefined)).toBe(false)
+  })
+})
+
+describe('useTicketAction', () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('posts the exact note as JSON for an extra-note retry', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      message: 'Retry started',
+      ticketId: 'ticket-1',
+      state: 'CODING',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    const note = '  Keep the existing work.\nTry the focused fix next.  '
+
+    await ticketAction('ticket-1', 'retry', note)
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/tickets/ticket-1/retry', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    })
+  })
+
+  it('keeps an ordinary retry request body-free', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      message: 'Retry started',
+      ticketId: 'ticket-1',
+      state: 'CODING',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    await ticketAction('ticket-1', 'retry')
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/tickets/ticket-1/retry', { method: 'POST' })
   })
 })

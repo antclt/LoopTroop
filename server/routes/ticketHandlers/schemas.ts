@@ -20,6 +20,13 @@ export const cancelTicketSchema = z.object({
   deleteLog: z.boolean().default(false),
 })
 
+export const retryTicketSchema = z.object({
+  note: z.string()
+    .max(20_000, 'Retry note must be 20,000 characters or fewer')
+    .refine((note) => note.trim().length > 0, 'Retry note must contain non-whitespace text')
+    .optional(),
+}).strict()
+
 export const uiStateScopeSchema = z.object({
   scope: z.string().min(1).max(80).regex(/^[a-zA-Z0-9:_-]+$/),
 })

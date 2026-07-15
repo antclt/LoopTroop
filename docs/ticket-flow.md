@@ -273,7 +273,7 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`PREPARING_EXECUTION_ENV`:** Runs only the approved temporary setup, verifies wrappers/probes, may perform setup-scoped online lookup, and emits the reusable execution-setup profile under `.ticket/runtime/execution-setup/**`.
 
 ### Implementation (Coding)
-- **`CODING`:** The executor processes one bead at a time in dependency order. The agent gets narrow contexts and structured completion reminders. Uncommitted project changes are captured in local bead commits, while retries reset the active bead/checkpoint rather than creating a new phase attempt.
+- **`CODING`:** The executor processes one bead at a time in dependency order. The agent gets narrow contexts and structured completion reminders. Uncommitted project changes are captured in local bead commits, while retries reset the active bead/checkpoint rather than creating a new phase attempt. From a live implementation block, **Retry with extra note** performs the same safe bead recovery and appends the user's guidance to the existing bead notes for the next fresh attempt.
 
 ### Post-Implementation & Delivery
 - **`RUNNING_FINAL_TEST`:** The implementer constructs a whole-ticket test plan, executes it with the approved runtime profile, and records a final-test file-effects audit alongside the test outputs.
@@ -285,7 +285,7 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`CLEANING_ENV`:** Deletes transient lockfiles, wrapper hooks, and session directories, preserving planning files and audit trails.
 
 ### Error & Terminal States
-- **`BLOCKED_ERROR`:** Recovery gate that preserves `previousStatus`, structured diagnostics, and any continuation candidate. Depending on the failure, the user can retry, continue a preserved OpenCode session, resolve final-test file-effects, or cancel.
+- **`BLOCKED_ERROR`:** Recovery gate that preserves `previousStatus`, structured diagnostics, and any continuation candidate. Depending on the failure, the user can retry, retry an implementation bead with an extra note, continue a preserved OpenCode session, resolve final-test file-effects, or cancel.
 - **`COMPLETED`:** Terminal success state after cleanup finishes and execution locks are released. Ticket artifacts, logs, and archived attempts remain available for audit.
 - **`CANCELED`:** Terminal stop state for user-driven cancellation or intentional planning rewinds. Existing artifacts/history remain, but no further automation continues.
 
@@ -303,7 +303,7 @@ The state machine metadata directly drives the React user interface. Developers 
 | `WAITING_EXECUTION_SETUP_APPROVAL` / `PREPARING_EXECUTION_ENV` | edit, regenerate, approve/rewind | Setup-plan saves or regenerations during runtime setup stop the active setup session, archive the current setup/runtime attempts, preserve the tool cache, and require approval again. |
 | `WAITING_PR_REVIEW` | `merge`, `close_unmerged`, `cancel` | Review resolution decides whether the ticket exits with a merged PR or a closed unmerged branch. |
 | `WAITING_MANUAL_QA` | autosave, evidence upload/remove, submit, skip, include/discard drift, `cancel` | There is no manual Save action. Every mutation uses an action id, expected checklist hash, and expected draft revision. Skip bypasses normal result/group validation, snapshots all entered data read-only, and creates no drafted improvement/fix work. |
-| `BLOCKED_ERROR` | `retry`, optional `continue`, optional file-effects overrides, `cancel` | `continue` appears only when a preserved OpenCode session is still live. `include-final-test-files` / `discard-final-test-files` appear only for `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED`. |
+| `BLOCKED_ERROR` | `retry`, optional retry with extra note, optional `continue`, optional file-effects overrides, `cancel` | Retry with extra note appears only for the live error whose `previousStatus` is `CODING`. `continue` appears only when a preserved OpenCode session is still live. `include-final-test-files` / `discard-final-test-files` appear only for `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED`. |
 | Any other non-terminal status | `cancel` | Cancellation is not limited to gates; the route accepts it from every non-terminal workflow state. |
 | `PREPARING_EXECUTION_ENV` / `CODING` | reply/reject OpenCode questions | OpenCode can request human input mid-session without changing the main ticket status; answering or rejecting the request unblocks that live session in place. |
 
@@ -323,6 +323,7 @@ When a phase encounters a fatal block, it routes to `BLOCKED_ERROR` while storin
 - Archives the active phase attempt and initializes a fresh run.
 - **Planning Phases:** Manual retries create a new version of the draft spec or blueprint in the UI.
 - **`CODING` Exception:** `CODING` does not create new phase attempts. It runs a bead-scoped recovery loop: resets the active bead's worktree back to its recorded `beadStartCommit` snapshot and schedules it again.
+- **Optional user guidance:** From a live implementation block, **Retry with extra note** requires a non-blank note of at most 20,000 characters. LoopTroop first proves that the same failed or paused bead can be safely reset, then appends a `User retry note` entry with an ISO timestamp and the user's text unchanged. Existing notes remain intact and are separated with the normal `---` divider. If recovery fails, no note is written and the ticket stays blocked.
 
 ### The Continue Path (`CONTINUE`)
 - Resumes an in-progress session without resetting or creating new attempts.

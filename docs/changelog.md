@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Added optional user guidance when retrying a blocked implementation bead, so the next fresh attempt can act on extra context without replacing existing notes.
 - Bolded the live voting-result tally details in the council card description while voting is in progress.
 - Changed ticket description to render as pretty Markdown by default (with a toggle to Raw text) when revisiting the Backlog phase on a started ticket.
 - Added manual height adjustment to the expanded Manual QA log panel, allowing the drawer to be resized up or down.
@@ -33,6 +34,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added **Retry with extra note** to live implementation errors, with a required multiline note that is appended to the recoverable bead's existing context before the next fresh attempt.
 - Added reasoned **Not applicable to Manual QA** PRD coverage, P1–P5 and Manual QA settings for Improvement tickets, and strict repository-aware `<MANUAL_QA_FIX_BEADS>` generation persisted before child creation.
 - Added cleanup warning messages display in a `<Tooltip>` on hover over the Cleanup status badge in the Ticket Details dialog.
 - Added `errors` array property to the cleanup payload in backend database queries and frontend ticket normalization.
@@ -48,6 +50,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Extended implementation retry recovery and `POST /api/tickets/:id/retry` with optional user guidance, CODING-only validation, safe reset-before-append ordering, and append-only timestamped bead notes.
 - Bolded the live voting-result tally details (e.g. `2/4 complete · Leading: <model> · <pts>`) in the Council card description line.
 - Updated the description display when revisiting the Backlog (Draft) phase on a started ticket to show the pretty Markdown view by default with a tab toggle to view raw text.
 - Updated description edit actions in the draft workspace to automatically restore the pretty Markdown view once changes are saved or canceled.
@@ -92,6 +95,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
+- Documented the Retry with extra note workflow, validation, context contract, and API behavior across the Implementing and Blocked Error status details and focused execution guides.
 - Updated Manual QA status Details and reference guides for version-free titles, structured history, activity/log/artifact presentation, four-state PRD coverage, configurable Improvements, and failure-safe AI-planned QA beads. Existing testing tickets/artifacts are intentionally not migrated.
 - Updated the Manual QA status details and reference guides for Pending-first results, optional waiver reasons, collapsed disclosures, inline Improvements, evidence controls, merge-group validation, autosave status, and lossless Skip semantics.
 - Documented Manual QA configuration/inheritance, strict checklist/result contracts, Submit-versus-Skip artifact semantics, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, context-rich Improvements, self-contained QA origins, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.

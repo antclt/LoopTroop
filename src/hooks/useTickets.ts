@@ -275,8 +275,24 @@ function getTicketActionPath(id: string, action: WorkflowAction): string {
   }
 }
 
-async function ticketAction(id: string, action: WorkflowAction): Promise<TicketActionResponse> {
-  const res = await fetch(getTicketActionPath(id, action), { method: 'POST' })
+export type TicketActionVariables =
+  | { id: string; action: WorkflowAction; note?: undefined }
+  | { id: string; action: 'retry'; note: string }
+
+export async function ticketAction(
+  id: string,
+  action: WorkflowAction,
+  note?: string,
+): Promise<TicketActionResponse> {
+  const res = await fetch(getTicketActionPath(id, action), {
+    method: 'POST',
+    ...(note !== undefined
+      ? {
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ note }),
+        }
+      : {}),
+  })
   if (!res.ok) {
     throw new Error(await parseErrorBody(res, `Failed to ${action} ticket`))
   }
@@ -444,8 +460,8 @@ export function useUpdateTicket() {
 export function useTicketAction() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, action }: { id: string; action: WorkflowAction }) =>
-      ticketAction(id, action),
+    mutationFn: ({ id, action, note }: TicketActionVariables) =>
+      ticketAction(id, action, note),
     onSuccess: (result, variables) => {
       if (result.ticket) {
         mergeTicketInCache<Ticket>(queryClient, result.ticket)

@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { renderWithProviders } from '@/test/renderHelpers'
 import { makeTicket } from '@/test/factories'
@@ -23,6 +23,26 @@ vi.mock('@/hooks/useTickets', async (importOriginal) => {
     useTicketAction: () => mockUseTicketAction(),
   }
 })
+
+function makeLiveCodingErrorTicket() {
+  return makeTicket({
+    status: 'BLOCKED_ERROR',
+    previousStatus: 'CODING',
+    availableActions: ['retry', 'cancel'],
+    activeErrorOccurrenceId: 'coding-error',
+    errorOccurrences: [{
+      id: 'coding-error',
+      occurrenceNumber: 1,
+      blockedFromStatus: 'CODING',
+      errorMessage: 'Implementation failed.',
+      errorCodes: [],
+      occurredAt: '2026-01-01T00:00:00.000Z',
+      resolvedAt: null,
+      resolutionStatus: null,
+      resumedToStatus: null,
+    }],
+  })
+}
 
 describe('ErrorView', () => {
   beforeEach(() => {
@@ -116,6 +136,117 @@ describe('ErrorView', () => {
     renderWithProviders(<ErrorView ticket={ticket} />)
 
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('offers an extra-note retry only for a live retryable implementation error', () => {
+    const liveView = renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
+
+    expect(screen.getByRole('button', { name: 'Retry with extra note' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+    liveView.unmount()
+
+    const nonCodingTicket = makeTicket({
+      ...makeLiveCodingErrorTicket(),
+      previousStatus: 'GENERATING_PRD',
+      errorOccurrences: [{
+        ...makeLiveCodingErrorTicket().errorOccurrences![0]!,
+        blockedFromStatus: 'GENERATING_PRD',
+      }],
+    })
+    const nonCodingView = renderWithProviders(<ErrorView ticket={nonCodingTicket} />)
+    expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
+    nonCodingView.unmount()
+
+    const historyView = renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} readOnly />)
+    expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
+    historyView.unmount()
+
+    const noRetryTicket = makeLiveCodingErrorTicket()
+    noRetryTicket.availableActions = ['cancel']
+    renderWithProviders(<ErrorView ticket={noRetryTicket} />)
+    expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
+  })
+
+  it('opens an accessible extra-note dialog and requires non-whitespace text', () => {
+    renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    const dialog = screen.getByRole('dialog', { name: 'Retry implementation with an extra note' })
+    const note = within(dialog).getByRole('textbox', { name: /Extra note/ })
+    const submit = within(dialog).getByRole('button', { name: 'Add note and retry' })
+
+    expect(note).toHaveAttribute('required')
+    expect(note).toHaveAttribute('maxLength', '20000')
+    expect(submit).toBeDisabled()
+
+    fireEvent.change(note, { target: { value: '   \n  ' } })
+    expect(within(dialog).getByRole('alert')).toHaveTextContent('Enter an extra note before retrying.')
+    expect(submit).toBeDisabled()
+
+    fireEvent.change(note, { target: { value: 'A'.repeat(20_001) } })
+    expect(note).toHaveValue('A'.repeat(20_000))
+    expect(within(dialog).getByText('20,000 / 20,000 characters')).toBeInTheDocument()
+    expect(submit).toBeEnabled()
+  })
+
+  it('submits the exact extra note and clears it only after retry succeeds', () => {
+    const mutate = vi.fn((_: unknown, options?: { onSuccess?: () => void }) => {
+      options?.onSuccess?.()
+    })
+    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
+    const ticket = makeLiveCodingErrorTicket()
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    const note = screen.getByRole('textbox', { name: /Extra note/ })
+    const exactNote = '  Keep the existing parser.\nTry the smaller repair first.  '
+    fireEvent.change(note, { target: { value: exactNote } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add note and retry' }))
+
+    expect(mutate).toHaveBeenCalledWith(
+      { id: ticket.id, action: 'retry', note: exactNote },
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
+    )
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    expect(screen.getByRole('textbox', { name: /Extra note/ })).toHaveValue('')
+  })
+
+  it('keeps the extra-note dialog and text when retry fails', () => {
+    const mutate = vi.fn((_: unknown, options?: { onError?: (error: Error) => void }) => {
+      options?.onError?.(new Error('The implementation bead could not be reset'))
+    })
+    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
+    renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    const note = screen.getByRole('textbox', { name: /Extra note/ })
+    fireEvent.change(note, { target: { value: 'Preserve this note after failure.' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add note and retry' }))
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(note).toHaveValue('Preserve this note after failure.')
+    expect(screen.getByRole('alert')).toHaveTextContent('The implementation bead could not be reset')
+  })
+
+  it('disables the extra-note form while the retry request is pending', () => {
+    const mutate = vi.fn()
+    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
+    const ticket = makeLiveCodingErrorTicket()
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    const note = screen.getByRole('textbox', { name: /Extra note/ })
+    fireEvent.change(note, {
+      target: { value: 'Wait for this request.' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Add note and retry' }))
+
+    const dialog = screen.getByRole('dialog')
+    expect(within(dialog).getByRole('textbox', { name: /Extra note/ })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(within(dialog).getByRole('button', { name: 'Add note and retry' })).toBeDisabled()
   })
 
   it('shows real bead counters on coding error occurrence labels', () => {
@@ -235,6 +366,7 @@ describe('ErrorView', () => {
     expect(screen.getByText(/Timer paused while the ticket is blocked/)).toHaveTextContent(
       'Continue resumes the preserved OpenCode session with a fresh bead timer.',
     )
+    expect(screen.getByRole('button', { name: 'Retry with extra note' })).toBeInTheDocument()
     expect(screen.queryByText(/Failed bead/)).not.toBeInTheDocument()
   })
 

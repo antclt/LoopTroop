@@ -912,6 +912,7 @@ export function recoverCodingBeadWithReset(
     onlyInProgress?: boolean
     requireReset?: boolean
     preservePaths?: string[]
+    userRetryNote?: string
   },
 ): Bead | null {
   const beads = readTicketBeads(ticketId)
@@ -934,15 +935,28 @@ export function recoverCodingBeadWithReset(
     })
   }
 
-  return recoverCodingBead(ticketId, beads, failedBead)
+  return recoverCodingBead(ticketId, beads, failedBead, options.userRetryNote)
 }
 
-function recoverCodingBead(ticketId: string, beads: Bead[], failedBead: Bead): Bead | null {
+function appendUserRetryNote(existingNotes: string, note: string, timestamp: string): string {
+  const stampedNote = `[User retry note — ${timestamp}]\n${note}`
+  return existingNotes ? `${existingNotes}\n\n---\n\n${stampedNote}` : stampedNote
+}
+
+function recoverCodingBead(
+  ticketId: string,
+  beads: Bead[],
+  failedBead: Bead,
+  userRetryNote?: string,
+): Bead | null {
   const now = new Date().toISOString()
   const recoveredBeads = beads.map((bead) => bead.id === failedBead.id
     ? {
         ...bead,
         status: 'pending' as const,
+        notes: userRetryNote === undefined
+          ? bead.notes
+          : appendUserRetryNote(bead.notes, userRetryNote, now),
         updatedAt: now,
       }
     : bead)

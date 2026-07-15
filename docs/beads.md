@@ -346,6 +346,15 @@ If the model cannot produce a good note, LoopTroop falls back to a deterministic
 
 If the bead reaches the configured retry cap, LoopTroop marks it `error`, attaches `BEAD_RETRY_BUDGET_EXHAUSTED`, and routes the ticket to `BLOCKED_ERROR`.
 
+From the live blocked view, the normal **Retry** action resets and schedules the same failed or paused bead with its accumulated notes. **Retry with extra note** opens a multiline field for 1–20,000 characters of user guidance, then performs the same safe recovery and appends a new entry to `bead.notes`:
+
+```text
+[User retry note — 2026-07-15T12:34:56.789Z]
+<user text preserved unchanged>
+```
+
+Existing notes are never replaced. When notes already exist, the new entry is separated with the established `---` divider and becomes part of `bead_notes` for the next fresh coding attempt. The note is appended only after LoopTroop identifies the same recoverable bead and successfully resets it to `beadStartCommit`; if either check fails, the ticket remains blocked and its notes are unchanged. Whitespace-only or oversized notes are rejected. This action is available only for the current `BLOCKED_ERROR` that came from `CODING`, not for historical error views or failures from other phases.
+
 ---
 
 ## 10. Session Ownership, Preservation, And Continue
