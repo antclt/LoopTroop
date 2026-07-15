@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useUI } from '@/context/useUI'
-import { useTicketAction, useCancelTicket, useUpdateTicket } from '@/hooks/useTickets'
+import { useTicketAction, useUpdateTicket } from '@/hooks/useTickets'
 import type { Ticket } from '@/hooks/useTickets'
 import { useProfile } from '@/hooks/useProfile'
 import { useProjects } from '@/hooks/useProjects'
@@ -21,6 +21,7 @@ import { useCopyToClipboard } from '@/hooks/useCopyToClipboard'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { TicketDescriptionViewer } from './TicketDescriptionViewer'
 import { TicketExternalId } from './TicketExternalId'
+import { CancelTicketDialog } from './CancelTicketDialog'
 
 interface DashboardHeaderProps {
   ticket: Ticket
@@ -235,13 +236,10 @@ function FileTreeNode({ node, depth = 0 }: { node: SizeItem; depth?: number }) {
 export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const { dispatch } = useUI()
   const { isPending } = useTicketAction()
-  const { mutate: cancelTicket, isPending: isCancelPending } = useCancelTicket()
   const { mutateAsync: updateTicket } = useUpdateTicket()
   const { data: profile } = useProfile()
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [isCancelConfirmOpen, setIsCancelConfirmOpen] = useState(false)
-  const [deleteContent, setDeleteContent] = useState(false)
-  const [deleteLog, setDeleteLog] = useState(false)
   const [isBottomFadeVisible, setIsBottomFadeVisible] = useState(false)
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [titleDraft, setTitleDraft] = useState(ticket.title)
@@ -325,8 +323,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
   const lockedCouncilMembers = getTicketCouncilMembers(ticket)
   const canCancel = availableActions.includes('cancel')
   const canDelete = NON_CANCELABLE.includes(ticket.status)
-  const isActionPending = isPending || isCancelPending
-  const isDraft = ticket.status === 'DRAFT'
+  const isActionPending = isPending
   const { data: projects = [] } = useProjects()
   const project = projects.find(p => p.id === ticket.projectId)
   const statusLabel = getStatusUserLabel(ticket.status, {
@@ -403,12 +400,9 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
           canCancel={canCancel}
           canDelete={canDelete}
           isPending={isActionPending}
-          cancelLabel={isDraft ? 'Cancel' : 'Cancel…'}
+          cancelLabel="Cancel…"
           onShowDetails={() => setIsDetailsOpen(true)}
-          onCancelConfirm={isDraft
-            ? () => { cancelTicket({ id: ticket.id, options: { deleteContent: false, deleteLog: false } }) }
-            : () => setIsCancelConfirmOpen(true)
-          }
+          onCancelConfirm={() => setIsCancelConfirmOpen(true)}
           onClose={() => dispatch({ type: 'CLOSE_TICKET' })}
         />
       </div>
@@ -933,85 +927,7 @@ export function DashboardHeader({ ticket }: DashboardHeaderProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog
-        open={isCancelConfirmOpen}
-        onOpenChange={(open) => {
-          setIsCancelConfirmOpen(open)
-          if (!open) {
-            setDeleteContent(false)
-            setDeleteLog(false)
-          }
-        }}
-      >
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Cancel Ticket</DialogTitle>
-            <DialogDescription className="sr-only">
-              Confirm cancellation and choose optional cleanup actions.
-            </DialogDescription>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            The ticket will be stopped and moved to Canceled. No further AI execution will occur.
-            Artifacts generated up to this point are preserved by default.
-          </p>
-          <div className="mt-3 space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer group">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer"
-                checked={deleteContent}
-                onChange={(e) => setDeleteContent(e.target.checked)}
-                data-testid="delete-content-checkbox"
-              />
-              <span className="text-sm leading-snug text-muted-foreground group-hover:text-foreground transition-colors">
-                <span className="font-medium text-foreground">Delete AI-generated artifacts and worktree</span>
-                <br />
-                Permanently removes all AI-generated content stored for this ticket — interview questions and answers, PRD drafts, beads plan entries — and deletes the isolated git worktree including its branch and any code written to it. This cannot be undone.
-              </span>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer group">
-              <input
-                type="checkbox"
-                className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer"
-                checked={deleteLog}
-                onChange={(e) => setDeleteLog(e.target.checked)}
-                data-testid="delete-log-checkbox"
-              />
-              <span className="text-sm leading-snug text-muted-foreground group-hover:text-foreground transition-colors">
-                <span className="font-medium text-foreground">Delete execution log</span>
-                <br />
-                Permanently removes both persisted execution logs: the normal phase log and the debug/forensic log. The log viewer will show no history for this ticket after deletion.
-              </span>
-            </label>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setIsCancelConfirmOpen(false)
-                setDeleteContent(false)
-                setDeleteLog(false)
-              }}
-            >
-              Keep Ticket
-            </Button>
-            <Button
-              variant="destructive"
-              size="sm"
-              disabled={isCancelPending}
-              onClick={() => {
-                cancelTicket({ id: ticket.id, options: { deleteContent, deleteLog } })
-                setIsCancelConfirmOpen(false)
-                setDeleteContent(false)
-                setDeleteLog(false)
-              }}
-            >
-              Yes, Cancel Ticket
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <CancelTicketDialog ticketId={ticket.id} open={isCancelConfirmOpen} onOpenChange={setIsCancelConfirmOpen} />
     </div>
   )
 }

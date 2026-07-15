@@ -11,6 +11,7 @@ import {
 
 const logSectionMock = vi.hoisted(() => vi.fn(() => <div data-testid="phase-log-section" />))
 const mockUseTicketAction = vi.hoisted(() => vi.fn())
+const mockUseCancelTicket = vi.hoisted(() => vi.fn())
 
 vi.mock('../CollapsiblePhaseLogSection', () => ({
   CollapsiblePhaseLogSection: logSectionMock,
@@ -21,6 +22,7 @@ vi.mock('@/hooks/useTickets', async (importOriginal) => {
   return {
     ...actual,
     useTicketAction: () => mockUseTicketAction(),
+    useCancelTicket: () => mockUseCancelTicket(),
   }
 })
 
@@ -48,6 +50,25 @@ describe('ErrorView', () => {
   beforeEach(() => {
     logSectionMock.mockClear()
     mockUseTicketAction.mockReturnValue({ mutate: vi.fn(), isPending: false })
+    mockUseCancelTicket.mockReturnValue({ mutate: vi.fn(), isPending: false })
+  })
+
+  it('requires confirmation before canceling a blocked ticket', () => {
+    const cancelMutate = vi.fn()
+    mockUseCancelTicket.mockReturnValue({ mutate: cancelMutate, isPending: false })
+    const ticket = makeLiveCodingErrorTicket()
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel…/i }))
+    expect(cancelMutate).not.toHaveBeenCalled()
+    expect(screen.getByText('Cancel Ticket')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, Cancel Ticket' }))
+    expect(cancelMutate).toHaveBeenCalledWith({
+      id: ticket.id,
+      options: { deleteContent: false, deleteLog: false },
+    })
   })
 
   it('allows long error details to scroll within the summary area', () => {

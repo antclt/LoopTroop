@@ -31,6 +31,7 @@ import {
 } from '@shared/finalTestFileEffects'
 import type { WorkflowAction } from '@shared/workflowMeta'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { CancelTicketDialog } from '@/components/ticket/CancelTicketDialog'
 
 const MAX_RETRY_NOTE_LENGTH = 20_000
 
@@ -140,6 +141,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const [retryNote, setRetryNote] = useState('')
   const [retryNoteError, setRetryNoteError] = useState<string | null>(null)
   const [retryNoteSubmitting, setRetryNoteSubmitting] = useState(false)
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const logCtx = useLogs()
   const failedBead = ticket.runtime.lastFailedBeadId
     ? ticket.runtime.beads?.find((bead) => bead.id === ticket.runtime.lastFailedBeadId) ?? null
@@ -378,11 +380,11 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={() => handleAction('cancel')}
+                    onClick={() => setCancelDialogOpen(true)}
                     disabled={isPending}
                     className="h-7 text-xs"
                   >
-                    Cancel
+                    Cancel…
                   </Button>
                   {canContinue && (
                     <Tooltip>
@@ -559,6 +561,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
           </form>
         </DialogContent>
       </Dialog>
+      <CancelTicketDialog ticketId={ticket.id} open={cancelDialogOpen} onOpenChange={setCancelDialogOpen} />
     </div>
   )
 }

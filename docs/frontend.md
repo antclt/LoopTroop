@@ -400,7 +400,7 @@ Shortcut toggling and dashboard-search focusing are suppressed when focus is ins
 
 ## 14. Ticket Cancel Confirmation Dialog
 
-The cancel button in `DashboardHeader` is labeled **"Cancel…"** (the ellipsis signals that a dialog will open before any action is taken).
+Every ticket-cancel entry point, including Draft and Blocked Error, is labeled **"Cancel…"** (the ellipsis signals that a dialog will open before any action is taken). Cancellation never starts directly from the first click.
 
 Clicking the button opens a confirmation dialog with two optional, unchecked-by-default cleanup checkboxes:
 
@@ -411,7 +411,7 @@ Clicking the button opens a confirmation dialog with two optional, unchecked-by-
 
 Both options default to unchecked — canceling without checking anything preserves all artifacts exactly as the basic cancel behavior did before.
 
-The dialog calls `useCancelTicket` which POSTs `{ deleteContent, deleteLog }` to `POST /api/tickets/:id/cancel`. The hook invalidates the ticket and ticket-list queries on success.
+The shared `CancelTicketDialog` calls `useCancelTicket`, which POSTs `{ deleteContent, deleteLog }` to `POST /api/tickets/:id/cancel`. The hook invalidates the ticket and ticket-list queries on success.
 
 ## Related Docs
 
