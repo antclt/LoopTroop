@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useId, useRef, useState, type RefObject } from 'react'
 import { ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { VerticalResizeHandle } from './VerticalResizeHandle'
@@ -27,7 +27,7 @@ export function CollapsiblePhaseLogSection({
   phaseAttempt,
   logMode = 'live',
   defaultExpanded = true,
-  variant = 'bottom',
+  variant = 'fill',
   className,
   resizeContainerRef,
   defaultHeight = 200,
@@ -39,19 +39,12 @@ export function CollapsiblePhaseLogSection({
   const panelId = useId()
   const rootRef = useRef<HTMLDivElement>(null)
 
-  const parentRef = useMemo(() => ({
-    get current() {
-      return rootRef.current?.parentElement ?? null
-    }
-  }), [])
-
-  const effectiveContainerRef = resizeContainerRef ?? parentRef
-  const hasResizeHandle = variant === 'bottom' && isExpanded
+  const hasResizeHandle = variant === 'bottom' && isExpanded && Boolean(resizeContainerRef)
 
   const rootClassName = cn(
     'min-w-0 flex flex-col',
     !hasResizeHandle && 'border-t border-border/40 pt-1.5',
-    'mt-auto shrink-0',
+    variant === 'fill' ? 'mt-auto shrink-0' : 'shrink-0',
     className,
   )
 
@@ -147,8 +140,8 @@ export function CollapsiblePhaseLogSection({
 
   return (
     <>
-      {variant === 'bottom' && isExpanded ? (
-        <VerticalResizeHandle onResize={setHeight} containerRef={effectiveContainerRef} />
+      {variant === 'bottom' && isExpanded && resizeContainerRef ? (
+        <VerticalResizeHandle onResize={setHeight} containerRef={resizeContainerRef} />
       ) : null}
       <div ref={rootRef} className={rootClassName} style={rootStyle}>
         {!isExpanded ? logToggleButton : null}
