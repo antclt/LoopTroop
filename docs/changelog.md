@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 ### Summary
+- Bolded the live voting-result tally details in the council card description while voting is in progress.
 - Changed ticket description to render as pretty Markdown by default (with a toggle to Raw text) when revisiting the Backlog phase on a started ticket.
 - Added manual height adjustment to the expanded Manual QA log panel, allowing the drawer to be resized up or down.
 - Modified Manual QA submission with failures to automatically expand the log drawer so users can monitor the QA-fix bead generation.
@@ -47,6 +48,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Bolded the live voting-result tally details (e.g. `2/4 complete · Leading: <model> · <pts>`) in the Council card description line.
 - Updated the description display when revisiting the Backlog (Draft) phase on a started ticket to show the pretty Markdown view by default with a tab toggle to view raw text.
 - Updated description edit actions in the draft workspace to automatically restore the pretty Markdown view once changes are saved or canceled.
 - Updated the expanded Manual QA log panel at the bottom of the workspace to support manual vertical resizing via a drag handle.

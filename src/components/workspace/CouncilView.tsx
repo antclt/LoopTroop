@@ -198,13 +198,13 @@ export function CouncilView({ phase, ticket }: CouncilViewProps) {
               {isVerifying && `Winning model verifies ${domain.toLowerCase()} covers all requirements.`}
               {isExpanding && 'Winning model expands the validated implementation plan into execution-ready bead records.'}
               {voteSummary && (
-                <>
+                <span className="font-semibold">
                   {' · '}
                   {voteSummary.completedCount}/{voteSummary.total} complete ·{' '}
-                  <span className={voteSummary.leaderLabel === 'Winner' ? 'text-primary font-medium' : undefined}>
+                  <span className={voteSummary.leaderLabel === 'Winner' ? 'text-primary font-bold' : undefined}>
                     {voteSummary.leaderLabel}: {getModelDisplayName(voteSummary.leaderModelId)} · {voteSummary.leaderTotal} pts
                   </span>
-                </>
+                </span>
               )}
             </p>
           </CardContent>
