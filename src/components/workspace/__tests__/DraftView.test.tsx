@@ -260,10 +260,12 @@ describe('DraftView', () => {
     expect(screen.getByRole('tab', { name: 'Markdown' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('heading', { name: 'Scope' })).toBeInTheDocument()
     expect(screen.getByText('bold').tagName).toBe('STRONG')
+    expect(screen.queryByRole('button', { name: 'Copy description' })).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('tab', { name: 'Raw' }))
 
     expect(screen.getByRole('tab', { name: 'Raw' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Copy description' })).toBeInTheDocument()
     expect(screen.getByText((_content, element) =>
       element?.tagName === 'P' && element.textContent === '# Scope\nUse **bold** details.',
     )).toBeInTheDocument()

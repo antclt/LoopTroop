@@ -11,7 +11,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ::: details Show unreleased changes
 
-### Summary
+#### Summary
+- Added a copy button next to the ticket description tab in the backlog workspace when clicking on the "Raw" view.
 - Made ticket cancellation confirmation mandatory in every state, including Draft and Blocked Error, preventing accidental one-click cancellation.
 - Added optional user guidance when retrying a blocked implementation bead, so the next fresh attempt can act on extra context without replacing existing notes.
 - Bolded the live voting-result tally details in the council card description while voting is in progress.
@@ -30,11 +31,12 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added a spec-aligned, ticket-locked Manual QA checkpoint with a distinct artifact-and-log preparation view and interactive verification handoff, turning failures into traceable fix beads and reviewed improvements into context-rich backlog tickets without controlling the user's application.
 - Streamlined Manual QA with Pending-first items, inline Improvements, immediate evidence feedback, safer merge groups, autosave-only submission, and lossless skipping.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
-- Added a Show/Hide Mock Tickets option to the Kanban triage filter bar.
+- Added Show/Hide Mock Tickets option to the Kanban triage filter bar.
 
 ### Detailed Changes
 
 #### Added
+- Added a copy button next to the description's "Raw" tab in both DraftView (tickets in backlog before starting) and PhaseReviewView (backlog/DRAFT phase of started tickets).
 - Added **Retry with extra note** to live implementation errors, with a required multiline note that is appended to the recoverable bead's existing context before the next fresh attempt.
 - Added reasoned **Not applicable to Manual QA** PRD coverage, P1–P5 and Manual QA settings for Improvement tickets, and strict repository-aware `<MANUAL_QA_FIX_BEADS>` generation persisted before child creation.
 - Added cleanup warning messages display in a `<Tooltip>` on hover over the Cleanup status badge in the Ticket Details dialog.

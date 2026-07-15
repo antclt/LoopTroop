@@ -171,11 +171,13 @@ describe('PhaseReviewView', () => {
     expect(screen.getByRole('tab', { name: /Markdown/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Raw/i })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: /Markdown/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('button', { name: 'Copy description' })).not.toBeInTheDocument()
 
     // Click Raw
     const rawTab = screen.getByRole('tab', { name: /Raw/i })
     fireEvent.click(rawTab)
     expect(screen.getByRole('tab', { name: /Raw/i })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: /Markdown/i })).toHaveAttribute('aria-selected', 'false')
+    expect(screen.getByRole('button', { name: 'Copy description' })).toBeInTheDocument()
   })
 })

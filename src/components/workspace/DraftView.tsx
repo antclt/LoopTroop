@@ -11,6 +11,7 @@ import { CalendarDays } from 'lucide-react'
 import { EffortBadge } from '@/components/shared/EffortBadge'
 import { CollapsiblePhaseLogSection } from '@/components/workspace/CollapsiblePhaseLogSection'
 import { TicketDescriptionTabs, type TicketDescriptionMode } from '@/components/ticket/TicketDescriptionTabs'
+import { CopyButton } from './RawTextDisplay'
 import { TicketDescriptionViewer } from '@/components/ticket/TicketDescriptionViewer'
 import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
 import { resolveManualQaSettingLabel, type ManualQaOverride } from '@/lib/manualQaSetting'
@@ -316,6 +317,9 @@ export function DraftView({ ticket }: DraftViewProps) {
               <h4 className="text-xs font-medium">Description</h4>
               <div className="flex items-center gap-1.5">
                 <TicketDescriptionTabs mode={descriptionMode} onModeChange={setDescriptionMode} />
+                {descriptionMode === 'raw' && (
+                  <CopyButton content={descriptionDraft} title="Copy description" />
+                )}
                 {!isEditingDescription && (
                   <Button
                     type="button"
