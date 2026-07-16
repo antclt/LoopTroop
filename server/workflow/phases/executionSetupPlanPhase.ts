@@ -38,6 +38,7 @@ import {
   PROM_EXECUTION_SETUP_PLAN_REGENERATE,
 } from '../../prompts/index'
 import { enrichGeneratedExecutionSetupPlan } from '../../phases/executionSetupPlan/hookEvidence'
+import { validateExecutionSetupWorkspaceInputs } from '../../phases/executionSetup/workspaceInputs'
 
 function buildExecutionSetupPlanReport(input: {
   generatedBy: string
@@ -61,7 +62,12 @@ function buildExecutionSetupPlanReport(input: {
   }
 }
 
-function buildRegenerateContext(baseContext: PromptPart[], currentPlan: ExecutionSetupPlan | null, note: string | null): PromptPart[] {
+function buildRegenerateContext(
+  baseContext: PromptPart[],
+  currentPlan: ExecutionSetupPlan | null,
+  note: string | null,
+  notes: string[],
+): PromptPart[] {
   const extra: PromptPart[] = []
   if (currentPlan) {
     extra.push({
@@ -80,6 +86,7 @@ function buildRegenerateContext(baseContext: PromptPart[], currentPlan: Executio
           gaps: currentPlan.readiness.gaps,
         },
         temp_roots: currentPlan.tempRoots,
+        workspace_inputs: currentPlan.workspaceInputs,
         workspace_probes: currentPlan.workspaceProbes,
         git_hooks: {
           policy: currentPlan.gitHooks.policy,
@@ -110,6 +117,13 @@ function buildRegenerateContext(baseContext: PromptPart[], currentPlan: Executio
       content: note,
     })
   }
+  if (notes.length > 0) {
+    extra.push({
+      type: 'text',
+      source: 'execution_setup_plan_notes',
+      content: JSON.stringify(notes, null, 2),
+    })
+  }
   return [...baseContext, ...extra]
 }
 
@@ -134,12 +148,20 @@ async function generateAndPersistExecutionSetupPlan(input: {
   const aiResponseSettings = resolveAiResponseRuntimeSettings(input.context)
   const streamStates = new Map<string, OpenCodeStreamState>()
   const baseContext = await adapter.assembleCouncilContext(input.ticketId, 'execution_setup_plan')
+  const workspaceLocations: PromptPart = {
+    type: 'text',
+    source: 'workspace_locations',
+    content: JSON.stringify({
+      original_checkout: paths.projectRoot,
+      ticket_worktree: paths.worktreePath,
+    }, null, 2),
+  }
   const notes = input.note
     ? appendExecutionSetupPlanNotes(input.ticketId, [input.note])
     : readExecutionSetupPlanNotes(input.ticketId)
   const promptContext = input.source === 'regenerate'
-    ? buildRegenerateContext(baseContext, input.currentPlan ?? null, input.note ?? null)
-    : baseContext
+    ? buildRegenerateContext([...baseContext, workspaceLocations], input.currentPlan ?? null, input.note ?? null, notes)
+    : [...baseContext, workspaceLocations]
 
   emitPhaseLog(
     input.ticketId,
@@ -221,7 +243,21 @@ async function generateAndPersistExecutionSetupPlan(input: {
   )
 
   if (generation.plan) {
-    generation.plan = enrichGeneratedExecutionSetupPlan(input.ticketId, generation.plan)
+    try {
+      generation.plan = enrichGeneratedExecutionSetupPlan(input.ticketId, {
+        ...generation.plan,
+        workspaceInputs: validateExecutionSetupWorkspaceInputs({
+          projectRoot: paths.projectRoot,
+          worktreePath: paths.worktreePath,
+          workspaceInputs: generation.plan.workspaceInputs,
+        }),
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      generation.parse.errors.push(message)
+      generation.parse.plan = null
+      generation.plan = null
+    }
   }
 
   const report = buildExecutionSetupPlanReport({

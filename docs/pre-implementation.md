@@ -59,6 +59,7 @@ The setup-plan artifact is structured around a small, explicit contract:
 | --- | --- |
 | `readiness` | Whether the environment is already `ready`, only `partial`, or still `missing` key requirements, plus supporting evidence and gaps. |
 | `temp_roots` | Repository-local or runtime-owned paths the next phase may use for temporary setup work. |
+| `workspace_inputs` | Ignored or untracked files and directories that exist in the original checkout, are missing from the ticket worktree, and are needed for setup. Each entry records a repository-relative `path`, `kind`, `source_status`, and concrete `reason`. |
 | `workspace_probes` | Ordered repository-level commands that prove the prepared checkout can actually perform project work; each entry has an `id`, `command`, and `purpose`. |
 | `git_hooks` | The resolved policy, read-only detected-hook evidence, and an ordered editable list of explicit validation commands. |
 | `steps` | Ordered setup actions with `id`, `title`, `purpose`, `commands`, `required`, `rationale`, and step-level `cautions`. |
@@ -66,7 +67,9 @@ The setup-plan artifact is structured around a small, explicit contract:
 | `quality_gate_policy` | The default policy later coding and final-test phases should follow for tests, lint, typecheck, and full-project fallback behavior. |
 | `cautions` | User-facing warnings or assumptions that should remain visible after approval. |
 
-If the workspace is already ready, LoopTroop treats that as a first-class result: `steps` can be empty, and the artifact stays reviewable instead of inventing filler setup commands.
+The planning prompt receives the original checkout and ticket worktree as read-only locations. It checks whether a missing ignored or untracked file or directory explains a concrete readiness problem. It does not list unrelated caches, dependencies, build output, or the complete ignored-file inventory. The user can edit every proposed input before approval.
+
+If the workspace is already ready, LoopTroop treats that as a first-class result: `steps` can be empty, and the artifact stays reviewable instead of inventing filler setup commands. A non-empty `workspace_inputs` list still counts as required setup work because LoopTroop must materialize those inputs before validation.
 
 ### 2.2 Edit, regenerate, and version semantics
 
@@ -86,7 +89,7 @@ The generation report also preserves:
 
 ### 2.3 Approval handoff and rewind behavior
 
-Approving the plan stores an approval receipt with the reviewed `content_sha256`, step count, command count, selected Git-hook policy, detected-hook evidence, workspace probes, and the exact hook-validation command list. Stale approvals fail with `409` instead of silently approving newer content. Detected hooks are read-only, while validation commands can be added, edited, reordered, or all removed; removing every command is itself a valid reviewed decision and requires no separate waiver.
+Approving the plan stores an approval receipt with the reviewed `content_sha256`, step count, command count, approved workspace inputs, selected Git-hook policy, detected-hook evidence, workspace probes, and the exact hook-validation command list. Stale approvals fail with `409` instead of silently approving newer content. Detected hooks are read-only, while validation commands and workspace inputs can be added, edited, reordered, or removed.
 
 While the ticket is still in `PREPARING_EXECUTION_ENV`, editing or regenerating the setup plan triggers a **runtime rewind** rather than an in-place overwrite:
 
@@ -125,6 +128,7 @@ The setup agent reads the **approved** plan first. User edits override the model
 
 When setup is still needed, the agent may:
 
+- use the approved ignored or untracked workspace inputs that LoopTroop materialized before the setup session
 - run only the approved temporary setup steps
 - inspect the repository and invoke repo-native bootstrap commands
 - prepare runtime-owned wrappers or caches
@@ -146,7 +150,9 @@ LoopTroop does not trust a superficially valid setup response. A setup result is
   - either at least two distinct `provisioning_attempts` strategies with real commands
   - or a `not_provisionable` result with a concrete `failure_reason`
 
-LoopTroop also audits the worktree after each ready-looking attempt. Committable project changes left behind by setup fail the attempt. Generated noise is kept as a warning and copied into the profile cautions with suggested `.gitignore` entries. Ignored files from the primary checkout are never copied into a ticket worktree to make setup pass: a missing prerequisite must be produced by an approved repository-native command or reported as a setup failure.
+Before setup commands run, LoopTroop validates every approved workspace input against the original checkout and Git status. It rejects missing sources, incorrect ignored or untracked classifications, paths outside the checkout, and Git or LoopTroop internal paths. Approved files are copied to the same relative path. Approved directories are copied recursively without a size limit, but tracked ticket source always wins and is never replaced. Materialized inputs are setup-only state: worktree audits and ticket commits exclude them, and setup retries rematerialize them after tracked-file resets.
+
+LoopTroop also audits the worktree after each ready-looking attempt. Committable project changes left behind by setup fail the attempt. Generated noise is kept as a warning and copied into the profile cautions with suggested `.gitignore` entries. The setup agent may not copy any additional ignored or untracked path that the user did not approve.
 
 Hook discovery is evidence, not an ecosystem assumption. LoopTroop inspects Git's resolved hook path, standard hook files, committed hook directories, and recognizable manager configuration. Known managers may supply a hint, but unknown hooks remain visible without an invented command. The approved policy controls LoopTroop-owned Git operations:
 
@@ -167,6 +173,8 @@ If an attempt fails:
 5. It retries until the normal setup budget is exhausted or a repeated tooling blocker becomes terminal.
 
 The final report keeps the retry notes and per-attempt history so the user can see how setup evolved and why it eventually succeeded or blocked.
+
+When the retry budget ends in `BLOCKED_ERROR`, the live error view offers two setup-specific recovery actions. **Retry with extra note** archives the failed runtime attempt and sends the user's note into the next setup attempt. **Edit setup plan** archives the failed runtime attempt, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and opens the current plan for editing or regeneration. Regeneration receives the cleaned setup failure so it can propose a missing workspace input when the evidence supports one. Historical error occurrences remain read-only.
 
 ### 3.4 What gets persisted
 

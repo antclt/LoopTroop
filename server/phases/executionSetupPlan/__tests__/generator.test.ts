@@ -103,6 +103,8 @@ describe('generateExecutionSetupPlan', () => {
     ))?.content
 
     expect(retryPrompt).toContain('Every setup step must include id, title, purpose, commands, required, rationale, and cautions')
+    expect(retryPrompt).toContain('workspace_inputs must list only concrete ignored or untracked files and directories needed by setup')
+    expect(retryPrompt).toContain('steps and workspace_inputs must both be empty when readiness says the environment is ready')
   })
 
   it('completes owned setup-plan sessions after a ready plan is parsed', async () => {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, CirclePlay, Clock3, FilePlus2, Info, MessageSquarePlus, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, CirclePlay, Clock3, FilePenLine, FilePlus2, Info, MessageSquarePlus, RotateCcw, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -32,6 +32,7 @@ import {
 import type { WorkflowAction } from '@shared/workflowMeta'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { CancelTicketDialog } from '@/components/ticket/CancelTicketDialog'
+import { sanitizeErrorForDisplay } from '@/lib/errorDisplay'
 
 const MAX_RETRY_NOTE_LENGTH = 20_000
 
@@ -120,7 +121,7 @@ function buildDiagnosticRows(diagnostics: NonNullable<TicketErrorOccurrence['dia
   if (typeof diagnostics.isRetryable === 'boolean') rows.push({ label: 'Retryable', value: diagnostics.isRetryable ? 'yes' : 'no' })
   if (diagnostics.providerErrorTitle) rows.push({ label: 'Provider title', value: diagnostics.providerErrorTitle })
   if (diagnostics.providerErrorMessage && diagnostics.providerErrorMessage !== diagnostics.summary) {
-    rows.push({ label: 'Provider message', value: diagnostics.providerErrorMessage })
+    rows.push({ label: 'Provider message', value: sanitizeErrorForDisplay(diagnostics.providerErrorMessage) })
   }
   if (diagnostics.finishReason) rows.push({ label: 'Finish reason', value: diagnostics.finishReason })
   if (typeof diagnostics.outputTokens === 'number') rows.push({ label: 'Output tokens', value: diagnostics.outputTokens.toLocaleString() })
@@ -194,10 +195,12 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && ticket.status === 'BLOCKED_ERROR'
     && Boolean(visibleOccurrence)
     && visibleOccurrence?.resolvedAt === null
+  const isSetupRuntimeError = isLiveError && ticket.previousStatus === 'PREPARING_EXECUTION_ENV'
   const canContinue = isLiveError && ticket.availableActions.includes('continue')
   const canRetryWithNote = isLiveError
-    && visibleOccurrence?.blockedFromStatus === 'CODING'
+    && (visibleOccurrence?.blockedFromStatus === 'CODING' || isSetupRuntimeError)
     && ticket.availableActions.includes('retry')
+  const canEditExecutionSetupPlan = isSetupRuntimeError
   const canIncludeFinalTestFiles = isLiveError && ticket.availableActions.includes(FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION)
   const canDiscardFinalTestFiles = isLiveError && ticket.availableActions.includes(FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION)
   const pausedCodingBead = isLiveError
@@ -207,12 +210,13 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     : null
   const diagnostics = visibleOccurrence?.diagnostics ?? null
   const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
-  const primaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
+  const rawPrimaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
+  const primaryErrorMessage = sanitizeErrorForDisplay(rawPrimaryErrorMessage) || 'An error occurred but no details were captured. Try retrying or check the server logs.'
   const statusLabelOptions = {
     currentBead: ticket.runtime.currentBead ?? ticket.currentBead,
     totalBeads: ticket.runtime.totalBeads ?? ticket.totalBeads,
   }
-  const diagnosticSummary = diagnostics?.summary?.trim() ?? ''
+  const diagnosticSummary = sanitizeErrorForDisplay(diagnostics?.summary ?? '')
   const normalizedPrimaryError = normalizeErrorText(primaryErrorMessage)
   const normalizedDiagnosticSummary = normalizeErrorText(diagnosticSummary)
   const hasDiagnosticSummary = diagnosticSummary.length > 0
@@ -466,6 +470,18 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                       Retry with extra note
                     </Button>
                   )}
+                  {canEditExecutionSetupPlan && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleAction('edit_execution_setup_plan')}
+                      disabled={isPending}
+                      className="h-7 text-xs"
+                    >
+                      <FilePenLine className="mr-1 h-3.5 w-3.5" />
+                      Edit setup plan
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     onClick={() => handleAction('retry')}
@@ -507,9 +523,13 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Retry implementation with an extra note</DialogTitle>
+            <DialogTitle>
+              {canEditExecutionSetupPlan ? 'Retry workspace setup with an extra note' : 'Retry implementation with an extra note'}
+            </DialogTitle>
             <DialogDescription id="retry-note-description">
-              Add guidance for the next fresh implementation attempt. The note will be appended to User Retry Notes; nothing already there will be replaced.
+              {canEditExecutionSetupPlan
+                ? 'Add guidance for the next fresh workspace setup attempt. The note becomes setup retry context for the setup agent.'
+                : 'Add guidance for the next fresh implementation attempt. The note will be appended to User Retry Notes; nothing already there will be replaced.'}
             </DialogDescription>
           </DialogHeader>
           <form

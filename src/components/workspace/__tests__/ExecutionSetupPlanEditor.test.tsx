@@ -12,6 +12,7 @@ function buildPlan(): ExecutionSetupPlan {
     summary: 'Verify the workspace.',
     readiness: { status: 'ready', actionsRequired: false, evidence: [], gaps: [] },
     tempRoots: [],
+    workspaceInputs: [],
     workspaceProbes: [{ id: 'workspace', command: 'project test --list', purpose: 'Load the project.' }],
     gitHooks: {
       policy: 'validate_explicitly',

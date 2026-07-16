@@ -511,7 +511,7 @@ describe('ticketRouter execution setup plan approval routes', () => {
     expect(response.status).toBe(400)
     const payload = await response.json() as { error: string; details: string }
     expect(payload.error).toBe('Failed to save execution setup plan')
-    expect(payload.details).toContain('cannot include setup steps when readiness is ready')
+    expect(payload.details).toContain('cannot include setup steps or workspace inputs when readiness is ready')
     expect(getLatestPhaseArtifact(ticket.id, 'user_edit_receipt:execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')).toBeUndefined()
   })
 
@@ -696,6 +696,34 @@ describe('ticketRouter execution setup plan approval routes', () => {
     ])
     expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')?.content)
       .toContain('Regenerate after runtime setup started.')
+  })
+
+  it('archives a blocked workspace runtime attempt and returns to setup plan approval for editing', async () => {
+    const { app, ticket } = setupExecutionSetupPlanTicket()
+    await moveTicketToRuntimeSetup(app, ticket, 'Approved plan before blocked runtime setup.')
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'PREPARING_EXECUTION_ENV' } }),
+      errorMessage: '\u001b[31mWorkspace probe failed.\u001b[39m\n────────',
+    })
+
+    const response = await app.request(`/api/tickets/${ticket.id}/edit-execution-setup-plan`, { method: 'POST' })
+
+    expect(response.status).toBe(200)
+    expect(getTicketByRef(ticket.id)?.status).toBe('WAITING_EXECUTION_SETUP_APPROVAL')
+    expect(listPhaseAttempts(ticket.id, 'WAITING_EXECUTION_SETUP_APPROVAL')).toEqual([
+      expect.objectContaining({ attemptNumber: 2, state: 'active' }),
+      expect.objectContaining({ attemptNumber: 1, state: 'archived', archivedReason: 'execution_setup_runtime_rewind' }),
+    ])
+    expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
+      expect.objectContaining({ attemptNumber: 1, state: 'archived', archivedReason: 'execution_setup_runtime_rewind' }),
+    ])
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan', 'WAITING_EXECUTION_SETUP_APPROVAL')?.content)
+      .toContain('Approved plan before blocked runtime setup.')
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan_notes', 'WAITING_EXECUTION_SETUP_APPROVAL')?.content)
+      .toContain('Previous workspace runtime failure:\\nWorkspace probe failed.')
+    expect(getLatestPhaseArtifact(ticket.id, 'execution_setup_plan_notes', 'WAITING_EXECUTION_SETUP_APPROVAL')?.content)
+      .not.toContain('\u001b[31m')
   })
 
   it('rejects setup-plan edits and regenerations after runtime setup has advanced', async () => {

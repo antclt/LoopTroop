@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Made workspace setup recoverable when isolated worktrees need approved ignored or untracked inputs.
 - Made blocked errors immediately actionable and recovered safely wrapped YAML list prose across structured-output phases.
 - Prevented automatic development maintenance from installing peer-incompatible npm dependency graphs.
 - Preserved eligible same-session Continue recovery across backend, OpenCode, WSL, OS, and machine restarts.
@@ -41,6 +42,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added user-reviewed workspace input files and directories to execution setup plans, plus setup-specific **Retry with extra note** and **Edit setup plan** recovery actions.
 - Added repository-level workspace probes and configurable explicit Git-hook validation with visible setup-plan evidence, editable validation commands, and audited internal-hook policies.
 - Added backend-owned verification receipts for every declared bead test command so structured model completion claims are accepted only after the repository commands actually pass.
 - Added a copy button next to the description's "Raw" tab in both DraftView (tickets in backlog before starting) and PhaseReviewView (backlog/DRAFT phase of started tickets).
@@ -60,6 +62,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Changed execution setup planning to compare the original checkout with the ticket worktree, propose only evidence-backed missing inputs, and materialize approved inputs before setup commands run.
 - Made every held dependency and audit detail self-explanatory by naming the exact release-age, metadata, version, or peer-compatibility reason and showing the eligibility timestamp when applicable.
 - Split bead history into append-only **Failed Iteration Notes**, **User Retry Notes**, and **Finalization Failure Notes**, keeping each source clearly labelled in execution context and workspace views.
 - Changed execution setup readiness to require functional repository probes, audit configured Git hooks without assuming an ecosystem, and use explicit validation by default instead of allowing hidden hook failures during LoopTroop-owned commits.
@@ -85,6 +88,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Cleaned ANSI sequences, terminal decoration, carriage-return artifacts, and consecutive duplicate warnings from displayed blocked errors while preserving raw logs.
 - Replaced the generic Blocked Error workspace essay with the failed phase, a bounded version of the captured error, and guidance for only the recovery actions currently available; historical occurrences are clearly read-only.
 - Recovered model-generated YAML list prose that wraps onto deeper continuation lines by preserving the emitted text in a block scalar before shared structured-output parsing, instead of blocking otherwise valid PRD, Beads, and other artifacts.
 - Allowed successful audit previews to continue when npm exits with status 1 solely because known vulnerabilities remain, while still rejecting peer-resolution and operational failures.
@@ -118,6 +122,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
+- Documented workspace input approval and materialization, setup-runtime recovery actions, retry API behavior, and readable blocked-error output across the execution guides and references.
 - Documented the Retry with extra note workflow, validation, context contract, and API behavior across the Implementing and Blocked Error status details and focused execution guides.
 - Updated Manual QA status Details and reference guides for version-free titles, structured history, activity/log/artifact presentation, four-state PRD coverage, configurable Improvements, and failure-safe AI-planned QA beads. Existing testing tickets/artifacts are intentionally not migrated.
 - Updated the Manual QA status details and reference guides for Pending-first results, optional waiver reasons, collapsed disclosures, inline Improvements, evidence controls, merge-group validation, autosave status, and lossless Skip semantics.

@@ -34,6 +34,7 @@ import {
   handleDevEvent,
   handleGetInterview,
   handleGetExecutionSetupPlan,
+  handleEditBlockedExecutionSetupPlan,
   handlePutInterview,
   handlePutInterviewAnswers,
   handlePutExecutionSetupPlan,
@@ -71,6 +72,7 @@ ticketRouter.patch('/tickets/:id/edit-answer', async (c) => handleEditAnswer(c))
 ticketRouter.put('/tickets/:id/interview', async (c) => handlePutInterview(c))
 ticketRouter.put('/tickets/:id/interview-answers', async (c) => handlePutInterviewAnswers(c))
 ticketRouter.get('/tickets/:id/execution-setup-plan', (c) => handleGetExecutionSetupPlan(c))
+ticketRouter.post('/tickets/:id/edit-execution-setup-plan', async (c) => handleEditBlockedExecutionSetupPlan(c))
 ticketRouter.put('/tickets/:id/execution-setup-plan', async (c) => handlePutExecutionSetupPlan(c))
 ticketRouter.post('/tickets/:id/regenerate-execution-setup-plan', async (c) => handleRegenerateExecutionSetupPlan(c))
 ticketRouter.post('/tickets/:id/approve-interview', (c) => handleApproveInterview(c))

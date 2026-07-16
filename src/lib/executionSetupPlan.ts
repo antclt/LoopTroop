@@ -19,6 +19,13 @@ export interface ExecutionSetupPlanReadiness {
   gaps: string[]
 }
 
+export interface ExecutionSetupWorkspaceInput {
+  path: string
+  kind: 'file' | 'directory'
+  sourceStatus: 'ignored' | 'untracked'
+  reason: string
+}
+
 export type GitHookPolicy = 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only'
 
 export interface ExecutionSetupWorkspaceProbe {
@@ -50,6 +57,7 @@ export interface ExecutionSetupPlan {
   summary: string
   readiness: ExecutionSetupPlanReadiness
   tempRoots: string[]
+  workspaceInputs: ExecutionSetupWorkspaceInput[]
   workspaceProbes: ExecutionSetupWorkspaceProbe[]
   gitHooks: {
     policy: GitHookPolicy
@@ -127,6 +135,21 @@ function toExecutionSetupPlan(value: unknown): ExecutionSetupPlan | null {
       } satisfies ExecutionSetupWorkspaceProbe])
     : []
 
+  const workspaceInputsRaw = value.workspaceInputs ?? value.workspace_inputs
+  const workspaceInputs = Array.isArray(workspaceInputsRaw)
+    ? workspaceInputsRaw.flatMap((entry) => {
+        if (!isRecord(entry)) return []
+        const kind = entry.kind === 'directory' ? 'directory' : 'file'
+        const sourceStatus = (entry.sourceStatus ?? entry.source_status) === 'untracked' ? 'untracked' : 'ignored'
+        return [{
+          path: typeof entry.path === 'string' ? entry.path : '',
+          kind,
+          sourceStatus,
+          reason: typeof entry.reason === 'string' ? entry.reason : '',
+        } satisfies ExecutionSetupWorkspaceInput]
+      })
+    : []
+
   const detectedRaw = gitHooks.detected
   const detected = Array.isArray(detectedRaw)
     ? detectedRaw.flatMap((hook) => !isRecord(hook) ? [] : [{
@@ -171,7 +194,9 @@ function toExecutionSetupPlan(value: unknown): ExecutionSetupPlan | null {
       ? value.environment_readiness
       : null
 
-  const derivedReadinessStatus: ExecutionSetupPlanReadiness['status'] = steps.length > 0 ? 'partial' : 'ready'
+  const derivedReadinessStatus: ExecutionSetupPlanReadiness['status'] = steps.length > 0 || workspaceInputs.length > 0
+    ? 'partial'
+    : 'ready'
   const readinessStatus = readinessRecord
     ? normalizeReadinessStatus(readinessRecord.status)
     : derivedReadinessStatus
@@ -202,6 +227,7 @@ function toExecutionSetupPlan(value: unknown): ExecutionSetupPlan | null {
       gaps: toStringArray(readinessRecord?.gaps),
     },
     tempRoots: toStringArray(value.tempRoots ?? value.temp_roots),
+    workspaceInputs,
     workspaceProbes,
     gitHooks: {
       policy: normalizeGitHookPolicy(gitHooks.policy),
@@ -250,11 +276,11 @@ export function parseExecutionSetupPlanContent(content: string): { plan: Executi
       if (plan.readiness.gaps.length > 0) {
         return { plan: null, error: 'Ready execution setup plans cannot list unresolved gaps.' }
       }
-      if (plan.steps.length > 0) {
-        return { plan: null, error: 'Ready execution setup plans must not include setup steps.' }
+      if (plan.steps.length > 0 || plan.workspaceInputs.length > 0) {
+        return { plan: null, error: 'Ready execution setup plans must not include setup steps or workspace inputs.' }
       }
-    } else if (plan.steps.length === 0) {
-      return { plan: null, error: 'Execution setup plans with missing work must include at least one setup step.' }
+    } else if (plan.steps.length === 0 && plan.workspaceInputs.length === 0) {
+      return { plan: null, error: 'Execution setup plans with missing work must include at least one setup step or workspace input.' }
     }
     return { plan, error: null }
   } catch (error) {
@@ -279,6 +305,12 @@ export function serializeExecutionSetupPlan(plan: ExecutionSetupPlan): string {
       gaps: plan.readiness.gaps,
     },
     temp_roots: plan.tempRoots,
+    workspace_inputs: plan.workspaceInputs.map((input) => ({
+      path: input.path,
+      kind: input.kind,
+      source_status: input.sourceStatus,
+      reason: input.reason,
+    })),
     workspace_probes: plan.workspaceProbes,
     git_hooks: {
       policy: plan.gitHooks.policy,

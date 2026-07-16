@@ -3,6 +3,7 @@ import { ensureActorForTicket, sendTicketEvent } from '../../machines/persistenc
 import {
   findProjectExecutionBandConflict,
   getTicketByRef,
+  getTicketPaths,
 } from '../../storage/tickets'
 import { approveInterviewDocument } from '../../phases/interview/finalDocument'
 import {
@@ -36,6 +37,7 @@ import {
 } from './routeUtils'
 import { approvalRequestSchema, rawPrdSaveSchema, structuredPrdSaveSchema } from './schemas'
 import { isCoverageFixInProgress } from './coverageFixHandlers'
+import { validateExecutionSetupWorkspaceInputs } from '../../phases/executionSetup/workspaceInputs'
 
 function countPrdItems(document: PrdDocument): number {
   return document.epics.reduce((count, epic) => count + 1 + epic.user_stories.length, 0)
@@ -435,6 +437,14 @@ function approveExecutionSetupPlanForRoute(c: Context, ticketId: string, expecte
     if (!current.raw) {
       return c.json({ error: 'Execution setup plan is not ready yet' }, 409)
     }
+
+    const paths = getTicketPaths(ticketId)
+    if (!paths) return c.json({ error: 'Ticket workspace could not be resolved' }, 409)
+    plan.workspaceInputs = validateExecutionSetupWorkspaceInputs({
+      projectRoot: paths.projectRoot,
+      worktreePath: paths.worktreePath,
+      workspaceInputs: plan.workspaceInputs,
+    })
 
     approveExecutionSetupPlan(ticketId, plan, current.raw, expectedContentSha256)
     ensureActorForTicket(ticketId)

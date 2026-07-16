@@ -117,6 +117,7 @@ describe('parseExecutionSetupResult', () => {
       status: 'ready',
       summary: 'environment initialized and reusable',
       tempRoots: ['.ticket/runtime/execution-setup'],
+      workspaceInputs: [],
       bootstrapCommands: [],
       toolingProbeCommands: ['./.ticket/runtime/execution-setup/run go version'],
       workspaceProbes: [],

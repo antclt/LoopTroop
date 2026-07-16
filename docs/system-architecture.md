@@ -92,7 +92,7 @@ Planning is intentionally artifact-driven.
 | Interview council | Ticket details, relevant files | Interview document and answer session | Forces ambiguity out before specs |
 | PRD council | Ticket details, interview, relevant files, member-specific Full Answers | PRD document | Produces the feature contract |
 | Beads council | Ticket details, PRD, relevant files | Execution bead plan | Converts the spec into execution units |
-| Execution setup planning | Ticket details, PRD, beads, execution profile | Reviewable setup plan | Makes the coding environment explicit before code changes begin |
+| Execution setup planning | Ticket details, PRD, beads, execution profile, original checkout and ticket worktree | Reviewable setup plan with approved workspace inputs | Makes the coding environment and any required ignored or untracked inputs explicit before code changes begin |
 
 The planning phases are not one long conversation. Each stage assembles a new context window from durable artifacts and runs in its own session scope.
 
@@ -108,7 +108,7 @@ Execution is built around beads, not around one monolithic coding prompt.
 
 1. `PRE_FLIGHT_CHECK` verifies the ticket can enter pre-implementation setup, including worktree cleanliness before setup starts.
 2. `WAITING_EXECUTION_SETUP_APPROVAL` pauses for setup-plan review before setup commands run.
-3. `PREPARING_EXECUTION_ENV` creates the temporary execution environment described by the approved setup plan, provisioning missing required tooling under ticket-owned runtime roots, exposing setup-scoped OpenCode `websearch`/`webfetch` for unresolved official launcher artifact lookup, validating declared wrappers, tooling probes, functional workspace probes, and approved Git-hook commands, requiring `tool_requirements.provisioning_attempts` evidence for failed launcher provisioning, and rejecting ready results that leave committable project changes behind.
+3. `PREPARING_EXECUTION_ENV` validates and materializes approved ignored or untracked workspace inputs from the original checkout without replacing tracked ticket source, then creates the temporary execution environment described by the approved setup plan. It provisions missing required tooling under ticket-owned runtime roots, exposes setup-scoped OpenCode `websearch`/`webfetch` for unresolved official launcher artifact lookup, validates declared wrappers, tooling probes, functional workspace probes, and approved Git-hook commands, requires `tool_requirements.provisioning_attempts` evidence for failed launcher provisioning, and rejects ready results that leave other committable project changes behind.
 4. `CODING` selects the next runnable bead from the scheduler.
 5. `executeBead()` starts or reattaches to the owned OpenCode session for that bead attempt.
 6. The model must emit the expected structured bead status markers. Missing or malformed markers trigger a structured retry path instead of silently progressing.
@@ -136,6 +136,7 @@ Recovery is a first-class architectural concern.
 | Backend process restart | Reconcile persisted XState snapshots, hydrate ticket actors from durable ticket state, and immediately process restored active snapshots |
 | User edits approved interview or PRD | Archive the active approved generation and downstream attempts, cancel downstream sessions intentionally, clear stale downstream artifacts/UI state, persist a `user_edit_receipt:*`, and restart from the next drafting phase |
 | User edits or regenerates setup plan during runtime setup | Stop active runtime setup, archive both setup-plan and runtime attempts, preserve the tool cache when safe, clear stale setup outputs, and return to `WAITING_EXECUTION_SETUP_APPROVAL` for fresh approval |
+| User edits the setup plan after a runtime setup block | Archive the failed runtime attempt, return to `WAITING_EXECUTION_SETUP_APPROVAL`, preserve the failed attempt for review, and supply its cleaned failure to plan regeneration |
 | Stale approval | Return `409` with the expected and current SHA-256 hashes, keeping the ticket at the approval gate |
 | Manual QA generation/submission restart | Reuse the reserved checklist version or submission operation journal; deterministic action/origin/bead IDs prevent duplicate child work |
 | Application-created drift during QA | Stay in `WAITING_MANUAL_QA` and require include/discard for exactly audited paths before submit/skip |
@@ -145,7 +146,7 @@ Recovery is a first-class architectural concern.
 
 LoopTroop tries hard to preserve the work product while discarding the bad conversational state that produced the failure.
 
-If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`.
+If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`. A live block from `PREPARING_EXECUTION_ENV` can retry with user guidance or rewind to setup-plan approval. Errors shown in summaries and cards are cleaned of ANSI and other terminal control sequences, decoration-only lines, carriage-return artifacts, and consecutive duplicate warnings. Raw logs stay unchanged.
 
 ## 8. Restart And Session Ownership
 

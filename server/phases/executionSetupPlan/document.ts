@@ -117,6 +117,7 @@ export function approveExecutionSetupPlan(
   approvedAt: string
   stepCount: number
   commandCount: number
+  workspaceInputCount: number
   contentSha256: string
 } {
   const reviewedContentSha256 = assertExpectedContentSha256({
@@ -133,12 +134,15 @@ export function approveExecutionSetupPlan(
     phase: EXECUTION_SETUP_PLAN_PHASE,
     step_count: plan.steps.length,
     command_count: commandCount,
+    workspace_input_count: plan.workspaceInputs.length,
+    workspace_input_paths: plan.workspaceInputs.map((input) => input.path),
     content_sha256: reviewedContentSha256,
   }))
   return {
     approvedAt,
     stepCount: plan.steps.length,
     commandCount,
+    workspaceInputCount: plan.workspaceInputs.length,
     contentSha256: reviewedContentSha256,
   }
 }

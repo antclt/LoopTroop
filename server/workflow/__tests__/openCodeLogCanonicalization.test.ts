@@ -11,6 +11,7 @@ import * as atomicAppendModule from '../../io/atomicAppend'
 import { broadcaster } from '../../sse/broadcaster'
 
 vi.spyOn(ticketsModule, 'getTicketPaths').mockReturnValue({
+  projectRoot: '/tmp/test-project',
   executionLogPath: '/tmp/test-execution-log.jsonl',
   debugLogPath: '/tmp/test-execution-log.debug.jsonl',
   aiLogPath: '/tmp/test-execution-log.ai.jsonl',

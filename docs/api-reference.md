@@ -341,11 +341,12 @@ Ticket projections expose `visitedStatuses`, monotonic `workflowRevision`, and `
 | `POST` | `/api/tickets/:id/approve-prd` | Approve PRD artifact |
 | `POST` | `/api/tickets/:id/approve-beads` | Approve bead plan artifact |
 | `POST` | `/api/tickets/:id/approve-execution-setup-plan` | Approve execution setup plan |
+| `POST` | `/api/tickets/:id/edit-execution-setup-plan` | Rewind a blocked workspace runtime setup to setup-plan approval |
 | `POST` | `/api/tickets/:id/coverage/fix-gaps` | Run one approval-screen extra fix for unresolved PRD or beads coverage gaps |
 | `POST` | `/api/tickets/:id/merge` | Merge delivered PR |
 | `POST` | `/api/tickets/:id/close-unmerged` | Close without merge |
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
-| `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase; an optional `{ "note": "..." }` body adds user guidance for CODING bead recovery only |
+| `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase; an optional `{ "note": "..." }` body adds user guidance for CODING bead recovery or execution setup retry |
 | `POST` | `/api/tickets/:id/continue` | Continue a blocked ticket only when eligible OpenCode/provider diagnostics, including `HTTP 402 Payment Required`, have a matching active preserved OpenCode session |
 | `POST` | `/api/tickets/:id/include-final-test-files` | Resolve a `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` block by marking all unclassified final-test-produced files as PR candidates and retrying integration |
 | `POST` | `/api/tickets/:id/discard-final-test-files` | Resolve a `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` block by discarding only audited final-test-produced dirty files and retrying integration |
@@ -391,7 +392,7 @@ Most action routes in this section respond with the latest machine snapshot so c
 
 The Continue endpoint is available only from `BLOCKED_ERROR`. It requires a known `previousStatus`, an unresolved active error occurrence with a diagnostic `sessionId`, a matching active `opencode_sessions` row for that ticket and previous phase, and an OpenCode session that is still addressable by that exact id. It returns `409` and leaves the ticket blocked when those checks fail. On success it dispatches `CONTINUE`, records the pending session continuation, and the next owned prompt sends exactly `continue please` without creating a fresh phase attempt.
 
-The Retry endpoint accepts an empty body for ordinary recovery. It also accepts the following body only when the ticket is currently in `BLOCKED_ERROR` with `previousStatus: "CODING"`:
+The Retry endpoint accepts an empty body for ordinary recovery. It also accepts the following body when the ticket is currently in `BLOCKED_ERROR` with `previousStatus: "CODING"` or `previousStatus: "PREPARING_EXECUTION_ENV"`:
 
 ```json
 {
@@ -399,7 +400,9 @@ The Retry endpoint accepts an empty body for ordinary recovery. It also accepts 
 }
 ```
 
-`note` must contain at least one non-whitespace character and must not exceed 20,000 characters. After LoopTroop proves it can reset the same failed or paused bead, it appends a structured `userRetryNotes` entry containing the ISO timestamp, iteration, and the user's text unchanged. It never overwrites, merges, or deduplicates earlier entries and never writes user guidance into the machine-generated failure histories. If recovery fails, no entry is appended and the ticket remains blocked. Note-bearing requests for historical errors, non-CODING failures, blank notes, or oversized notes are rejected. Omitting `note` preserves the existing Retry behavior.
+`note` must contain at least one non-whitespace character and must not exceed 20,000 characters. For coding, LoopTroop first proves it can reset the same failed or paused bead, then appends a structured `userRetryNotes` entry containing the ISO timestamp, iteration, and the user's text unchanged. For execution setup, it archives the failed runtime attempt and adds the note to the context of the fresh setup attempt. It never overwrites or merges earlier notes. If recovery fails, no note is appended and the ticket remains blocked. Note-bearing requests for historical errors, other phases, blank notes, or oversized notes are rejected. Omitting `note` preserves ordinary Retry behavior.
+
+`POST /api/tickets/:id/edit-execution-setup-plan` is available only for the live `BLOCKED_ERROR` whose `previousStatus` is `PREPARING_EXECUTION_ENV`. It archives the failed runtime attempt, preserves it in phase history, and returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL` with the current plan available for editing or regeneration. Other phases and historical error occurrences return `409`.
 
 Bead API/read-model payloads expose three independent append-only arrays: `failedIterationNotes`, `userRetryNotes`, and `finalizationFailureNotes`. Each entry contains `timestamp`, `iteration`, `content`, and optional `errorCode`. LoopTroop strips ANSI terminal sequences from machine-generated failed-iteration and finalization content; user retry content is preserved exactly.
 
@@ -515,6 +518,7 @@ Edit-answer payload:
 | Method | Route | Notes |
 | --- | --- | --- |
 | `GET` | `/api/tickets/:id/execution-setup-plan` | Read the current setup plan |
+| `POST` | `/api/tickets/:id/edit-execution-setup-plan` | Return a blocked workspace runtime setup to setup-plan approval |
 | `PUT` | `/api/tickets/:id/execution-setup-plan` | Save setup plan as raw content or structured plan |
 | `POST` | `/api/tickets/:id/regenerate-execution-setup-plan` | Regenerate the plan with commentary |
 
@@ -540,6 +544,7 @@ Execution setup plan read response:
       "gaps": []
     },
     "tempRoots": [".looptroop/worktrees/AUTH-12"],
+    "workspaceInputs": [],
     "workspaceProbes": [
       {
         "id": "workspace-test",
@@ -592,7 +597,7 @@ Execution setup plan reads may select archived versions with `phaseAttempt`. Arc
 
 Successful `PUT /execution-setup-plan` responses return the saved `raw`, normalized `plan`, `contentSha256`, and current route state (`status`, `state`, `ticket`) so the client does not need an immediate follow-up fetch.
 
-`workspaceProbes` and `gitHooks.validationCommands` are ordered editable lists. `gitHooks.detected` is refreshed from repository/Git evidence and cannot be changed through the plan editor. An empty validation-command list is valid; no waiver field or secondary confirmation is required.
+`workspaceInputs`, `workspaceProbes`, and `gitHooks.validationCommands` are ordered editable lists. Each workspace input contains `path`, `kind`, `sourceStatus`, and `reason`; the server checks it against the original checkout before accepting the plan. `gitHooks.detected` is refreshed from repository/Git evidence and cannot be changed through the plan editor. An empty validation-command list is valid; no waiver field or secondary confirmation is required.
 
 `PUT /execution-setup-plan` and `POST /regenerate-execution-setup-plan` are normally accepted only while the ticket is in `WAITING_EXECUTION_SETUP_APPROVAL`. They are also accepted from `PREPARING_EXECUTION_ENV` as a one-step runtime rewind: LoopTroop stops active runtime setup, archives the approved setup-plan attempt and current runtime attempt with `execution_setup_runtime_rewind`, clears stale setup profile/runtime outputs while preserving `.ticket/runtime/execution-setup/tool-cache`, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and requires approval again. During that route-driven rewind, the restored approval actor does not auto-draft from the empty fresh attempt; manual edits save the supplied plan, and regenerate starts only the requested commented generation. `POST /regenerate-execution-setup-plan` returns immediately after scheduling background regeneration; the new draft then arrives through normal artifact/log/SSE updates. These routes still reject from `CODING` and later statuses.
 
@@ -614,6 +619,7 @@ Regeneration payload:
       "gaps": []
     },
     "tempRoots": [],
+    "workspaceInputs": [],
     "steps": [],
     "projectCommands": {
       "prepare": [],

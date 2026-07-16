@@ -717,6 +717,8 @@ Execution setup artifacts use explicit XML envelopes:
 
 The plan normalizer accepts wrapper keys such as `execution_setup_plan`, `plan`, `data`, and `result`. The result normalizer accepts `execution_setup_result`, `result`, `output`, and `data`.
 
+Plans carry `workspace_inputs` entries with a repository-relative `path`, `kind` (`file` or `directory`), `source_status` (`ignored` or `untracked`), and a concrete `reason`. The planning prompt compares the original checkout with the ticket worktree and proposes an entry only when repository evidence or a prior setup failure connects that missing input to readiness. It never includes file contents or shell copy commands. It also forbids paths outside the checkout and Git or LoopTroop internal paths.
+
 Both artifacts carry ordered `workspace_probes` entries with required `id`, `command`, and `purpose`. Their `git_hooks` object contains a strict policy enum, read-only detected-hook records (`name`, normalized `path`, `source`, `executable`, optional `manager_hint`), and ordered validation commands (`id`, `hook`, `command`, `purpose`). An empty validation-command list is valid and preserved exactly; the parser never synthesizes a command for an unknown hook.
 
 **Status normalization**
@@ -727,7 +729,7 @@ Both artifacts carry ordered `workspace_probes` entries with required `id`, `com
 
 **Path normalization**
 
-`temp_roots` and reusable artifact paths are normalized to forward-slash form and drop a leading `./`, so path comparisons stay stable across providers and host shells.
+`temp_roots`, `workspace_inputs`, and reusable artifact paths are normalized to forward-slash form and drop a leading `./`, so path comparisons stay stable across providers and host shells. Workspace input entries keep only the strict `file|directory` kind and `ignored|untracked` source status. Filesystem and Git validation happen before materialization, so parser normalization never invents an input or changes its classification.
 
 **Missing setup-step field fill**
 

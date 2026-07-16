@@ -279,6 +279,8 @@ function getTicketActionPath(id: string, action: WorkflowAction): string {
       return `/api/tickets/${id}/include-final-test-files`
     case FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION:
       return `/api/tickets/${id}/discard-final-test-files`
+    case 'edit_execution_setup_plan':
+      return `/api/tickets/${id}/edit-execution-setup-plan`
     default:
       return `/api/tickets/${id}/${action}`
   }

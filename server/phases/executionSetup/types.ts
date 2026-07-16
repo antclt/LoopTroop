@@ -90,6 +90,12 @@ export function toExecutionSetupProfileArtifact(profile: ExecutionSetupProfile):
     status: profile.status,
     summary: profile.summary,
     temp_roots: profile.tempRoots,
+    workspace_inputs: profile.workspaceInputs.map((input) => ({
+      path: input.path,
+      kind: input.kind,
+      source_status: input.sourceStatus,
+      reason: input.reason,
+    })),
     bootstrap_commands: profile.bootstrapCommands,
     tooling_probe_commands: profile.toolingProbeCommands,
     workspace_probes: profile.workspaceProbes ?? [],

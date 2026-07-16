@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { parseExecutionSetupPlanResult } from '../parser'
+import { serializeExecutionSetupPlan } from '../types'
 
 function wrapPlan(body: string): string {
   return `<EXECUTION_SETUP_PLAN>\n${body}\n</EXECUTION_SETUP_PLAN>`
 }
 
-function buildPlanPayload(steps: unknown[]) {
+function buildPlanPayload(steps: unknown[], workspaceInputs: unknown[] = []) {
   return {
     schema_version: 1,
     ticket_id: 'T-1',
@@ -19,6 +20,7 @@ function buildPlanPayload(steps: unknown[]) {
       gaps: ['Dependencies are missing.'],
     },
     temp_roots: ['.ticket/runtime/execution-setup'],
+    workspace_inputs: workspaceInputs,
     workspace_probes: [{ id: 'workspace-1', command: 'project inspect', purpose: 'load the repository project' }],
     git_hooks: {
       policy: 'validate_explicitly',
@@ -129,5 +131,92 @@ describe('parseExecutionSetupPlanResult', () => {
 
     expect(parsed.plan).toBeNull()
     expect(parsed.errors).toEqual(['Missing required steps[0].purpose'])
+  })
+
+  it('accepts ignored and untracked workspace inputs as the only required setup work', () => {
+    const payload = buildPlanPayload([], [
+      {
+        path: 'packages/runtime/package.json',
+        kind: 'file',
+        source_status: 'ignored',
+        reason: 'The workspace package manifest is required to resolve repository imports.',
+      },
+      {
+        path: 'fixtures/generated',
+        kind: 'directory',
+        source_status: 'untracked',
+        reason: 'Repository tests load generated fixtures from this directory.',
+      },
+    ])
+    payload.readiness = {
+      status: 'partial',
+      actions_required: true,
+      evidence: ['Both inputs exist in the original checkout.'],
+      gaps: ['The ticket worktree does not contain the inputs.'],
+    }
+
+    const parsed = parseExecutionSetupPlanResult(wrapPlan(JSON.stringify(payload)))
+
+    expect(parsed.errors).toEqual([])
+    expect(parsed.plan?.steps).toEqual([])
+    expect(parsed.plan?.workspaceInputs).toEqual([
+      {
+        path: 'packages/runtime/package.json',
+        kind: 'file',
+        sourceStatus: 'ignored',
+        reason: 'The workspace package manifest is required to resolve repository imports.',
+      },
+      {
+        path: 'fixtures/generated',
+        kind: 'directory',
+        sourceStatus: 'untracked',
+        reason: 'Repository tests load generated fixtures from this directory.',
+      },
+    ])
+
+    expect(JSON.parse(serializeExecutionSetupPlan(parsed.plan!)).workspace_inputs).toEqual([
+      {
+        path: 'packages/runtime/package.json',
+        kind: 'file',
+        source_status: 'ignored',
+        reason: 'The workspace package manifest is required to resolve repository imports.',
+      },
+      {
+        path: 'fixtures/generated',
+        kind: 'directory',
+        source_status: 'untracked',
+        reason: 'Repository tests load generated fixtures from this directory.',
+      },
+    ])
+  })
+
+  it.each([
+    ['unsupported kind', { path: 'local/input', kind: 'tree', source_status: 'ignored', reason: 'Needed.' }, 'kind must be file or directory'],
+    ['unsupported source status', { path: 'local/input', kind: 'file', source_status: 'tracked', reason: 'Needed.' }, 'source_status must be ignored or untracked'],
+  ])('rejects workspace inputs with an %s', (_label, workspaceInput, expectedError) => {
+    const parsed = parseExecutionSetupPlanResult(wrapPlan(JSON.stringify(buildPlanPayload([], [workspaceInput]))))
+
+    expect(parsed.plan).toBeNull()
+    expect(parsed.errors.join(' ')).toContain(expectedError)
+  })
+
+  it('rejects a ready plan that still contains workspace inputs', () => {
+    const payload = buildPlanPayload([], [{
+      path: 'local/input',
+      kind: 'file',
+      source_status: 'ignored',
+      reason: 'Needed by the workspace.',
+    }])
+    payload.readiness = {
+      status: 'ready',
+      actions_required: false,
+      evidence: ['Workspace is ready.'],
+      gaps: [],
+    }
+
+    const parsed = parseExecutionSetupPlanResult(wrapPlan(JSON.stringify(payload)))
+
+    expect(parsed.plan).toBeNull()
+    expect(parsed.errors.join(' ')).toContain('cannot include setup steps or workspace inputs when readiness is ready')
   })
 })

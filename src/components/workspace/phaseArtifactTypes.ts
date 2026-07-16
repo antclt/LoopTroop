@@ -435,6 +435,12 @@ export interface ExecutionSetupProfileData {
   status?: string
   summary?: string
   tempRoots: string[]
+  workspaceInputs: Array<{
+    path: string
+    kind: 'file' | 'directory'
+    sourceStatus: 'ignored' | 'untracked'
+    reason: string
+  }>
   bootstrapCommands: string[]
   toolingProbeCommands: string[]
   workspaceProbes: ExecutionSetupCommandProbeData[]
@@ -1127,6 +1133,7 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
     'verification_commands',
   ]))
   const reusableArtifactsRaw = getValueByAliases(record, ['reusableArtifacts', 'reusable_artifacts'])
+  const workspaceInputsRaw = getValueByAliases(record, ['workspaceInputs', 'workspace_inputs'])
   const projectCommandsRaw = getValueByAliases(record, ['projectCommands', 'project_commands'])
   const qualityGatePolicyRaw = getValueByAliases(record, ['qualityGatePolicy', 'quality_gate_policy'])
   const workspaceProbesRaw = getValueByAliases(record, ['workspaceProbes', 'workspace_probes'])
@@ -1194,6 +1201,14 @@ function parseExecutionSetupProfileRecord(record: Record<string, unknown>): Exec
     status: normalizeOptionalString(getValueByAliases(record, ['status'])),
     summary: normalizeOptionalString(getValueByAliases(record, ['summary'])),
     tempRoots,
+    workspaceInputs: Array.isArray(workspaceInputsRaw)
+      ? workspaceInputsRaw.filter((entry): entry is Record<string, unknown> => isRecord(entry)).map((entry) => ({
+          path: normalizeOptionalString(getValueByAliases(entry, ['path'])) ?? '',
+          kind: getValueByAliases(entry, ['kind']) === 'directory' ? 'directory' : 'file',
+          sourceStatus: getValueByAliases(entry, ['sourceStatus', 'source_status']) === 'untracked' ? 'untracked' : 'ignored',
+          reason: normalizeOptionalString(getValueByAliases(entry, ['reason'])) ?? '',
+        }))
+      : [],
     bootstrapCommands,
     toolingProbeCommands,
     workspaceProbes,

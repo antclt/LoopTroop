@@ -62,6 +62,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { discoverGitHooks } from '../../git/hookDiscovery'
 import type { ExecutionSetupCommandReceiptPayload } from '../../structuredOutput/types'
 import { isVersionOnlyWorkspaceProbeCommand } from '../../phases/executionSetup/workspaceProbe'
+import { materializeExecutionSetupWorkspaceInputs } from '../../phases/executionSetup/workspaceInputs'
 
 const SETUP_WRAPPER_VALIDATION_TIMEOUT_MS = 10_000
 const SETUP_PROBE_TIMEOUT_MS = 30_000
@@ -416,11 +417,27 @@ export async function handleExecutionSetup(
       }
 
       const runtimeSettings = resolveExecutionSetupRuntimeSettings(context)
-      const phaseStartCommit = recordWorktreeStartCommit(paths.worktreePath)
       const approvedPlan = readExecutionSetupPlan(ticketId).plan
       if (!approvedPlan) {
         throw new Error('Approved execution setup plan is missing')
       }
+      const materializeApprovedInputs = () => materializeExecutionSetupWorkspaceInputs({
+        projectRoot: paths.projectRoot,
+        worktreePath: paths.worktreePath,
+        workspaceInputs: approvedPlan.workspaceInputs,
+      })
+      const materialized = materializeApprovedInputs()
+      if (materialized.copiedPaths.length > 0) {
+        emitPhaseLog(
+          ticketId,
+          context.externalId,
+          'PREPARING_EXECUTION_ENV',
+          'info',
+          `Materialized ${materialized.copiedPaths.length} approved workspace input${materialized.copiedPaths.length === 1 ? '' : 's'}.`,
+          { paths: materialized.copiedPaths },
+        )
+      }
+      const phaseStartCommit = recordWorktreeStartCommit(paths.worktreePath)
       const approvedPlanCommands = flattenExecutionSetupPlanCommands(approvedPlan)
       const sessionManager = new SessionManager(adapter)
       const streamStates = new Map<string, OpenCodeStreamState>()
@@ -457,6 +474,7 @@ export async function handleExecutionSetup(
               const hookDiscovery = discoverGitHooks(paths.worktreePath)
               profile = {
                 ...profile,
+                workspaceInputs: approvedPlan.workspaceInputs,
                 workspaceProbes: approvedPlan.workspaceProbes,
                 gitHooks: {
                   policy: approvedPlan.gitHooks.policy,
@@ -670,6 +688,7 @@ export async function handleExecutionSetup(
             resetWorktreeToCommit(paths.worktreePath, phaseStartCommit, {
               preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
             })
+            materializeApprovedInputs()
             clearExecutionSetupRuntimeArtifacts(ticketId, { preserveToolCache: true })
             emitPhaseLog(
               ticketId,

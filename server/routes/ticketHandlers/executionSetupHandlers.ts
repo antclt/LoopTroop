@@ -1,7 +1,8 @@
 import type { Context } from 'hono'
-import { getTicketByRef } from '../../storage/tickets'
+import { getTicketByRef, getTicketPaths } from '../../storage/tickets'
 import { ArchivedArtifactWriteError, assertCurrentEditablePhaseAttempt } from '../../storage/ticketPhaseAttempts'
 import {
+  appendExecutionSetupPlanNotes,
   readExecutionSetupPlan,
   saveExecutionSetupPlan,
 } from '../../phases/executionSetupPlan/document'
@@ -9,6 +10,7 @@ import {
   EXECUTION_SETUP_PLAN_RESULT_END,
   EXECUTION_SETUP_PLAN_RESULT_MARKER,
   serializeExecutionSetupPlan,
+  type ExecutionSetupPlan,
 } from '../../phases/executionSetupPlan/types'
 import { regenerateExecutionSetupPlanDraft } from '../../workflow/phases/executionSetupPlanPhase'
 import { lockExecutionSetupPlanDetectedHooks } from '../../phases/executionSetupPlan/hookEvidence'
@@ -23,12 +25,15 @@ import {
   prepareExecutionSetupPlanRestart,
   prepareExecutionSetupRuntimeRewind,
   rejectDisplayOnlyMockTicket,
+  respondWithState,
 } from './routeUtils'
 import {
   rawExecutionSetupPlanSaveSchema,
   regenerateExecutionSetupPlanSchema,
   structuredExecutionSetupPlanSaveSchema,
 } from './schemas'
+import { validateExecutionSetupWorkspaceInputs } from '../../phases/executionSetup/workspaceInputs'
+import { sanitizeErrorForDisplay } from '@shared/errorDisplay'
 
 function countPlanCommands(plan: { steps: Array<{ commands: unknown[] }> } | null): number | null {
   return plan ? plan.steps.reduce((sum, step) => sum + step.commands.length, 0) : null
@@ -47,6 +52,17 @@ function normalizeRawSetupPlanContent(rawContent: string) {
     ? rawContent
     : `${EXECUTION_SETUP_PLAN_RESULT_MARKER}\n${rawContent}\n${EXECUTION_SETUP_PLAN_RESULT_END}`
   return normalizeExecutionSetupPlanOutput(content)
+}
+
+function validateWorkspaceInputsForTicket(ticketId: string, plan: ExecutionSetupPlan): ExecutionSetupPlan {
+  const paths = getTicketPaths(ticketId)
+  if (!paths) throw new Error('Ticket workspace could not be resolved')
+  plan.workspaceInputs = validateExecutionSetupWorkspaceInputs({
+    projectRoot: paths.projectRoot,
+    worktreePath: paths.worktreePath,
+    workspaceInputs: plan.workspaceInputs,
+  })
+  return plan
 }
 
 function validateRawSetupPlanContent(rawContent: string): string | null {
@@ -77,6 +93,34 @@ export function handleGetExecutionSetupPlan(c: Context) {
       details: getErrorMessage(err),
     }, 400)
   }
+}
+
+export async function handleEditBlockedExecutionSetupPlan(c: Context) {
+  const ticketId = getTicketParam(c)
+  const ticket = getTicketByRef(ticketId)
+  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
+  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
+  if (mockResponse) return mockResponse
+  if (ticket.status !== 'BLOCKED_ERROR' || ticket.previousStatus !== 'PREPARING_EXECUTION_ENV') {
+    return c.json({ error: 'Edit setup plan is only available for workspace runtime setup errors' }, 409)
+  }
+
+  try {
+    const currentPlan = readExecutionSetupPlan(ticketId).plan
+    const previousFailure = sanitizeErrorForDisplay(ticket.errorMessage ?? '')
+    await prepareExecutionSetupRuntimeRewind(ticketId)
+    if (currentPlan) saveExecutionSetupPlan(ticketId, currentPlan)
+    if (previousFailure) {
+      appendExecutionSetupPlanNotes(ticketId, [`Previous workspace runtime failure:\n${previousFailure}`])
+    }
+  } catch (err) {
+    return c.json({
+      error: 'Failed to return to execution setup plan approval',
+      details: getErrorMessage(err),
+    }, 500)
+  }
+
+  return respondWithState(c, ticketId, 'Workspace runtime setup archived; setup plan is ready to edit')
 }
 
 export async function handlePutExecutionSetupPlan(c: Context) {
@@ -139,9 +183,10 @@ export async function handlePutExecutionSetupPlan(c: Context) {
     }
 
     try {
-      const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
       const normalized = normalizeRawSetupPlanContent(rawParsed.data.content)
       if (!normalized.ok) throw new Error(normalized.error)
+      validateWorkspaceInputsForTicket(ticketId, normalized.value)
+      const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
       const { raw, contentSha256, plan } = saveExecutionSetupPlan(
         ticketId,
         lockExecutionSetupPlanDetectedHooks(ticketId, normalized.value),
@@ -183,6 +228,7 @@ export async function handlePutExecutionSetupPlan(c: Context) {
   }
 
   try {
+    validateWorkspaceInputsForTicket(ticketId, structuredParsed.data.plan)
     const restart = rewindsRuntimeSetup ? await prepareExecutionSetupRuntimeRewind(ticketId) : null
     const { raw, contentSha256, plan } = saveExecutionSetupPlan(
       ticketId,

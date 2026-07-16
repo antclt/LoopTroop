@@ -113,6 +113,8 @@ interface ExecutionSetupProfileLike {
   temp_roots?: string[]
   reusableArtifacts?: Array<{ path?: string | null } | null>
   reusable_artifacts?: Array<{ path?: string | null } | null>
+  workspaceInputs?: Array<{ path?: string | null } | null>
+  workspace_inputs?: Array<{ path?: string | null } | null>
 }
 
 function normalizeRepoPath(path: string): string {
@@ -175,6 +177,15 @@ function collectExecutionSetupRoots(worktreePath: string, profile: ExecutionSetu
     for (const artifact of artifacts) {
       if (!artifact || typeof artifact !== 'object' || Array.isArray(artifact)) continue
       const normalized = normalizeSetupRoot(worktreePath, (artifact as Record<string, unknown>).path)
+      if (normalized) roots.push(normalized)
+    }
+  }
+
+  const workspaceInputs = getRecordValue(record, ['workspace_inputs', 'workspaceInputs'])
+  if (Array.isArray(workspaceInputs)) {
+    for (const input of workspaceInputs) {
+      if (!input || typeof input !== 'object' || Array.isArray(input)) continue
+      const normalized = normalizeSetupRoot(worktreePath, (input as Record<string, unknown>).path)
       if (normalized) roots.push(normalized)
     }
   }

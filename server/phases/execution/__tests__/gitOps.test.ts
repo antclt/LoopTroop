@@ -618,6 +618,64 @@ describe('commitBeadChanges', () => {
     expect(untrackedFiles).toContain('.ticket/runtime/execution-setup-profile.json')
   })
 
+  it('classifies approved workspace inputs as setup-only and excludes them from commits', () => {
+    const dir = makeFreshRepo()
+    mkdirSync(join(dir, '.ticket', 'runtime'), { recursive: true })
+    mkdirSync(join(dir, 'local-config'), { recursive: true })
+    writeFileSync(join(dir, '.ticket', 'runtime', 'execution-setup-profile.json'), JSON.stringify({
+      schema_version: 1,
+      ticket_id: 'T-1',
+      artifact: 'execution_setup_profile',
+      status: 'ready',
+      summary: 'approved workspace inputs',
+      temp_roots: ['.ticket/runtime/execution-setup'],
+      workspace_inputs: [
+        {
+          path: 'local-config',
+          kind: 'directory',
+          source_status: 'untracked',
+          reason: 'The workspace needs local generated configuration.',
+        },
+      ],
+      tooling_probe_commands: [],
+      reusable_artifacts: [],
+      project_commands: {
+        prepare: [],
+        test_full: [],
+        lint_full: [],
+        typecheck_full: [],
+      },
+      quality_gate_policy: {
+        tests: 'bead-test-commands-first',
+        lint: 'impacted-or-package',
+        typecheck: 'impacted-or-package',
+        full_project_fallback: 'never-block-on-unrelated-baseline',
+      },
+      cautions: [],
+    }))
+    writeFileSync(join(dir, 'local-config', 'project.json'), '{"local":true}\n')
+    writeFileSync(join(dir, 'app.ts'), 'export const app = 1\n')
+
+    expect(getExecutionSetupCommitExcludedRoots(dir)).toContain('local-config')
+
+    const result = commitBeadChanges(dir, 'bead-workspace-inputs', 'Skip approved workspace inputs')
+
+    expect(result.committed).toBe(true)
+    expect(result.skippedFiles).toContain('local-config/project.json')
+    const committedFiles = execFileSync('git', [
+      '-C',
+      dir,
+      'diff-tree',
+      '--no-commit-id',
+      '--name-only',
+      '-r',
+      'HEAD',
+    ], { encoding: 'utf8' }).trim().split('\n').filter(Boolean)
+    expect(committedFiles).toEqual(['app.ts'])
+    expect(execFileSync('git', ['-C', dir, 'ls-files', '--others', '--exclude-standard'], { encoding: 'utf8' }))
+      .toContain('local-config/project.json')
+  })
+
   it('does not commit legacy .cache/project-tooling files even without a setup profile', () => {
     const dir = makeFreshRepo()
     mkdirSync(join(dir, '.cache', 'project-tooling', 'go', 'src'), { recursive: true })

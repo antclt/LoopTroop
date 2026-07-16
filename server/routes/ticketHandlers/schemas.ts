@@ -142,6 +142,12 @@ export const executionSetupPlanSchema = z.object({
     gaps: z.array(z.string()),
   }).strict(),
   tempRoots: z.array(z.string()),
+  workspaceInputs: z.array(z.object({
+    path: z.string(),
+    kind: z.enum(['file', 'directory']),
+    sourceStatus: z.enum(['ignored', 'untracked']),
+    reason: z.string(),
+  }).strict()).default([]),
   workspaceProbes: z.array(z.object({
     id: z.string(),
     command: z.string(),

@@ -27,7 +27,12 @@ import {
   lockTicketStartConfiguration,
   patchTicket,
   resolveTicketContinuationCandidate,
+  upsertLatestPhaseArtifact,
 } from '../../storage/tickets'
+import {
+  EXECUTION_SETUP_RETRY_NOTES_ARTIFACT_TYPE,
+  serializeExecutionSetupRetryNotes,
+} from '../../phases/executionSetup/types'
 import {
   completeCloseUnmerged,
   completeMergedPullRequest,
@@ -519,8 +524,8 @@ export async function handleRetryTicket(c: Context) {
     return c.json({ error: parsedBody.error.issues[0]?.message ?? 'Invalid retry request' }, 400)
   }
   const userRetryNote = parsedBody.data.note
-  if (userRetryNote !== undefined && ticket.previousStatus !== 'CODING') {
-    return c.json({ error: 'Retry notes are only available for errors blocked during implementation' }, 409)
+  if (userRetryNote !== undefined && ticket.previousStatus !== 'CODING' && ticket.previousStatus !== 'PREPARING_EXECUTION_ENV') {
+    return c.json({ error: 'Retry notes are only available for implementation or workspace runtime setup errors' }, 409)
   }
 
   if (isExecutionBandStatus(ticket.previousStatus)) {
@@ -560,6 +565,14 @@ export async function handleRetryTicket(c: Context) {
       ensureActivePhaseAttempt(ticketId, ticket.previousStatus)
       archiveActivePhaseAttempts(ticketId, [ticket.previousStatus], 'manual_retry_after_blocked_error')
       createFreshPhaseAttempts(ticketId, [ticket.previousStatus])
+    }
+    if (userRetryNote !== undefined && ticket.previousStatus === 'PREPARING_EXECUTION_ENV') {
+      upsertLatestPhaseArtifact(
+        ticketId,
+        EXECUTION_SETUP_RETRY_NOTES_ARTIFACT_TYPE,
+        'PREPARING_EXECUTION_ENV',
+        serializeExecutionSetupRetryNotes([userRetryNote]),
+      )
     }
     ensureActorForTicket(ticketId)
     sendTicketEvent(ticketId, { type: 'RETRY' })

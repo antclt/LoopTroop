@@ -1618,6 +1618,7 @@ export type WorkflowAction =
   | 'approve'
   | 'cancel'
   | 'retry'
+  | 'edit_execution_setup_plan'
   | 'continue'
   | 'merge'
   | 'close_unmerged'

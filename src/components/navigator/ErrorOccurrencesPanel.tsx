@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { sanitizeErrorForDisplay } from '@/lib/errorDisplay'
 import type { Ticket } from '@/hooks/useTickets'
 import { formatTimestampString } from '@/components/workspace/logFormat'
 import { StatusIndicator } from './StatusIndicator'
@@ -69,7 +70,7 @@ function ErrorOccurrenceRow({
           </p>
           {occurrence.errorMessage && (
             <p className="text-[11px] font-mono text-muted-foreground/90 line-clamp-2 [overflow-wrap:anywhere]">
-              {occurrence.errorMessage}
+              {sanitizeErrorForDisplay(occurrence.errorMessage)}
             </p>
           )}
         </div>

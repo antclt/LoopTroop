@@ -14,6 +14,7 @@ import {
   patchTicket,
   upsertLatestPhaseArtifact,
 } from '../../storage/tickets'
+import { parseExecutionSetupRetryNotes } from '../../phases/executionSetup/types'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { WORKFLOW_PHASES } from '@shared/workflowMeta'
 
@@ -374,11 +375,44 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
 
     expect(response.status).toBe(409)
     expect(await response.json()).toMatchObject({
-      error: 'Retry notes are only available for errors blocked during implementation',
+      error: 'Retry notes are only available for implementation or workspace runtime setup errors',
     })
     expect(sendTicketEvent).not.toHaveBeenCalled()
     expect(listPhaseAttempts(ticket.id, 'REFINING_PRD')).toHaveLength(1)
     expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
+  })
+
+  it('persists an extra note as context for a fresh workspace runtime setup attempt', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    ensureActivePhaseAttempt(ticket.id, 'PREPARING_EXECUTION_ENV')
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      'execution_setup_report',
+      'PREPARING_EXECUTION_ENV',
+      JSON.stringify({ status: 'failed', errors: ['Workspace probe failed'] }),
+    )
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'PREPARING_EXECUTION_ENV' } }),
+      errorMessage: 'Workspace probe failed',
+    })
+
+    const note = 'Check the original checkout for the missing generated fixture.'
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    })
+
+    expect(response.status).toBe(200)
+    expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
+    const noteArtifact = listPhaseArtifacts(ticket.id, { phase: 'PREPARING_EXECUTION_ENV' })
+      .find((artifact) => artifact.artifactType === 'execution_setup_retry_notes')
+    expect(parseExecutionSetupRetryNotes(noteArtifact?.content)).toEqual([note])
+    expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
+      expect.objectContaining({ attemptNumber: 2, state: 'active' }),
+      expect.objectContaining({ attemptNumber: 1, state: 'archived' }),
+    ])
   })
 
   it('does not resume when CODING recovery fails before a user note can be persisted', async () => {

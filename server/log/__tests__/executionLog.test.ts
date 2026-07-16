@@ -4,6 +4,7 @@ import * as ticketsModule from '../../storage/tickets'
 import * as atomicAppendModule from '../../io/atomicAppend'
 
 const mockGetTicketPaths = vi.spyOn(ticketsModule, 'getTicketPaths').mockReturnValue({
+  projectRoot: '/tmp/test-project',
   executionLogPath: '/tmp/test-execution-log.jsonl',
   debugLogPath: '/tmp/test-execution-log.debug.jsonl',
   aiLogPath: '/tmp/test-execution-log.ai.jsonl',

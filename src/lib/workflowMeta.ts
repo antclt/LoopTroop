@@ -5,6 +5,7 @@ import {
   WORKFLOW_PHASE_MAP,
   WORKFLOW_PHASES,
 } from '@shared/workflowMeta'
+import { sanitizeErrorForDisplay } from './errorDisplay'
 
 export { WORKFLOW_GROUPS, WORKFLOW_PHASES, WORKFLOW_PHASE_MAP }
 export type { EditableArtifactType, KanbanPhase }
@@ -95,7 +96,7 @@ export function getCascadeEditWarningMessage(
 function formatBlockedErrorLabel(errorMessage?: string | null): string {
   const blockedErrorLabel = BASE_STATUS_LABELS.BLOCKED_ERROR ?? 'Error (reason)'
   if (!errorMessage) return blockedErrorLabel
-  const trimmed = errorMessage.trim()
+  const trimmed = sanitizeErrorForDisplay(errorMessage).replace(/\s+/g, ' ').trim()
   if (!trimmed) return blockedErrorLabel
   const shortReason = trimmed.length > 56 ? `${trimmed.slice(0, 53)}...` : trimmed
   return `Error (${shortReason})`

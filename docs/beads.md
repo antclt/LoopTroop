@@ -185,6 +185,7 @@ The setup plan is an approval artifact, not the final runtime state. Its key fie
 
 - **`readiness`**: `status`, `actionsRequired`, evidence, and remaining gaps
 - **`tempRoots`**: approved temporary directories the setup phase may use
+- **`workspaceInputs`**: approved ignored or untracked files and directories materialized from the original checkout into the ticket worktree before setup commands run
 - **`steps`**: ordered setup steps with `commands`, `required`, rationale, and cautions
 - **`projectCommands`**: discovered full-project command families (`prepare`, `testFull`, `lintFull`, `typecheckFull`)
 - **`qualityGatePolicy`**: default policy later coding beads should follow
@@ -216,12 +217,15 @@ Final testing reuses this validated runtime wrapper instead of rediscovering the
 `PREPARING_EXECUTION_ENV` is deliberately narrow:
 
 - it must respect the approved setup plan first
+- it may use only the ignored or untracked files and directories listed in the approved workspace inputs
 - it should verify readiness before running bootstrap commands
 - it may prepare temporary-only tooling under LoopTroop-owned runtime paths
 - it must not quietly leave committable project changes behind
 - it may use setup-scoped online lookup (`websearch` / `webfetch`) when local metadata is insufficient to resolve a required launcher or version
 
 This is why the setup phase belongs in the Beads & Execution story: it is the controlled runtime bridge between an approved plan and a safe coding loop.
+
+LoopTroop validates approved workspace inputs before copying them. Paths must stay inside the original checkout, must exist there with the declared ignored or untracked status, and cannot target Git or LoopTroop internals. Directory inputs are recursive and have no size limit. Existing tracked ticket files are never replaced. Materialized inputs remain setup-only and are excluded from ticket commits.
 
 ---
 

@@ -437,6 +437,35 @@ function normalizeExecutionSetupCommandProbes(value: unknown, label: string): Ex
   })
 }
 
+function normalizeExecutionSetupWorkspaceInputs(value: unknown): ExecutionSetupPlanPayload['workspaceInputs'] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) throw new Error('workspace_inputs must be a list')
+  return value.map((entry, index) => {
+    if (!isRecord(entry)) throw new Error(`workspace_inputs[${index}] must be an object`)
+    const kind = getRequiredString(entry, ['kind', 'type'], `workspace_inputs[${index}].kind`)
+    if (kind !== 'file' && kind !== 'directory') {
+      throw new Error(`workspace_inputs[${index}].kind must be file or directory`)
+    }
+    const sourceStatus = getRequiredString(
+      entry,
+      ['sourcestatus', 'status'],
+      `workspace_inputs[${index}].source_status`,
+    )
+    if (sourceStatus !== 'ignored' && sourceStatus !== 'untracked') {
+      throw new Error(`workspace_inputs[${index}].source_status must be ignored or untracked`)
+    }
+    return {
+      path: normalizeExecutionSetupPath(
+        getValueByAliases(entry, ['path']),
+        `workspace_inputs[${index}].path`,
+      ),
+      kind,
+      sourceStatus,
+      reason: getRequiredString(entry, ['reason', 'rationale'], `workspace_inputs[${index}].reason`),
+    }
+  })
+}
+
 function normalizeExecutionSetupGitHooks(value: unknown): ExecutionSetupGitHooksPayload {
   if (value === undefined || value === null) {
     return { policy: 'validate_explicitly', detected: [], validationCommands: [] }
@@ -565,6 +594,9 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
     throw new Error('Execution setup plan requires at least one temp_root')
   }
 
+  const workspaceInputs = normalizeExecutionSetupWorkspaceInputs(
+    getValueByAliases(value, ['workspaceinputs']),
+  )
   const rawSteps = getValueByAliases(value, ['steps', 'plansteps'])
   const steps = Array.isArray(rawSteps) ? rawSteps.map((entry, index) => {
     if (!isRecord(entry)) throw new Error(`steps[${index}] must be an object`)
@@ -574,8 +606,8 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
   const readiness = normalizeExecutionSetupPlanReadiness(
     getValueByAliases(value, ['readiness', 'environmentreadiness', 'environment_readiness']),
     {
-      status: steps.length > 0 ? 'partial' : 'ready',
-      actionsRequired: steps.length > 0,
+      status: steps.length > 0 || workspaceInputs.length > 0 ? 'partial' : 'ready',
+      actionsRequired: steps.length > 0 || workspaceInputs.length > 0,
     },
   )
 
@@ -586,15 +618,15 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
     if (readiness.gaps.length > 0) {
       throw new Error('Execution setup plan readiness cannot list gaps when status is ready')
     }
-    if (steps.length > 0) {
-      throw new Error('Execution setup plan cannot include setup steps when readiness is ready')
+    if (steps.length > 0 || workspaceInputs.length > 0) {
+      throw new Error('Execution setup plan cannot include setup steps or workspace inputs when readiness is ready')
     }
   } else {
     if (!readiness.actionsRequired) {
       throw new Error('Execution setup plan readiness must require actions unless status is ready')
     }
-    if (steps.length === 0) {
-      throw new Error('Execution setup plan requires at least one setup step when actions are required')
+    if (steps.length === 0 && workspaceInputs.length === 0) {
+      throw new Error('Execution setup plan requires at least one setup step or workspace input when actions are required')
     }
   }
 
@@ -621,6 +653,7 @@ function normalizeExecutionSetupPlan(value: unknown, repairWarnings?: string[]):
     summary,
     readiness,
     tempRoots: [...new Set(tempRoots)],
+    workspaceInputs,
     workspaceProbes,
     gitHooks,
     steps,
@@ -716,6 +749,9 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     'probecommands',
     'verificationcommands',
   ]))
+  const workspaceInputs = normalizeExecutionSetupWorkspaceInputs(
+    getValueByAliases(value, ['workspaceinputs']),
+  )
   const workspaceProbes = normalizeExecutionSetupCommandProbes(
     getValueByAliases(value, ['workspaceprobes']),
     'workspace_probes',
@@ -758,6 +794,7 @@ function normalizeExecutionSetupProfile(value: unknown): ExecutionSetupProfilePa
     status,
     summary,
     tempRoots: [...new Set(tempRoots)],
+    workspaceInputs,
     bootstrapCommands,
     toolingProbeCommands,
     workspaceProbes,
@@ -802,6 +839,12 @@ function toCanonicalExecutionSetupPlanPayload(value: ExecutionSetupPlanPayload):
       gaps: value.readiness.gaps,
     },
     temp_roots: value.tempRoots,
+    workspace_inputs: value.workspaceInputs.map((input) => ({
+      path: input.path,
+      kind: input.kind,
+      source_status: input.sourceStatus,
+      reason: input.reason,
+    })),
     workspace_probes: value.workspaceProbes,
     git_hooks: {
       policy: value.gitHooks.policy,
@@ -850,6 +893,12 @@ function toCanonicalExecutionSetupResultPayload(value: ExecutionSetupResultPaylo
       status: value.profile.status,
       summary: value.profile.summary,
       temp_roots: value.profile.tempRoots,
+      workspace_inputs: value.profile.workspaceInputs.map((input) => ({
+        path: input.path,
+        kind: input.kind,
+        source_status: input.sourceStatus,
+        reason: input.reason,
+      })),
       bootstrap_commands: value.profile.bootstrapCommands,
       tooling_probe_commands: value.profile.toolingProbeCommands,
       workspace_probes: value.profile.workspaceProbes,

@@ -16,11 +16,13 @@ const {
   recordWorktreeStartCommitMock,
   resetWorktreeToCommitMock,
   isMockOpenCodeModeMock,
+  materializeExecutionSetupWorkspaceInputsMock,
 } = vi.hoisted(() => ({
   executeExecutionSetupWithRetriesMock: vi.fn(),
   recordWorktreeStartCommitMock: vi.fn(),
   resetWorktreeToCommitMock: vi.fn(),
   isMockOpenCodeModeMock: vi.fn(),
+  materializeExecutionSetupWorkspaceInputsMock: vi.fn(() => ({ copiedPaths: [] })),
 }))
 
 vi.mock('../../phases/executionSetup/executor', () => ({
@@ -44,6 +46,10 @@ vi.mock('../../opencode/factory', async () => {
     isMockOpenCodeMode: isMockOpenCodeModeMock,
   }
 })
+
+vi.mock('../../phases/executionSetup/workspaceInputs', () => ({
+  materializeExecutionSetupWorkspaceInputs: materializeExecutionSetupWorkspaceInputsMock,
+}))
 
 import { handleExecutionSetup } from '../phases/executionSetupPhase'
 
@@ -94,6 +100,7 @@ function readyExecutionSetupReport(ticketId: string): ExecutionSetupReport {
       status: 'ready' as const,
       summary: 'ready',
       tempRoots: ['.ticket/runtime/execution-setup'],
+      workspaceInputs: [],
       bootstrapCommands: [],
       toolingProbeCommands: [],
       workspaceProbes: [],
@@ -193,9 +200,11 @@ describe('handleExecutionSetup', () => {
     recordWorktreeStartCommitMock.mockReset()
     resetWorktreeToCommitMock.mockReset()
     isMockOpenCodeModeMock.mockReset()
+    materializeExecutionSetupWorkspaceInputsMock.mockReset()
 
     recordWorktreeStartCommitMock.mockReturnValue('setup-start-sha')
     isMockOpenCodeModeMock.mockReturnValue(false)
+    materializeExecutionSetupWorkspaceInputsMock.mockReturnValue({ copiedPaths: [] })
   })
 
   afterAll(() => {
@@ -255,6 +264,17 @@ describe('handleExecutionSetup', () => {
         preservePaths: expect.arrayContaining(['.ticket']),
       }),
     )
+    expect(materializeExecutionSetupWorkspaceInputsMock).toHaveBeenCalledTimes(2)
+    expect(materializeExecutionSetupWorkspaceInputsMock).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      projectRoot: paths.projectRoot,
+      worktreePath: paths.worktreePath,
+      workspaceInputs: [],
+    }))
+    expect(materializeExecutionSetupWorkspaceInputsMock).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      projectRoot: paths.projectRoot,
+      worktreePath: paths.worktreePath,
+      workspaceInputs: [],
+    }))
     expect(existsSync(join(paths.executionSetupDir, 'tool-cache', 'go', 'VERSION'))).toBe(true)
     expect(existsSync(join(paths.executionSetupDir, 'env.sh'))).toBe(false)
     expect(existsSync(join(paths.executionSetupDir, 'run'))).toBe(false)

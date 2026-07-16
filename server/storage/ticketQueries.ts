@@ -1118,6 +1118,7 @@ export function listNonTerminalTickets(): PublicTicket[] {
 }
 
 export function getTicketPaths(ticketRef: string): {
+  projectRoot: string
   worktreePath: string
   ticketDir: string
   executionLogPath: string
@@ -1132,6 +1133,7 @@ export function getTicketPaths(ticketRef: string): {
   if (!storage) return undefined
   const baseBranch = resolveTicketBaseBranch(storage.projectRoot, storage.externalId)
   return {
+    projectRoot: storage.projectRoot,
     worktreePath: getTicketWorktreePath(storage.projectRoot, storage.externalId),
     ticketDir: getTicketDir(storage.projectRoot, storage.externalId),
     executionLogPath: getTicketExecutionLogPath(storage.projectRoot, storage.externalId),

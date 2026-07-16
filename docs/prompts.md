@@ -107,8 +107,8 @@ All built-in prompts in this section are exported from `server/prompts/index.ts`
 | Prompt | Used in / status | Session / tools | Context inputs | Purpose | Full text |
 | --- | --- | --- | --- | --- | --- |
 | `PROM_EXECUTION_CAPABILITY_PROBE` | `PRE_FLIGHT_CHECK` | Fresh probe / `read_only` | none | Runs a minimal OpenCode capability probe before execution setup. | [Full content here](#full-prompt-prom-execution-capability-probe) |
-| `PROM_EXECUTION_SETUP_PLAN` | `WAITING_EXECUTION_SETUP_APPROVAL` | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan_notes` | Drafts a reviewable workspace setup plan without modifying the repository. | [Full content here](#full-prompt-prom-execution-setup-plan) |
-| `PROM_EXECUTION_SETUP_PLAN_REGENERATE` | `WAITING_EXECUTION_SETUP_APPROVAL` regeneration | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan`, `execution_setup_plan_notes` | Revises the current setup plan using user commentary. | [Full content here](#full-prompt-prom-execution-setup-plan-regenerate) |
+| `PROM_EXECUTION_SETUP_PLAN` | `WAITING_EXECUTION_SETUP_APPROVAL` | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan_notes`, original checkout and ticket worktree locations | Drafts a reviewable workspace setup plan and identifies evidence-backed missing ignored or untracked inputs without modifying the repository. | [Full content here](#full-prompt-prom-execution-setup-plan) |
+| `PROM_EXECUTION_SETUP_PLAN_REGENERATE` | `WAITING_EXECUTION_SETUP_APPROVAL` regeneration | Fresh planning / `read_only` | `ticket_details`, `relevant_files`, `prd`, `beads`, `execution_setup_profile`, `execution_setup_plan`, `execution_setup_plan_notes`, cleaned prior setup failure, original checkout and ticket worktree locations | Revises the current setup plan using user commentary and the prior runtime failure. | [Full content here](#full-prompt-prom-execution-setup-plan-regenerate) |
 | `PROM_EXECUTION_SETUP` | `PREPARING_EXECUTION_ENV` | Fresh execution setup / `execution_setup_online` | `ticket_details`, `beads`, `execution_setup_plan`, `execution_setup_notes` | Executes the approved workspace setup plan and returns a structured setup result. | [Full content here](#full-prompt-prom-execution-setup) |
 | `PROM_EXECUTION_SETUP_NOTE` | `PREPARING_EXECUTION_ENV` retry-note sub-step | Same session / `disabled` | `ticket_details`, `error_context` | Summarizes a failed runtime setup attempt for the next retry. | [Full content here](#full-prompt-prom-execution-setup-note) |
 
@@ -1472,14 +1472,19 @@ Inspect the approved planning context and the current workspace state, decide wh
 5. Language Agnosticism: Infer tooling from the repository itself. Do not assume Node, npm, pnpm, Python, Cargo, Maven, Gradle, Go, or any other ecosystem unless the repository evidence supports it. Never invent commands for a language or toolchain you did not actually observe.
 6. Workspace Setup Policy: The setup plan may propose repository-native bootstrap commands. Prefer LoopTroop-owned temporary roots under `.ticket/runtime/execution-setup/**`, especially `.ticket/runtime/execution-setup/tool-cache/**`, for execution-only toolchains, dependency caches, build caches, generated outputs, or tool caches. Do not propose ticket feature implementation as part of setup.
 7. Tracked Change Boundary: If a setup command is likely to modify tracked manifests, lockfiles, generated assets, or configuration, prefer a non-mutating or temp-root alternative. If readiness truly requires a permanent repository change, record the exact need in `cautions` instead of trying to make that change during setup.
-8. Plan Structure: Return an ordered list of setup steps only when actions are required. Each step must include `id`, `title`, `purpose`, `commands`, `required`, `rationale`, and `cautions`; use `cautions: []` when no step-specific cautions apply.
+8. Plan Structure: Return ordered setup steps when commands are required. Each step must include `id`, `title`, `purpose`, `commands`, `required`, `rationale`, and `cautions`; use `cautions: []` when no step-specific cautions apply. A plan whose only required action is materializing approved workspace inputs may use a non-empty `workspace_inputs` list with an empty `steps` list.
 9. Command Families: Discover project-level command families for prepare/bootstrap, full test, full lint, and full typecheck when possible. If a family is unavailable, return an empty list rather than inventing commands.
 10. Quality Gate Policy: Default to bead test commands first, then impacted-or-package scoped lint/typecheck, and never block later phases on unrelated baseline debt.
 11. Functional Workspace Probes: Propose at least one safe repository-level command that loads or discovers the actual project whenever project command families or bead test commands exist. Tool/runtime version checks alone are not workspace probes.
 12. Git Hook Validation: Inspect repository hook configuration and propose explicit, safe validation commands for hooks you can identify. Do not invent commands for unknown hooks. The backend supplies read-only detected-hook evidence and the configured policy.
-13. Reproducible Inputs: Never propose copying ignored files from another checkout. A required file must be tracked or reproducibly generated by an approved repository-native command; otherwise list it as a readiness gap.
-14. No Execution: Do not initialize the environment yet. This phase stops at the plan artifact so the user can review and edit it.
-15. Output Discipline: End with exactly one `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` block and nothing else.
+13. Original Checkout Audit: Compare the current ticket worktree with the original checkout provided in `workspace_locations`. Check whether a file or directory that is ignored or untracked in the original checkout is absent from the ticket worktree and is needed to prepare, load, build, test, lint, or otherwise operate the project.
+14. Workspace Input Evidence: Add an item only when concrete repository evidence or a prior workspace-setup failure connects it to a readiness problem. Do not list unrelated ignored files, caches, dependencies, temporary output, or the complete ignored-file inventory.
+15. Workspace Inputs: Record every necessary ignored or untracked file or directory in `workspace_inputs`. Use repository-relative paths. For each item, record whether it is a file or directory, whether it is ignored or untracked, and a concise reason it is needed. Do not include file contents and do not add shell copy commands to `steps`.
+16. Approved Materialization: The user reviews and may edit `workspace_inputs` as part of the normal execution setup plan. Approval authorizes LoopTroop to copy only those listed inputs from the original checkout into the same relative paths in the ticket worktree before setup commands run.
+17. Workspace Input Boundaries: Never propose `.git`, `.ticket`, `.looptroop`, or paths outside the original checkout as workspace inputs.
+18. Workspace Input Readiness: A non-empty `workspace_inputs` list counts as required setup work. Set `readiness.actions_required` to true when those inputs are needed, even when no additional setup command is required.
+19. No Execution: Do not initialize the environment yet. This phase stops at the plan artifact so the user can review and edit it.
+20. Output Discipline: End with exactly one `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` block and nothing else.
 
 ## Expected Output Format
 JSON or YAML inside `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` with this exact shape:
@@ -1496,6 +1501,7 @@ JSON or YAML inside `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` with this
     "gaps": []
   },
   "temp_roots": [".ticket/runtime/execution-setup", ".ticket/runtime/execution-setup/tool-cache"],
+  "workspace_inputs": [{"path":"relative/path","kind":"file|directory","source_status":"ignored|untracked","reason":"why setup needs it"}],
   "workspace_probes": [{"id": "workspace-1", "command": "<safe repository-level command>", "purpose": "prove the project can be loaded"}],
   "git_hooks": {
     "policy": "validate_explicitly",
@@ -1517,7 +1523,7 @@ JSON or YAML inside `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` with this
   },
   "cautions": ["..."]
 }
-`steps` must be empty when `readiness.status` is `ready` and `readiness.actions_required` is `false`. When actions are required, `steps` must be a non-empty ordered list.
+`steps` and `workspace_inputs` must both be empty when `readiness.status` is `ready` and `readiness.actions_required` is `false`. When actions are required, at least one of those lists must be non-empty.
 Each setup step must have this exact shape:
 {
   "id": "setup-step-1",
@@ -1542,6 +1548,8 @@ Each setup step must have this exact shape:
 [execution_setup_profile provided at runtime]
 ### execution_setup_plan_notes
 [execution_setup_plan_notes provided at runtime]
+### workspace_locations
+[workspace_locations provided at runtime]
 ````
 :::
 
@@ -1569,11 +1577,12 @@ Revise the current execution setup plan using the provided user commentary while
 1. Treat the provided `execution_setup_plan` as the current draft baseline.
 2. Apply the user commentary from `execution_setup_plan_note` entries directly to the plan when it is compatible with the repository and workspace setup policy.
 3. Re-audit current readiness while revising. Preserve or strengthen a no-op plan when the environment is already ready; only add steps if the commentary or repository evidence shows missing work.
-4. Preserve good existing steps when the commentary does not require changing them.
-5. Remain language-agnostic. Do not switch ecosystems or invent commands unless the repository evidence supports the change.
-6. Do not execute commands or mutate the repository while revising the plan.
-7. Return a full replacement setup plan artifact, not a diff or patch note.
-8. Output Discipline: End with exactly one `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` block and nothing else.
+4. When prior workspace-runtime failure context is present, use its cleaned command and error output while checking the original checkout for ignored or untracked inputs that concretely explain the failure.
+5. Preserve good existing steps when the commentary does not require changing them.
+6. Remain language-agnostic. Do not switch ecosystems or invent commands unless the repository evidence supports the change.
+7. Do not execute commands or mutate the repository while revising the plan.
+8. Return a full replacement setup plan artifact, not a diff or patch note.
+9. Output Discipline: End with exactly one `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` block and nothing else.
 
 ## Expected Output Format
 JSON or YAML inside `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` with this exact shape:
@@ -1590,6 +1599,7 @@ JSON or YAML inside `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` with this
     "gaps": []
   },
   "temp_roots": [".ticket/runtime/execution-setup", ".ticket/runtime/execution-setup/tool-cache"],
+  "workspace_inputs": [{"path":"relative/path","kind":"file|directory","source_status":"ignored|untracked","reason":"why setup needs it"}],
   "workspace_probes": [{"id": "workspace-1", "command": "<safe repository-level command>", "purpose": "prove the project can be loaded"}],
   "git_hooks": {
     "policy": "validate_explicitly",
@@ -1611,7 +1621,7 @@ JSON or YAML inside `<EXECUTION_SETUP_PLAN>...</EXECUTION_SETUP_PLAN>` with this
   },
   "cautions": ["..."]
 }
-`steps` must be empty when `readiness.status` is `ready` and `readiness.actions_required` is `false`. When actions are required, `steps` must be a non-empty ordered list.
+`steps` and `workspace_inputs` must both be empty when `readiness.status` is `ready` and `readiness.actions_required` is `false`. When actions are required, at least one of those lists must be non-empty.
 Each setup step must have this exact shape:
 {
   "id": "setup-step-1",
@@ -1638,6 +1648,8 @@ Each setup step must have this exact shape:
 [execution_setup_plan provided at runtime]
 ### execution_setup_plan_notes
 [execution_setup_plan_notes provided at runtime]
+### workspace_locations
+[workspace_locations provided at runtime]
 ````
 :::
 
@@ -1687,7 +1699,7 @@ Execute the approved setup plan, initialize reusable execution state, discover a
 23. Tooling Probes: Record non-mutating, rerunnable `tooling_probe_commands` that prove the prepared environment works. If a wrapper is required, the probe command itself must use that wrapper, for example `./.ticket/runtime/execution-setup/run <tool> --version`. LoopTroop reruns these probes before coding and rejects profiles with broken wrappers or missing probes for declared command families.
 24. Workspace Probes: Copy the approved `workspace_probes` into the profile. They must be repository-level functional checks, not tool version probes. LoopTroop executes them independently before coding.
 25. Git Hooks: Copy the approved `git_hooks.policy` and editable `git_hooks.validation_commands` into the profile. Do not modify backend-supplied `git_hooks.detected` evidence. LoopTroop runs explicit commands itself when the policy is `validate_explicitly`.
-26. Reproducible Inputs: Never copy ignored files from the primary checkout. Generate required files only through approved repository-native commands; otherwise report the missing prerequisite with `checks.workspace = fail`.
+26. Approved Workspace Inputs: LoopTroop materializes the approved `workspace_inputs` before this setup session begins. Use those inputs as part of the prepared worktree. Do not copy additional ignored or untracked paths that are not present in the approved plan. If an approved input is unavailable or materialization failed, report the exact path as a workspace failure.
 27. Quality Gate Policy: Default to bead test commands first, then impacted-or-package scoped lint/typecheck, and never block later phases on unrelated baseline debt.
 28. Tooling Gate: If a required command launcher or toolchain is missing, set `checks.tooling` to `fail` only after at least two distinct safe user-space provisioning strategies under approved temp roots fail, or when no safe temp-root provisioning path exists. Keep the top-level `status` and `profile.status` as `ready` for schema compatibility, and explain the attempted provisioning and blocker in `summary` and `cautions`. LoopTroop will block coding until every setup check passes.
 29. Do Not Stop Early: Continue working until the environment is ready, you hit a hard blocker, or the app interrupts you.
@@ -1706,6 +1718,7 @@ JSON or YAML inside `<EXECUTION_SETUP_RESULT>...</EXECUTION_SETUP_RESULT>` with 
     "status": "ready",
     "summary": "environment initialized and reusable",
     "temp_roots": [".ticket/runtime/execution-setup", ".ticket/runtime/execution-setup/tool-cache"],
+    "workspace_inputs": [{"path":"relative/path","kind":"file|directory","source_status":"ignored|untracked","reason":"approved setup input"}],
     "bootstrap_commands": ["..."],
     "tooling_probe_commands": ["./.ticket/runtime/execution-setup/run <tool> --version"],
     "workspace_probes": [{"id": "workspace-1", "command": "<safe repository-level command>", "purpose": "prove the project can be loaded"}],

@@ -9,6 +9,7 @@ import type { Ticket } from '@/hooks/useTickets'
 import { type DBartifact, useTicketArtifacts } from '@/hooks/useTicketArtifacts'
 import { useTicketPhaseAttempts, type TicketPhaseAttempt } from '@/hooks/useTicketPhaseAttempts'
 import { getTicketRuntime } from '@/lib/ticketNormalization'
+import { sanitizeErrorForDisplay } from '@/lib/errorDisplay'
 import type { TicketErrorOccurrence } from '@/lib/errorOccurrences'
 import { findLatestArtifactByType, findLatestCompanionArtifact, parseArtifactCompanionPayload } from '@/components/workspace/artifactCompanionUtils'
 import { buildCoverageArtifactContent, parseCoverageArtifact } from '@/components/workspace/phaseArtifactTypes'
@@ -374,7 +375,7 @@ function getSummaryBasePhaseLabel(phase: string, errorMessage?: string | null): 
 const MAX_SUMMARY_ERROR_LENGTH = 240
 
 function normalizeSummaryError(errorMessage?: string | null): string {
-  const normalized = errorMessage?.trim().split(/\r?\n/, 1)[0]?.replace(/\s+/g, ' ').trim()
+  const normalized = sanitizeErrorForDisplay(errorMessage ?? '').split('\n', 1)[0]?.replace(/\s+/g, ' ').trim()
   if (!normalized) return 'No error details were captured.'
   if (normalized.length <= MAX_SUMMARY_ERROR_LENGTH) return normalized
   return `${normalized.slice(0, MAX_SUMMARY_ERROR_LENGTH - 1).trimEnd()}…`

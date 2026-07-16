@@ -74,6 +74,7 @@ describe('Pre-Flight Doctor', () => {
   let deps: DoctorDeps
 
   const ticketPaths = {
+    projectRoot: '/tmp/test-project',
     worktreePath: '/tmp/test-worktree',
     ticketDir: '/tmp/test-worktree/.ticket',
     executionLogPath: '/tmp/test-worktree/.ticket/runtime/execution-log.jsonl',

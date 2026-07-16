@@ -4584,6 +4584,7 @@ function ExecutionSetupPlanView({
   const optionalStepCount = Math.max(stepCount - requiredStepCount, 0)
   const commandCount = plan.steps.reduce((total, step) => total + step.commands.length, 0)
   const workspaceProbeCount = plan.workspaceProbes.length
+  const workspaceInputCount = plan.workspaceInputs.length
   const detectedHookCount = plan.gitHooks.detected.length
   const hookValidationCount = plan.gitHooks.validationCommands.length
   const generatedAtLabel = formatArtifactTimestampLabel(report?.generatedAt)
@@ -4718,13 +4719,14 @@ function ExecutionSetupPlanView({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-9 gap-3">
+        <div className="grid grid-cols-2 xl:grid-cols-3 2xl:grid-cols-10 gap-3">
           <MetadataCard label="Readiness" value={readinessLabel} tone={readinessTone} />
           <MetadataCard label="Actions" value={plan.readiness.actionsRequired ? 'Yes' : 'No'} tone={plan.readiness.actionsRequired ? 'warning' : 'success'} />
           <MetadataCard label="Steps" value={stepCount.toLocaleString()} tone="info" />
           <MetadataCard label="Required" value={requiredStepCount.toLocaleString()} tone={requiredStepCount > 0 ? 'success' : 'default'} />
           <MetadataCard label="Optional" value={optionalStepCount.toLocaleString()} tone={optionalStepCount > 0 ? 'warning' : 'default'} />
           <MetadataCard label="Commands" value={commandCount.toLocaleString()} tone={commandCount > 0 ? 'info' : 'default'} />
+          <MetadataCard label="Workspace Inputs" value={workspaceInputCount.toLocaleString()} tone={workspaceInputCount > 0 ? 'warning' : 'default'} />
           <MetadataCard label="Workspace Probes" value={workspaceProbeCount.toLocaleString()} tone={workspaceProbeCount > 0 ? 'info' : 'warning'} />
           <MetadataCard label="Detected Hooks" value={detectedHookCount.toLocaleString()} tone={detectedHookCount > 0 ? 'info' : 'default'} />
           <MetadataCard label="Hook Checks" value={hookValidationCount.toLocaleString()} tone={hookValidationCount > 0 ? 'success' : 'default'} />
@@ -4732,12 +4734,20 @@ function ExecutionSetupPlanView({
 
         <CollapsibleSection title="Workspace Verification" defaultOpen>
           <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-            <ArtifactListSection
-              title="Workspace Probes"
-              items={plan.workspaceProbes.map((probe) => `${probe.id}: ${probe.command}${probe.purpose ? ` — ${probe.purpose}` : ''}`)}
-              emptyLabel="No repository-level workspace probes were recorded."
-              tone="default"
-            />
+            <div className="space-y-3">
+              <ArtifactListSection
+                title="Approved Workspace Inputs"
+                items={plan.workspaceInputs.map((input) => `${input.path} (${input.kind}, ${input.sourceStatus}): ${input.reason}`)}
+                emptyLabel="No ignored or untracked workspace inputs were approved."
+                tone="default"
+              />
+              <ArtifactListSection
+                title="Workspace Probes"
+                items={plan.workspaceProbes.map((probe) => `${probe.id}: ${probe.command}${probe.purpose ? ` — ${probe.purpose}` : ''}`)}
+                emptyLabel="No repository-level workspace probes were recorded."
+                tone="default"
+              />
+            </div>
             <div className="space-y-3">
               <MetadataCard label="Git Hook Policy" value={plan.gitHooks.policy.replaceAll('_', ' ')} tone="info" />
               <ArtifactListSection
@@ -5070,9 +5080,10 @@ function ExecutionSetupProfileSummary({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 xl:grid-cols-10 gap-3">
+      <div className="grid grid-cols-2 xl:grid-cols-11 gap-3">
         <MetadataCard label="Status" value={profile.status || 'Unknown'} tone={statusReady ? 'success' : 'info'} />
         <MetadataCard label="Temp Roots" value={profile.tempRoots.length.toLocaleString()} tone="info" />
+        <MetadataCard label="Workspace Inputs" value={profile.workspaceInputs.length.toLocaleString()} tone={profile.workspaceInputs.length > 0 ? 'info' : 'default'} />
         <MetadataCard label="Bootstrap" value={profile.bootstrapCommands.length.toLocaleString()} tone={profile.bootstrapCommands.length > 0 ? 'info' : 'default'} />
         <MetadataCard label="Probes" value={profile.toolingProbeCommands.length.toLocaleString()} tone={profile.toolingProbeCommands.length > 0 ? 'success' : 'default'} />
         <MetadataCard label="Workspace Probes" value={profile.workspaceProbes.length.toLocaleString()} tone={profile.workspaceProbes.length > 0 ? 'success' : 'warning'} />
@@ -5089,6 +5100,11 @@ function ExecutionSetupProfileSummary({
             title="Workspace Probes"
             items={profile.workspaceProbes.map((probe) => `${probe.id}: ${probe.command}${probe.purpose ? ` — ${probe.purpose}` : ''}`)}
             emptyLabel="No repository-level workspace probes were recorded."
+          />
+          <ArtifactListSection
+            title="Approved Workspace Inputs"
+            items={profile.workspaceInputs.map((input) => `${input.path} (${input.kind}, ${input.sourceStatus}): ${input.reason}`)}
+            emptyLabel="No workspace inputs were approved."
           />
           <ArtifactListSection
             title="Workspace Probe Outcomes"

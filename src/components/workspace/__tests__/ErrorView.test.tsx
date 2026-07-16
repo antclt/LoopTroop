@@ -217,6 +217,58 @@ describe('ErrorView', () => {
     expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
   })
 
+  it('offers setup recovery actions for a live workspace runtime setup error', () => {
+    const mutate = vi.fn()
+    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'PREPARING_EXECUTION_ENV',
+      availableActions: ['retry', 'cancel'],
+      activeErrorOccurrenceId: 'setup-error',
+      errorOccurrences: [{
+        id: 'setup-error',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'PREPARING_EXECUTION_ENV',
+        errorMessage: 'Workspace probe failed.',
+        errorCodes: ['EXECUTION_SETUP_FAILED'],
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByRole('button', { name: 'Retry with extra note' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    expect(screen.getByRole('dialog', { name: 'Retry workspace setup with an extra note' })).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit setup plan' }))
+    expect(mutate).toHaveBeenCalledWith(
+      { id: ticket.id, action: 'edit_execution_setup_plan' },
+      expect.objectContaining({ onError: expect.any(Function) }),
+    )
+  })
+
+  it('cleans terminal formatting and duplicate warnings from the displayed error', () => {
+    const ticket = makeLiveCodingErrorTicket()
+    ticket.errorOccurrences![0]!.errorMessage = [
+      '\u001b[33mExperimental warning\u001b[39m',
+      '\u001b[33mExperimental warning\u001b[39m',
+      '\u001b[31m──────\u001b[39m',
+      '\u001b[41m FAIL \u001b[49m src/example.test.ts',
+    ].join('\r\n')
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    const displayedError = screen.getByText(/Experimental warning/)
+    expect(displayedError).toHaveTextContent('Experimental warning FAIL src/example.test.ts')
+    expect(displayedError.textContent?.match(/Experimental warning/g)).toHaveLength(1)
+    expect(screen.queryByText(/───/)).not.toBeInTheDocument()
+  })
+
   it('opens an accessible extra-note dialog and requires non-whitespace text', () => {
     renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
 

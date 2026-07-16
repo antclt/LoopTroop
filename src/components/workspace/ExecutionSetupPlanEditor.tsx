@@ -7,6 +7,7 @@ import type {
   ExecutionSetupPlanReadiness,
   ExecutionSetupPlanStep,
   ExecutionSetupWorkspaceProbe,
+  ExecutionSetupWorkspaceInput,
 } from '@/lib/executionSetupPlan'
 
 function StringListEditor({
@@ -158,6 +159,100 @@ function CommandRecordEditor<T extends { id: string; command: string; purpose: s
   )
 }
 
+function WorkspaceInputEditor({
+  items,
+  disabled,
+  onChange,
+}: {
+  items: ExecutionSetupWorkspaceInput[]
+  disabled?: boolean
+  onChange: (items: ExecutionSetupWorkspaceInput[]) => void
+}) {
+  const updateItem = (index: number, update: Partial<ExecutionSetupWorkspaceInput>) => {
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...update } : item))
+  }
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-background p-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Workspace Inputs</div>
+          <Badge variant="outline" className="h-5 text-[10px]">{items.length}</Badge>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={() => onChange([...items, { path: '', kind: 'file', sourceStatus: 'ignored', reason: '' }])}
+          className="h-7 text-xs"
+        >
+          Add
+        </Button>
+      </div>
+      {items.length === 0 ? (
+        <div className="rounded border border-dashed border-border p-3 text-xs text-muted-foreground">
+          No ignored or untracked workspace inputs are approved.
+        </div>
+      ) : null}
+      {items.map((item, index) => (
+        <div key={`${item.path}-${index}`} className="space-y-2 rounded-md border border-border bg-muted/10 p-2">
+          <div className="flex items-center gap-2">
+            <input
+              aria-label={`Workspace input ${index + 1} path`}
+              value={item.path}
+              disabled={disabled}
+              onChange={(event) => updateItem(index, { path: event.target.value })}
+              className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 py-1 font-mono text-xs"
+              placeholder="Repository-relative path"
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label={`Remove workspace input ${index + 1}`}
+              disabled={disabled}
+              onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+              className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+            >
+              ×
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select
+              aria-label={`Workspace input ${index + 1} kind`}
+              value={item.kind}
+              disabled={disabled}
+              onChange={(event) => updateItem(index, { kind: event.target.value as ExecutionSetupWorkspaceInput['kind'] })}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+            >
+              <option value="file">File</option>
+              <option value="directory">Directory</option>
+            </select>
+            <select
+              aria-label={`Workspace input ${index + 1} source status`}
+              value={item.sourceStatus}
+              disabled={disabled}
+              onChange={(event) => updateItem(index, { sourceStatus: event.target.value as ExecutionSetupWorkspaceInput['sourceStatus'] })}
+              className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+            >
+              <option value="ignored">Ignored</option>
+              <option value="untracked">Untracked</option>
+            </select>
+          </div>
+          <input
+            aria-label={`Workspace input ${index + 1} reason`}
+            value={item.reason}
+            disabled={disabled}
+            onChange={(event) => updateItem(index, { reason: event.target.value })}
+            className="w-full rounded-md border border-input bg-background px-2 py-1 text-xs"
+            placeholder="Why setup needs this path"
+          />
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function createEmptySetupStep(index: number): ExecutionSetupPlanStep {
   const stepNumber = index + 1
   return {
@@ -227,7 +322,7 @@ export function ExecutionSetupPlanEditor({ plan, disabled, onChange }: Execution
 
   const removeStep = useCallback((index: number) => {
     const nextSteps = plan.steps.filter((_, stepIndex) => stepIndex !== index)
-    const nextReadiness = nextSteps.length === 0
+    const nextReadiness = nextSteps.length === 0 && plan.workspaceInputs.length === 0
       ? applyReadinessStatus(plan.readiness, 'ready')
       : applyReadinessStatus(plan.readiness, plan.readiness.status === 'ready' ? 'partial' : plan.readiness.status)
     updatePlan({
@@ -241,17 +336,34 @@ export function ExecutionSetupPlanEditor({ plan, disabled, onChange }: Execution
       if (current > index) return current - 1
       return current
     })
-  }, [plan.readiness, plan.steps, updatePlan])
+  }, [plan.readiness, plan.steps, plan.workspaceInputs.length, updatePlan])
+
+  const updateWorkspaceInputs = useCallback((workspaceInputs: ExecutionSetupWorkspaceInput[]) => {
+    const hasActions = workspaceInputs.length > 0 || plan.steps.length > 0
+    const status = hasActions
+      ? plan.readiness.status === 'ready' ? 'partial' : plan.readiness.status
+      : 'ready'
+    updatePlan({
+      workspaceInputs,
+      readiness: applyReadinessStatus(plan.readiness, status),
+    })
+  }, [plan.readiness, plan.steps.length, updatePlan])
 
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/20 dark:text-amber-100">
         <div className="font-semibold">Structured setup-plan editor</div>
         <p className="mt-1 text-xs leading-5 text-amber-900/80 dark:text-amber-200/90">
-          Review the readiness assessment first, then adjust only the setup steps that should run later.
+          Review the readiness assessment, approved workspace inputs, and setup steps before approval.
           Use the raw tab for full-power editing.
         </p>
       </div>
+
+      <WorkspaceInputEditor
+        items={plan.workspaceInputs}
+        disabled={disabled}
+        onChange={updateWorkspaceInputs}
+      />
 
       <div className="grid gap-3 md:grid-cols-2">
         <div>
@@ -344,9 +456,9 @@ export function ExecutionSetupPlanEditor({ plan, disabled, onChange }: Execution
                 <option value="partial">Partial</option>
                 <option value="missing">Missing</option>
               </select>
-              {plan.readiness.status === 'ready' && plan.steps.length > 0 ? (
+              {plan.readiness.status === 'ready' && (plan.steps.length > 0 || plan.workspaceInputs.length > 0) ? (
                 <div className="mt-1 text-[10px] leading-4 text-amber-700 dark:text-amber-300">
-                  Ready status requires removing all setup steps before saving.
+                  Ready status requires removing all setup steps and workspace inputs before saving.
                 </div>
               ) : null}
             </div>
@@ -485,7 +597,9 @@ export function ExecutionSetupPlanEditor({ plan, disabled, onChange }: Execution
         {plan.steps.length === 0 ? (
           <div className="rounded-lg border border-dashed border-border bg-muted/20 px-3 py-4 text-xs text-muted-foreground">
             {plan.readiness.actionsRequired
-              ? 'No setup steps are recorded yet. Add the missing temporary steps before saving.'
+              ? plan.workspaceInputs.length > 0
+                ? 'The approved workspace inputs are the only required setup action.'
+                : 'No setup steps are recorded yet. Add the missing temporary steps before saving.'
               : 'No setup steps are recorded because the current readiness assessment says no actions are required. Add a step if you want LoopTroop to run extra temporary preparation.'}
           </div>
         ) : null}

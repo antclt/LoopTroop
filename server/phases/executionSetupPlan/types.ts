@@ -67,6 +67,12 @@ export function serializeExecutionSetupPlan(plan: ExecutionSetupPlan): string {
       gaps: plan.readiness.gaps,
     },
     temp_roots: plan.tempRoots,
+    workspace_inputs: plan.workspaceInputs.map((input) => ({
+      path: input.path,
+      kind: input.kind,
+      source_status: input.sourceStatus,
+      reason: input.reason,
+    })),
     workspace_probes: plan.workspaceProbes ?? [],
     git_hooks: {
       policy: gitHooks.policy,
