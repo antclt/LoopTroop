@@ -312,6 +312,10 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
             <label className="text-sm font-medium block mb-1" htmlFor="main-implementer">
               Main Implementer Model
             </label>
+            <div className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
+              <p className="min-w-0 flex-1">Primary model used for code generation and implementation</p>
+              <ConfigurationDocsLink docsPath={descriptionDocs.mainImplementer} label="Main Implementer Model" />
+            </div>
             <ModelPicker
               value={formData.mainImplementer ?? ''}
               onChange={v => {
@@ -344,10 +348,6 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                 })()}
               </div>
             )}
-            <div className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
-              <p className="min-w-0 flex-1">Primary model used for code generation and implementation</p>
-              <ConfigurationDocsLink docsPath={descriptionDocs.mainImplementer} label="Main Implementer Model" />
-            </div>
             {isOpenCodeConnected === false && (
               <div className="mt-2 rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">
                 LoopTroop could not reach the configured OpenCode server. Start it with <code className="font-mono bg-muted-foreground/10 px-1 rounded">opencode serve</code> or check the backend OpenCode URL.
