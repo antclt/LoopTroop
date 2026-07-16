@@ -30,4 +30,22 @@ describe('sanitizeErrorForDisplay', () => {
       'Experimental warning. FAIL src/example.test.ts',
     )
   })
+
+  it('deduplicates repeated multiline warning blocks', () => {
+    const raw = [
+      'Experimental type testing.',
+      'Pin the current Vitest version.',
+      'Experimental type testing.',
+      'Pin the current Vitest version.',
+      'Experimental type testing.',
+      'Pin the current Vitest version.',
+      'FAIL src/example.test.ts',
+    ].join('\n')
+
+    expect(sanitizeErrorForDisplay(raw)).toBe([
+      'Experimental type testing.',
+      'Pin the current Vitest version.',
+      'FAIL src/example.test.ts',
+    ].join('\n'))
+  })
 })

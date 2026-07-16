@@ -213,6 +213,9 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const diagnosticRows = diagnostics ? buildDiagnosticRows(diagnostics) : []
   const rawPrimaryErrorMessage = visibleOccurrence?.errorMessage || ticket.errorMessage || 'An error occurred but no details were captured. Try retrying or check the server logs.'
   const primaryErrorMessage = sanitizeErrorForDisplay(rawPrimaryErrorMessage) || 'An error occurred but no details were captured. Try retrying or check the server logs.'
+  const displayErrorCodes = visibleOccurrence?.errorCodes
+    .map(code => sanitizeErrorForDisplay(code))
+    .filter(code => code.length > 0) ?? []
   const statusLabelOptions = {
     currentBead: ticket.runtime.currentBead ?? ticket.currentBead,
     totalBeads: ticket.runtime.totalBeads ?? ticket.totalBeads,
@@ -324,11 +327,18 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                 )}
               </div>
               <p className="text-xs font-mono text-muted-foreground">{primaryErrorMessage}</p>
-              {visibleOccurrence?.errorCodes && visibleOccurrence.errorCodes.length > 0 && (
-                <div className="flex flex-wrap gap-1">
-                  {visibleOccurrence.errorCodes.map((code) => (
-                    <Badge key={code} variant="outline" className="text-[10px]">
-                      {sanitizeErrorForDisplay(code)}
+              {displayErrorCodes.length > 0 && (
+                <div className="flex flex-col items-start gap-1">
+                  {displayErrorCodes.map((code, index) => code.includes('\n') || code.length > 120 ? (
+                    <div
+                      key={`${index}:${code}`}
+                      className="w-full rounded-md border border-border px-2.5 py-1 text-[10px] font-mono leading-relaxed whitespace-pre-wrap [overflow-wrap:anywhere]"
+                    >
+                      {code}
+                    </div>
+                  ) : (
+                    <Badge key={`${index}:${code}`} variant="outline" className="text-[10px]">
+                      {code}
                     </Badge>
                   ))}
                 </div>

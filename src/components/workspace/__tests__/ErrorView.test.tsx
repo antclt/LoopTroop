@@ -273,7 +273,7 @@ describe('ErrorView', () => {
         occurrenceNumber: 1,
         blockedFromStatus: 'PREPARING_EXECUTION_ENV',
         errorMessage: 'Execution setup failed',
-        errorCodes: ['\u001b[31mFAIL\u001b[39m src/example.test.ts'],
+        errorCodes: ['\u001b[31mFAIL\u001b[39m src/example.test.ts\nError: Cannot resolve package\n  at src/example.test.ts:2:1'],
         occurredAt: '2026-01-01T00:00:00.000Z',
         resolvedAt: null,
         resolutionStatus: null,
@@ -283,7 +283,16 @@ describe('ErrorView', () => {
 
     renderWithProviders(<ErrorView ticket={ticket} />)
 
-    expect(screen.getByText('FAIL src/example.test.ts')).toBeInTheDocument()
+    const detail = screen.getByText((_, element) => (
+      element?.classList.contains('whitespace-pre-wrap') === true
+      && element.textContent === [
+        'FAIL src/example.test.ts',
+        'Error: Cannot resolve package',
+        '  at src/example.test.ts:2:1',
+      ].join('\n')
+    ))
+    expect(detail).toHaveClass('whitespace-pre-wrap')
+    expect(detail.textContent).toContain('\nError: Cannot resolve package\n')
     expect(document.body.textContent).not.toContain('\u001b')
   })
 

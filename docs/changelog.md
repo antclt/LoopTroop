@@ -91,7 +91,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
-- Cleaned ANSI sequences from blocked-error detail badges as well as the main message, while preserving the raw logs. Terminal decoration, carriage-return artifacts, and consecutive duplicate warnings are also removed from the displayed error.
+- Preserved line breaks in long blocked-error details and cleaned ANSI sequences from those details as well as the main message, while preserving the raw logs. Terminal decoration, carriage-return artifacts, and repeated single-line or multiline warnings are also removed from the displayed error.
 - Replaced the generic Blocked Error workspace essay with the failed phase, a bounded version of the captured error, and guidance for only the recovery actions currently available; historical occurrences are clearly read-only.
 - Recovered model-generated YAML list prose that wraps onto deeper continuation lines by preserving the emitted text in a block scalar before shared structured-output parsing, instead of blocking otherwise valid PRD, Beads, and other artifacts.
 - Allowed successful audit previews to continue when npm exits with status 1 solely because known vulnerabilities remain, while still rejecting peer-resolution and operational failures.
