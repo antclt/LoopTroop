@@ -28,9 +28,15 @@ function parseOpenRouterModel(modelId: string | null | undefined) {
   return { base: val, suffix: '' }
 }
 
-function isRouterModel(modelId: string | null | undefined): boolean {
+function isRouterModel(modelId: string | null | undefined, modelsList?: any[]): boolean {
   const clean = cleanModelId(modelId)
-  return clean === 'openrouter/free' || clean === 'openrouter/auto'
+  if (!clean.startsWith('openrouter/')) return false
+  if (clean.startsWith('openrouter/openrouter/')) return true
+  if (modelsList) {
+    const found = modelsList.find(m => m.fullId === clean)
+    if (found && found.name.toLowerCase().includes('router')) return true
+  }
+  return false
 }
 import { useProfile, useCreateProfile, useUpdateProfile } from '@/hooks/useProfile'
 import type { CreateProfileInput } from '@/hooks/useProfile'
@@ -325,7 +331,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                   value={mainVariant}
                   onChange={setMainVariant}
                 />
-                {formData.mainImplementer.startsWith('openrouter/') && !isRouterModel(formData.mainImplementer) && (() => {
+                {formData.mainImplementer.startsWith('openrouter/') && !isRouterModel(formData.mainImplementer, models) && (() => {
                   const { base, suffix } = parseOpenRouterModel(formData.mainImplementer)
                   return (
                     <OpenRouterRoutingPicker
@@ -401,7 +407,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                             return next
                           })}
                         />
-                        {slot.startsWith('openrouter/') && !isRouterModel(slot) && (() => {
+                        {slot.startsWith('openrouter/') && !isRouterModel(slot, models) && (() => {
                           const { base, suffix } = parseOpenRouterModel(slot)
                           return (
                             <OpenRouterRoutingPicker
