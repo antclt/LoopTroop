@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Preserved eligible same-session Continue recovery across backend, OpenCode, WSL, OS, and machine restarts.
 - Restored one-click recovery for blocked tickets when Retry sends an empty request body.
 - Added language-agnostic workspace and Git-hook validation, backend-enforced bead test commands, and separate append-only implementation note histories.
 - Added a copy button next to the ticket description tab in the backlog workspace when clicking on the "Raw" view.
@@ -81,6 +82,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Kept every centrally classified continuable blocked-error session restart-safe by matching exact project-local ownership, preserving transiently unverifiable sessions, and abandoning only confirmed-missing or stale records.
+- Distinguished confirmed OpenCode session `404` responses from SDK transport and server failures so temporary verification errors no longer remove Continue.
 - Preserved zero-byte POST streams after global JSON validation so body-free Retry requests no longer fail with a misleading invalid-JSON error.
 - Prevented ANSI terminal control sequences from leaking into machine-generated bead notes while retaining complete raw command output in execution logs.
 - Routed all ticket cancellation controls through the shared confirmation dialog, with existing optional artifact, worktree, and log cleanup choices preserved.

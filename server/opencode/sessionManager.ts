@@ -6,6 +6,7 @@ import { getOpenCodeAdapter } from './factory'
 import { getProjectContextById, listProjects } from '../storage/projects'
 import { getTicketByRef, getTicketContext } from '../storage/tickets'
 import { createOpenCodeSessionWithRetry } from './sessionCreation'
+import { isContinuableBlockedError } from './sessionContinuation'
 
 export interface SessionOwnership {
   ticketId?: string
@@ -17,6 +18,10 @@ export interface SessionOwnership {
 }
 
 export type OpenCodeSessionRecord = typeof opencodeSessions.$inferSelect
+
+export type SessionReconnectResult =
+  | { state: 'reconnected'; session: Session }
+  | { state: 'stale' | 'missing' | 'unverified' }
 
 function findSessionRecord(sessionId: string) {
   for (const project of listProjects()) {
@@ -185,32 +190,72 @@ export class SessionManager {
     ownership?: SessionOwnership,
     signal?: AbortSignal,
   ): Promise<Session | null> {
+    const existing = ownership
+      ? this.getOwnedActiveSession(ticketId, phase, ownership)
+      : this.getActiveSession(ticketId, phase)
+    if (!existing) return null
+
+    const result = await this.reconcileActiveSession(
+      ticketId,
+      phase,
+      existing.sessionId,
+      ownership,
+      signal,
+    )
+    if (result.state === 'reconnected') return result.session
+    if (result.state === 'missing') await this.abandonSession(existing.sessionId)
+    return null
+  }
+
+  /**
+   * Verifies one exact active session without conflating a transient OpenCode
+   * failure with a confirmed missing or stale session.
+   */
+  async reconcileActiveSession(
+    ticketId: string,
+    phase: string,
+    sessionId: string,
+    ownership?: SessionOwnership,
+    signal?: AbortSignal,
+  ): Promise<SessionReconnectResult> {
     const ticket = getTicketByRef(ticketId)
-    if (!ticket || ticket.status !== phase) {
-      return null
+    if (!ticket) return { state: 'stale' }
+
+    if (ticket.status !== phase) {
+      const occurrence = ticket.errorOccurrences.find(
+        candidate => candidate.id === ticket.activeErrorOccurrenceId,
+      )
+      if (
+        ticket.status !== 'BLOCKED_ERROR'
+        || ticket.previousStatus !== phase
+        || occurrence?.blockedFromStatus !== phase
+        || occurrence.resolvedAt !== null
+        || occurrence.diagnostics?.sessionId?.trim() !== sessionId
+        || !isContinuableBlockedError({
+          diagnostics: occurrence.diagnostics,
+          errorCodes: occurrence.errorCodes,
+        })
+      ) {
+        return { state: 'stale' }
+      }
     }
 
     const existing = ownership
       ? this.getOwnedActiveSession(ticketId, phase, ownership)
       : this.getActiveSession(ticketId, phase)
-    if (!existing) return null
+    if (!existing || existing.sessionId !== sessionId) return { state: 'stale' }
 
     let found: Session | null
     try {
       found = await this.adapter.getSession(existing.sessionId, signal)
     } catch (error) {
       if (signal?.aborted) throw error
-      // Transient failure verifying the exact session — return null so the caller
-      // creates a fresh session, but do NOT abandon the DB record.
-      return null
+      return { state: 'unverified' }
     }
 
-    if (!found) {
-      await this.abandonSession(existing.sessionId)
-      return null
-    }
+    if (!found) return { state: 'missing' }
 
-    return found
+    return { state: 'reconnected', session: found }
   }
 }
 

@@ -238,7 +238,8 @@ Columns:
 Operational notes:
 
 - the ownership slot is the full tuple of ticket + phase + phase attempt + optional member/bead/iteration/step
-- reconnect/continue logic validates the **exact** owned active session record, not just “some session for this ticket”
+- reconnect/continue logic validates the **exact project-local** owned active session record, not just “some session for this ticket”; blocked-error restart recovery also requires the unresolved occurrence, previous phase, and diagnostic session id to match
+- transient OpenCode verification failures preserve `active`, while only confirmed remote absence or stale ownership changes the row to `abandoned`
 - `state` is currently `active`, `completed`, or `abandoned`
 - `ticket_id` is nullable and becomes `NULL` if a referenced ticket is removed
 

@@ -132,7 +132,7 @@ Recovery is a first-class architectural concern.
 | Crash during atomic write or append | Startup promotes orphan `.tmp` files, repairs trailing corrupt JSONL lines when safe, and rebuilds runtime projections |
 | Invalid model output | Retry with repair or explicit re-prompt, depending on phase |
 | Bead execution or deterministic verification deadline | Append a Failed Iteration Note, reset worktree, abandon the session, and retry in fresh context |
-| OpenCode reconnect gap | Validate the exact owned session against remote sessions and recreate only when ownership can no longer be proven |
+| OpenCode reconnect gap | Validate the exact project-local owned session against the remote session; preserve all centrally classified blocked-error continuations and all temporarily unverifiable records, and abandon only confirmed-missing or stale ownership |
 | Backend process restart | Reconcile persisted XState snapshots, hydrate ticket actors from durable ticket state, and immediately process restored active snapshots |
 | User edits approved interview or PRD | Archive the active approved generation and downstream attempts, cancel downstream sessions intentionally, clear stale downstream artifacts/UI state, persist a `user_edit_receipt:*`, and restart from the next drafting phase |
 | User edits or regenerates setup plan during runtime setup | Stop active runtime setup, archive both setup-plan and runtime attempts, preserve the tool cache when safe, clear stale setup outputs, and return to `WAITING_EXECUTION_SETUP_APPROVAL` for fresh approval |
@@ -403,7 +403,7 @@ On startup, LoopTroop restores durable state through `server/startup.ts` and `se
 3. Recover ticket runtime artifacts by promoting orphan `.tmp` files, repairing trailing JSONL corruption where safe, and rebuilding `.ticket/runtime/state.yaml` projections.
 4. Start the WAL checkpoint timer and probe OpenCode health.
 5. Hydrate XState actors for non-terminal tickets from attached project databases.
-6. Validate and reconnect active OpenCode sessions; records that no longer map to a live owned session are marked abandoned.
+6. Validate and reconnect active OpenCode sessions using project-local ticket identity. Eligible blocked-error continuations are matched through their unresolved occurrence, previous phase, and exact diagnostic session id; transiently unverifiable records remain active, while confirmed-missing or stale records are marked abandoned.
 
 ### Startup Classification
 
@@ -422,7 +422,7 @@ On startup, LoopTroop restores durable state through `server/startup.ts` and `se
 3. The frontend uses `useStartupStatus()` and `StartupRestorePopup` to show restore context after a real restore.
 4. `dismissStartupRestoreNotice()` persists the user's dismissal in app metadata so the restore notice does not keep reappearing.
 
-Session recovery is best-effort. If OpenCode is unavailable during startup, ticket actors are still hydrated from durable workflow state and later phase work either reconnects, creates fresh owned sessions, or blocks with a persisted error.
+Session recovery is best-effort. If OpenCode is unavailable during startup, ticket actors are still hydrated from durable workflow state and active session records remain preserved for later verification. Later phase work either reconnects, creates fresh owned sessions where appropriate, or blocks with a persisted error; a temporary startup outage cannot by itself remove an eligible Continue action.
 
 The startup health endpoint exposes the storage path, kind, source, runtime warning state, restored project list, dismissed state, and human-readable summary for diagnostics and UI messaging.
 

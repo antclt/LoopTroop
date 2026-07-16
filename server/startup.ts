@@ -5,9 +5,9 @@ import { createIndexes } from './db/indexes'
 import { hydrateAllTickets } from './machines/persistence'
 import { getOpenCodeAdapter } from './opencode/factory'
 import { SessionManager } from './opencode/sessionManager'
-import { opencodeSessions } from './db/schema'
+import { opencodeSessions, tickets } from './db/schema'
 import { getProjectContextById, listProjects } from './storage/projects'
-import { findTicketRefByLocalId, getTicketPaths, listTickets } from './storage/tickets'
+import { buildTicketRef, getTicketPaths, listTickets } from './storage/tickets'
 import {
   formatStartupStorageSummary,
   initializeStartupState,
@@ -38,6 +38,65 @@ export function recoverTicketRuntimeArtifacts() {
     repairedExecutionLogs,
     rebuiltProjections,
   }
+}
+
+export async function reconcileOpenCodeSessions(
+  adapter: ReturnType<typeof getOpenCodeAdapter>,
+  attachedProjects = listProjects(),
+): Promise<{ reconnected: number; abandoned: number; preserved: number }> {
+  const sessionManager = new SessionManager(adapter)
+  let reconnected = 0
+  let abandoned = 0
+  let preserved = 0
+
+  for (const project of attachedProjects) {
+    const context = getProjectContextById(project.id)
+    if (!context) continue
+    const activeDbSessions = context.projectDb
+      .select()
+      .from(opencodeSessions)
+      .where(eq(opencodeSessions.state, 'active'))
+      .all()
+
+    for (const session of activeDbSessions) {
+      // Ticket ids are only unique inside a project database. Resolve the
+      // composite ref from the project currently being reconciled.
+      const localTicket = session.ticketId != null
+        ? context.projectDb.select({ externalId: tickets.externalId })
+            .from(tickets)
+            .where(eq(tickets.id, session.ticketId))
+            .get()
+        : undefined
+      const ticketRef = localTicket ? buildTicketRef(project.id, localTicket.externalId) : undefined
+      const result = ticketRef
+        ? await sessionManager.reconcileActiveSession(ticketRef, session.phase, session.sessionId, {
+            ...(session.phaseAttempt != null ? { phaseAttempt: session.phaseAttempt } : {}),
+            memberId: session.memberId,
+            beadId: session.beadId,
+            ...(session.iteration != null ? { iteration: session.iteration } : {}),
+            step: session.step,
+          })
+        : { state: 'stale' as const }
+
+      if (result.state === 'reconnected' && result.session.id === session.sessionId) {
+        reconnected++
+        continue
+      }
+
+      if (result.state === 'unverified') {
+        preserved++
+        continue
+      }
+
+      context.projectDb.update(opencodeSessions)
+        .set({ state: 'abandoned', updatedAt: new Date().toISOString() })
+        .where(eq(opencodeSessions.id, session.id))
+        .run()
+      abandoned++
+    }
+  }
+
+  return { reconnected, abandoned, preserved }
 }
 
 export async function startupSequence(): Promise<void> {
@@ -83,47 +142,9 @@ export async function startupSequence(): Promise<void> {
   }
 
   try {
-    await adapter.listSessions()
+    const { reconnected, abandoned, preserved } = await reconcileOpenCodeSessions(adapter, attachedProjects)
 
-    const sessionManager = new SessionManager(adapter)
-    let reconnected = 0
-    let abandoned = 0
-
-    for (const project of attachedProjects) {
-      const context = getProjectContextById(project.id)
-      if (!context) continue
-      const activeDbSessions = context.projectDb
-        .select()
-        .from(opencodeSessions)
-        .where(eq(opencodeSessions.state, 'active'))
-        .all()
-
-      for (const session of activeDbSessions) {
-        const ticketRef = session.ticketId != null ? findTicketRefByLocalId(session.ticketId) : undefined
-        const recovered = ticketRef
-          ? await sessionManager.validateAndReconnect(ticketRef, session.phase, {
-              ...(session.phaseAttempt != null ? { phaseAttempt: session.phaseAttempt } : {}),
-              memberId: session.memberId,
-              beadId: session.beadId,
-              ...(session.iteration != null ? { iteration: session.iteration } : {}),
-              step: session.step,
-            })
-          : null
-
-        if (recovered && recovered.id === session.sessionId) {
-          reconnected++
-          continue
-        }
-
-        context.projectDb.update(opencodeSessions)
-          .set({ state: 'abandoned', updatedAt: new Date().toISOString() })
-          .where(eq(opencodeSessions.id, session.id))
-          .run()
-        abandoned++
-      }
-    }
-
-    console.log(`[startup] Reconnected ${reconnected} OpenCode sessions, cleaned up ${abandoned} stale entries`)
+    console.log(`[startup] Reconnected ${reconnected} OpenCode sessions, preserved ${preserved} unverified sessions, cleaned up ${abandoned} stale entries`)
   } catch (err) {
     console.warn(`[startup] OpenCode session reconnection failed: ${getErrorMessage(err)}`)
   }

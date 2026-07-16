@@ -166,15 +166,15 @@ Reconnect is intentionally conservative.
 `SessionManager.validateAndReconnect()` only succeeds when:
 
 - the ticket still exists
-- the ticket is still in the same phase
+- the ticket is still in the same phase, or is in `BLOCKED_ERROR` with an unresolved centrally classified continuation whose `previousStatus`, blocked-from phase, and diagnostic session id exactly match the owned session
 - the owned active session record still exists in the project DB
 - the same session still exists remotely in OpenCode
 
-If any of those checks fail, LoopTroop falls back to creating a fresh session through the same bounded session-creation retry wrapper.
+Startup resolves ticket ownership inside the project database currently being reconciled because local numeric ticket ids may repeat across projects. It then classifies exact verification as reconnected, confirmed missing, stale ownership, or temporarily unverified. Confirmed missing and stale records are abandoned; timeouts, transport failures, and OpenCode 5xx responses preserve the active record for a later check.
 
 That means LoopTroop can survive restart and resume safely, but it does not try to magically continue any random broken stream from the past.
 
-If OpenCode cannot verify an exact session because the server is down or restarting, validation fails closed without abandoning the database record. The prompt runner then either creates a new owned session when OpenCode is reachable or lets the phase fail into the normal retry/block path. Owned same-session reuse is also revalidated immediately before prompting, so a stale session cannot be prompted after the ticket has moved phases.
+If OpenCode cannot verify an exact session because the server is down or restarting, validation fails closed without abandoning the database record. This applies both to active phases and to every resumable `BLOCKED_ERROR` condition accepted by the central continuation classifier, including eligible limits, payment blocks, overloads, timeouts, and transport failures. The prompt runner then either creates a new owned session when OpenCode is reachable or lets the phase fail into the normal retry/block path. Owned same-session reuse is also revalidated immediately before prompting, so a stale session cannot be prompted after the ticket has moved phases.
 
 For Continue, the route performs one extra live check: if the OpenCode server can no longer read the preserved session by exact id, the request returns `409` and leaves the ticket in `BLOCKED_ERROR`.
 
@@ -189,6 +189,8 @@ For Continue, the route performs one extra live check: if the OpenCode server ca
 - A matching active `opencode_sessions` row must exist for that ticket, previous phase, and session ID.
 - The OpenCode server must still have the session addressable by that exact ID.
 - The error diagnostics must be of a continuable type (retryable provider errors, HTTP 402/408/429/500/502/503/504/529, rate/usage limits, transport failures, timeout-style interruptions).
+
+Backend, OpenCode, WSL, OS, and machine restarts preserve the same eligibility when those exact ownership checks still match. A temporary inability to verify OpenCode leaves the session active rather than removing Continue permanently; a later read or restart may verify it again. Only confirmed remote absence or provably stale ownership abandons the local session record.
 
 **Non-continuable errors:** Auth failures, invalid requests, permission errors, missing API keys, model-not-found, and non-402 insufficient-quota signals are not eligible for Continue.
 

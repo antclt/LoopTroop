@@ -351,7 +351,7 @@ LoopTroop is designed to survive crashes, restarts, and disconnects. The table b
 | **Browser Closes / SSE Disconnects** | The next UI mount requests the Hono server REST state. SSE reconnects pass `Last-Event-ID` to replay stream indicators without reloading active panels. |
 | **Frontend Crashes** | Active draft forms and interview inputs are written to local ticket UI-state files on page unload. |
 | **Backend Process Restarts** | LoopTroop validates the serialized XState snapshot on startup: valid snapshots are rehydrated and immediately processed, resuming the active task; corrupt states trigger `BLOCKED_ERROR`. |
-| **OpenCode Server Restarts** | LoopTroop queries local `opencode_sessions` active keys; missing sessions are cleanly abandoned, and fresh contexts are created. |
+| **OpenCode Server, WSL, OS, or Machine Restarts** | LoopTroop verifies exact project-local `opencode_sessions` ownership. Active phases reconnect normally; eligible `BLOCKED_ERROR` continuations reconnect through their unresolved occurrence, previous phase, and diagnostic session id. Confirmed-missing or stale sessions are abandoned, while temporary verification failures remain active for a later check. |
 | **Model Fails / Returns Garbage** | Planning phases run automatic structured retries; rejected attempts are saved as Raw attempts for inspection. |
 
 ---

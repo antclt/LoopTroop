@@ -427,7 +427,15 @@ export class OpenCodeSDKAdapter implements OpenCodeAdapter {
         { sessionID: sessionId },
         this.requestOptions(this.withSdkOperationTimeout(signal)),
       )
-      if (!res.data) return null
+      if (!res.data) {
+        const status = res.response?.status
+        if (status === 404) return null
+        if (res.error) throw res.error
+        if (typeof status === 'number') {
+          throw new Error(`OpenCode session lookup failed with HTTP ${status}`)
+        }
+        throw new Error('OpenCode returned no session payload')
+      }
       const session = this.mapSession(res.data as Record<string, unknown>)
       if (session.directory) this.sessionDirectories.set(session.id, session.directory)
       return session

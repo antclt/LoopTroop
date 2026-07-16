@@ -360,6 +360,45 @@ describe('runOpenCodePrompt', () => {
     expect(capturedSignals.every(signal => signal.aborted)).toBe(true)
   })
 
+  it('gets the exact session through the SDK v2 flat parameter contract', async () => {
+    const get = vi.fn(async () => ({
+      data: { id: 'ses-exact', directory: '/tmp/project' },
+    }))
+    const fakeClient = createFakeSdkClient({ get })
+    const adapter = new OpenCodeSDKAdapter('http://localhost:4096', fakeClient as unknown as OpenCodeSDKClient)
+
+    await expect(adapter.getSession('ses-exact')).resolves.toMatchObject({
+      id: 'ses-exact',
+      directory: '/tmp/project',
+    })
+    expect(get).toHaveBeenCalledOnce()
+    expect(get.mock.calls[0]?.[0]).toEqual({ sessionID: 'ses-exact' })
+  })
+
+  it('returns a missing session only for a confirmed SDK 404 response', async () => {
+    const missingClient = createFakeSdkClient({
+      get: async () => ({
+        error: { name: 'NotFoundError', message: 'Session not found' },
+        response: { status: 404 },
+      }),
+    })
+    const unavailableClient = createFakeSdkClient({
+      get: async () => ({
+        error: { name: 'InternalServerError', message: 'OpenCode unavailable' },
+        response: { status: 500 },
+      }),
+    })
+
+    const missingAdapter = new OpenCodeSDKAdapter('http://localhost:4096', missingClient as unknown as OpenCodeSDKClient)
+    const unavailableAdapter = new OpenCodeSDKAdapter('http://localhost:4096', unavailableClient as unknown as OpenCodeSDKClient)
+
+    await expect(missingAdapter.getSession('ses-missing')).resolves.toBeNull()
+    await expect(unavailableAdapter.getSession('ses-preserve')).rejects.toMatchObject({
+      name: 'InternalServerError',
+      message: 'OpenCode unavailable',
+    })
+  })
+
   it('dispatches prompt metadata before the prompt completes', async () => {
     const deferredResponse = createDeferred<string>()
     const adapter = new TestOpenCodeAdapter([deferredResponse])
