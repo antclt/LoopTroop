@@ -103,19 +103,76 @@ describe('WorkspacePhaseSummary', () => {
     expect(screen.getByText(/competing PRD drafts\./)).toBeInTheDocument()
   })
 
-  it('uses the error reason when rendering the blocked-error label', () => {
-    const ticket = makeTicket({ status: 'BLOCKED_ERROR' })
+  it('shows the failed phase, actual error, and live recovery choices for a blocked error', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'REFINING_PRD',
+      availableActions: ['retry', 'continue', 'cancel'],
+    })
 
     renderWithProviders(
       <WorkspacePhaseSummary
         phase="BLOCKED_ERROR"
         ticket={ticket}
-        errorMessage="The runner crashed while executing bead B-12."
+        errorMessage={'The runner crashed while executing bead B-12.\n\n112 | noisy parser excerpt'}
       />,
     )
 
-    expect(screen.getByText(/Error \(The runner crashed while executing bead B-12\.\)/)).toBeInTheDocument()
-    expect(screen.getByText(/A phase failure paused the workflow\./)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Error — Refining Specs' })).toBeInTheDocument()
+    expect(screen.getByText(/Refining Specs failed: The runner crashed while executing bead B-12\./)).toBeInTheDocument()
+    expect(screen.getByText(/Retry starts a fresh Refining Specs attempt\./)).toBeInTheDocument()
+    expect(screen.getByText(/Continue resumes the preserved provider session\./)).toBeInTheDocument()
+    expect(screen.queryByText(/noisy parser excerpt/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/CODING exposes three separate histories/)).not.toBeInTheDocument()
+  })
+
+  it('does not advertise live recovery actions for a historical error occurrence', () => {
+    const ticket = makeTicket({ status: 'CODING', availableActions: ['cancel'] })
+
+    renderWithProviders(
+      <WorkspacePhaseSummary
+        phase="BLOCKED_ERROR"
+        ticket={ticket}
+        errorOccurrence={{
+          id: 'error-1',
+          occurrenceNumber: 1,
+          blockedFromStatus: 'DRAFTING_PRD',
+          errorMessage: 'Provider connection closed.',
+          errorCodes: [],
+          occurredAt: TEST.timestamp,
+          resolvedAt: TEST.timestamp,
+          resolutionStatus: 'RETRIED',
+          resumedToStatus: 'DRAFTING_PRD',
+        }}
+      />,
+    )
+
+    expect(screen.getByRole('button', { name: 'Past error — Council Drafting Specs' })).toBeInTheDocument()
+    expect(screen.getByText(/Council Drafting Specs failed: Provider connection closed\./)).toBeInTheDocument()
+    expect(screen.getByText(/This saved occurrence is read-only/)).toBeInTheDocument()
+    expect(screen.queryByText(/Retry starts/)).not.toBeInTheDocument()
+  })
+
+  it('truncates oversized error payloads in the top summary', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'REFINING_PRD',
+      availableActions: ['retry', 'cancel'],
+    })
+    const oversizedError = `Malformed provider output: ${'invalid YAML payload '.repeat(30)}`
+
+    renderWithProviders(
+      <WorkspacePhaseSummary
+        phase="BLOCKED_ERROR"
+        ticket={ticket}
+        errorMessage={oversizedError}
+      />,
+    )
+
+    const summary = screen.getByText(/Refining Specs failed: Malformed provider output:/)
+    expect(summary.textContent).toContain('… Retry starts a fresh Refining Specs attempt.')
+    expect(summary.textContent).not.toContain(oversizedError.trim())
+    expect(summary.textContent?.length).toBeLessThan(350)
   })
 
   it('renders with runtime defaults when cached ticket data is partial', () => {

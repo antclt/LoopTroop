@@ -101,7 +101,7 @@ For intermittent issues, save at least one report from a healthy moment and one 
 
 ## 3. Blocked-Error Diagnostics
 
-When a phase fails hard enough to enter `BLOCKED_ERROR`, LoopTroop persists a normalized diagnostic payload alongside the error occurrence. That payload is normalized by `shared/errorDiagnostics.ts`, typically assembled by `server/opencode/blockedErrorDiagnostics.ts`, and rendered in the ticket error view as **Underlying error**.
+When a phase fails hard enough to enter `BLOCKED_ERROR`, LoopTroop persists a normalized diagnostic payload alongside the error occurrence. The workspace summary immediately names the failed phase, shows a bounded first line of the captured error, and explains the available recovery actions. The complete message and diagnostic payload remain in the ticket error view, where the payload is rendered as **Underlying error**. Diagnostics are normalized by `shared/errorDiagnostics.ts` and typically assembled by `server/opencode/blockedErrorDiagnostics.ts`.
 
 Use this surface when the ticket already blocked and you want the reason, not the whole-machine health picture.
 

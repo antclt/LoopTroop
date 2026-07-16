@@ -367,6 +367,41 @@ describe('pull request drafting context', () => {
     expect(getLatestPhaseArtifact(ticket.id, 'git_recovery_receipt', 'CREATING_PULL_REQUEST')).toBeDefined()
   })
 
+  it('accepts wrapped colon-containing prose in PR draft lists without a retry', async () => {
+    resetTestDb()
+    const { ticket, context } = createPullRequestReadyTicket({ structuredRetryCount: 1 })
+
+    mocks.runOpenCodePrompt.mockResolvedValueOnce({
+      session: { id: 'candidate-audit-wrapped-prose' },
+      response: validCandidateAuditResponse(),
+      messages: [],
+    })
+    mocks.runOpenCodePrompt.mockResolvedValueOnce({
+      session: { id: 'pr-draft-wrapped-prose' },
+      response: [
+        'title: Valid wrapped PR draft',
+        'summary:',
+        '  - `Object.getOwnPropertyDescriptor(fn, key)` reports `writable: false`, and',
+        '    `configurable: false`.',
+        'why:',
+        '  - The ticket requested this behavior.',
+        'what_changed:',
+        '  - Updated the relevant code path.',
+        'validation:',
+        '  - Final tests passed.',
+        'follow_ups: []',
+      ].join('\n'),
+      messages: [],
+    })
+
+    await handleCreatePullRequest(ticket.id, context, vi.fn(), new AbortController().signal)
+
+    expect(mocks.runOpenCodeSessionPrompt).not.toHaveBeenCalled()
+    expect(mocks.createOrUpdateDraftPullRequest).toHaveBeenCalledWith(expect.objectContaining({
+      body: expect.stringContaining('`writable: false`, and `configurable: false`.'),
+    }))
+  })
+
   it('completes a merged PR by verifying the remote base without syncing the user checkout', () => {
     resetTestDb()
     const { ticket, context } = createInitializedTestTicket(repoManager, {

@@ -1543,6 +1543,30 @@ describe.concurrent('structured output normalization', () => {
     ])
   })
 
+  it('repairs wrapped colon-containing acceptance criteria from PRD refinement output', () => {
+    const interviewContent = buildInterviewContent(TICKET_ID)
+    const malformedCriterion = [
+      '          - `Object.getOwnPropertyDescriptor(fn, approvedProperty)` reports `writable: false`, `enumerable: false`, and',
+      '            `configurable: false`.',
+    ].join('\n')
+    const prdContent = buildStandardPrdYaml({
+      ticketId: TICKET_ID,
+      storyAcceptanceCriteria: ['placeholder'],
+    }).replace('          - "placeholder"', malformedCriterion)
+
+    const result = normalizePrdYamlOutput(prdContent, {
+      ticketId: TICKET_ID,
+      interviewContent,
+    })
+
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.repairWarnings).toContain('Folded wrapped YAML list scalar text containing colon-space before reparsing.')
+    expect(result.value.epics[0]?.user_stories[0]?.acceptance_criteria).toEqual([
+      '`Object.getOwnPropertyDescriptor(fn, approvedProperty)` reports `writable: false`, `enumerable: false`, and `configurable: false`.',
+    ])
+  })
+
   it('accepts PRD YAML after repairing bare epic and user story sequence ids', () => {
     const interviewContent = buildInterviewContent(TICKET_ID)
     const prdContent = buildStandardPrdYaml({

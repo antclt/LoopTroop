@@ -707,6 +707,7 @@ export function TicketDashboard() {
                   phase={summaryPhase}
                   ticket={renderTicket}
                   errorMessage={summaryErrorMessage}
+                  errorOccurrence={selectedErrorOccurrence ?? liveErrorOccurrence}
                 />
               )}
               <ActiveWorkspace

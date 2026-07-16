@@ -173,6 +173,12 @@ describe('parser fix interventions', () => {
     expectIntervention(i, { code: 'parser_plain_scalar_colon', stage: 'parse', category: 'parser_fix' })
   })
 
+  it('maps wrapped colon-containing list scalar repairs', () => {
+    const i = deriveOne('Folded wrapped YAML list scalar text containing colon-space before reparsing.')
+    expectIntervention(i, { code: 'parser_plain_scalar_colon', stage: 'parse', category: 'parser_fix' })
+    expect(i.how).toContain('folded its existing wrapped lines')
+  })
+
   it('maps indentation', () => {
     const i = deriveOne('Repaired YAML indentation at line 42.')
     expectIntervention(i, { code: 'parser_indentation', stage: 'parse', category: 'parser_fix' })

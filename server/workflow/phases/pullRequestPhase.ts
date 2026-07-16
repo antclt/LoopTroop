@@ -27,6 +27,7 @@ import {
 } from '../../phases/integration/candidateFileAudit'
 import { pushBranchRef } from '../../git/push'
 import { readWorktreeGitHookPolicy, shouldBypassGitHooks } from '../../git/hookPolicy'
+import { parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
 import {
   captureGitRecoveryReceipt,
   createOrUpdateDraftPullRequest,
@@ -153,7 +154,7 @@ function parsePullRequestDraftResponse(response: string, fallbackTitle: string):
   let parsed: PullRequestDraftPayload | null = null
 
   try {
-    const loaded = jsYaml.load(response) as PullRequestDraftPayload | null
+    const loaded = parseYamlOrJsonCandidate(response) as PullRequestDraftPayload | null
     parsed = loaded && typeof loaded === 'object' ? loaded : null
   } catch {
     parsed = null

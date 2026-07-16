@@ -132,6 +132,24 @@ describe('Manual QA fix-bead generation contracts', () => {
     expect(bead?.id).toMatch(/^qa-v1-[a-f0-9]{12}$/)
   })
 
+  it('repairs wrapped colon-containing acceptance criteria in generated fix beads', () => {
+    const groups = buildManualQaFixGroups(checklist, draft)
+    const response = validResponse.replace(
+      '    acceptanceCriteria: ["Reloading preserves the selected value."]',
+      [
+        '    acceptanceCriteria:',
+        '      - `Object.getOwnPropertyDescriptor(fn, key)` reports `writable: false`, and',
+        '        `configurable: false`.',
+      ].join('\n'),
+    )
+
+    const candidates = parseManualQaFixBeadsOutput(response, groups)
+
+    expect(candidates[0]?.acceptanceCriteria).toEqual([
+      '`Object.getOwnPropertyDescriptor(fn, key)` reports `writable: false`, and `configurable: false`.',
+    ])
+  })
+
   it('rejects missing groups, invented PRD refs, unsafe paths, and forward dependencies', () => {
     const groups = buildManualQaFixGroups(checklist, draft)
     expect(() => parseManualQaFixBeadsOutput(validResponse.replace('EPIC-1/STORY-1/AC-1', 'EPIC-9/STORY-9/AC-9'), groups))

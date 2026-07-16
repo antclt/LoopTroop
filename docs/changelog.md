@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Made blocked errors immediately actionable and recovered safely wrapped YAML list prose across structured-output phases.
 - Prevented automatic development maintenance from installing peer-incompatible npm dependency graphs.
 - Preserved eligible same-session Continue recovery across backend, OpenCode, WSL, OS, and machine restarts.
 - Restored one-click recovery for blocked tickets when Retry sends an empty request body.
@@ -84,6 +85,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Replaced the generic Blocked Error workspace essay with the failed phase, a bounded version of the captured error, and guidance for only the recovery actions currently available; historical occurrences are clearly read-only.
+- Recovered model-generated YAML list prose that wraps onto deeper continuation lines by preserving the emitted text in a block scalar before shared structured-output parsing, instead of blocking otherwise valid PRD, Beads, and other artifacts.
 - Allowed successful audit previews to continue when npm exits with status 1 solely because known vulnerabilities remain, while still rejecting peer-resolution and operational failures.
 - Previewed direct dependency and audit proposals in isolation, validated their complete graphs with `npm ci --dry-run`, held incompatible releases without forced fallbacks, applied accepted graphs through deterministic `npm ci`, and restored the previous graph if application fails.
 - Changed the dependency bootstrap and standalone sync paths to use the committed lockfile through `npm ci`, preventing missing or stale `node_modules` from silently rewriting dependency versions.

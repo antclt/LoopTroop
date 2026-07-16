@@ -164,7 +164,17 @@ questions:
 
 **Warning:** *Quoted YAML plain scalar values containing colon-space before reparsing.*
 
-#### 6. Structured list primary-key repair
+#### 6. Wrapped plain list scalar repair
+
+**Trigger:** A prose list item contains `: ` and continues on one or more deeper-indented prose lines, such as a long acceptance criterion wrapping after ``writable: false``. YAML otherwise interprets the first line as a mapping and rejects the continuation as bad indentation.
+
+**Repair:** When the list item is not mapping-shaped and every deeper line is also prose-shaped, the existing lines are converted to a folded `>-` block scalar. The emitted words and punctuation are preserved exactly, with YAML supplying the intended spaces between wrapped lines. Mapping-shaped items, structural child fields, blank-line boundaries, already quoted values, and ambiguous continuations are left unchanged for normal validation.
+
+The shared YAML candidate parser applies this repair to PRD, Beads, relevant-files, execution-setup, final-test, Manual QA fix-bead, and pull-request draft artifacts.
+
+**Warning:** *Folded wrapped YAML list scalar text containing colon-space before reparsing.*
+
+#### 7. Structured list primary-key repair
 
 **Trigger:** An opt-in structured artifact list item starts with a bare scalar and is followed by object fields, e.g. `beads: - config-parser title: ...`.
 
@@ -172,7 +182,7 @@ questions:
 
 **Warning:** *Repaired YAML sequence entry under "beads" at line 12: treated bare item "config-parser" as id before parsing.* (Lists the actual parent key, line, emitted scalar, and primary key.)
 
-#### 7. Markdown code fence stripping
+#### 8. Markdown code fence stripping
 
 **Trigger:** The entire artifact is wrapped in a ` ```yaml ` … ` ``` ` block (or `json` / `yml` / `jsonl`).
 
@@ -180,7 +190,7 @@ questions:
 
 **Warning:** *Unwrapped markdown code fence wrapping the YAML payload.*
 
-#### 8. Spurious XML tag stripping
+#### 9. Spurious XML tag stripping
 
 **Trigger:** Lines that consist entirely of a bare XML-style tag (`<tag>`, `</tag>`, `<tag/>`).
 
@@ -188,7 +198,7 @@ questions:
 
 **Warning:** *Stripped XML-style tags `<tag>` from the payload before parsing.* (Lists the specific tags that were removed.)
 
-#### 9. Free-text scalar repair
+#### 10. Free-text scalar repair
 
 **Trigger:** A `free_text:` field has fragile YAML scalar formatting. Common cases include unquoted one-line values, malformed block scalars whose body starts at the same indentation as `free_text: >-`, and plain multi-line values that spill onto following indented lines. Such values are always strings in LoopTroop's schema but can start with backticks, look like booleans, contain `: `, or otherwise be misread as structure.
 
@@ -196,19 +206,19 @@ questions:
 
 **Warning:** *Repaired YAML free_text scalar formatting before parsing.*
 
-#### 10. Missing list-dash space
+#### 11. Missing list-dash space
 
 **Trigger:** A list item starts with `-` immediately followed by a key letter: `-key: value` instead of `- key: value`.
 
 **Repair:** A space is inserted after the dash.
 
-#### 11. Duplicate key removal
+#### 12. Duplicate key removal
 
 **Trigger:** The same mapping key appears more than once with exactly the same line text (key + value).
 
 **Repair:** The exact duplicate is dropped. If the duplicate opens a nested block (e.g. a second `options:` with the same list), the entire duplicate block is skipped. Ambiguous duplicates with *different* values are left for js-yaml to report as an error.
 
-#### 12. Invalid double-quoted escape repair
+#### 13. Invalid double-quoted escape repair
 
 **Trigger:** A double-quoted YAML scalar contains a backslash sequence that is not valid in YAML (e.g. `\+`, `\p`, `\s` from regex-like text). YAML only permits a specific set of escape sequences (`\n`, `\t`, `\\`, `\"`, `\uXXXX`, etc.).
 
@@ -216,7 +226,7 @@ questions:
 
 **Warning:** *Escaped invalid YAML double-quoted scalar backslash sequences before reparsing.*
 
-#### 13. Inner double-quote scalar repair
+#### 14. Inner double-quote scalar repair
 
 **Trigger:** A one-line double-quoted scalar contains unescaped inner quotes, usually in code-like prose such as `free_text: "Errors include origin: "date" metadata."`.
 
@@ -224,7 +234,7 @@ questions:
 
 **Warning:** *Repaired improperly quoted YAML scalar value.*
 
-#### 14. Unclosed double-quote repair
+#### 15. Unclosed double-quote repair
 
 **Trigger:** A `key: "value` mapping line or a `- "value` list item has an opening `"` with no matching closing `"`, and the next non-blank line is clearly a new YAML structural element (list item, sibling key, code fence, document marker `---`, or end of file).
 
@@ -232,7 +242,7 @@ questions:
 
 **Warning:** *Fixed unbalanced YAML quote before reparsing.*
 
-#### 15. Quoted scalar fragment repair
+#### 16. Quoted scalar fragment repair
 
 Two sub-cases:
 
@@ -246,13 +256,13 @@ Two sub-cases:
 
 **Warning:** *Repaired improperly quoted YAML scalar value.*
 
-#### 16. Type-union scalar repair
+#### 17. Type-union scalar repair
 
 **Trigger:** Schema-like values such as `type: "epic" | "user_story"` or `- "unit" | "integration"`. YAML interprets the `|` as a block-scalar indicator after a quoted token.
 
 **Repair:** The entire scalar is wrapped in double quotes.
 
-#### 17. Reserved indicator scalar repair
+#### 18. Reserved indicator scalar repair
 
 **Trigger:** Plain scalars starting with `` ` `` (backtick) or `@`. YAML reserves these characters and rejects plain scalars that begin with them.
 
@@ -269,13 +279,13 @@ question: "`repo_git_mutex` behavior?"
 
 **Warning:** *Quoted plain YAML scalars that began with reserved indicator characters (`` ` `` or `@`) before reparsing.*
 
-#### 18. Sequence entry indent drift repair
+#### 19. Sequence entry indent drift repair
 
 **Trigger:** After a block scalar (`>-`, `|`), subsequent sibling list items drift by 1–3 spaces relative to the first item in the sequence.
 
 **Repair:** All sibling dashes are normalized to the indent of the first `- ` in each sequence level.
 
-#### 19. Indentation repair
+#### 20. Indentation repair
 
 **Trigger:** Property lines inside a list item are indented by the wrong amount (off by 1–2 spaces relative to `dash_indent + 2`).
 

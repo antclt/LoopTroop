@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as jsYaml from 'js-yaml'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDoubleQuotedScalarInnerQuotes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlUnclosedQuotes, stripCodeFences } from '../yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDoubleQuotedScalarInnerQuotes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlUnclosedQuotes, repairYamlWrappedPlainListScalars, stripCodeFences } from '../yamlRepair'
 
 describe.concurrent('repairYamlListDashSpace', () => {
   it.each([
@@ -765,6 +765,43 @@ describe('repairYamlQuotedScalarFragments', () => {
     ].join('\n')
 
     expect(repairYamlQuotedScalarFragments(input)).toBe(input)
+  })
+})
+
+describe('repairYamlWrappedPlainListScalars', () => {
+  it('folds the exact wrapped descriptor criterion without changing its text', () => {
+    const input = [
+      'acceptance_criteria:',
+      '  - `Object.getOwnPropertyDescriptor(fn, approvedProperty)` reports `writable: false`, `enumerable: false`, and',
+      '    `configurable: false`.',
+      '  - Existing validation behavior remains unchanged.',
+    ].join('\n')
+
+    const repaired = repairYamlWrappedPlainListScalars(input)
+    const parsed = jsYaml.load(repaired) as { acceptance_criteria: string[] }
+
+    expect(repaired).toContain('  - >-\n    `Object.getOwnPropertyDescriptor')
+    expect(parsed.acceptance_criteria).toEqual([
+      '`Object.getOwnPropertyDescriptor(fn, approvedProperty)` reports `writable: false`, `enumerable: false`, and `configurable: false`.',
+      'Existing validation behavior remains unchanged.',
+    ])
+  })
+
+  it.each([
+    [
+      'mapping-shaped list entries',
+      ['items:', '  - label: current', '    detail: retained'].join('\n'),
+    ],
+    [
+      'structural continuations',
+      ['items:', '  - prose reports value: false', '    detail: retained'].join('\n'),
+    ],
+    [
+      'single-line colon prose',
+      ['items:', '  - prose reports value: false', '  - another item'].join('\n'),
+    ],
+  ])('leaves %s unchanged when folding would be ambiguous', (_, input) => {
+    expect(repairYamlWrappedPlainListScalars(input)).toBe(input)
   })
 })
 

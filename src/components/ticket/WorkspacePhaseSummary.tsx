@@ -9,6 +9,7 @@ import type { Ticket } from '@/hooks/useTickets'
 import { type DBartifact, useTicketArtifacts } from '@/hooks/useTicketArtifacts'
 import { useTicketPhaseAttempts, type TicketPhaseAttempt } from '@/hooks/useTicketPhaseAttempts'
 import { getTicketRuntime } from '@/lib/ticketNormalization'
+import type { TicketErrorOccurrence } from '@/lib/errorOccurrences'
 import { findLatestArtifactByType, findLatestCompanionArtifact, parseArtifactCompanionPayload } from '@/components/workspace/artifactCompanionUtils'
 import { buildCoverageArtifactContent, parseCoverageArtifact } from '@/components/workspace/phaseArtifactTypes'
 import type { WorkflowContextKey } from '@shared/workflowMeta'
@@ -58,6 +59,7 @@ interface WorkspacePhaseSummaryProps {
   phase: string
   ticket: Ticket
   errorMessage?: string | null
+  errorOccurrence?: TicketErrorOccurrence | null
 }
 
 type CoveragePhase = 'VERIFYING_INTERVIEW_COVERAGE' | 'VERIFYING_PRD_COVERAGE' | 'VERIFYING_BEADS_COVERAGE'
@@ -369,6 +371,53 @@ function getSummaryBasePhaseLabel(phase: string, errorMessage?: string | null): 
   return getStatusUserLabel(phase, { errorMessage })
 }
 
+const MAX_SUMMARY_ERROR_LENGTH = 240
+
+function normalizeSummaryError(errorMessage?: string | null): string {
+  const normalized = errorMessage?.trim().split(/\r?\n/, 1)[0]?.replace(/\s+/g, ' ').trim()
+  if (!normalized) return 'No error details were captured.'
+  if (normalized.length <= MAX_SUMMARY_ERROR_LENGTH) return normalized
+  return `${normalized.slice(0, MAX_SUMMARY_ERROR_LENGTH - 1).trimEnd()}…`
+}
+
+function getBlockedErrorSummary(
+  ticket: Ticket,
+  occurrence?: TicketErrorOccurrence | null,
+  errorMessage?: string | null,
+): { label: string; description: string } {
+  const blockedFromStatus = occurrence?.blockedFromStatus
+    ?? (ticket.previousStatus && ticket.previousStatus !== 'BLOCKED_ERROR' ? ticket.previousStatus : null)
+  const failedPhaseLabel = blockedFromStatus ? getStatusUserLabel(blockedFromStatus) : 'Workflow phase'
+  const message = normalizeSummaryError(occurrence?.errorMessage || errorMessage || ticket.errorMessage)
+  const isLiveOccurrence = ticket.status === 'BLOCKED_ERROR' && (!occurrence || occurrence.resolvedAt === null)
+
+  if (!isLiveOccurrence) {
+    return {
+      label: `Past error — ${failedPhaseLabel}`,
+      description: `${failedPhaseLabel} failed: ${message} This saved occurrence is read-only; its resolution is available in Details.`,
+    }
+  }
+
+  const recoveryGuidance: string[] = []
+  if (ticket.availableActions.includes('retry')) {
+    recoveryGuidance.push(`Retry starts a fresh ${failedPhaseLabel} attempt`)
+  }
+  if (ticket.availableActions.includes('continue')) {
+    recoveryGuidance.push('Continue resumes the preserved provider session')
+  }
+  if (ticket.availableActions.includes('include_final_test_files') || ticket.availableActions.includes('discard_final_test_files')) {
+    recoveryGuidance.push('Choose whether final-test file changes should be included or discarded')
+  }
+  if (recoveryGuidance.length === 0) {
+    recoveryGuidance.push('Open Details to review the failure and available recovery options')
+  }
+
+  return {
+    label: `Error — ${failedPhaseLabel}`,
+    description: `${failedPhaseLabel} failed: ${message} ${recoveryGuidance.join('. ')}.`,
+  }
+}
+
 function getActivePhaseAttempt(attempts: TicketPhaseAttempt[]): TicketPhaseAttempt | null {
   return attempts.find((attempt) => attempt.state === 'active') ?? attempts[0] ?? null
 }
@@ -386,7 +435,7 @@ function formatLivePhaseAttemptLabel(attempts: TicketPhaseAttempt[]): string | n
  * Collapsible status bar with phase label, description, "(details)" dialog trigger,
  * and optional live coverage-version badge.
  */
-export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: WorkspacePhaseSummaryProps) {
+export function WorkspacePhaseSummary({ phase, ticket, errorMessage, errorOccurrence }: WorkspacePhaseSummaryProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
   const phaseMeta = getWorkflowPhaseMeta(phase)
@@ -409,10 +458,15 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
     ? findLatestPhaseActivationTimestamp(phase, phaseLogs)
     : undefined
 
-  const basePhaseLabel = useMemo(
-    () => getSummaryBasePhaseLabel(phase, errorMessage),
-    [errorMessage, phase],
+  const blockedErrorSummary = useMemo(
+    () => phase === 'BLOCKED_ERROR' ? getBlockedErrorSummary(ticket, errorOccurrence, errorMessage) : null,
+    [errorMessage, errorOccurrence, phase, ticket],
   )
+  const basePhaseLabel = useMemo(
+    () => blockedErrorSummary?.label ?? getSummaryBasePhaseLabel(phase, errorMessage),
+    [blockedErrorSummary, errorMessage, phase],
+  )
+  const summaryDescription = blockedErrorSummary?.description ?? phaseMeta?.description ?? ''
   const coverageVersion = useMemo(() => {
     if (!shouldTrackCoverageProgress || !isVersionedCoveragePhase(phase)) return null
 
@@ -488,7 +542,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
         </button>
         {isExpanded ? (
           <p id={descriptionId} className="mt-px ml-5 text-[11px] leading-[15px] text-muted-foreground">
-            {phaseMeta.description}
+            {summaryDescription}
             {' '}
             <Tooltip>
               <TooltipTrigger asChild>
@@ -514,7 +568,7 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage }: Workspace
         <DialogContent closeButtonVariant="dashboard" className="max-w-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>{phaseLabel}</DialogTitle>
-            <DialogDescription>{phaseMeta.description}</DialogDescription>
+            <DialogDescription>{summaryDescription}</DialogDescription>
           </DialogHeader>
           <div className="space-y-5 overflow-y-auto pr-2">
             <section className="space-y-2">

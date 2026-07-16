@@ -98,6 +98,23 @@ describe.concurrent('parseYamlOrJsonCandidate', () => {
     })
   })
 
+  it('folds wrapped colon-containing list prose through the shared parser', () => {
+    const repairWarnings: string[] = []
+
+    const parsed = parseYamlOrJsonCandidate([
+      'acceptance_criteria:',
+      '  - `Object.getOwnPropertyDescriptor(fn, approvedProperty)` reports `writable: false`, `enumerable: false`, and',
+      '    `configurable: false`.',
+      '  - Existing validation remains unchanged.',
+    ].join('\n'), { repairWarnings }) as { acceptance_criteria: string[] }
+
+    expect(repairWarnings).toContain('Folded wrapped YAML list scalar text containing colon-space before reparsing.')
+    expect(parsed.acceptance_criteria).toEqual([
+      '`Object.getOwnPropertyDescriptor(fn, approvedProperty)` reports `writable: false`, `enumerable: false`, and `configurable: false`.',
+      'Existing validation remains unchanged.',
+    ])
+  })
+
   it('repairs bare primary-key sequence items only when a parser opts in', () => {
     const content = [
       'beads:',

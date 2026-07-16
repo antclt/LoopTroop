@@ -1,6 +1,6 @@
 import * as jsYaml from 'js-yaml'
 import type { PromptPart } from '../opencode/types'
-import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDoubleQuotedScalarInnerQuotes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlTypeUnionScalars, repairYamlUnclosedQuotes, stripCodeFences, type YamlSequenceItemPrimaryKeyOptions, type YamlSequenceItemPrimaryKeyRepair } from '@shared/yamlRepair'
+import { repairYamlDoubleQuotedInvalidEscapes, repairYamlDoubleQuotedScalarInnerQuotes, repairYamlDuplicateKeys, repairYamlFreeTextScalars, repairYamlIndentation, repairYamlInlineKeys, repairYamlInlineSequenceParents, repairYamlListDashSpace, repairYamlMappingKeyColonSpace, repairYamlNestedMappingChildren, repairYamlPlainScalarColons, repairYamlQuotedScalarFragments, repairYamlReservedIndicatorScalars, repairYamlSequenceEntryIndent, repairYamlSequenceItemPrimaryKeys, repairYamlTypeUnionScalars, repairYamlUnclosedQuotes, repairYamlWrappedPlainListScalars, stripCodeFences, type YamlSequenceItemPrimaryKeyOptions, type YamlSequenceItemPrimaryKeyRepair } from '@shared/yamlRepair'
 import { isRecord } from '@shared/typeGuards'
 
 export { isRecord }
@@ -180,6 +180,7 @@ const CANDIDATE_RECOVERY_WARNING = 'Recovered the structured artifact from surro
 const WRAPPER_KEY_WARNING = 'Removed wrapper key from top level.'
 const INLINE_YAML_WARNING = 'Repaired inline YAML sequence or mapping syntax before parsing.'
 const MAPPING_KEY_COLON_SPACE_WARNING = 'Repaired YAML mapping keys missing a space after colon before parsing.'
+const WRAPPED_PLAIN_LIST_SCALAR_WARNING = 'Folded wrapped YAML list scalar text containing colon-space before reparsing.'
 const PLAIN_SCALAR_COLON_WARNING = 'Quoted YAML plain scalar values containing colon-space before reparsing.'
 const QUOTED_SCALAR_WARNING = 'Repaired improperly quoted YAML scalar value.'
 const UNBALANCED_QUOTE_WARNING = 'Fixed unbalanced YAML quote before reparsing.'
@@ -574,6 +575,7 @@ export function parseYamlOrJsonCandidate(
         nestedMappingChildren?: boolean
         inlineYaml?: boolean
         mappingKeyColonSpace?: boolean
+        wrappedPlainListScalar?: boolean
         plainScalarColon?: boolean
         sequenceItemPrimaryKey?: YamlSequenceItemPrimaryKeyRepair[]
         freeTextScalar?: boolean
@@ -591,6 +593,9 @@ export function parseYamlOrJsonCandidate(
       }
       if (appliedRepairs?.mappingKeyColonSpace) {
         appendRepairWarningOnce(options?.repairWarnings, MAPPING_KEY_COLON_SPACE_WARNING)
+      }
+      if (appliedRepairs?.wrappedPlainListScalar) {
+        appendRepairWarningOnce(options?.repairWarnings, WRAPPED_PLAIN_LIST_SCALAR_WARNING)
       }
       if (appliedRepairs?.plainScalarColon) {
         appendRepairWarningOnce(options?.repairWarnings, PLAIN_SCALAR_COLON_WARNING)
@@ -634,7 +639,8 @@ export function parseYamlOrJsonCandidate(
         nestedMappingChildren: options?.nestedMappingChildren,
       })
       const mappingKeyColonSpacePreRepaired = repairYamlMappingKeyColonSpace(inlineKeyPreRepaired)
-      const plainScalarColonPreRepaired = repairYamlPlainScalarColons(mappingKeyColonSpacePreRepaired)
+      const wrappedPlainListScalarPreRepaired = repairYamlWrappedPlainListScalars(mappingKeyColonSpacePreRepaired)
+      const plainScalarColonPreRepaired = repairYamlPlainScalarColons(wrappedPlainListScalarPreRepaired)
       const sequenceItemPrimaryKeyPreRepaired = repairYamlSequenceItemPrimaryKeys(
         plainScalarColonPreRepaired,
         options?.sequenceItemPrimaryKeys,
@@ -645,7 +651,8 @@ export function parseYamlOrJsonCandidate(
           return finalizeParsedCandidate(jsYaml.load(preParseRepaired), {
             inlineYaml: inlineSequencePreRepaired !== candidate || inlineKeyPreRepaired !== inlineSequencePreRepaired,
             mappingKeyColonSpace: mappingKeyColonSpacePreRepaired !== inlineKeyPreRepaired,
-            plainScalarColon: plainScalarColonPreRepaired !== mappingKeyColonSpacePreRepaired,
+            wrappedPlainListScalar: wrappedPlainListScalarPreRepaired !== mappingKeyColonSpacePreRepaired,
+            plainScalarColon: plainScalarColonPreRepaired !== wrappedPlainListScalarPreRepaired,
             sequenceItemPrimaryKey: sequenceItemPrimaryKeyPreRepaired.repairs,
             nestedMappingChildren: preParseRepaired !== sequenceItemPrimaryKeyPreRepaired.yaml,
           })
@@ -705,13 +712,15 @@ export function parseYamlOrJsonCandidate(
         // Pre-processing: strip XML tags, quote fragile free_text values, remove duplicate keys, fix missing list-dash space
         const xmlStripped = stripSpuriousXmlTags(afterInline)
         const xmlTags = xmlStripped !== afterInline ? collectSpuriousXmlTags(afterInline) : []
-        const freeTextQuoted = repairYamlFreeTextScalars(xmlStripped)
+        const wrappedPlainListScalarRepaired = repairYamlWrappedPlainListScalars(xmlStripped)
+        const freeTextQuoted = repairYamlFreeTextScalars(wrappedPlainListScalarRepaired)
         const dashFixed = repairYamlListDashSpace(freeTextQuoted)
         const deduped = repairYamlDuplicateKeys(dashFixed)
         const base = applyNestedMappingRepair(deduped)
         const appliedPreParseRepairs = {
           sequenceItemPrimaryKey: sequenceItemPrimaryKeyInlineRepaired.repairs,
-          freeTextScalar: freeTextQuoted !== xmlStripped,
+          wrappedPlainListScalar: wrappedPlainListScalarRepaired !== xmlStripped,
+          freeTextScalar: freeTextQuoted !== wrappedPlainListScalarRepaired,
           xmlStyleTags: xmlTags,
         }
 

@@ -2290,6 +2290,81 @@ function looksLikeHeaderStyleListScalar(value: string): boolean {
   return /^[A-Z][A-Za-z0-9]*(?:-[A-Za-z0-9]+)+:\s+\S/.test(value)
 }
 
+/**
+ * Repair prose list scalars that contain colon-space and wrap onto deeper lines.
+ *
+ * A model can emit prose such as:
+ *
+ *   - `Object.getOwnPropertyDescriptor()` reports `writable: false`, and
+ *     `configurable: false`.
+ *
+ * YAML reads the colon-space on the first line as mapping syntax, leaving the
+ * wrapped continuation invalid. When the list item cannot be a normal mapping
+ * and every continuation is prose-shaped, convert the existing lines to a
+ * folded block scalar. This preserves the model's text and YAML's intended
+ * space-folding without inventing or discarding content.
+ */
+export function repairYamlWrappedPlainListScalars(yaml: string): string {
+  const lines = yaml.split('\n')
+  const result: string[] = []
+  const LIST_SCALAR_PATTERN = /^(\s*)-\s+(.+)$/
+  const STRUCTURAL_CONTINUATION_PATTERN = /^(?:-\s+|[A-Za-z_][\w-]*\s*:|[>|][+-]?\s*$)/
+  const SAFE_VALUE_START = /^["'[{>|&*!#]/
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!
+    const match = line.match(LIST_SCALAR_PATTERN)
+    if (!match) {
+      result.push(line)
+      continue
+    }
+
+    const dashIndent = match[1]!.length
+    const value = match[2]!
+    const looksLikeListItemMapping = /^[A-Za-z_][\w-]*\s*:\s+/.test(value)
+    if (
+      SAFE_VALUE_START.test(value)
+      || !/:\s/.test(value)
+      || (looksLikeListItemMapping && !looksLikeHeaderStyleListScalar(value))
+    ) {
+      result.push(line)
+      continue
+    }
+
+    const continuationLines: string[] = []
+    let nextIndex = index + 1
+    let ambiguous = false
+    for (; nextIndex < lines.length; nextIndex += 1) {
+      const continuation = lines[nextIndex]!
+      const trimmed = continuation.trim()
+      if (!trimmed) {
+        ambiguous = true
+        break
+      }
+
+      const continuationIndent = continuation.match(/^(\s*)/)?.[1]?.length ?? 0
+      if (continuationIndent <= dashIndent) break
+      if (trimmed.startsWith('#') || STRUCTURAL_CONTINUATION_PATTERN.test(trimmed)) {
+        ambiguous = true
+        break
+      }
+      continuationLines.push(continuation)
+    }
+
+    if (continuationLines.length === 0 || ambiguous) {
+      result.push(line)
+      continue
+    }
+
+    result.push(`${match[1]}- >-`)
+    result.push(`${' '.repeat(dashIndent + 2)}${value}`)
+    result.push(...continuationLines)
+    index = nextIndex - 1
+  }
+
+  return result.join('\n')
+}
+
 export function repairYamlPlainScalarColons(yaml: string): string {
   const lines = yaml.split('\n')
   const result: string[] = []

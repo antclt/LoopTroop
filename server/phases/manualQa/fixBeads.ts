@@ -6,7 +6,7 @@ import { z } from 'zod'
 import * as jsYaml from 'js-yaml'
 import type { TicketContext } from '../../machines/types'
 import type { Message, StreamEvent } from '../../opencode/types'
-import { collectTaggedCandidates, buildYamlDocument } from '../../structuredOutput/yamlUtils'
+import { collectTaggedCandidates, buildYamlDocument, parseYamlOrJsonCandidate } from '../../structuredOutput/yamlUtils'
 import { getLatestPhaseArtifact, getTicketByRef, getTicketPaths, resolvePhaseAttempt } from '../../storage/tickets'
 import { buildPromptFromTemplate, PROM_MANUAL_QA_FIX_BEADS } from '../../prompts/index'
 import { runOpenCodePrompt } from '../../workflow/runOpenCodePrompt'
@@ -112,7 +112,7 @@ export function parseManualQaFixBeadsOutput(
   }
   const candidate = collectTaggedCandidates(raw, MANUAL_QA_FIX_BEADS_TAG)[0]
   if (!candidate) throw new Error('Manual QA fix-bead output was empty.')
-  const parsed = CandidateDocumentSchema.parse(jsYaml.load(candidate))
+  const parsed = CandidateDocumentSchema.parse(parseYamlOrJsonCandidate(candidate))
   validateManualQaFixBeadCandidates(parsed.beads, groups)
   return parsed.beads
 }
