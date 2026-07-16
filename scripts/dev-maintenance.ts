@@ -577,6 +577,15 @@ export function isPeerResolutionFailure(message: string) {
   return /\bERESOLVE\b|could not resolve dependency|conflicting peer dependency/i.test(message)
 }
 
+export function isExpectedAuditFindingsExit(result: NpmCommandResult) {
+  if (result.status !== 1) return false
+
+  const output = `${result.stdout}\n${result.stderr}`
+  return /# npm audit report/i.test(output) &&
+    /\b\d+ vulnerabilities?\b/i.test(output) &&
+    !/\bnpm error code\b/i.test(output)
+}
+
 export function summarizePeerResolutionFailure(message: string) {
   const lines = stripAnsi(message)
     .split(/\r?\n/)
@@ -1091,7 +1100,7 @@ function previewAuditFixLockfile({ verbose = false }: { verbose?: boolean } = {}
       { verbose, cwd: tempDir },
     )
 
-    if (result.status !== 0) {
+    if (result.status !== 0 && !isExpectedAuditFindingsExit(result)) {
       const message = getNpmFailureMessage(result, 'npm audit fix --package-lock-only')
       if (isPeerResolutionFailure(message)) {
         return {

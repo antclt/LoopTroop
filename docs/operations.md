@@ -50,7 +50,7 @@ Before those services launch, LoopTroop runs a dev preflight that:
 - checks direct dependencies against npm publish metadata
 - previews stale direct dependencies with npm's normal peer resolver and updates only compatible stable releases that are newer than the current installed version and at least 7 days old
 - holds newer releases that are still inside that 7-day delay or conflict with the current peer dependency graph; automatic maintenance never retries with `--force` or `--legacy-peer-deps`
-- previews `npm audit fix` lockfile changes with the same peer resolver and runs the fix only when the proposal is compatible and every proposed npm package version has passed the same 7-day delay
+- previews `npm audit fix` lockfile changes with the same peer resolver, recognizes npm's expected exit code when unresolved findings remain, and runs the fix only when the proposal is compatible and every proposed npm package version has passed the same 7-day delay
 - upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
 - refuses to kill unrelated port occupants and reports which process still owns the conflicting port

@@ -15,6 +15,7 @@ import {
   getDependencyUpdateReleaseDetails,
   getHeldAuditPackageReleaseDetails,
   getHeldDependencyReleaseDetails,
+  isExpectedAuditFindingsExit,
   isPeerResolutionFailure,
   recordDailyMaintenanceSuccess,
   summarizePeerResolutionFailure,
@@ -200,6 +201,19 @@ describe('peer-safe dependency maintenance', () => {
 
 describe('audit lockfile age gating', () => {
   const now = new Date('2026-05-12T12:00:00.000Z')
+
+  it('accepts npm audit exit 1 when the preview completed but vulnerabilities remain', () => {
+    expect(isExpectedAuditFindingsExit({
+      status: 1,
+      stdout: 'up to date, audited 674 packages\n\n# npm audit report\n\n6 vulnerabilities (5 moderate, 1 high)',
+      stderr: '',
+    })).toBe(true)
+    expect(isExpectedAuditFindingsExit({
+      status: 1,
+      stdout: '',
+      stderr: 'npm error code ENOAUDIT\n# npm audit report\n6 vulnerabilities',
+    })).toBe(false)
+  })
 
   it('extracts proposed package version changes from npm audit lockfile previews', () => {
     const currentLock = JSON.stringify({
