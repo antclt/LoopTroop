@@ -371,7 +371,7 @@ if (preflightReport) {
     const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
     printSummaryLine(
       'Dependencies',
-      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} inside the 7-day delay.`,
+      `Held ${heldCount} newer ${heldCount === 1 ? 'release' : 'releases'} behind release-age or compatibility gates.`,
     )
   } else {
     const heldCount = getHeldDependencyCount(preflightReport.dependencySync)
@@ -382,7 +382,6 @@ if (preflightReport) {
       `Updated ${runtimeCount} runtime and ` +
       `${devCount} dev packages to eligible releases` +
       (heldCount > 0 ? `; held ${heldCount}` : '') +
-      (preflightReport.dependencySync.isForced ? ' (with npm --force fallback)' : '') +
       '.',
     )
   }
@@ -409,8 +408,10 @@ if (preflightReport) {
     const heldCount = preflightReport.audit.heldPackageUpdates.length
     printSummaryLine(
       'Audit',
-      `Held remediation; ${heldCount} proposed ` +
-      `${heldCount === 1 ? 'release is' : 'releases are'} inside the 7-day delay.`,
+      preflightReport.audit.compatibilityHold
+        ? `Held remediation because npm rejected an incompatible peer dependency graph: ${preflightReport.audit.compatibilityHold}.`
+        : `Held remediation; ${heldCount} proposed ` +
+          `${heldCount === 1 ? 'release is' : 'releases are'} inside the 7-day delay.`,
     )
   } else if (preflightReport.audit.unresolved.length === 0) {
     if (preflightReport.audit.fixChanged) {

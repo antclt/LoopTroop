@@ -90,12 +90,12 @@ if (missingBins.length > 0) {
 }
 
 if (reasons.length > 0) {
-  console.log('[dev-preflight] Running npm install before starting dev:')
+  console.log('[dev-preflight] Running npm ci before starting dev:')
   for (const reason of reasons) {
     console.log(`[dev-preflight] - ${reason}`)
   }
 
-  const result = spawnViaShell(npmCommand, ['install', ...npmInstallFlags], {
+  const result = spawnViaShell(npmCommand, ['ci', ...npmInstallFlags], {
     cwd: repoRoot,
     encoding: 'utf8',
     stdio: 'pipe',
@@ -103,7 +103,7 @@ if (reasons.length > 0) {
   })
 
   if (result.error) {
-    console.error(`[dev-preflight] Failed to start npm install: ${result.error.message}`)
+    console.error(`[dev-preflight] Failed to start npm ci: ${result.error.message}`)
     process.exit(1)
   }
   if (result.status !== 0) {
@@ -127,7 +127,7 @@ const stillMissing = requiredBins.filter(name => {
 
 if (stillMissing.length > 0) {
   console.error(
-    '[dev-preflight] Required dev tools are still missing after npm install: ' +
+    '[dev-preflight] Required dev tools are still missing after npm ci: ' +
     stillMissing.join(', '),
   )
   process.exit(1)

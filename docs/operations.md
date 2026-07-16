@@ -48,9 +48,9 @@ Before those services launch, LoopTroop runs a dev preflight that:
 - prints immediate progress for bootstrap checks, daily maintenance, stale-process cleanup, and port availability so startup does not appear stalled during slower checks
 - restores missing local tooling with `npm ci` when dependencies need to be restored, then verifies required local dev binaries
 - checks direct dependencies against npm publish metadata
-- updates stale direct dependencies only to stable releases that are newer than the current installed version and at least 7 days old
-- holds newer releases that are still inside that 7-day delay, and installs the newest eligible older release when one exists
-- previews `npm audit fix` lockfile changes and runs the fix only when every proposed npm package version has passed the same 7-day delay
+- previews stale direct dependencies with npm's normal peer resolver and updates only compatible stable releases that are newer than the current installed version and at least 7 days old
+- holds newer releases that are still inside that 7-day delay or conflict with the current peer dependency graph; automatic maintenance never retries with `--force` or `--legacy-peer-deps`
+- previews `npm audit fix` lockfile changes with the same peer resolver and runs the fix only when the proposal is compatible and every proposed npm package version has passed the same 7-day delay
 - upgrades the local `opencode` CLI to the latest available version when the binary is installed
 - checks and reclaims only stale LoopTroop-owned processes on configured ports
 - refuses to kill unrelated port occupants and reports which process still owns the conflicting port
@@ -73,7 +73,7 @@ Before those services launch, LoopTroop runs a dev preflight that:
 
 Normal `npm run dev` can intentionally mutate local dependency files when aged direct dependency updates or audit fixes are available. The expensive networked maintenance work is daily-gated through `tmp/dev-maintenance-state.json`: direct dependency sync, npm audit remediation, and OpenCode CLI upgrade checks run on the first local dev start of the day, then run again only if their relevant inputs change later that day.
 
-The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Audit remediation is all-or-nothing: if npm proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt and reports the held package names and next eligible times during normal startup. OpenCode is exempt: the local OpenCode CLI and the direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs.
+The 7-day release delay applies to direct npm package updates selected by dependency sync and to all npm package versions proposed by audit remediation. Before changing the live checkout, LoopTroop resolves proposed package and lock files in a temporary directory with npm's normal peer-dependency rules. Incompatible direct releases are held while compatible candidates can still proceed; related candidates are reconsidered together so a supporting package can unlock a previously incompatible update. Audit remediation is all-or-nothing: if npm rejects the proposed graph, or proposes any package version that is too fresh or whose publish time cannot be verified, LoopTroop holds the entire `npm audit fix` attempt. Accepted proposals are applied with `npm ci`; if that fails, the previous package files and dependency graph are restored. Automatic maintenance never bypasses npm conflicts with `--force` or `--legacy-peer-deps`. OpenCode is exempt only from the release-age delay: the local OpenCode CLI and direct `@opencode-ai/sdk` package update immediately when their normal maintenance path runs, while npm peer compatibility remains mandatory.
 
 ## 4. Maintenance Commands
 
@@ -129,8 +129,8 @@ The frontend dev server pre-optimizes its complete declared browser dependency s
 | Script | Purpose |
 | --- | --- |
 | `predev` | Automatic dev preflight hook that runs before `npm run dev`. Usually invoked through `npm run dev`, not by hand. |
-| `deps:sync` | Run only the direct dependency sync step, then refresh the daily-maintenance stamp. |
-| `audit:remediate` | Run only the gated npm audit remediation step, then refresh the daily-maintenance stamp. |
+| `deps:sync` | Preview direct dependency updates with npm peer resolution, apply compatible releases with `npm ci`, hold conflicts, then refresh the daily-maintenance stamp. |
+| `audit:remediate` | Preview the gated npm audit remediation in isolation, hold incompatible proposals, and apply accepted lockfiles with `npm ci`. |
 | `opencode:upgrade` | Run only the OpenCode CLI upgrade step, then refresh the daily-maintenance stamp. |
 | `diagnose:stall` | Generate a runtime diagnostics report under `tmp/diagnostics/`. |
 

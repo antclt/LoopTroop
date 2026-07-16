@@ -19,10 +19,14 @@ if (report.skipped) {
 }
 
 if (report.fixHeld) {
-  console.log(
-    `[audit:remediate] Held npm audit fix because ${report.heldPackageUpdates.length} proposed ` +
-    `${report.heldPackageUpdates.length === 1 ? 'package release is' : 'package releases are'} inside the 7-day delay.`,
-  )
+  if (report.compatibilityHold) {
+    console.log(`[audit:remediate] Held npm audit fix because npm rejected its peer dependency graph: ${report.compatibilityHold}`)
+  } else {
+    console.log(
+      `[audit:remediate] Held npm audit fix because ${report.heldPackageUpdates.length} proposed ` +
+      `${report.heldPackageUpdates.length === 1 ? 'package release is' : 'package releases are'} inside the 7-day delay.`,
+    )
+  }
   for (const held of getHeldAuditPackageReleaseDetails(report.heldPackageUpdates)) {
     console.log(`[audit:remediate] - ${formatHeldAuditPackageUpdate(held)}`)
   }

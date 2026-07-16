@@ -361,7 +361,7 @@ describe('runOpenCodePrompt', () => {
   })
 
   it('gets the exact session through the SDK v2 flat parameter contract', async () => {
-    const get = vi.fn(async () => ({
+    const get = vi.fn(async (..._args: unknown[]) => ({
       data: { id: 'ses-exact', directory: '/tmp/project' },
     }))
     const fakeClient = createFakeSdkClient({ get })

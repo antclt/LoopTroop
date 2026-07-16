@@ -56,7 +56,7 @@ By default the services bind to:
 
 ::: details What happens during startup?
 
-The preflight handles dependency updates, security audit fixes, OpenCode CLI updates, and port checks. Normal startup prints a short summary of every updated package (previous → new version) and any held releases with their next eligibility time.
+The preflight handles dependency updates, security audit fixes, OpenCode CLI updates, and port checks. Dependency proposals must pass npm's normal peer resolution before they can change the checkout; incompatible releases are held rather than forced. Normal startup prints a short summary of every updated package (previous → new version) and releases held by the age or compatibility gates.
 
 For the full preflight specification, see [Operations Guide](operations.md).
 :::

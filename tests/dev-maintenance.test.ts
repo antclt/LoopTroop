@@ -11,10 +11,13 @@ import {
   formatDependencyUpdateReleaseDetail,
   formatHeldAuditPackageUpdate,
   formatHeldDependencyReleaseDetail,
+  formatUpdatedDependencyRange,
   getDependencyUpdateReleaseDetails,
   getHeldAuditPackageReleaseDetails,
   getHeldDependencyReleaseDetails,
+  isPeerResolutionFailure,
   recordDailyMaintenanceSuccess,
+  summarizePeerResolutionFailure,
   type DailyMaintenanceState,
 } from '../scripts/dev-maintenance'
 
@@ -175,6 +178,25 @@ describe('aged dependency update selection', () => {
   })
 })
 
+describe('peer-safe dependency maintenance', () => {
+  it('recognizes npm peer-resolution failures without treating unrelated failures as compatibility holds', () => {
+    expect(isPeerResolutionFailure('npm error code ERESOLVE\nnpm error Could not resolve dependency:')).toBe(true)
+    expect(isPeerResolutionFailure('npm error network timeout')).toBe(false)
+  })
+
+  it('extracts a concise peer constraint for held-release details', () => {
+    expect(summarizePeerResolutionFailure(
+      'npm error Could not resolve dependency:\nnpm error peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.63.0',
+    )).toBe('peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.63.0')
+  })
+
+  it('preserves compatible semver range styles when staging a newer version', () => {
+    expect(formatUpdatedDependencyRange('^6.0.3', '6.1.0')).toBe('^6.1.0')
+    expect(formatUpdatedDependencyRange('~6.0.3', '6.0.4')).toBe('~6.0.4')
+    expect(formatUpdatedDependencyRange('6.0.3', '6.0.4')).toBe('6.0.4')
+  })
+})
+
 describe('audit lockfile age gating', () => {
   const now = new Date('2026-05-12T12:00:00.000Z')
 
@@ -235,7 +257,7 @@ describe('held dependency detail formatting', () => {
   it('describes the release-age policy used by dev startup messaging', () => {
     expect(formatDependencyReleasePolicySummaryLines()).toEqual([
       'Direct npm dependency updates and npm audit fixes wait until a release has been published for 7 days.',
-      'Newer releases are shown as held with their next eligible time.',
+      'Updates are previewed with npm peer resolution; incompatible releases are held and never forced.',
       'OpenCode CLI and @opencode-ai/sdk updates are applied immediately.',
     ])
   })
@@ -292,6 +314,24 @@ describe('held dependency detail formatting', () => {
     expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
       'held runtime dependency alpha 1.0.0 -> 1.1.0; until 2026-05-15T00:00:00.000Z',
       'held dev dependency beta 2.0.0 -> 2.1.0; until npm publish metadata can be verified',
+    ])
+  })
+
+  it('explains peer-incompatible dependency holds without inventing an eligibility time', () => {
+    const details = getHeldDependencyReleaseDetails({
+      heldDependencies: [],
+      heldDevDependencies: [{
+        name: 'typescript',
+        current: '6.0.3',
+        latest: '7.0.2',
+        reason: 'peer-incompatible',
+        detail: 'peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.63.0',
+      }],
+    })
+
+    expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
+      'held dev dependency typescript 6.0.3 -> 7.0.2; because npm reported an incompatible peer dependency: ' +
+      'peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.63.0',
     ])
   })
 

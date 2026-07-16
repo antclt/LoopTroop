@@ -74,7 +74,8 @@ export interface HeldDependencyUpdate {
   current?: string
   latest?: string
   nextEligibleAt?: string
-  reason: 'metadata-unavailable' | 'missing-version' | 'non-semver-current' | 'no-aged-version'
+  reason: 'metadata-unavailable' | 'missing-version' | 'non-semver-current' | 'no-aged-version' | 'peer-incompatible'
+  detail?: string
 }
 
 export interface AgedDependencyTargetSelection {
@@ -109,6 +110,7 @@ export interface AuditRemediationReport {
   fixHeld: boolean
   appliedPackageUpdates: LockfilePackageUpdate[]
   heldPackageUpdates: HeldAuditPackageUpdate[]
+  compatibilityHold?: string
   unresolved: AuditIssue[]
   totals: AuditTotals
   errors: string[]
@@ -198,6 +200,8 @@ function formatHeldReleaseTiming(
       return 'until a newer stable release is at least 7 days old'
     case 'too-new':
       return 'until the 7-day release delay passes'
+    case 'peer-incompatible':
+      return 'because npm reported an incompatible peer dependency'
   }
 }
 
@@ -246,7 +250,7 @@ export function formatDependencyUpdateReleaseDetail(detail: DependencyReleaseUpd
 export function formatDependencyReleasePolicySummaryLines() {
   return [
     `Direct npm dependency updates and npm audit fixes wait until a release has been published for ${DEPENDENCY_RELEASE_DELAY_DAYS} days.`,
-    'Newer releases are shown as held with their next eligible time.',
+    'Updates are previewed with npm peer resolution; incompatible releases are held and never forced.',
     'OpenCode CLI and @opencode-ai/sdk updates are applied immediately.',
   ]
 }
@@ -256,10 +260,12 @@ export function formatHeldDependencyReleaseDetail(detail: HeldDependencyReleaseD
     ? ` ${detail.current ?? 'unknown'} -> ${detail.latest ?? 'unknown'}`
     : ''
 
-  return `held ${detail.dependencyType} dependency ${detail.name}${versionSuffix}; ${formatHeldReleaseTiming(
+  const reason = formatHeldReleaseTiming(
     detail.reason,
     detail.nextEligibleAt,
-  )}`
+  )
+  return `held ${detail.dependencyType} dependency ${detail.name}${versionSuffix}; ${reason}` +
+    (detail.detail ? `: ${detail.detail}` : '')
 }
 
 export function getHeldAuditPackageReleaseDetails(updates: HeldAuditPackageUpdate[]) {
@@ -539,26 +545,65 @@ function runExternalCommand(
 function runInstallCommand(
   args: string[],
   label: string,
-  { verbose = false, allowForceFallback = false }: { verbose?: boolean; allowForceFallback?: boolean } = {},
+  { verbose = false, cwd = repoRoot }: { verbose?: boolean; cwd?: string } = {},
 ) {
-  const initial = runCommand(args, label, { verbose })
-  if (initial.status === 0) {
-    return { isForced: false }
-  }
+  const result = runCommand(args, label, { verbose, cwd })
+  if (result.status === 0) return
 
-  if (!allowForceFallback) {
-    const message = initial.stderr || initial.stdout || `${label} failed with code ${initial.status ?? 'unknown'}`
-    throw new Error(message)
-  }
-
-  console.warn(`[dev-preflight] ${label} failed; retrying with --force.`)
-  const forceRetryResult = runCommand([...args, '--force'], `${label} --force`, { verbose })
-  if (forceRetryResult.status === 0) {
-    return { isForced: true }
-  }
-
-  const message = forceRetryResult.stderr || forceRetryResult.stdout || `${label} --force failed with code ${forceRetryResult.status ?? 'unknown'}`
+  const message = result.stderr || result.stdout || `${label} failed with code ${result.status ?? 'unknown'}`
   throw new Error(message)
+}
+
+function getNpmFailureMessage(result: NpmCommandResult, label: string) {
+  return result.stderr || result.stdout || `${label} failed with code ${result.status ?? 'unknown'}`
+}
+
+export function isPeerResolutionFailure(message: string) {
+  return /\bERESOLVE\b|could not resolve dependency|conflicting peer dependency/i.test(message)
+}
+
+export function summarizePeerResolutionFailure(message: string) {
+  const lines = stripAnsi(message)
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^npm (?:error|warn)\s*/i, '').trim())
+    .filter(Boolean)
+  const peerLine = lines.find((line) => /^peer\s+.+\s+from\s+.+/i.test(line))
+  return peerLine ?? lines.find((line) => /could not resolve dependency|conflicting peer dependency/i.test(line))
+    ?? 'npm could not resolve the proposed peer dependency graph'
+}
+
+function restoreDependencyFiles(packageContents: string, lockContents: string, { verbose = false }: { verbose?: boolean } = {}) {
+  writeFileSync(packageJsonPath, packageContents, 'utf8')
+  writeFileSync(packageLockPath, lockContents, 'utf8')
+  runInstallCommand(['ci', ...npmInstallFlags], 'npm ci rollback', { verbose })
+}
+
+function applyResolvedDependencyFiles(
+  proposedPackageContents: string,
+  proposedLockContents: string,
+  { verbose = false }: { verbose?: boolean } = {},
+) {
+  const originalPackageContents = readFileIfPresent(packageJsonPath)
+  const originalLockContents = readFileIfPresent(packageLockPath)
+  if (!originalPackageContents || !originalLockContents) {
+    throw new Error('Unable to read package.json and package-lock.json before applying dependency maintenance.')
+  }
+
+  writeFileSync(packageJsonPath, proposedPackageContents, 'utf8')
+  writeFileSync(packageLockPath, proposedLockContents, 'utf8')
+
+  try {
+    runInstallCommand(['ci', ...npmInstallFlags], 'npm ci for resolved dependency maintenance', { verbose })
+  } catch (error) {
+    try {
+      restoreDependencyFiles(originalPackageContents, originalLockContents, { verbose })
+    } catch (rollbackError) {
+      throw new Error(
+        `${getErrorMessage(error)}\nDependency-file rollback succeeded, but npm ci rollback failed: ${getErrorMessage(rollbackError)}`,
+      )
+    }
+    throw new Error(`${getErrorMessage(error)}\nThe previous dependency graph was restored.`)
+  }
 }
 
 export function readDailyMaintenanceState(): DailyMaintenanceState {
@@ -1024,19 +1069,41 @@ function previewAuditFixLockfile({ verbose = false }: { verbose?: boolean } = {}
   try {
     copyFileSync(packageJsonPath, tempPackageJsonPath)
     copyFileSync(packageLockPath, tempPackageLockPath)
-    runCommand(
+    const result = runCommand(
       ['audit', 'fix', '--package-lock-only', '--ignore-scripts'],
       'npm audit fix --package-lock-only',
       { verbose, cwd: tempDir },
     )
 
+    if (result.status !== 0) {
+      const message = getNpmFailureMessage(result, 'npm audit fix --package-lock-only')
+      if (isPeerResolutionFailure(message)) {
+        return {
+          packageContents: null,
+          lockContents: null,
+          compatibilityHold: summarizePeerResolutionFailure(message),
+          error: null as string | null,
+        }
+      }
+      return {
+        packageContents: null,
+        lockContents: null,
+        compatibilityHold: null,
+        error: message,
+      }
+    }
+
     return {
+      packageContents: readFileIfPresent(tempPackageJsonPath),
       lockContents: readFileIfPresent(tempPackageLockPath),
+      compatibilityHold: null,
       error: null as string | null,
     }
   } catch (error) {
     return {
+      packageContents: null,
       lockContents: null,
+      compatibilityHold: null,
       error: getErrorMessage(error),
     }
   } finally {
@@ -1083,7 +1150,7 @@ function summarizeAuditIssues(vulnerabilities: Record<string, {
 }
 
 export function ensureInstallIfNeeded(
-  { verbose = false, allowForceFallback = false }: { verbose?: boolean; allowForceFallback?: boolean } = {},
+  { verbose = false }: { verbose?: boolean } = {},
 ): InstallReport {
   const reasons = getInstallReasons()
   if (reasons.length === 0) {
@@ -1095,22 +1162,18 @@ export function ensureInstallIfNeeded(
     }
   }
 
-  const installCommand = allowForceFallback ? 'install' : 'ci'
-  console.log(`[dev-preflight] Running npm ${installCommand} before starting dev:`)
+  console.log('[dev-preflight] Running npm ci before starting dev:')
   for (const reason of reasons) {
     console.log(`[dev-preflight] - ${reason}`)
   }
 
   try {
-    const result = runInstallCommand([installCommand, ...npmInstallFlags], `npm ${installCommand}`, {
-      verbose,
-      allowForceFallback,
-    })
+    runInstallCommand(['ci', ...npmInstallFlags], 'npm ci', { verbose })
 
     return {
       ran: true,
       reasons,
-      isForced: result.isForced,
+      isForced: false,
       errors: [],
     }
   } catch (error) {
@@ -1185,10 +1248,6 @@ function planDependencyUpdates(
   return { updates, held }
 }
 
-function formatDependencyUpdateSpecs(updates: DependencyUpdatePlan[]) {
-  return updates.map((update) => `${update.name}@${update.targetVersion}`)
-}
-
 function buildDependencyUpdateDetails(updates: DependencyUpdatePlan[]): DependencyUpdateDetail[] {
   return updates.map((update) => ({
     name: update.name,
@@ -1197,6 +1256,154 @@ function buildDependencyUpdateDetails(updates: DependencyUpdatePlan[]): Dependen
     targetPublishedAt: update.targetPublishedAt,
     bypassedAgeGate: update.bypassedAgeGate,
   }))
+}
+
+interface DependencyUpdateCandidate extends DependencyUpdatePlan {
+  dependencyType: 'runtime' | 'dev'
+}
+
+interface DependencyUpdatePreview {
+  packageContents: string | null
+  lockContents: string | null
+  error: string | null
+  peerConflict: boolean
+}
+
+export function formatUpdatedDependencyRange(currentRange: string, targetVersion: string) {
+  if (currentRange.startsWith('^')) return `^${targetVersion}`
+  if (currentRange.startsWith('~')) return `~${targetVersion}`
+  return targetVersion
+}
+
+function previewDirectDependencyUpdates(
+  updates: DependencyUpdateCandidate[],
+  { verbose = false }: { verbose?: boolean } = {},
+): DependencyUpdatePreview {
+  const tempDir = mkdtempSync(join(tmpdir(), 'looptroop-dependency-update-'))
+  const tempPackageJsonPath = resolve(tempDir, 'package.json')
+  const tempPackageLockPath = resolve(tempDir, 'package-lock.json')
+
+  try {
+    const packageContents = readFileIfPresent(packageJsonPath)
+    if (!packageContents || !readFileIfPresent(packageLockPath)) {
+      return { packageContents: null, lockContents: null, error: 'Unable to read dependency manifests.', peerConflict: false }
+    }
+
+    const manifest = parseJson<PackageManifest>(packageContents)
+    if (!manifest) {
+      return { packageContents: null, lockContents: null, error: 'Unable to parse package.json.', peerConflict: false }
+    }
+
+    for (const update of updates) {
+      const dependencies = update.dependencyType === 'runtime' ? manifest.dependencies : manifest.devDependencies
+      const currentRange = dependencies?.[update.name]
+      if (!dependencies || currentRange == null) {
+        return {
+          packageContents: null,
+          lockContents: null,
+          error: `Unable to stage ${update.name}; it is no longer a direct ${update.dependencyType} dependency.`,
+          peerConflict: false,
+        }
+      }
+      dependencies[update.name] = formatUpdatedDependencyRange(currentRange, update.targetVersion)
+    }
+
+    writeFileSync(tempPackageJsonPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8')
+    copyFileSync(packageLockPath, tempPackageLockPath)
+    const result = runCommand(
+      ['install', '--package-lock-only', '--ignore-scripts', ...npmInstallFlags],
+      'npm install --package-lock-only dependency preview',
+      { verbose, cwd: tempDir },
+    )
+
+    if (result.status !== 0) {
+      const message = getNpmFailureMessage(result, 'npm install --package-lock-only dependency preview')
+      return {
+        packageContents: null,
+        lockContents: null,
+        error: message,
+        peerConflict: isPeerResolutionFailure(message),
+      }
+    }
+
+    const proposedPackageContents = readFileIfPresent(tempPackageJsonPath)
+    const proposedLockContents = readFileIfPresent(tempPackageLockPath)
+    if (!proposedPackageContents || !proposedLockContents) {
+      return {
+        packageContents: null,
+        lockContents: null,
+        error: 'Unable to read the resolved dependency preview.',
+        peerConflict: false,
+      }
+    }
+
+    return {
+      packageContents: proposedPackageContents,
+      lockContents: proposedLockContents,
+      error: null,
+      peerConflict: false,
+    }
+  } catch (error) {
+    return { packageContents: null, lockContents: null, error: getErrorMessage(error), peerConflict: false }
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+function findCompatibleDependencyUpdates(
+  candidates: DependencyUpdateCandidate[],
+  { verbose = false }: { verbose?: boolean } = {},
+) {
+  if (candidates.length === 0) {
+    return { accepted: [] as DependencyUpdateCandidate[], held: [] as HeldDependencyUpdate[], preview: null, error: null as string | null }
+  }
+
+  const combinedPreview = previewDirectDependencyUpdates(candidates, { verbose })
+  if (!combinedPreview.error) {
+    return { accepted: candidates, held: [] as HeldDependencyUpdate[], preview: combinedPreview, error: null as string | null }
+  }
+  if (!combinedPreview.peerConflict) {
+    return { accepted: [] as DependencyUpdateCandidate[], held: [] as HeldDependencyUpdate[], preview: null, error: combinedPreview.error }
+  }
+
+  const accepted: DependencyUpdateCandidate[] = []
+  let pending = candidates.map((candidate) => ({ candidate, detail: summarizePeerResolutionFailure(combinedPreview.error ?? '') }))
+  let madeProgress = true
+
+  while (madeProgress && pending.length > 0) {
+    madeProgress = false
+    const nextPending: typeof pending = []
+    for (const item of pending) {
+      const preview = previewDirectDependencyUpdates([...accepted, item.candidate], { verbose })
+      if (!preview.error) {
+        accepted.push(item.candidate)
+        madeProgress = true
+      } else if (preview.peerConflict) {
+        nextPending.push({ candidate: item.candidate, detail: summarizePeerResolutionFailure(preview.error) })
+      } else {
+        return { accepted: [] as DependencyUpdateCandidate[], held: [] as HeldDependencyUpdate[], preview: null, error: preview.error }
+      }
+    }
+    pending = nextPending
+  }
+
+  const finalPreview = accepted.length > 0 ? previewDirectDependencyUpdates(accepted, { verbose }) : null
+  if (finalPreview?.error) {
+    return { accepted: [] as DependencyUpdateCandidate[], held: [] as HeldDependencyUpdate[], preview: null, error: finalPreview.error }
+  }
+
+  return {
+    accepted,
+    held: pending.map(({ candidate, detail }) => ({
+      name: candidate.name,
+      current: candidate.current,
+      latest: candidate.targetVersion,
+      reason: 'peer-incompatible' as const,
+      detail,
+    })),
+    preview: finalPreview,
+    error: null as string | null,
+  }
 }
 
 export function syncDirectDependencies(
@@ -1259,12 +1466,51 @@ export function syncDirectDependencies(
   const manifest = readPackageManifest()
   const runtimePlan = planDependencyUpdates(outdated, manifest.dependencies, { verbose })
   const devPlan = planDependencyUpdates(outdated, manifest.devDependencies, { verbose })
-  const updatedDependencies = runtimePlan.updates.map((update) => update.name)
-  const updatedDevDependencies = devPlan.updates.map((update) => update.name)
-  const updatedDependencyDetails = buildDependencyUpdateDetails(runtimePlan.updates)
-  const updatedDevDependencyDetails = buildDependencyUpdateDetails(devPlan.updates)
-  const heldDependencies = runtimePlan.held
-  const heldDevDependencies = devPlan.held
+  const candidates: DependencyUpdateCandidate[] = [
+    ...runtimePlan.updates.map((update) => ({ ...update, dependencyType: 'runtime' as const })),
+    ...devPlan.updates.map((update) => ({ ...update, dependencyType: 'dev' as const })),
+  ]
+  const compatibility = findCompatibleDependencyUpdates(candidates, { verbose })
+  const errors: string[] = compatibility.error ? [compatibility.error] : []
+
+  if (!compatibility.error && compatibility.accepted.length > 0) {
+    console.log(
+      `[dev-preflight] Applying ${compatibility.accepted.length} peer-compatible direct ` +
+      `${compatibility.accepted.length === 1 ? 'dependency update' : 'dependency updates'} from the resolved preview.`,
+    )
+    try {
+      if (!compatibility.preview?.packageContents || !compatibility.preview.lockContents) {
+        throw new Error('The resolved dependency preview is missing package files.')
+      }
+      applyResolvedDependencyFiles(
+        compatibility.preview.packageContents,
+        compatibility.preview.lockContents,
+        { verbose },
+      )
+    } catch (error) {
+      errors.push(getErrorMessage(error))
+    }
+  }
+
+  const applied = errors.length === 0 ? compatibility.accepted : []
+  const appliedRuntime = applied.filter((update) => update.dependencyType === 'runtime')
+  const appliedDev = applied.filter((update) => update.dependencyType === 'dev')
+  const updatedDependencies = appliedRuntime.map((update) => update.name)
+  const updatedDevDependencies = appliedDev.map((update) => update.name)
+  const updatedDependencyDetails = buildDependencyUpdateDetails(appliedRuntime)
+  const updatedDevDependencyDetails = buildDependencyUpdateDetails(appliedDev)
+  const heldDependencies = [
+    ...runtimePlan.held,
+    ...compatibility.held.filter((update) => candidates.find(
+      (candidate) => candidate.name === update.name && candidate.dependencyType === 'runtime',
+    )),
+  ]
+  const heldDevDependencies = [
+    ...devPlan.held,
+    ...compatibility.held.filter((update) => candidates.find(
+      (candidate) => candidate.name === update.name && candidate.dependencyType === 'dev',
+    )),
+  ]
 
   if (
     updatedDependencies.length === 0 &&
@@ -1288,45 +1534,12 @@ export function syncDirectDependencies(
     }
   }
 
-  let isForced = false
-  const errors: string[] = []
-
-  try {
-    if (updatedDependencies.length > 0) {
-      console.log(
-        `[dev-preflight] Updating ${updatedDependencies.length} direct runtime ` +
-        `${updatedDependencies.length === 1 ? 'dependency' : 'dependencies'} to eligible stable releases.`,
-      )
-      const result = runInstallCommand(
-        ['install', ...npmInstallFlags, ...formatDependencyUpdateSpecs(runtimePlan.updates)],
-        'npm install <dependencies>@<aged-version>',
-        { verbose, allowForceFallback: true },
-      )
-      isForced = isForced || result.isForced
-    }
-
-    if (updatedDevDependencies.length > 0) {
-      console.log(
-        `[dev-preflight] Updating ${updatedDevDependencies.length} direct dev ` +
-        `${updatedDevDependencies.length === 1 ? 'dependency' : 'dependencies'} to eligible stable releases.`,
-      )
-      const result = runInstallCommand(
-        ['install', ...npmInstallFlags, '-D', ...formatDependencyUpdateSpecs(devPlan.updates)],
-        'npm install -D <dependencies>@<aged-version>',
-        { verbose, allowForceFallback: true },
-      )
-      isForced = isForced || result.isForced
-    }
-  } catch (error) {
-    errors.push(getErrorMessage(error))
-  }
-
   return {
     skipped: false,
     deferred: false,
     checked: true,
     alreadyCurrent: false,
-    isForced,
+    isForced: false,
     errors,
     updatedDependencies,
     updatedDevDependencies,
@@ -1361,15 +1574,19 @@ export function remediateAudit(
   let appliedPackageUpdates: LockfilePackageUpdate[] = []
   let didFixRun = false
   let fixHeld = false
+  let compatibilityHold: string | undefined
 
   if (!lockContentsBefore) {
     errors.push('Unable to read package-lock.json before npm audit remediation.')
   } else {
     const preview = previewAuditFixLockfile({ verbose })
 
-    if (preview.error) {
+    if (preview.compatibilityHold) {
+      fixHeld = true
+      compatibilityHold = preview.compatibilityHold
+    } else if (preview.error) {
       errors.push(`Unable to preview npm audit fix: ${preview.error}`)
-    } else if (!preview.lockContents) {
+    } else if (!preview.packageContents || !preview.lockContents) {
       errors.push('Unable to read npm audit fix lockfile preview.')
     } else {
       const lockfileUpdates = collectLockfilePackageUpdates(lockContentsBefore, preview.lockContents)
@@ -1379,12 +1596,13 @@ export function remediateAudit(
         heldPackageUpdates.push(...findHeldAuditPackageUpdates(lockfileUpdates.updates, { verbose }))
         fixHeld = heldPackageUpdates.length > 0
 
-        if (!fixHeld) {
+        if (!fixHeld && lockfileUpdates.updates.length > 0) {
           appliedPackageUpdates = lockfileUpdates.updates
           try {
             didFixRun = true
-            runCommand(['audit', 'fix'], 'npm audit fix', { verbose })
+            applyResolvedDependencyFiles(preview.packageContents, preview.lockContents, { verbose })
           } catch (error) {
+            appliedPackageUpdates = []
             errors.push(getErrorMessage(error))
           }
         }
@@ -1422,6 +1640,7 @@ export function remediateAudit(
     fixHeld,
     appliedPackageUpdates,
     heldPackageUpdates,
+    compatibilityHold,
     unresolved: summarizeAuditIssues(auditJson?.vulnerabilities),
     totals: auditJson?.metadata?.vulnerabilities ?? emptyTotals(),
     errors,

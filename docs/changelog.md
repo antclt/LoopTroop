@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Prevented automatic development maintenance from installing peer-incompatible npm dependency graphs.
 - Preserved eligible same-session Continue recovery across backend, OpenCode, WSL, OS, and machine restarts.
 - Restored one-click recovery for blocked tickets when Retry sends an empty request body.
 - Added language-agnostic workspace and Git-hook validation, backend-enforced bead test commands, and separate append-only implementation note histories.
@@ -82,6 +83,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Previewed direct dependency and audit proposals with npm's normal peer resolver, held incompatible releases without forced fallbacks, applied accepted graphs through deterministic `npm ci`, and restored the previous graph if application fails.
+- Changed the dependency bootstrap and standalone sync paths to use the committed lockfile through `npm ci`, preventing missing or stale `node_modules` from silently rewriting dependency versions.
 - Kept every centrally classified continuable blocked-error session restart-safe by matching exact project-local ownership, preserving transiently unverifiable sessions, and abandoning only confirmed-missing or stale records.
 - Distinguished confirmed OpenCode session `404` responses from SDK transport and server failures so temporary verification errors no longer remove Continue.
 - Preserved zero-byte POST streams after global JSON validation so body-free Retry requests no longer fail with a misleading invalid-JSON error.

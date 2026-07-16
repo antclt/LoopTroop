@@ -11,7 +11,7 @@ import {
   writeDailyMaintenanceState,
 } from './dev-maintenance'
 
-const install = ensureInstallIfNeeded({ allowForceFallback: true })
+const install = ensureInstallIfNeeded()
 if (install.errors.length > 0) {
   for (const error of install.errors) {
     console.error(`[deps:sync] ${error}`)
@@ -38,7 +38,7 @@ if (report.alreadyCurrent) {
   const heldCount = report.heldDependencies.length + report.heldDevDependencies.length
   console.log(
     `[deps:sync] Held ${heldCount} newer direct dependency ` +
-    `${heldCount === 1 ? 'release' : 'releases'} until the 7-day release delay passes.`,
+    `${heldCount === 1 ? 'release' : 'releases'} behind release-age or compatibility gates.`,
   )
   for (const held of getHeldDependencyReleaseDetails(report)) {
     console.log(`[deps:sync] - ${formatHeldDependencyReleaseDetail(held)}`)
