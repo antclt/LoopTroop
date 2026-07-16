@@ -232,4 +232,65 @@ describe('executeExecutionSetupWithRetries', () => {
       reason: 'exhausted',
     }))
   })
+
+  it.each([
+    { maxIterations: 5, priorNotes: 2 },
+    { maxIterations: 5, priorNotes: 7 },
+    { maxIterations: 0, priorNotes: 3 },
+  ])('grants exactly one manual continuation attempt after $priorNotes used attempts with a configured budget of $maxIterations', async ({ maxIterations, priorNotes }) => {
+    const nextAttempt = priorNotes + 1
+    generateExecutionSetupMock.mockResolvedValueOnce(buildGeneration(nextAttempt))
+    const onAttemptStart = vi.fn()
+    const beforeRetry = vi.fn()
+    const onFailedAttempt = vi.fn()
+
+    const report = await executeExecutionSetupWithRetries(
+      new MockOpenCodeAdapter(),
+      [{ type: 'text', content: 'Execution setup context' }],
+      '/tmp/project',
+      undefined,
+      {
+        model: 'model-a',
+        maxIterations,
+        timeoutMs: 60_000,
+        initialAttempt: nextAttempt,
+        initialRetryNotes: Array.from({ length: priorNotes }, (_, index) => `Note ${index + 1}`),
+        additionalManualIterations: 1,
+      },
+      {
+        evaluateGeneration: async ({ attempt }) => buildToolingFailureReport(attempt, [{
+          strategy: 'official archive',
+          commands: ['./install-go'],
+          result: 'failed',
+          reason: 'download failed',
+        }]),
+        onAttemptStart,
+        beforeRetry,
+        onFailedAttempt,
+      },
+    )
+
+    expect(generateExecutionSetupMock).toHaveBeenCalledTimes(1)
+    expect(generateExecutionSetupMock).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      '/tmp/project',
+      undefined,
+      expect.objectContaining({
+        phaseAttempt: nextAttempt,
+        manualContinuation: true,
+      }),
+    )
+    expect(onAttemptStart).toHaveBeenCalledWith(nextAttempt, expect.objectContaining({
+      isManualContinuationAttempt: true,
+      isExtraToolingPersistenceAttempt: false,
+    }))
+    expect(onFailedAttempt).toHaveBeenCalledWith(expect.objectContaining({
+      attempt: nextAttempt,
+      canRetry: false,
+    }))
+    expect(beforeRetry).not.toHaveBeenCalled()
+    expect(report.attempt).toBe(nextAttempt)
+    expect(report.maxIterations).toBe(maxIterations)
+  })
 })

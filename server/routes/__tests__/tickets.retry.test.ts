@@ -2,21 +2,36 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Hono } from 'hono'
 import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
+import { opencodeSessions } from '../../db/schema'
 import { clearProjectDatabaseCache } from '../../db/project'
 import { attachProject } from '../../storage/projects'
 import {
   createTicket,
   ensureActivePhaseAttempt,
   getTicketByRef,
+  getTicketContext,
   isAttemptTrackedPhase,
   listPhaseArtifacts,
   listPhaseAttempts,
   patchTicket,
   upsertLatestPhaseArtifact,
 } from '../../storage/tickets'
-import { parseExecutionSetupRetryNotes } from '../../phases/executionSetup/types'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { WORKFLOW_PHASES } from '@shared/workflowMeta'
+import {
+  clearAllPendingSessionContinuationsForTests,
+  getPendingSessionContinuationForTicketPhase,
+} from '../../opencode/sessionContinuation'
+
+const { getSessionMock } = vi.hoisted(() => ({ getSessionMock: vi.fn() }))
+
+vi.mock('../../opencode/factory', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../opencode/factory')>()
+  return {
+    ...actual,
+    getOpenCodeAdapter: vi.fn(() => ({ getSession: getSessionMock, abortSession: vi.fn() })),
+  }
+})
 
 vi.mock('../../machines/persistence', async () => {
   const storage = await import('../../storage/tickets')
@@ -26,7 +41,7 @@ vi.mock('../../machines/persistence', async () => {
     ensureActorForTicket: vi.fn(() => ({ id: 'mock-actor' })),
     sendTicketEvent: vi.fn((ticketRef: string | number, event: { type: string }) => {
       const ticket = storage.getTicketByRef(String(ticketRef))
-      if (event.type === 'RETRY' && ticket?.previousStatus) {
+      if ((event.type === 'RETRY' || event.type === 'CONTINUE') && ticket?.previousStatus) {
         storage.patchTicket(String(ticketRef), {
           status: ticket.previousStatus,
           errorMessage: null,
@@ -91,12 +106,26 @@ function setupRetryTicketApp() {
   return { app, ticket }
 }
 
+function insertSetupSession(ticketRef: string, state: 'active' | 'abandoned', phaseAttempt = 5) {
+  const context = getTicketContext(ticketRef)
+  if (!context) throw new Error(`Missing ticket context for ${ticketRef}`)
+  context.projectDb.insert(opencodeSessions).values({
+    sessionId: 'ses-setup-current',
+    ticketId: context.localTicketId,
+    phase: 'PREPARING_EXECUTION_ENV',
+    phaseAttempt,
+    state,
+  }).run()
+}
+
 describe('ticketRouter POST /tickets/:id/retry', () => {
   beforeEach(() => {
     clearProjectDatabaseCache()
     initializeDatabase()
     sqlite.exec('DELETE FROM attached_projects; DELETE FROM profiles;')
+    clearAllPendingSessionContinuationsForTests()
     vi.clearAllMocks()
+    getSessionMock.mockResolvedValue({ id: 'ses-setup-current', projectPath: '/tmp/project' })
   })
 
   afterAll(() => {
@@ -382,7 +411,7 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
     expect(getTicketByRef(ticket.id)?.status).toBe('BLOCKED_ERROR')
   })
 
-  it('persists an extra note as context for a fresh workspace runtime setup attempt', async () => {
+  it('sends an extra note to the existing workspace setup session without versioning the phase', async () => {
     const { app, ticket } = setupRetryTicketApp()
     ensureActivePhaseAttempt(ticket.id, 'PREPARING_EXECUTION_ENV')
     upsertLatestPhaseArtifact(
@@ -391,6 +420,7 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
       'PREPARING_EXECUTION_ENV',
       JSON.stringify({ status: 'failed', errors: ['Workspace probe failed'] }),
     )
+    insertSetupSession(ticket.id, 'abandoned')
     patchTicket(ticket.id, {
       status: 'BLOCKED_ERROR',
       xstateSnapshot: JSON.stringify({ context: { previousStatus: 'PREPARING_EXECUTION_ENV' } }),
@@ -405,13 +435,40 @@ describe('ticketRouter POST /tickets/:id/retry', () => {
     })
 
     expect(response.status).toBe(200)
+    expect(getSessionMock).toHaveBeenCalledWith('ses-setup-current')
     expect(sendTicketEvent).toHaveBeenCalledWith(ticket.id, { type: 'RETRY' })
-    const noteArtifact = listPhaseArtifacts(ticket.id, { phase: 'PREPARING_EXECUTION_ENV' })
-      .find((artifact) => artifact.artifactType === 'execution_setup_retry_notes')
-    expect(parseExecutionSetupRetryNotes(noteArtifact?.content)).toEqual([note])
+    expect(getPendingSessionContinuationForTicketPhase(ticket.id, 'PREPARING_EXECUTION_ENV')).toMatchObject({
+      sessionId: 'ses-setup-current',
+      prompt: note,
+      additionalRetryAttempts: 1,
+    })
     expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
-      expect.objectContaining({ attemptNumber: 2, state: 'active' }),
-      expect.objectContaining({ attemptNumber: 1, state: 'archived' }),
+      expect.objectContaining({ attemptNumber: 1, state: 'active' }),
+    ])
+  })
+
+  it('does not resume workspace setup when its existing session is gone', async () => {
+    const { app, ticket } = setupRetryTicketApp()
+    ensureActivePhaseAttempt(ticket.id, 'PREPARING_EXECUTION_ENV')
+    insertSetupSession(ticket.id, 'abandoned')
+    patchTicket(ticket.id, {
+      status: 'BLOCKED_ERROR',
+      xstateSnapshot: JSON.stringify({ context: { previousStatus: 'PREPARING_EXECUTION_ENV' } }),
+      errorMessage: 'Workspace setup failed',
+    })
+    getSessionMock.mockResolvedValueOnce(null)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/retry`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note: 'Create file x first.' }),
+    })
+
+    expect(response.status).toBe(409)
+    expect(sendTicketEvent).not.toHaveBeenCalled()
+    expect(getPendingSessionContinuationForTicketPhase(ticket.id, 'PREPARING_EXECUTION_ENV')).toBeNull()
+    expect(listPhaseAttempts(ticket.id, 'PREPARING_EXECUTION_ENV')).toEqual([
+      expect.objectContaining({ attemptNumber: 1, state: 'active' }),
     ])
   })
 

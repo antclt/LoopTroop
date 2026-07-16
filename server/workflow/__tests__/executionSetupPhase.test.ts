@@ -10,6 +10,10 @@ import type {
   ExecutionSetupReport,
   ExecutionSetupResult,
 } from '../../phases/executionSetup/types'
+import {
+  clearAllPendingSessionContinuationsForTests,
+  requestSessionContinuation,
+} from '../../opencode/sessionContinuation'
 
 const {
   executeExecutionSetupWithRetriesMock,
@@ -201,10 +205,54 @@ describe('handleExecutionSetup', () => {
     resetWorktreeToCommitMock.mockReset()
     isMockOpenCodeModeMock.mockReset()
     materializeExecutionSetupWorkspaceInputsMock.mockReset()
+    clearAllPendingSessionContinuationsForTests()
 
     recordWorktreeStartCommitMock.mockReturnValue('setup-start-sha')
     isMockOpenCodeModeMock.mockReturnValue(false)
     materializeExecutionSetupWorkspaceInputsMock.mockReturnValue({ copiedPaths: [] })
+  })
+
+  it('runs one numbered manual attempt after the latest persisted setup report', async () => {
+    const { ticket, context } = createInitializedTestTicket(repoManager, {
+      title: 'Execution setup manual session retry',
+    })
+    writeExecutionSetupPlan(ticket.id, ticket.externalId)
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      'execution_setup_retry_notes',
+      'PREPARING_EXECUTION_ENV',
+      JSON.stringify({ notes: ['Older note that does not reflect every attempt.'] }),
+    )
+    upsertLatestPhaseArtifact(
+      ticket.id,
+      'execution_setup_report',
+      'PREPARING_EXECUTION_ENV',
+      JSON.stringify({ attempt: 5, status: 'failed' }),
+    )
+    requestSessionContinuation({
+      ticketId: ticket.id,
+      phase: 'PREPARING_EXECUTION_ENV',
+      sessionId: 'ses-setup-5',
+      prompt: 'Create file x first.',
+      additionalRetryAttempts: 1,
+    })
+    executeExecutionSetupWithRetriesMock.mockImplementationOnce(async (...args: unknown[]) => {
+      expect(args[4]).toMatchObject({
+        initialAttempt: 6,
+        additionalManualIterations: 1,
+      })
+      return readyExecutionSetupReport(ticket.externalId)
+    })
+
+    const sendEvent = vi.fn()
+    await handleExecutionSetup(
+      ticket.id,
+      { ...context, lockedMainImplementer: TEST.implementer },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'EXECUTION_SETUP_READY' })
   })
 
   afterAll(() => {

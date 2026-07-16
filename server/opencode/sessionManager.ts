@@ -6,7 +6,10 @@ import { getOpenCodeAdapter } from './factory'
 import { getProjectContextById, listProjects } from '../storage/projects'
 import { getTicketByRef, getTicketContext } from '../storage/tickets'
 import { createOpenCodeSessionWithRetry } from './sessionCreation'
-import { isContinuableBlockedError } from './sessionContinuation'
+import {
+  getPendingSessionContinuationForTicketPhase,
+  isContinuableBlockedError,
+} from './sessionContinuation'
 
 export interface SessionOwnership {
   ticketId?: string
@@ -46,6 +49,24 @@ export function listOpenCodeSessionsForTicket(ticketId: string, states: string[]
     .where(eq(opencodeSessions.ticketId, context.localTicketId))
     .all()
     .filter((session) => states.length === 0 || states.includes(session.state))
+}
+
+export function reactivateOpenCodeSessionForContinuation(
+  ticketId: string,
+  phase: string,
+  sessionId: string,
+): boolean {
+  const context = getTicketContext(ticketId)
+  if (!context) return false
+  const result = context.projectDb.update(opencodeSessions)
+    .set({ state: 'active', updatedAt: new Date().toISOString() })
+    .where(and(
+      eq(opencodeSessions.ticketId, context.localTicketId),
+      eq(opencodeSessions.phase, phase),
+      eq(opencodeSessions.sessionId, sessionId),
+    ))
+    .run()
+  return result.changes > 0
 }
 
 export class SessionManager {
@@ -190,9 +211,13 @@ export class SessionManager {
     ownership?: SessionOwnership,
     signal?: AbortSignal,
   ): Promise<Session | null> {
-    const existing = ownership
+    const pendingContinuation = getPendingSessionContinuationForTicketPhase(ticketId, phase)
+    const pendingSession = pendingContinuation
+      ? this.getActiveSessionById(ticketId, phase, pendingContinuation.sessionId)
+      : undefined
+    const existing = pendingSession ?? (ownership
       ? this.getOwnedActiveSession(ticketId, phase, ownership)
-      : this.getActiveSession(ticketId, phase)
+      : this.getActiveSession(ticketId, phase))
     if (!existing) return null
 
     const result = await this.reconcileActiveSession(
@@ -205,6 +230,21 @@ export class SessionManager {
     if (result.state === 'reconnected') return result.session
     if (result.state === 'missing') await this.abandonSession(existing.sessionId)
     return null
+  }
+
+  private getActiveSessionById(ticketId: string, phase: string, sessionId: string) {
+    const context = getTicketContext(ticketId)
+    if (!context) return undefined
+    return context.projectDb
+      .select()
+      .from(opencodeSessions)
+      .where(and(
+        eq(opencodeSessions.ticketId, context.localTicketId),
+        eq(opencodeSessions.phase, phase),
+        eq(opencodeSessions.sessionId, sessionId),
+        eq(opencodeSessions.state, 'active'),
+      ))
+      .get()
   }
 
   /**
@@ -220,12 +260,14 @@ export class SessionManager {
   ): Promise<SessionReconnectResult> {
     const ticket = getTicketByRef(ticketId)
     if (!ticket) return { state: 'stale' }
+    const pendingContinuation = getPendingSessionContinuationForTicketPhase(ticketId, phase)
+    const isExactPendingContinuation = pendingContinuation?.sessionId === sessionId
 
     if (ticket.status !== phase) {
       const occurrence = ticket.errorOccurrences.find(
         candidate => candidate.id === ticket.activeErrorOccurrenceId,
       )
-      if (
+      if (!isExactPendingContinuation && (
         ticket.status !== 'BLOCKED_ERROR'
         || ticket.previousStatus !== phase
         || occurrence?.blockedFromStatus !== phase
@@ -235,14 +277,17 @@ export class SessionManager {
           diagnostics: occurrence.diagnostics,
           errorCodes: occurrence.errorCodes,
         })
-      ) {
+      )) {
         return { state: 'stale' }
       }
     }
 
-    const existing = ownership
+    const pendingSession = pendingContinuation?.sessionId === sessionId
+      ? this.getActiveSessionById(ticketId, phase, sessionId)
+      : undefined
+    const existing = pendingSession ?? (ownership
       ? this.getOwnedActiveSession(ticketId, phase, ownership)
-      : this.getActiveSession(ticketId, phase)
+      : this.getActiveSession(ticketId, phase))
     if (!existing || existing.sessionId !== sessionId) return { state: 'stale' }
 
     let found: Session | null

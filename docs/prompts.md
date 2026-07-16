@@ -127,6 +127,8 @@ All built-in prompts in this section are exported from `server/prompts/index.ts`
 | `PROM53` | `RUNNING_FINAL_TEST` retry-note sub-step | Fresh / `disabled` | `ticket_details`, `error_context` | Summarizes a failed final-test attempt for the next retry. | [Full content here](#full-prompt-prom53) |
 | `PROM54` | `BLOCKED_ERROR` continuation into preserved session | Same session / `default` | none | Sends the bare continuation text `continue please` into an eligible preserved OpenCode session. | [Full content here](#full-prompt-prom54) |
 
+The setup-specific **Retry with extra note...** action does not build a new setup prompt and does not call `PROM_EXECUTION_SETUP_NOTE`. It sends only the text entered by the user to the preserved `PREPARING_EXECUTION_ENV` OpenCode session. That text is used for one manual setup attempt beyond the automatic retry budget and is not added to later setup context.
+
 ### Pull Request And Repair
 
 Pull-request drafting, candidate-file auditing, and shared structured retry prompts are runtime builders rather than `ALL_PROMPTS` built-in prompts. They are inventoried in [Runtime Prompt Builders](#runtime-prompt-builders) and [Shared Structured Retry Prompts](#shared-structured-retry-prompts).

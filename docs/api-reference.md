@@ -341,12 +341,12 @@ Ticket projections expose `visitedStatuses`, monotonic `workflowRevision`, and `
 | `POST` | `/api/tickets/:id/approve-prd` | Approve PRD artifact |
 | `POST` | `/api/tickets/:id/approve-beads` | Approve bead plan artifact |
 | `POST` | `/api/tickets/:id/approve-execution-setup-plan` | Approve execution setup plan |
-| `POST` | `/api/tickets/:id/edit-execution-setup-plan` | Rewind a blocked workspace runtime setup to setup-plan approval |
+| `POST` | `/api/tickets/:id/edit-execution-setup-plan` | After UI confirmation, rewind a blocked workspace runtime setup to setup-plan approval |
 | `POST` | `/api/tickets/:id/coverage/fix-gaps` | Run one approval-screen extra fix for unresolved PRD or beads coverage gaps |
 | `POST` | `/api/tickets/:id/merge` | Merge delivered PR |
 | `POST` | `/api/tickets/:id/close-unmerged` | Close without merge |
 | `POST` | `/api/tickets/:id/verify` | Alias for the merge handler — both routes call the same handler |
-| `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase; an optional `{ "note": "..." }` body adds user guidance for CODING bead recovery or execution setup retry |
+| `POST` | `/api/tickets/:id/retry` | Retry a blocked ticket or failed phase; an optional `{ "note": "..." }` body adds CODING bead guidance or sends one direct message to a preserved execution setup session |
 | `POST` | `/api/tickets/:id/continue` | Continue a blocked ticket only when eligible OpenCode/provider diagnostics, including `HTTP 402 Payment Required`, have a matching active preserved OpenCode session |
 | `POST` | `/api/tickets/:id/include-final-test-files` | Resolve a `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` block by marking all unclassified final-test-produced files as PR candidates and retrying integration |
 | `POST` | `/api/tickets/:id/discard-final-test-files` | Resolve a `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` block by discarding only audited final-test-produced dirty files and retrying integration |
@@ -400,9 +400,11 @@ The Retry endpoint accepts an empty body for ordinary recovery. It also accepts 
 }
 ```
 
-`note` must contain at least one non-whitespace character and must not exceed 20,000 characters. For coding, LoopTroop first proves it can reset the same failed or paused bead, then appends a structured `userRetryNotes` entry containing the ISO timestamp, iteration, and the user's text unchanged. For execution setup, it archives the failed runtime attempt and adds the note to the context of the fresh setup attempt. It never overwrites or merges earlier notes. If recovery fails, no note is appended and the ticket remains blocked. Note-bearing requests for historical errors, other phases, blank notes, or oversized notes are rejected. Omitting `note` preserves ordinary Retry behavior.
+`note` must contain at least one non-whitespace character and must not exceed 20,000 characters. For coding, LoopTroop first proves it can reset the same failed or paused bead, then appends a structured `userRetryNotes` entry containing the ISO timestamp, iteration, and the user's text unchanged. This keeps the existing fresh-bead recovery behavior.
 
-`POST /api/tickets/:id/edit-execution-setup-plan` is available only for the live `BLOCKED_ERROR` whose `previousStatus` is `PREPARING_EXECUTION_ENV`. It archives the failed runtime attempt, preserves it in phase history, and returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL` with the current plan available for editing or regeneration. Other phases and historical error occurrences return `409`.
+For execution setup, the request requires the preserved `PREPARING_EXECUTION_ENV` OpenCode session. LoopTroop sends only the user's text as the next prompt in that session and allows exactly one manual setup attempt beyond the configured automatic retry budget. The current runtime phase attempt is not archived, and the text is not appended to `execution_setup_notes` or reused as future setup context. If the session cannot be resumed or the manual attempt cannot start, the ticket remains blocked. Note-bearing requests for historical errors, other phases, blank notes, or oversized notes are rejected. Omitting `note` preserves ordinary Retry behavior.
+
+`POST /api/tickets/:id/edit-execution-setup-plan` is available only for the live `BLOCKED_ERROR` whose `previousStatus` is `PREPARING_EXECUTION_ENV`. The UI opens a confirmation dialog before calling it. Once confirmed, the route archives the failed runtime attempt, preserves it in phase history, and returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL` with the current plan available for editing or regeneration. Other phases and historical error occurrences return `409`.
 
 Bead API/read-model payloads expose three independent append-only arrays: `failedIterationNotes`, `userRetryNotes`, and `finalizationFailureNotes`. Each entry contains `timestamp`, `iteration`, `content`, and optional `errorCode`. LoopTroop strips ANSI terminal sequences from machine-generated failed-iteration and finalization content; user retry content is preserved exactly.
 

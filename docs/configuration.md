@@ -579,6 +579,8 @@ The maximum allowed runtime for the one-time `PREPARING_EXECUTION_ENV` phase, wh
 
 The setup phase can materialize user-approved ignored or untracked files and directories from the original checkout, install user-space toolchains under `.ticket/runtime/execution-setup/tool-cache`, warm caches, build native dependencies, or prepare repository-local runtime artifacts. It runs in the ticket's worktree before coding, records reusable wrapper commands when prepared runtime environment variables are needed, and validates declared tooling probes, repository-level workspace probes, and approved explicit Git-hook commands before the workflow enters coding. If required launcher setup fails, the profile records `tool_requirements.provisioning_attempts` evidence showing distinct attempted temp-root provisioning strategies and commands, or why no safe provisioning path exists. Workspace inputs have no size limit and use the setup plan approval gate rather than a separate configuration setting. Manual approval authorizes the listed paths. A future unattended mode must limit materialization to paths covered by a project allowlist.
 
+When setup exhausts its automatic retry budget, **Retry with extra note...** can grant one manual setup attempt. This does not raise or replace the configured budget. It sends the entered text directly to the preserved setup session for that one attempt.
+
 **Trade-offs:**
 
 | Lower | Higher |

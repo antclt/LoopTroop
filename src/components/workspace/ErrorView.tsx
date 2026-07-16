@@ -142,6 +142,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
   const [retryNote, setRetryNote] = useState('')
   const [retryNoteError, setRetryNoteError] = useState<string | null>(null)
   const [retryNoteSubmitting, setRetryNoteSubmitting] = useState(false)
+  const [editSetupPlanDialogOpen, setEditSetupPlanDialogOpen] = useState(false)
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false)
   const logCtx = useLogs()
   const failedBead = ticket.runtime.lastFailedBeadId
@@ -255,6 +256,20 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
         onError: (error: unknown) => {
           setRetryNoteSubmitting(false)
           setRetryNoteError(error instanceof Error ? error.message : 'Failed to add note and retry ticket')
+        },
+      },
+    )
+  }
+  const handleEditExecutionSetupPlan = () => {
+    setActionError(null)
+    performAction(
+      { id: ticket.id, action: 'edit_execution_setup_plan' },
+      {
+        onSuccess: () => {
+          setEditSetupPlanDialogOpen(false)
+        },
+        onError: (error: unknown) => {
+          setActionError(error instanceof Error ? error.message : 'Failed to return to setup plan editing')
         },
       },
     )
@@ -455,6 +470,18 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                       </TooltipContent>
                     </Tooltip>
                   )}
+                  {canEditExecutionSetupPlan && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setEditSetupPlanDialogOpen(true)}
+                      disabled={isPending}
+                      className="h-7 text-xs"
+                    >
+                      <FilePenLine className="mr-1 h-3.5 w-3.5" />
+                      Edit setup plan...
+                    </Button>
+                  )}
                   {canRetryWithNote && (
                     <Button
                       variant="outline"
@@ -467,19 +494,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                       className="h-7 text-xs"
                     >
                       <MessageSquarePlus className="mr-1 h-3.5 w-3.5" />
-                      Retry with extra note
-                    </Button>
-                  )}
-                  {canEditExecutionSetupPlan && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleAction('edit_execution_setup_plan')}
-                      disabled={isPending}
-                      className="h-7 text-xs"
-                    >
-                      <FilePenLine className="mr-1 h-3.5 w-3.5" />
-                      Edit setup plan
+                      Retry with extra note...
                     </Button>
                   )}
                   <Button
@@ -528,7 +543,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
             </DialogTitle>
             <DialogDescription id="retry-note-description">
               {canEditExecutionSetupPlan
-                ? 'Add guidance for the next fresh workspace setup attempt. The note becomes setup retry context for the setup agent.'
+                ? 'Send guidance to the current workspace setup session. LoopTroop sends only this note and runs one extra attempt beyond the configured retry limit.'
                 : 'Add guidance for the next fresh implementation attempt. The note will be appended to User Retry Notes; nothing already there will be replaced.'}
             </DialogDescription>
           </DialogHeader>
@@ -587,6 +602,34 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
               </Button>
             </div>
           </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={editSetupPlanDialogOpen}
+        onOpenChange={(open) => {
+          if (!isPending) setEditSetupPlanDialogOpen(open)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit workspace setup plan?</DialogTitle>
+            <DialogDescription>
+              The failed setup attempt will remain in the ticket history. After you confirm, the ticket will return to setup plan review, where you can edit or regenerate the plan before approving it again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditSetupPlanDialogOpen(false)}
+              disabled={isPending}
+            >
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleEditExecutionSetupPlan} disabled={isPending}>
+              Edit setup plan
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
       <CancelTicketDialog ticketId={ticket.id} open={cancelDialogOpen} onOpenChange={setCancelDialogOpen} />

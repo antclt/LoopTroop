@@ -174,7 +174,7 @@ If an attempt fails:
 
 The final report keeps the retry notes and per-attempt history so the user can see how setup evolved and why it eventually succeeded or blocked.
 
-When the retry budget ends in `BLOCKED_ERROR`, the live error view offers two setup-specific recovery actions. **Retry with extra note** archives the failed runtime attempt and sends the user's note into the next setup attempt. **Edit setup plan** archives the failed runtime attempt, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and opens the current plan for editing or regeneration. Regeneration receives the cleaned setup failure so it can propose a missing workspace input when the evidence supports one. Historical error occurrences remain read-only.
+When the automatic retry budget ends in `BLOCKED_ERROR`, the live error view offers two setup-specific recovery actions. **Retry with extra note...** opens a dialog and sends only the entered text to the preserved `PREPARING_EXECUTION_ENV` OpenCode session. It keeps the current runtime phase attempt, does not add the note to future setup context, and allows exactly one manual setup attempt beyond the configured automatic budget. **Edit setup plan...** opens a confirmation dialog. After confirmation, it archives the failed runtime attempt, returns the ticket to `WAITING_EXECUTION_SETUP_APPROVAL`, and opens the current plan for editing or regeneration. Regeneration receives the cleaned setup failure so it can propose a missing workspace input when the evidence supports one. Historical error occurrences remain read-only.
 
 ### 3.4 What gets persisted
 

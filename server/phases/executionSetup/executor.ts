@@ -19,6 +19,7 @@ const MAX_EXTRA_TOOLING_PERSISTENCE_ATTEMPTS = 2
 
 interface ExecutionSetupAttemptStartMetadata {
   baseMaxIterations: number
+  isManualContinuationAttempt: boolean
   isExtraToolingPersistenceAttempt: boolean
   extraToolingPersistenceAttempt: number
   maxExtraToolingPersistenceAttempts: number
@@ -167,6 +168,7 @@ export async function executeExecutionSetupWithRetries(
     structuredRetryCount?: number
     initialRetryNotes?: string[]
     initialAttempt?: number
+    additionalManualIterations?: number
   },
   callbacks: {
     evaluateGeneration: (input: {
@@ -219,18 +221,26 @@ export async function executeExecutionSetupWithRetries(
   const toolingFailureSignatures: string[] = []
   let extraToolingPersistenceAttemptsUsed = 0
   let attempt = (options.initialAttempt ?? 1) - 1
+  const attemptsUsedAtStart = attempt
+  const hasManualContinuationBudget = (options.additionalManualIterations ?? 0) > 0
+  const iterationLimit = hasManualContinuationBudget
+    ? attemptsUsedAtStart + (options.additionalManualIterations ?? 0)
+    : options.maxIterations
 
   while (
-    options.maxIterations <= 0
-    || attempt < options.maxIterations + extraToolingPersistenceAttemptsUsed
+    (!hasManualContinuationBudget && iterationLimit <= 0)
+    || attempt < iterationLimit + extraToolingPersistenceAttemptsUsed
   ) {
     attempt += 1
     throwIfAborted(signal)
     await callbacks.onAttemptStart?.(attempt, {
       baseMaxIterations: options.maxIterations,
-      isExtraToolingPersistenceAttempt: options.maxIterations > 0 && attempt > options.maxIterations,
-      extraToolingPersistenceAttempt: options.maxIterations > 0
-        ? Math.max(0, attempt - options.maxIterations)
+      isManualContinuationAttempt: hasManualContinuationBudget
+        && attempt > attemptsUsedAtStart
+        && attempt <= iterationLimit,
+      isExtraToolingPersistenceAttempt: iterationLimit > 0 && attempt > iterationLimit,
+      extraToolingPersistenceAttempt: iterationLimit > 0
+        ? Math.max(0, attempt - iterationLimit)
         : 0,
       maxExtraToolingPersistenceAttempts: MAX_EXTRA_TOOLING_PERSISTENCE_ATTEMPTS,
     })
@@ -247,6 +257,9 @@ export async function executeExecutionSetupWithRetries(
         timeoutMs: options.timeoutMs,
         structuredRetryCount: options.structuredRetryCount,
         phaseAttempt: attempt,
+        manualContinuation: hasManualContinuationBudget
+          && attempt > attemptsUsedAtStart
+          && attempt <= iterationLimit,
         onSessionCreated: (sessionId) => {
           callbacks.onSessionCreated?.(sessionId, attempt)
         },
@@ -307,8 +320,10 @@ export async function executeExecutionSetupWithRetries(
     notes.push(resolvedNote)
     attemptEntry.noteAppended = resolvedNote
 
-    const withinBaseBudget = options.maxIterations <= 0 || attempt < options.maxIterations
+    const withinBaseBudget = (!hasManualContinuationBudget && iterationLimit <= 0)
+      || attempt < iterationLimit
     const canUseExtraToolingPersistenceAttempt = options.maxIterations > 0
+      && (options.additionalManualIterations ?? 0) <= 0
       && !withinBaseBudget
       && needsToolingPersistenceRetry(finalReport)
       && extraToolingPersistenceAttemptsUsed < MAX_EXTRA_TOOLING_PERSISTENCE_ATTEMPTS

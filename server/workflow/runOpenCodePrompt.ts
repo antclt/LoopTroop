@@ -434,7 +434,7 @@ export async function runOpenCodePrompt({
         })
       : null
     const promptParts = continuation
-      ? [{ type: 'text' as const, content: PROM54_CONTINUE_TEXT }]
+      ? [{ type: 'text' as const, content: continuation.prompt ?? PROM54_CONTINUE_TEXT }]
       : parts
     const result = await runOpenCodeSessionPrompt({
       adapter,

@@ -2,6 +2,7 @@ import type { TicketContext, TicketEvent } from '../../machines/types'
 import type { TicketState } from '../../opencode/contextBuilder'
 import { buildMinimalContext } from '../../opencode/contextBuilder'
 import { SessionManager } from '../../opencode/sessionManager'
+import { getPendingSessionContinuationForTicketPhase } from '../../opencode/sessionContinuation'
 import { buildSameSessionPromptFromTemplate, PROM_EXECUTION_SETUP_NOTE } from '../../prompts/index'
 import { withCommandLoggingAsync } from '../../log/commandLogger'
 import { getLatestPhaseArtifact, getTicketPaths, upsertLatestPhaseArtifact } from '../../storage/tickets'
@@ -66,6 +67,18 @@ import { materializeExecutionSetupWorkspaceInputs } from '../../phases/execution
 
 const SETUP_WRAPPER_VALIDATION_TIMEOUT_MS = 10_000
 const SETUP_PROBE_TIMEOUT_MS = 30_000
+
+function readExecutionSetupAttempt(content: string | null | undefined): number {
+  if (!content) return 0
+  try {
+    const parsed = JSON.parse(content) as { attempt?: unknown }
+    return typeof parsed.attempt === 'number' && Number.isInteger(parsed.attempt) && parsed.attempt > 0
+      ? parsed.attempt
+      : 0
+  } catch {
+    return 0
+  }
+}
 
 function allChecksPass(result: ExecutionSetupResult): boolean {
   return Object.values(result.checks).every((value) => value === 'pass')
@@ -447,6 +460,15 @@ export async function handleExecutionSetup(
         'PREPARING_EXECUTION_ENV',
       )
       let retryNotes = parseExecutionSetupRetryNotes(existingRetryNotesArtifact?.content)
+      const previousReportAttempt = readExecutionSetupAttempt(getLatestPhaseArtifact(
+        ticketId,
+        EXECUTION_SETUP_REPORT_ARTIFACT_TYPE,
+        'PREPARING_EXECUTION_ENV',
+      )?.content)
+      const pendingContinuation = getPendingSessionContinuationForTicketPhase(
+        ticketId,
+        'PREPARING_EXECUTION_ENV',
+      )
 
       const report = await executeExecutionSetupWithRetries(
         adapter,
@@ -461,7 +483,8 @@ export async function handleExecutionSetup(
           timeoutMs: runtimeSettings.timeoutMs,
           structuredRetryCount: resolveStructuredRetryRuntimeSettings(context).structuredRetryCount,
           initialRetryNotes: retryNotes,
-          initialAttempt: retryNotes.length + 1,
+          initialAttempt: Math.max(retryNotes.length, previousReportAttempt) + 1,
+          additionalManualIterations: pendingContinuation?.additionalRetryAttempts ?? 0,
         },
         {
           evaluateGeneration: async ({ generation }) => {
@@ -579,7 +602,9 @@ export async function handleExecutionSetup(
               context.externalId,
               'PREPARING_EXECUTION_ENV',
               'info',
-              metadata.isExtraToolingPersistenceAttempt
+              metadata.isManualContinuationAttempt
+                ? `Resuming execution setup session for user-requested attempt ${attempt} (configured automatic budget ${metadata.baseMaxIterations}).`
+                : metadata.isExtraToolingPersistenceAttempt
                 ? `Starting execution setup tooling persistence attempt ${attempt} (extra ${metadata.extraToolingPersistenceAttempt} of ${metadata.maxExtraToolingPersistenceAttempts}; base budget ${metadata.baseMaxIterations}).`
                 : runtimeSettings.maxIterations > 0
                 ? `Starting execution setup attempt ${attempt} of ${runtimeSettings.maxIterations}.`
@@ -661,7 +686,7 @@ export async function handleExecutionSetup(
               streamStates.get(event.session.id),
             )
           },
-          onFailedAttempt: async ({ generation, note, notes, canRetry }) => {
+          onFailedAttempt: async ({ note, notes, canRetry }) => {
             retryNotes = notes
             upsertLatestPhaseArtifact(
               ticketId,
@@ -679,9 +704,6 @@ export async function handleExecutionSetup(
                 : 'Appended an execution setup retry note before blocking.',
               { note },
             )
-            if (!canRetry) {
-              await sessionManager.abandonSession(generation.session.id)
-            }
           },
           beforeRetry: async ({ generation, nextAttempt }) => {
             await sessionManager.abandonSession(generation.session.id)

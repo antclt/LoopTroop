@@ -196,6 +196,8 @@ Backend, OpenCode, WSL, OS, and machine restarts preserve the same eligibility w
 
 When all checks pass, the Continue action records a pending continuation keyed by `sessionId`. The next owned session prompt consumes this and sends exactly `continue please` — no context rebuild and no new attempt version.
 
+Blocked execution setup also has a same-session action called **Retry with extra note...**. It uses the same exact session ownership checks, but sends only the user's entered text instead of `continue please`. The action keeps the current runtime phase attempt and allows one manual setup attempt beyond the automatic retry budget. It does not add the text to future setup context. Coding uses its existing fresh-bead recovery path for the button with the same label.
+
 ## 8. Streaming
 
 OpenCode stream events are consumed server-side and then translated into LoopTroop's own ticket event model.

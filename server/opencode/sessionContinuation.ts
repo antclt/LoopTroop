@@ -18,6 +18,8 @@ export interface PendingSessionContinuation {
   phase: string
   sessionId: string
   requestedAt: string
+  prompt?: string
+  additionalRetryAttempts?: number
 }
 
 export interface ContinuableBlockedErrorInput {
@@ -139,6 +141,8 @@ export function requestSessionContinuation(input: {
   phase: string
   sessionId: string
   requestedAt?: string
+  prompt?: string
+  additionalRetryAttempts?: number
 }): PendingSessionContinuation {
   pruneStalePendingContinuations()
   const pending: PendingSessionContinuation = {
@@ -146,9 +150,24 @@ export function requestSessionContinuation(input: {
     phase: input.phase,
     sessionId: input.sessionId,
     requestedAt: input.requestedAt ?? new Date().toISOString(),
+    ...(input.prompt !== undefined ? { prompt: input.prompt } : {}),
+    ...(input.additionalRetryAttempts !== undefined
+      ? { additionalRetryAttempts: input.additionalRetryAttempts }
+      : {}),
   }
   pendingSessionContinuations.set(input.sessionId, pending)
   return pending
+}
+
+export function getPendingSessionContinuationForTicketPhase(
+  ticketId: string,
+  phase: string,
+): PendingSessionContinuation | null {
+  pruneStalePendingContinuations()
+  for (const pending of pendingSessionContinuations.values()) {
+    if (pending.ticketId === ticketId && pending.phase === phase) return pending
+  }
+  return null
 }
 
 export function consumeSessionContinuation(input: {
@@ -169,11 +188,7 @@ export function clearSessionContinuation(sessionId: string): void {
 }
 
 export function hasPendingSessionContinuationForTicketPhase(ticketId: string, phase: string): boolean {
-  pruneStalePendingContinuations()
-  for (const pending of pendingSessionContinuations.values()) {
-    if (pending.ticketId === ticketId && pending.phase === phase) return true
-  }
-  return false
+  return getPendingSessionContinuationForTicketPhase(ticketId, phase) !== null
 }
 
 export function clearAllPendingSessionContinuationsForTests(): void {

@@ -49,7 +49,7 @@ A bead is the smallest unit LoopTroop will schedule for coding. It carries enoug
 | `dependencies` | `{ blocked_by: string[]; blocks: string[] }` | Dependency graph edges |
 | `targetFiles` | `string[]` | Expected file touch set |
 | `failedIterationNotes` | `BeadNoteEntry[]` | Append-only notes produced when an implementation iteration fails |
-| `userRetryNotes` | `BeadNoteEntry[]` | Append-only user guidance supplied through Retry with extra note |
+| `userRetryNotes` | `BeadNoteEntry[]` | Append-only user guidance supplied through Retry with extra note... |
 | `finalizationFailureNotes` | `BeadNoteEntry[]` | Append-only local commit/finalization diagnostics |
 | `iteration` | `number` | Current execution attempt number |
 | `createdAt` | `string` | ISO timestamp set when beads are approved |
@@ -356,7 +356,7 @@ If the model cannot produce a good note, LoopTroop falls back to a deterministic
 
 If the bead reaches the configured retry cap, LoopTroop marks it `error`, attaches `BEAD_RETRY_BUDGET_EXHAUSTED`, and routes the ticket to `BLOCKED_ERROR`.
 
-From the live blocked view, the normal **Retry** action resets and schedules the same failed or paused bead with its accumulated note histories. **Retry with extra note** opens a multiline field for 1–20,000 characters of user guidance, then performs the same safe recovery and appends a structured entry to `userRetryNotes`.
+From the live blocked view, the normal **Retry** action resets and schedules the same failed or paused bead with its accumulated note histories. **Retry with extra note...** opens a multiline dialog for 1 to 20,000 characters of user guidance, then performs the same safe recovery and appends a structured entry to `userRetryNotes`.
 
 ```text
 {

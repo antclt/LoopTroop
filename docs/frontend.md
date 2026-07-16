@@ -120,7 +120,7 @@ QA-origin beads receive a **Manual QA Fix** badge and keep their version, source
 
 Execution setup approval exposes workspace inputs, functional workspace probes, and Git-hook handling as first-class plan fields. The user can review and edit each ignored or untracked file or directory before approval. Detected hooks are read-only evidence; the selected policy and ordered validation commands are editable, including adding, reordering, changing, or removing every command without an additional waiver gate. The runtime/final review surfaces whether input materialization and hook validation executed, failed, or was deliberately skipped.
 
-A live `BLOCKED_ERROR` from `PREPARING_EXECUTION_ENV` shows **Retry with extra note** and **Edit setup plan**. Retry passes the note into the fresh runtime attempt. Edit setup plan archives the failed runtime attempt and returns to the setup approval editor. Historical error occurrences show neither action.
+A live `BLOCKED_ERROR` from `PREPARING_EXECUTION_ENV` orders its setup actions as **Edit setup plan...**, **Retry with extra note...**, then **Retry**. The two retry actions sit beside each other. Both dotted labels open a dialog before changing anything. The retry dialog sends only the entered note to the preserved setup session and grants one manual attempt beyond the configured automatic retry budget. It keeps the current runtime phase attempt. The edit dialog asks for confirmation before archiving the failed runtime attempt and returning to the setup approval editor. Historical error occurrences show neither action. Coding uses the same **Retry with extra note...** label, but keeps its existing fresh-bead retry behavior.
 
 ### Manual QA workspace
 

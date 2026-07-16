@@ -12,7 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
-- Made workspace setup recoverable when isolated worktrees need approved ignored or untracked inputs.
+- Made workspace setup recoverable when isolated worktrees need approved ignored or untracked inputs, including one direct same-session manual retry after the automatic budget ends.
 - Made blocked errors immediately actionable and recovered safely wrapped YAML list prose across structured-output phases.
 - Prevented automatic development maintenance from installing peer-incompatible npm dependency graphs.
 - Preserved eligible same-session Continue recovery across backend, OpenCode, WSL, OS, and machine restarts.
@@ -42,11 +42,11 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added user-reviewed workspace input files and directories to execution setup plans, plus setup-specific **Retry with extra note** and **Edit setup plan** recovery actions.
+- Added user-reviewed workspace input files and directories to execution setup plans, plus setup-specific **Retry with extra note...** and **Edit setup plan...** recovery actions.
 - Added repository-level workspace probes and configurable explicit Git-hook validation with visible setup-plan evidence, editable validation commands, and audited internal-hook policies.
 - Added backend-owned verification receipts for every declared bead test command so structured model completion claims are accepted only after the repository commands actually pass.
 - Added a copy button next to the description's "Raw" tab in both DraftView (tickets in backlog before starting) and PhaseReviewView (backlog/DRAFT phase of started tickets).
-- Added **Retry with extra note** to live implementation errors, with a required multiline note that is appended to the recoverable bead's existing context before the next fresh attempt.
+- Added **Retry with extra note...** to live implementation errors, with a required multiline note that is appended to the recoverable bead's existing context before the next fresh attempt.
 - Added reasoned **Not applicable to Manual QA** PRD coverage, P1–P5 and Manual QA settings for Improvement tickets, and strict repository-aware `<MANUAL_QA_FIX_BEADS>` generation persisted before child creation.
 - Added cleanup warning messages display in a `<Tooltip>` on hover over the Cleanup status badge in the Ticket Details dialog.
 - Added `errors` array property to the cleanup payload in backend database queries and frontend ticket normalization.
@@ -62,6 +62,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Changed setup **Retry with extra note...** to send only the entered text to the preserved setup session and grant one manual attempt beyond the automatic retry budget without archiving the runtime phase attempt or saving the note as future context. **Edit setup plan...** now asks for confirmation before rewinding, and both dialog-opening labels use an ellipsis.
 - Changed execution setup planning to compare the original checkout with the ticket worktree, propose only evidence-backed missing inputs, and materialize approved inputs before setup commands run.
 - Made every held dependency and audit detail self-explanatory by naming the exact release-age, metadata, version, or peer-compatibility reason and showing the eligibility timestamp when applicable.
 - Split bead history into append-only **Failed Iteration Notes**, **User Retry Notes**, and **Finalization Failure Notes**, keeping each source clearly labelled in execution context and workspace views.
@@ -123,7 +124,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 #### Documentation
 - Documented workspace input approval and materialization, setup-runtime recovery actions, retry API behavior, and readable blocked-error output across the execution guides and references.
-- Documented the Retry with extra note workflow, validation, context contract, and API behavior across the Implementing and Blocked Error status details and focused execution guides.
+- Documented the **Retry with extra note...** workflow, validation, context contract, and API behavior across the Implementing and Blocked Error status details and focused execution guides.
 - Updated Manual QA status Details and reference guides for version-free titles, structured history, activity/log/artifact presentation, four-state PRD coverage, configurable Improvements, and failure-safe AI-planned QA beads. Existing testing tickets/artifacts are intentionally not migrated.
 - Updated the Manual QA status details and reference guides for Pending-first results, optional waiver reasons, collapsed disclosures, inline Improvements, evidence controls, merge-group validation, autosave status, and lossless Skip semantics.
 - Documented Manual QA configuration/inheritance, strict checklist/result contracts, Submit-versus-Skip artifact semantics, routes/CAS, workflow/status details, checkpoint/drift safety, prompts/normalization, context-rich Improvements, self-contained QA origins, frontend routing/timeline, architecture impacts, and post-implementation outcomes across the README and reference guides.

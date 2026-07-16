@@ -6,7 +6,11 @@ import {
   sendTicketEvent,
   stopActor,
 } from '../../machines/persistence'
-import { abortTicketSessions } from '../../opencode/sessionManager'
+import {
+  abortTicketSessions,
+  listOpenCodeSessionsForTicket,
+  reactivateOpenCodeSessionForContinuation,
+} from '../../opencode/sessionManager'
 import { getOpenCodeAdapter } from '../../opencode/factory'
 import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import { cancelTicket } from '../../workflow/runner'
@@ -27,12 +31,7 @@ import {
   lockTicketStartConfiguration,
   patchTicket,
   resolveTicketContinuationCandidate,
-  upsertLatestPhaseArtifact,
 } from '../../storage/tickets'
-import {
-  EXECUTION_SETUP_RETRY_NOTES_ARTIFACT_TYPE,
-  serializeExecutionSetupRetryNotes,
-} from '../../phases/executionSetup/types'
 import {
   completeCloseUnmerged,
   completeMergedPullRequest,
@@ -535,6 +534,60 @@ export async function handleRetryTicket(c: Context) {
     }
   }
 
+  if (userRetryNote !== undefined && ticket.previousStatus === 'PREPARING_EXECUTION_ENV') {
+    const setupSession = listOpenCodeSessionsForTicket(ticketId, ['active', 'abandoned'])
+      .filter(session => session.phase === 'PREPARING_EXECUTION_ENV')
+      .sort((left, right) => (
+        (right.phaseAttempt ?? 0) - (left.phaseAttempt ?? 0)
+        || Date.parse(right.updatedAt) - Date.parse(left.updatedAt)
+      ))[0]
+    if (!setupSession) {
+      return c.json({
+        error: 'Retry with extra note is not available because the workspace setup session could not be recovered',
+      }, 409)
+    }
+
+    let liveSession
+    try {
+      liveSession = await getOpenCodeAdapter().getSession(setupSession.sessionId)
+    } catch (err) {
+      return c.json({
+        error: 'Retry with extra note is not available because the workspace setup session could not be verified',
+        details: getErrorMessage(err),
+      }, 500)
+    }
+    if (!liveSession) {
+      return c.json({
+        error: 'Retry with extra note is not available because the workspace setup session is no longer active',
+      }, 409)
+    }
+    if (!reactivateOpenCodeSessionForContinuation(
+      ticketId,
+      'PREPARING_EXECUTION_ENV',
+      setupSession.sessionId,
+    )) {
+      return c.json({ error: 'Retry with extra note could not recover the workspace setup session' }, 409)
+    }
+
+    requestSessionContinuation({
+      ticketId,
+      phase: 'PREPARING_EXECUTION_ENV',
+      sessionId: setupSession.sessionId,
+      prompt: userRetryNote,
+      additionalRetryAttempts: 1,
+    })
+    try {
+      ensureActorForTicket(ticketId)
+      sendTicketEvent(ticketId, { type: 'RETRY' })
+    } catch (err) {
+      clearSessionContinuation(setupSession.sessionId)
+      console.error(`[tickets] Failed to resume workspace setup session for ticket ${ticketId}:`, err)
+      return c.json({ error: 'Failed to retry workspace setup with the extra note', details: String(err) }, 500)
+    }
+
+    return respondWithState(c, ticketId, 'Workspace setup note accepted')
+  }
+
   if (ticket.previousStatus === 'CODING') {
     const paths = getTicketPaths(ticketId)
     if (!paths) {
@@ -561,18 +614,13 @@ export async function handleRetryTicket(c: Context) {
   }
 
   try {
+    if (ticket.previousStatus === 'PREPARING_EXECUTION_ENV') {
+      await abortTicketSessions(ticketId)
+    }
     if (isAttemptTrackedPhase(ticket.previousStatus)) {
       ensureActivePhaseAttempt(ticketId, ticket.previousStatus)
       archiveActivePhaseAttempts(ticketId, [ticket.previousStatus], 'manual_retry_after_blocked_error')
       createFreshPhaseAttempts(ticketId, [ticket.previousStatus])
-    }
-    if (userRetryNote !== undefined && ticket.previousStatus === 'PREPARING_EXECUTION_ENV') {
-      upsertLatestPhaseArtifact(
-        ticketId,
-        EXECUTION_SETUP_RETRY_NOTES_ARTIFACT_TYPE,
-        'PREPARING_EXECUTION_ENV',
-        serializeExecutionSetupRetryNotes([userRetryNote]),
-      )
     }
     ensureActorForTicket(ticketId)
     sendTicketEvent(ticketId, { type: 'RETRY' })

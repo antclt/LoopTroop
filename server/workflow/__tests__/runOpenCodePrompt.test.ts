@@ -927,6 +927,51 @@ describe('runOpenCodePrompt', () => {
     expect(adapter.promptCalls[1]?.parts).toEqual([{ type: 'text', content: 'continue please' }])
   })
 
+  it('sends a custom continuation prompt to the preserved session across setup attempt numbers', async () => {
+    resetTestDb()
+    clearAllPendingSessionContinuationsForTests()
+    const { ticket } = createInitializedTestTicket(repoManager, {
+      title: 'Workspace setup note continuation',
+    })
+    patchTicket(ticket.id, { status: 'PREPARING_EXECUTION_ENV' })
+    const adapter = new TestOpenCodeAdapter(['initial response', 'continued response'])
+
+    const initial = await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Initial setup prompt' }],
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'PREPARING_EXECUTION_ENV',
+        phaseAttempt: 5,
+        keepActive: true,
+      },
+    })
+    const note = 'Create file x first, then rerun the workspace check.'
+    requestSessionContinuation({
+      ticketId: ticket.id,
+      phase: 'PREPARING_EXECUTION_ENV',
+      sessionId: initial.session.id,
+      prompt: note,
+      additionalRetryAttempts: 1,
+    })
+
+    const continued = await runOpenCodePrompt({
+      adapter,
+      projectPath: '/tmp/project',
+      parts: [{ type: 'text', content: 'Original prompt should not be resent' }],
+      sessionOwnership: {
+        ticketId: ticket.id,
+        phase: 'PREPARING_EXECUTION_ENV',
+        phaseAttempt: 6,
+      },
+    })
+
+    expect(continued.response).toBe('continued response')
+    expect(adapter.promptCalls[1]?.sessionId).toBe(initial.session.id)
+    expect(adapter.promptCalls[1]?.parts).toEqual([{ type: 'text', content: note }])
+  })
+
   it('retains upgrade guidance after execution-band session creation retries are exhausted', async () => {
     vi.useFakeTimers()
     try {

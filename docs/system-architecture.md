@@ -136,7 +136,8 @@ Recovery is a first-class architectural concern.
 | Backend process restart | Reconcile persisted XState snapshots, hydrate ticket actors from durable ticket state, and immediately process restored active snapshots |
 | User edits approved interview or PRD | Archive the active approved generation and downstream attempts, cancel downstream sessions intentionally, clear stale downstream artifacts/UI state, persist a `user_edit_receipt:*`, and restart from the next drafting phase |
 | User edits or regenerates setup plan during runtime setup | Stop active runtime setup, archive both setup-plan and runtime attempts, preserve the tool cache when safe, clear stale setup outputs, and return to `WAITING_EXECUTION_SETUP_APPROVAL` for fresh approval |
-| User edits the setup plan after a runtime setup block | Archive the failed runtime attempt, return to `WAITING_EXECUTION_SETUP_APPROVAL`, preserve the failed attempt for review, and supply its cleaned failure to plan regeneration |
+| User retries setup with a note after the automatic budget ends | Keep the failed runtime phase attempt and its OpenCode session, send only the user's note to that session, and allow one manual setup attempt beyond the configured budget |
+| User edits the setup plan after a runtime setup block | Ask for confirmation, then archive the failed runtime attempt, return to `WAITING_EXECUTION_SETUP_APPROVAL`, preserve the failed attempt for review, and supply its cleaned failure to plan regeneration |
 | Stale approval | Return `409` with the expected and current SHA-256 hashes, keeping the ticket at the approval gate |
 | Manual QA generation/submission restart | Reuse the reserved checklist version or submission operation journal; deterministic action/origin/bead IDs prevent duplicate child work |
 | Application-created drift during QA | Stay in `WAITING_MANUAL_QA` and require include/discard for exactly audited paths before submit/skip |
@@ -146,7 +147,7 @@ Recovery is a first-class architectural concern.
 
 LoopTroop tries hard to preserve the work product while discarding the bad conversational state that produced the failure.
 
-If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`. A live block from `PREPARING_EXECUTION_ENV` can retry with user guidance or rewind to setup-plan approval. Errors shown in summaries and cards are cleaned of ANSI and other terminal control sequences, decoration-only lines, carriage-return artifacts, and consecutive duplicate warnings. Raw logs stay unchanged.
+If a resume point cannot be proven, recovery stops at `BLOCKED_ERROR` instead of continuing execution against unknown state. `BLOCKED_ERROR` retry requires a preserved `previousStatus`; `CODING` retry also requires a successful reset to the failed bead's `beadStartCommit`. For a live block from `PREPARING_EXECUTION_ENV`, **Retry with extra note...** sends only the entered text to the preserved setup session and grants one manual attempt beyond the automatic retry budget. It does not archive the runtime phase attempt or add the note to later setup context. **Edit setup plan...** asks for confirmation before it archives the runtime attempt and rewinds to setup-plan approval. Errors shown in summaries and cards are cleaned of ANSI and other terminal control sequences, decoration-only lines, carriage-return artifacts, and consecutive duplicate warnings. Raw logs stay unchanged.
 
 ## 8. Restart And Session Ownership
 

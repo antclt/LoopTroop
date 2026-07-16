@@ -24,6 +24,13 @@ class SequencedMockOpenCodeAdapter extends MockOpenCodeAdapter {
   }
 }
 
+class FailingPromptAdapter extends MockOpenCodeAdapter {
+  override async promptSession(...args: Parameters<MockOpenCodeAdapter['promptSession']>): Promise<string> {
+    this.promptCalls.push({ sessionId: args[0], parts: args[1], options: args[3] })
+    throw new Error('manual continuation prompt failed')
+  }
+}
+
 function buildReadyExecutionSetupResponse(): string {
   return [
     '<EXECUTION_SETUP_RESULT>',
@@ -67,6 +74,21 @@ function buildReadyExecutionSetupResponse(): string {
 }
 
 describe('generateExecutionSetup', () => {
+  it('does not replace a failed manual continuation with the full setup prompt in a fresh session', async () => {
+    const adapter = new FailingPromptAdapter()
+
+    await expect(generateExecutionSetup(
+      adapter,
+      [{ type: 'text', content: 'Execution setup context' }],
+      '/tmp/test',
+      undefined,
+      { manualContinuation: true },
+    )).rejects.toThrow('manual continuation prompt failed')
+
+    expect(adapter.sessions).toHaveLength(1)
+    expect(adapter.promptCalls).toHaveLength(1)
+  })
+
   it('retries malformed execution setup output in the same session', async () => {
     const adapter = new SequencedMockOpenCodeAdapter()
     adapter.mockResponses.set('mock-session-1#1', 'I am still preparing the environment.')

@@ -191,7 +191,7 @@ describe('ErrorView', () => {
   it('offers an extra-note retry only for a live retryable implementation error', () => {
     const liveView = renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
 
-    expect(screen.getByRole('button', { name: 'Retry with extra note' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry with extra note...' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
     liveView.unmount()
 
@@ -204,17 +204,17 @@ describe('ErrorView', () => {
       }],
     })
     const nonCodingView = renderWithProviders(<ErrorView ticket={nonCodingTicket} />)
-    expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry with extra note...' })).not.toBeInTheDocument()
     nonCodingView.unmount()
 
     const historyView = renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} readOnly />)
-    expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry with extra note...' })).not.toBeInTheDocument()
     historyView.unmount()
 
     const noRetryTicket = makeLiveCodingErrorTicket()
     noRetryTicket.availableActions = ['cancel']
     renderWithProviders(<ErrorView ticket={noRetryTicket} />)
-    expect(screen.queryByRole('button', { name: 'Retry with extra note' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry with extra note...' })).not.toBeInTheDocument()
   })
 
   it('offers setup recovery actions for a live workspace runtime setup error', () => {
@@ -240,15 +240,26 @@ describe('ErrorView', () => {
 
     renderWithProviders(<ErrorView ticket={ticket} />)
 
-    expect(screen.getByRole('button', { name: 'Retry with extra note' })).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    const editSetupPlanButton = screen.getByRole('button', { name: 'Edit setup plan...' })
+    const retryWithNoteButton = screen.getByRole('button', { name: 'Retry with extra note...' })
+    const retryButton = screen.getByRole('button', { name: 'Retry' })
+    expect(editSetupPlanButton.compareDocumentPosition(retryWithNoteButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(retryWithNoteButton.compareDocumentPosition(retryButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(retryWithNoteButton)
     expect(screen.getByRole('dialog', { name: 'Retry workspace setup with an extra note' })).toBeInTheDocument()
+    expect(screen.getByText(/sends only this note and runs one extra attempt/i)).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
+    fireEvent.click(editSetupPlanButton)
+    expect(screen.getByRole('dialog', { name: 'Edit workspace setup plan?' })).toBeInTheDocument()
+    expect(screen.getByText(/failed setup attempt will remain in the ticket history/i)).toBeInTheDocument()
+    expect(mutate).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Edit setup plan' }))
     expect(mutate).toHaveBeenCalledWith(
       { id: ticket.id, action: 'edit_execution_setup_plan' },
-      expect.objectContaining({ onError: expect.any(Function) }),
+      expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) }),
     )
   })
 
@@ -272,7 +283,7 @@ describe('ErrorView', () => {
   it('opens an accessible extra-note dialog and requires non-whitespace text', () => {
     renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note...' }))
     const dialog = screen.getByRole('dialog', { name: 'Retry implementation with an extra note' })
     const note = within(dialog).getByRole('textbox', { name: /Extra note/ })
     const submit = within(dialog).getByRole('button', { name: 'Add note and retry' })
@@ -299,7 +310,7 @@ describe('ErrorView', () => {
     const ticket = makeLiveCodingErrorTicket()
     renderWithProviders(<ErrorView ticket={ticket} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note...' }))
     const note = screen.getByRole('textbox', { name: /Extra note/ })
     const exactNote = '  Keep the existing parser.\nTry the smaller repair first.  '
     fireEvent.change(note, { target: { value: exactNote } })
@@ -311,7 +322,7 @@ describe('ErrorView', () => {
     )
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note...' }))
     expect(screen.getByRole('textbox', { name: /Extra note/ })).toHaveValue('')
   })
 
@@ -322,7 +333,7 @@ describe('ErrorView', () => {
     mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
     renderWithProviders(<ErrorView ticket={makeLiveCodingErrorTicket()} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note...' }))
     const note = screen.getByRole('textbox', { name: /Extra note/ })
     fireEvent.change(note, { target: { value: 'Preserve this note after failure.' } })
     fireEvent.click(screen.getByRole('button', { name: 'Add note and retry' }))
@@ -338,7 +349,7 @@ describe('ErrorView', () => {
     const ticket = makeLiveCodingErrorTicket()
     renderWithProviders(<ErrorView ticket={ticket} />)
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Retry with extra note...' }))
     const note = screen.getByRole('textbox', { name: /Extra note/ })
     fireEvent.change(note, {
       target: { value: 'Wait for this request.' },
@@ -468,7 +479,7 @@ describe('ErrorView', () => {
     expect(screen.getByText(/Timer paused while the ticket is blocked/)).toHaveTextContent(
       'Continue resumes the preserved OpenCode session with a fresh bead timer.',
     )
-    expect(screen.getByRole('button', { name: 'Retry with extra note' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry with extra note...' })).toBeInTheDocument()
     expect(screen.queryByText(/Failed bead/)).not.toBeInTheDocument()
   })
 

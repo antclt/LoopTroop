@@ -104,6 +104,7 @@ export async function generateExecutionSetup(
     timeoutMs?: number
     structuredRetryCount?: number
     phaseAttempt?: number
+    manualContinuation?: boolean
     onSessionCreated?: (sessionId: string) => void
     onOpenCodeStreamEvent?: (entry: { sessionId: string; event: StreamEvent }) => void
     onPromptDispatched?: (entry: { sessionId: string; event: OpenCodePromptDispatchEvent }) => void
@@ -164,6 +165,7 @@ export async function generateExecutionSetup(
     result = await runMainSetupPrompt()
   } catch (error) {
     throwIfCancelled(error, signal)
+    if (callbacks?.manualContinuation) throw error
     if (activeSessionId && sessionManager) {
       await sessionManager.abandonSession(activeSessionId)
       activeSessionId = null
