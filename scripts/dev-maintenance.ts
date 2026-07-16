@@ -185,21 +185,21 @@ function formatHeldReleaseTiming(
   reason: HeldDependencyUpdate['reason'] | HeldAuditPackageUpdate['reason'],
   nextEligibleAt?: string,
 ) {
-  if (nextEligibleAt) {
-    return `until ${nextEligibleAt}`
-  }
-
   switch (reason) {
     case 'metadata-unavailable':
-      return 'until npm publish metadata can be verified'
+      return 'because npm publish metadata could not be verified'
     case 'missing-version':
-      return 'until npm reports comparable version metadata'
+      return 'because npm did not report comparable version metadata'
     case 'non-semver-current':
-      return 'because the current version is not stable semver'
+      return 'because the current version is not a stable semantic version'
     case 'no-aged-version':
-      return 'until a newer stable release is at least 7 days old'
+      return nextEligibleAt
+        ? `because the 7-day release-safety period has not passed; eligible after ${nextEligibleAt}`
+        : 'because no newer stable release has completed the 7-day release-safety period'
     case 'too-new':
-      return 'until the 7-day release delay passes'
+      return nextEligibleAt
+        ? `because the 7-day release-safety period has not passed; eligible after ${nextEligibleAt}`
+        : 'because the proposed release has not completed the 7-day release-safety period'
     case 'peer-incompatible':
       return 'because npm reported an incompatible peer dependency'
   }

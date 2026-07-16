@@ -327,8 +327,9 @@ describe('held dependency detail formatting', () => {
     })
 
     expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
-      'held runtime dependency alpha 1.0.0 -> 1.1.0; until 2026-05-15T00:00:00.000Z',
-      'held dev dependency beta 2.0.0 -> 2.1.0; until npm publish metadata can be verified',
+      'held runtime dependency alpha 1.0.0 -> 1.1.0; because the 7-day release-safety period has not passed; ' +
+      'eligible after 2026-05-15T00:00:00.000Z',
+      'held dev dependency beta 2.0.0 -> 2.1.0; because npm publish metadata could not be verified',
     ])
   })
 
@@ -350,6 +351,29 @@ describe('held dependency detail formatting', () => {
     ])
   })
 
+  it('explains metadata and version-comparison holds without relying on the policy summary', () => {
+    const details = getHeldDependencyReleaseDetails({
+      heldDependencies: [{
+        name: 'metadata-package',
+        current: '1.0.0',
+        latest: '1.1.0',
+        reason: 'metadata-unavailable',
+      }],
+      heldDevDependencies: [{
+        name: 'tagged-package',
+        current: 'workspace:latest',
+        latest: '2.0.0',
+        reason: 'non-semver-current',
+      }],
+    })
+
+    expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
+      'held runtime dependency metadata-package 1.0.0 -> 1.1.0; because npm publish metadata could not be verified',
+      'held dev dependency tagged-package workspace:latest -> 2.0.0; ' +
+      'because the current version is not a stable semantic version',
+    ])
+  })
+
   it('lists held audit packages with proposed versions and eligibility time', () => {
     const details = getHeldAuditPackageReleaseDetails([
       {
@@ -362,7 +386,8 @@ describe('held dependency detail formatting', () => {
     ])
 
     expect(details.map(formatHeldAuditPackageUpdate)).toEqual([
-      'held audit fix beta 2.0.0 -> 2.1.0; until 2026-05-16T00:00:00.000Z',
+      'held audit fix beta 2.0.0 -> 2.1.0; because the 7-day release-safety period has not passed; ' +
+      'eligible after 2026-05-16T00:00:00.000Z',
     ])
   })
 })

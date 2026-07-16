@@ -59,6 +59,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Made every held dependency and audit detail self-explanatory by naming the exact release-age, metadata, version, or peer-compatibility reason and showing the eligibility timestamp when applicable.
 - Split bead history into append-only **Failed Iteration Notes**, **User Retry Notes**, and **Finalization Failure Notes**, keeping each source clearly labelled in execution context and workspace views.
 - Changed execution setup readiness to require functional repository probes, audit configured Git hooks without assuming an ecosystem, and use explicit validation by default instead of allowing hidden hook failures during LoopTroop-owned commits.
 - Extended implementation retry recovery and `POST /api/tickets/:id/retry` with optional user guidance, CODING-only validation, safe reset-before-append ordering, and append-only timestamped bead notes.
