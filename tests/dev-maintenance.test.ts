@@ -186,6 +186,7 @@ describe('peer-safe dependency maintenance', () => {
 
   it('extracts a concise peer constraint for held-release details', () => {
     expect(summarizePeerResolutionFailure(
+      'npm error peer typescript@">=4.8.4" from ts-api-utils@2.5.0\n' +
       'npm error Could not resolve dependency:\nnpm error peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.63.0',
     )).toBe('peer typescript@">=4.8.4 <6.1.0" from typescript-eslint@8.63.0')
   })

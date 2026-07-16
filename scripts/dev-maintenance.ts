@@ -558,6 +558,21 @@ function getNpmFailureMessage(result: NpmCommandResult, label: string) {
   return result.stderr || result.stdout || `${label} failed with code ${result.status ?? 'unknown'}`
 }
 
+function validateStagedDependencyGraph(tempDir: string, { verbose = false }: { verbose?: boolean } = {}) {
+  const label = 'npm ci --dry-run dependency validation'
+  const result = runCommand(
+    ['ci', '--dry-run', '--ignore-scripts', ...npmInstallFlags],
+    label,
+    { verbose, cwd: tempDir },
+  )
+  if (result.status === 0) {
+    return { error: null as string | null, peerConflict: false }
+  }
+
+  const error = getNpmFailureMessage(result, label)
+  return { error, peerConflict: isPeerResolutionFailure(error) }
+}
+
 export function isPeerResolutionFailure(message: string) {
   return /\bERESOLVE\b|could not resolve dependency|conflicting peer dependency/i.test(message)
 }
@@ -567,7 +582,8 @@ export function summarizePeerResolutionFailure(message: string) {
     .split(/\r?\n/)
     .map((line) => line.replace(/^npm (?:error|warn)\s*/i, '').trim())
     .filter(Boolean)
-  const peerLine = lines.find((line) => /^peer\s+.+\s+from\s+.+/i.test(line))
+  const resolutionIndex = lines.findIndex((line) => /could not resolve dependency/i.test(line))
+  const peerLine = lines.slice(Math.max(0, resolutionIndex + 1)).find((line) => /^peer\s+.+\s+from\s+.+/i.test(line))
   return peerLine ?? lines.find((line) => /could not resolve dependency|conflicting peer dependency/i.test(line))
     ?? 'npm could not resolve the proposed peer dependency graph'
 }
@@ -1093,6 +1109,24 @@ function previewAuditFixLockfile({ verbose = false }: { verbose?: boolean } = {}
       }
     }
 
+    const validation = validateStagedDependencyGraph(tempDir, { verbose })
+    if (validation.error) {
+      if (validation.peerConflict) {
+        return {
+          packageContents: null,
+          lockContents: null,
+          compatibilityHold: summarizePeerResolutionFailure(validation.error),
+          error: null as string | null,
+        }
+      }
+      return {
+        packageContents: null,
+        lockContents: null,
+        compatibilityHold: null,
+        error: validation.error,
+      }
+    }
+
     return {
       packageContents: readFileIfPresent(tempPackageJsonPath),
       lockContents: readFileIfPresent(tempPackageLockPath),
@@ -1323,6 +1357,16 @@ function previewDirectDependencyUpdates(
         lockContents: null,
         error: message,
         peerConflict: isPeerResolutionFailure(message),
+      }
+    }
+
+    const validation = validateStagedDependencyGraph(tempDir, { verbose })
+    if (validation.error) {
+      return {
+        packageContents: null,
+        lockContents: null,
+        error: validation.error,
+        peerConflict: validation.peerConflict,
       }
     }
 
