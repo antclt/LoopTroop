@@ -67,11 +67,14 @@ export async function validateJson(c: Context, next: Next) {
     // This also catches malformed JSON early before route handlers.
     if (contentType?.includes('application/json') || (!contentType && c.req.method !== 'OPTIONS')) {
       try {
+        const hadBodyStream = c.req.raw.body !== null
         const raw = await readBodyWithinLimit(c.req.raw, MAX_API_JSON_BODY_BYTES)
         if (raw.length > 0) {
           JSON.parse(raw)
-          // Re-attach the parsed body so downstream handlers can use c.req.json()
-          // without re-reading the stream
+        }
+        if (hadBodyStream) {
+          // Re-attach even an empty body stream so downstream handlers do not
+          // attempt to read the stream consumed by the size-limit check.
           c.req.raw = new Request(c.req.raw, { body: raw })
         }
       } catch (error) {

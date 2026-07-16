@@ -6,6 +6,7 @@ function createValidationApp() {
   const app = new Hono()
   app.use('/api/*', validateJson)
   app.post('/api/tickets', (c) => c.json({ ok: true }))
+  app.post('/api/retry', async (c) => c.json({ body: await c.req.text() }))
   return app
 }
 
@@ -63,5 +64,24 @@ describe('JSON validation middleware', () => {
     const response = await app.request(request)
 
     expect(response.status).toBe(413)
+  })
+
+  it('keeps an empty streamed POST body readable by downstream handlers', async () => {
+    const app = createValidationApp()
+    const body = new ReadableStream({
+      start(controller) {
+        controller.close()
+      },
+    })
+    const request = new Request('http://localhost/api/retry', {
+      method: 'POST',
+      body,
+      duplex: 'half',
+    } as RequestInit)
+
+    const response = await app.request(request)
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ body: '' })
   })
 })

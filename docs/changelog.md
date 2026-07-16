@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Restored one-click recovery for blocked tickets when Retry sends an empty request body.
 - Added language-agnostic workspace and Git-hook validation, backend-enforced bead test commands, and separate append-only implementation note histories.
 - Added a copy button next to the ticket description tab in the backlog workspace when clicking on the "Raw" view.
 - Made ticket cancellation confirmation mandatory in every state, including Draft and Blocked Error, preventing accidental one-click cancellation.
@@ -80,6 +81,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Preserved zero-byte POST streams after global JSON validation so body-free Retry requests no longer fail with a misleading invalid-JSON error.
 - Prevented ANSI terminal control sequences from leaking into machine-generated bead notes while retaining complete raw command output in execution logs.
 - Routed all ticket cancellation controls through the shared confirmation dialog, with existing optional artifact, worktree, and log cleanup choices preserved.
 - Corrected workflow Details to consistently describe ticket prompt context as the saved title and description only, keeping Manual QA Improvement provenance, evidence, priority, project data, and settings informational.
