@@ -27,6 +27,11 @@ function parseOpenRouterModel(modelId: string | null | undefined) {
   }
   return { base: val, suffix: '' }
 }
+
+function isRouterModel(modelId: string | null | undefined): boolean {
+  const clean = cleanModelId(modelId)
+  return clean === 'openrouter/free' || clean === 'openrouter/auto'
+}
 import { useProfile, useCreateProfile, useUpdateProfile } from '@/hooks/useProfile'
 import type { CreateProfileInput } from '@/hooks/useProfile'
 import { Plus, X, RefreshCw } from 'lucide-react'
@@ -320,7 +325,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                   value={mainVariant}
                   onChange={setMainVariant}
                 />
-                {formData.mainImplementer.startsWith('openrouter/') && (() => {
+                {formData.mainImplementer.startsWith('openrouter/') && !isRouterModel(formData.mainImplementer) && (() => {
                   const { base, suffix } = parseOpenRouterModel(formData.mainImplementer)
                   return (
                     <OpenRouterRoutingPicker
@@ -396,7 +401,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                             return next
                           })}
                         />
-                        {slot.startsWith('openrouter/') && (() => {
+                        {slot.startsWith('openrouter/') && !isRouterModel(slot) && (() => {
                           const { base, suffix } = parseOpenRouterModel(slot)
                           return (
                             <OpenRouterRoutingPicker

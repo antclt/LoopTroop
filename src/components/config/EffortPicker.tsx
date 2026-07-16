@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { cn } from '@/lib/utils'
 import { EFFORT_META } from '@/lib/effortMeta'
-import { Zap } from 'lucide-react'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 
 interface EffortPickerProps {
@@ -36,8 +35,8 @@ export function EffortPicker({ variants, value, onChange, disabled }: EffortPick
   if (sortedVariants.length === 0) return null
 
   return (
-    <div className="flex items-center gap-1.5">
-      <Zap className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+    <div className="flex items-center gap-1.5 mt-1">
+      <span className="text-[10px] font-semibold tracking-wider text-muted-foreground/80 uppercase shrink-0">Effort:</span>
       <div className="inline-flex items-center gap-0.5 rounded-lg bg-muted/30 p-0.5">
         {sortedVariants.map(variant => {
           const meta = EFFORT_META[variant] ?? { label: variant, shortLabel: variant, icon: '●', description: variant, intensity: 3 }

@@ -423,7 +423,7 @@ describe('Council Pipeline', () => {
       override async promptSession(sessionId: string, parts: PromptPart[], signal?: AbortSignal): Promise<string> {
         if (sessionId === 'mock-session-6') {
           return new Promise((resolve, reject) => {
-            const timer = setTimeout(() => resolve('late voter response'), 80)
+            const timer = setTimeout(() => resolve('late voter response'), 400)
             signal?.addEventListener('abort', () => {
               clearTimeout(timer)
               const abortError = new Error('Aborted')
@@ -442,7 +442,7 @@ describe('Council Pipeline', () => {
       members,
       contextParts: [{ type: 'text', content: 'Generate interview questions' }],
       projectPath: '/tmp/test',
-      draftTimeout: 20,
+      draftTimeout: 150,
       minQuorum: 2,
     })
 
