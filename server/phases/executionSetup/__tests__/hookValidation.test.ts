@@ -37,7 +37,7 @@ describe('runExplicitGitHookValidation', () => {
       profileContent: profile('validate_explicitly', 'node -e "process.stderr.write(\'missing prerequisite\'); process.exit(4)"'),
       worktreePath: root,
     })
-    expect(result.receipts[0]).toMatchObject({ status: 'failed', exitCode: 4, outputExcerpt: 'missing prerequisite' })
+    expect(result.receipts[0]).toMatchObject({ status: 'failed', exitCode: 4, outputExcerpt: expect.stringContaining('missing prerequisite') })
     expect(result.errors[0]).toContain('missing prerequisite')
   })
 

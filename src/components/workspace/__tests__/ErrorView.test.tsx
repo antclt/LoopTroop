@@ -67,7 +67,7 @@ describe('ErrorView', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Yes, Cancel Ticket' }))
     expect(cancelMutate).toHaveBeenCalledWith({
       id: ticket.id,
-      options: { deleteContent: false, deleteLog: false },
+      options: { deleteContent: false, deleteLog: false, deleteTicket: false },
     })
   })
 

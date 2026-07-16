@@ -301,7 +301,7 @@ describe.concurrent('structured prompt hardening', () => {
     expect(setupPlanPrompt).toContain('"title": "short step title"')
     expect(setupPlanPrompt).toContain('"rationale": "evidence or reasoning for this step"')
     expect(setupPlanPrompt).toContain('Original Checkout Audit')
-    expect(setupPlanPrompt).toContain('ignored or untracked in the original checkout')
+    expect(setupPlanPrompt).toContain('ignored or untracked file or directory')
     expect(setupPlanPrompt).toContain('concrete repository evidence or a prior workspace-setup failure')
     expect(setupPlanPrompt).toContain('Do not include file contents and do not add shell copy commands to `steps`')
     expect(setupPlanPrompt).toContain('Never propose `.git`, `.ticket`, `.looptroop`, or paths outside the original checkout')

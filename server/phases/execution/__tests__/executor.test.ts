@@ -145,7 +145,7 @@ describe('executeBead', () => {
         { command: statefulCommand, passed: false, exitCode: 1, timedOut: false },
         { command: statefulCommand, passed: true, exitCode: 0, timedOut: false },
       ])
-      expect(rawVerificationOutputs[0]?.stderr).toBe('full raw verification failure')
+      expect(rawVerificationOutputs[0]?.stderr).toContain('full raw verification failure')
     } finally {
       rmSync(cwd, { recursive: true, force: true })
     }

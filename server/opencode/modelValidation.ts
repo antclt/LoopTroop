@@ -6,6 +6,13 @@ export interface ValidatedModelSelection {
   councilMembers: string[]
 }
 
+function cleanModelId(modelId: string): string {
+  if (modelId.startsWith('openrouter/')) {
+    return modelId.split(':')[0]!
+  }
+  return modelId
+}
+
 export async function validateModelSelection(
   mainImplementerRaw: string | null | undefined,
   councilMembersRaw: string | null | undefined,
@@ -20,7 +27,8 @@ export async function validateModelSelection(
     throw new Error('No configured OpenCode models are available.')
   }
 
-  if (!connectedModelIds.has(mainImplementer)) {
+  const cleanMain = cleanModelId(mainImplementer)
+  if (!connectedModelIds.has(cleanMain)) {
     throw new Error(`Main implementer model is not configured in OpenCode: ${mainImplementer}`)
   }
 
@@ -31,7 +39,10 @@ export async function validateModelSelection(
     throw new Error('At least two distinct council members are required, including the main implementer.')
   }
 
-  const invalidCouncilMembers = normalizedCouncilMembers.filter((memberId) => !connectedModelIds.has(memberId))
+  const invalidCouncilMembers = normalizedCouncilMembers.filter((memberId) => {
+    const cleanMember = cleanModelId(memberId)
+    return !connectedModelIds.has(cleanMember)
+  })
   if (invalidCouncilMembers.length > 0) {
     throw new Error(`Council member models are not configured in OpenCode: ${invalidCouncilMembers.join(', ')}`)
   }

@@ -254,7 +254,17 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
     }
   }, [isOpen, applyPosition])
 
-  const selected = models?.find(m => m.fullId === value) ?? allModels?.find(m => m.fullId === value) ?? connectedModels?.find(m => m.fullId === value)
+  const cleanModelId = useCallback((id: string): string => {
+    if (id && id.startsWith('openrouter/')) {
+      return id.split(':')[0]!
+    }
+    return id
+  }, [])
+
+  const cleanValue = useMemo(() => cleanModelId(value), [value, cleanModelId])
+  const cleanDisabledValues = useMemo(() => disabledValues.map(cleanModelId), [disabledValues, cleanModelId])
+
+  const selected = models?.find(m => m.fullId === cleanValue) ?? allModels?.find(m => m.fullId === cleanValue) ?? connectedModels?.find(m => m.fullId === cleanValue)
 
   const filtered = useMemo(() => {
     if (!models) return []
@@ -408,8 +418,8 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
                 key={providerID}
                 providerName={providerName}
                 models={pModels}
-                value={value}
-                disabledValues={disabledValues}
+                value={cleanValue}
+                disabledValues={cleanDisabledValues}
                 onChange={onChange}
                 onClose={() => {
                   setIsOpen(false)

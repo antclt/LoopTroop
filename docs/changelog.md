@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) to customize model pricing, speed, and capability preferences.
 - Added a 'Delete the ticket completely' option to the ticket cancellation dialog to clean up all database records and local files.
 - Added the active execution setup attempt count (e.g. attempt 2 of 5) to the Preparing Workspace Runtime status title when running subsequent attempts.
 - Made workspace setup recoverable when isolated worktrees need approved ignored or untracked inputs, including one direct same-session manual retry after the automatic budget ends.
@@ -44,6 +45,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) in model configuration and validation, with a dedicated selector in the configuration profile setup.
 - Added `deleteTicket` option to the ticket cancellation endpoint and a corresponding checkbox in the Cancel Ticket dialog, allowing users to erase all database records and local files, automatically disabling other cleanup options when selected.
 - Added the active execution setup attempt count (e.g. `execution setup attempt 2 of 5`) from the phase logs to the `Preparing Workspace Runtime` status title when the setup attempt number is greater than 1.
 - Added user-reviewed workspace input files and directories to execution setup plans, plus setup-specific **Retry with extra note...** and **Edit setup plan...** recovery actions.
@@ -93,6 +95,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed Vitest environment-specific test suite warnings and failures caused by `nvm` shell initialization warnings on stderr and mismatched prompt expectations.
 - Preserved line breaks in long blocked-error details and cleaned ANSI sequences from those details as well as the main message, while preserving the raw logs. Terminal decoration, carriage-return artifacts, and repeated single-line or multiline warnings are also removed from the displayed error.
 - Replaced the generic Blocked Error workspace essay with the failed phase, a bounded version of the captured error, and guidance for only the recovery actions currently available; historical occurrences are clearly read-only.
 - Recovered model-generated YAML list prose that wraps onto deeper continuation lines by preserving the emitted text in a block scalar before shared structured-output parsing, instead of blocking otherwise valid PRD, Beads, and other artifacts.

@@ -5,6 +5,28 @@ import { Separator } from '@/components/ui/separator'
 import { LoadingText } from '@/components/ui/LoadingText'
 import { ModelPicker } from './ModelPicker'
 import { EffortPicker } from './EffortPicker'
+import { OpenRouterRoutingPicker } from './OpenRouterRoutingPicker'
+
+function cleanModelId(id: string | null | undefined): string {
+  if (id && id.startsWith('openrouter/')) {
+    return id.split(':')[0]!
+  }
+  return id ?? ''
+}
+
+function parseOpenRouterModel(modelId: string | null | undefined) {
+  const val = modelId ?? ''
+  if (val.startsWith('openrouter/')) {
+    const lastColon = val.lastIndexOf(':')
+    if (lastColon > val.indexOf('/')) {
+      return {
+        base: val.substring(0, lastColon),
+        suffix: val.substring(lastColon)
+      }
+    }
+  }
+  return { base: val, suffix: '' }
+}
 import { useProfile, useCreateProfile, useUpdateProfile } from '@/hooks/useProfile'
 import type { CreateProfileInput } from '@/hooks/useProfile'
 import { Plus, X, RefreshCw } from 'lucide-react'
@@ -134,7 +156,13 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
     setMainVariant(profile.mainImplementerVariant ?? undefined)
     try {
       const parsed = profile.councilMemberVariants ? JSON.parse(profile.councilMemberVariants) : {}
-      setCouncilVariants(typeof parsed === 'object' && parsed !== null ? parsed : {})
+      const cleanedVariants: Record<string, string> = {}
+      if (typeof parsed === 'object' && parsed !== null) {
+        for (const [k, v] of Object.entries(parsed)) {
+          cleanedVariants[cleanModelId(k)] = v as string
+        }
+      }
+      setCouncilVariants(cleanedVariants)
     } catch {
       setCouncilVariants({})
     }
@@ -221,7 +249,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
     const variantsMap: Record<string, string> = {}
     for (const modelId of uniqueCouncil) {
       if (modelId === validatedData.mainImplementer) continue
-      const v = councilVariants[modelId]
+      const v = councilVariants[cleanModelId(modelId)]
       if (v) variantsMap[modelId] = v
     }
     const payload: CreateProfileInput = {
@@ -286,12 +314,23 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
               disabledValues={councilSlots.filter(Boolean)}
             />
             {formData.mainImplementer && (
-              <div className="mt-1.5">
+              <div className="mt-1.5 space-y-1.5">
                 <EffortPicker
-                  variants={modelVariantMap.get(formData.mainImplementer)}
+                  variants={modelVariantMap.get(cleanModelId(formData.mainImplementer))}
                   value={mainVariant}
                   onChange={setMainVariant}
                 />
+                {formData.mainImplementer.startsWith('openrouter/') && (() => {
+                  const { base, suffix } = parseOpenRouterModel(formData.mainImplementer)
+                  return (
+                    <OpenRouterRoutingPicker
+                      value={suffix}
+                      onChange={nextSuffix => {
+                        updateField('mainImplementer', base + nextSuffix)
+                      }}
+                    />
+                  )
+                })()}
               </div>
             )}
             <div className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
@@ -326,15 +365,16 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                       value={slot}
                       onChange={v => {
                         setCouncilSlots(prev => prev.map((s, j) => j === i ? v : s))
-                        // Reset variant if new model doesn't support current variant
-                        const newVariants = modelVariantMap.get(v)
-                        const oldVariant = councilVariants[slot]
+                        const cleanV = cleanModelId(v)
+                        const cleanSlot = cleanModelId(slot)
+                        const newVariants = modelVariantMap.get(cleanV)
+                        const oldVariant = councilVariants[cleanSlot]
                         if (slot && slot !== v) {
                           setCouncilVariants(prev => {
                             const next = { ...prev }
-                            delete next[slot]
+                            delete next[cleanSlot]
                             if (oldVariant && newVariants && oldVariant in newVariants) {
-                              next[v] = oldVariant
+                              next[cleanV] = oldVariant
                             }
                             return next
                           })
@@ -344,16 +384,30 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                       disabledValues={[formData.mainImplementer, ...councilSlots.filter((_, j) => j !== i)].filter(Boolean) as string[]}
                     />
                     {slot && (
-                      <EffortPicker
-                        variants={modelVariantMap.get(slot)}
-                        value={councilVariants[slot]}
-                        onChange={v => setCouncilVariants(prev => {
-                          const next = { ...prev }
-                          if (v) next[slot] = v
-                          else delete next[slot]
-                          return next
-                        })}
-                      />
+                      <div className="space-y-1.5">
+                        <EffortPicker
+                          variants={modelVariantMap.get(cleanModelId(slot))}
+                          value={councilVariants[cleanModelId(slot)]}
+                          onChange={v => setCouncilVariants(prev => {
+                            const next = { ...prev }
+                            const cleanSlot = cleanModelId(slot)
+                            if (v) next[cleanSlot] = v
+                            else delete next[cleanSlot]
+                            return next
+                          })}
+                        />
+                        {slot.startsWith('openrouter/') && (() => {
+                          const { base, suffix } = parseOpenRouterModel(slot)
+                          return (
+                            <OpenRouterRoutingPicker
+                              value={suffix}
+                              onChange={nextSuffix => {
+                                setCouncilSlots(prev => prev.map((s, j) => j === i ? base + nextSuffix : s))
+                              }}
+                            />
+                          )
+                        })()}
+                      </div>
                     )}
                   </div>
                   <button
@@ -364,7 +418,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                       if (removedSlot) {
                         setCouncilVariants(prev => {
                           const next = { ...prev }
-                          delete next[removedSlot]
+                          delete next[cleanModelId(removedSlot)]
                           return next
                         })
                       }
