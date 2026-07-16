@@ -263,6 +263,30 @@ describe('ErrorView', () => {
     )
   })
 
+  it('removes terminal formatting from setup failure details', () => {
+    const ticket = makeTicket({
+      status: 'BLOCKED_ERROR',
+      previousStatus: 'PREPARING_EXECUTION_ENV',
+      activeErrorOccurrenceId: 'setup-error',
+      errorOccurrences: [{
+        id: 'setup-error',
+        occurrenceNumber: 1,
+        blockedFromStatus: 'PREPARING_EXECUTION_ENV',
+        errorMessage: 'Execution setup failed',
+        errorCodes: ['\u001b[31mFAIL\u001b[39m src/example.test.ts'],
+        occurredAt: '2026-01-01T00:00:00.000Z',
+        resolvedAt: null,
+        resolutionStatus: null,
+        resumedToStatus: null,
+      }],
+    })
+
+    renderWithProviders(<ErrorView ticket={ticket} />)
+
+    expect(screen.getByText('FAIL src/example.test.ts')).toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('\u001b')
+  })
+
   it('cleans terminal formatting and duplicate warnings from the displayed error', () => {
     const ticket = makeLiveCodingErrorTicket()
     ticket.errorOccurrences![0]!.errorMessage = [

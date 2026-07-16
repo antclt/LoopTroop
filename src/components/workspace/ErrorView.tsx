@@ -328,7 +328,7 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                 <div className="flex flex-wrap gap-1">
                   {visibleOccurrence.errorCodes.map((code) => (
                     <Badge key={code} variant="outline" className="text-[10px]">
-                      {code}
+                      {sanitizeErrorForDisplay(code)}
                     </Badge>
                   ))}
                 </div>
