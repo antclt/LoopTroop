@@ -3,6 +3,7 @@ import { ChevronRight, AlertTriangle } from 'lucide-react'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useLogs } from '@/context/useLogContext'
+import type { LogEntry } from '@/context/LogContext'
 import { getStatusUserLabel, WORKFLOW_GROUPS } from '@/lib/workflowMeta'
 import { cn } from '@/lib/utils'
 import type { Ticket } from '@/hooks/useTickets'
@@ -423,13 +424,56 @@ function getActivePhaseAttempt(attempts: TicketPhaseAttempt[]): TicketPhaseAttem
   return attempts.find((attempt) => attempt.state === 'active') ?? attempts[0] ?? null
 }
 
-function formatLivePhaseAttemptLabel(attempts: TicketPhaseAttempt[]): string | null {
-  const activeAttempt = getActivePhaseAttempt(attempts)
-  if (!activeAttempt || activeAttempt.attemptNumber <= 1) return null
+function getExecutionSetupAttemptInfo(logs: LogEntry[]): { attempt: number; maxIterations?: number } | null {
+  let attempt: number | null = null
+  let maxIterations: number | null = null
 
-  const previousAttempt = attempts.find((attempt) => attempt.attemptNumber === activeAttempt.attemptNumber - 1)
-  const isManualRetry = previousAttempt?.archivedReason === 'manual_retry_after_blocked_error'
-  return `${isManualRetry ? 'retry attempt' : 'attempt'} ${activeAttempt.attemptNumber}`
+  for (let i = logs.length - 1; i >= 0; i--) {
+    const entry = logs[i]
+    if (!entry) continue
+    const line = entry.line
+
+    const matchStart = /Starting execution setup attempt (\d+)(?: of (\d+))?/i.exec(line)
+    if (matchStart) {
+      if (attempt === null && matchStart[1]) attempt = parseInt(matchStart[1], 10)
+      if (maxIterations === null && matchStart[2]) maxIterations = parseInt(matchStart[2], 10)
+    }
+
+    const matchResume = /Resuming execution setup session for user-requested attempt (\d+)(?: \(configured automatic budget (\d+)\))?/i.exec(line)
+    if (matchResume) {
+      if (attempt === null && matchResume[1]) attempt = parseInt(matchResume[1], 10)
+      if (maxIterations === null && matchResume[2]) maxIterations = parseInt(matchResume[2], 10)
+    }
+
+    const matchPersist = /Starting execution setup tooling persistence attempt (\d+).+?base budget (\d+)/i.exec(line)
+    if (matchPersist) {
+      if (attempt === null && matchPersist[1]) attempt = parseInt(matchPersist[1], 10)
+      if (maxIterations === null && matchPersist[2]) maxIterations = parseInt(matchPersist[2], 10)
+    }
+
+    const matchSessionCreated = /Execution setup attempt (\d+) session created/i.exec(line)
+    if (matchSessionCreated && matchSessionCreated[1]) {
+      if (attempt === null) attempt = parseInt(matchSessionCreated[1], 10)
+    }
+
+    const matchComplete = /Execution setup attempt (\d+) (?:produced|failed)/i.exec(line)
+    if (matchComplete && matchComplete[1]) {
+      if (attempt === null) attempt = parseInt(matchComplete[1], 10)
+    }
+
+    if (attempt !== null && maxIterations !== null) {
+      break
+    }
+  }
+
+  if (attempt !== null) {
+    return {
+      attempt,
+      ...(maxIterations !== null ? { maxIterations } : {}),
+    }
+  }
+
+  return null
 }
 
 /**
@@ -451,9 +495,16 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage, errorOccurr
     shouldTrackPhaseAttempt ? ticket.id : undefined,
     shouldTrackPhaseAttempt ? phase : undefined,
   )
+  const activeAttempt = useMemo(
+    () => shouldTrackPhaseAttempt ? getActivePhaseAttempt(phaseAttempts) : null,
+    [phaseAttempts, shouldTrackPhaseAttempt],
+  )
+  const shouldTrackLogs = shouldTrackCoverageProgress || (isLivePhase && phase === 'PREPARING_EXECUTION_ENV')
   const phaseLogs = useMemo(
-    () => shouldTrackCoverageProgress && logCtx ? logCtx.getLogsForPhase(phase) : [],
-    [shouldTrackCoverageProgress, logCtx, phase],
+    () => shouldTrackLogs && logCtx
+      ? logCtx.getLogsForPhase(phase, activeAttempt ? { phaseAttempt: activeAttempt.attemptNumber } : undefined)
+      : [],
+    [shouldTrackLogs, logCtx, phase, activeAttempt],
   )
   const phaseActivationTimestamp = shouldTrackCoverageProgress
     ? findLatestPhaseActivationTimestamp(phase, phaseLogs)
@@ -496,18 +547,31 @@ export function WorkspacePhaseSummary({ phase, ticket, errorMessage, errorOccurr
       extractCoveragePassFromLogs(runLogs.map((entry) => entry.line)),
     ])
   }, [artifacts, phase, phaseActivationTimestamp, phaseLogs, shouldTrackCoverageProgress])
-  const phaseAttemptLabel = useMemo(
-    () => (shouldTrackPhaseAttempt ? formatLivePhaseAttemptLabel(phaseAttempts) : null),
-    [phaseAttempts, shouldTrackPhaseAttempt],
-  )
+  const phaseAttemptLabel = useMemo(() => {
+    if (!activeAttempt || activeAttempt.attemptNumber <= 1) return null
+    const previousAttempt = phaseAttempts.find((attempt) => attempt.attemptNumber === activeAttempt.attemptNumber - 1)
+    const isManualRetry = previousAttempt?.archivedReason === 'manual_retry_after_blocked_error'
+    return `${isManualRetry ? 'retry attempt' : 'attempt'} ${activeAttempt.attemptNumber}`
+  }, [activeAttempt, phaseAttempts])
   const phaseLabel = useMemo(() => {
     if (!isLivePhase) return basePhaseLabel
     if (phase === 'CODING') return formatCodingLiveLabel(runtime)
     if (isCoveragePhase(phase)) {
       return formatCoverageLiveLabel(basePhaseLabel, coverageVersion, coveragePass)
     }
+    if (phase === 'PREPARING_EXECUTION_ENV') {
+      const setupInfo = getExecutionSetupAttemptInfo(phaseLogs)
+      if (setupInfo && setupInfo.attempt > 1) {
+        const setupStr = setupInfo.maxIterations
+          ? `execution setup attempt ${setupInfo.attempt} of ${setupInfo.maxIterations}`
+          : `execution setup attempt ${setupInfo.attempt}`
+        return phaseAttemptLabel
+          ? `${basePhaseLabel} (${phaseAttemptLabel} - ${setupStr})`
+          : `${basePhaseLabel} (${setupStr})`
+      }
+    }
     return phaseAttemptLabel ? `${basePhaseLabel} (${phaseAttemptLabel})` : basePhaseLabel
-  }, [basePhaseLabel, coveragePass, coverageVersion, isLivePhase, phase, phaseAttemptLabel, runtime])
+  }, [basePhaseLabel, coveragePass, coverageVersion, isLivePhase, phase, phaseAttemptLabel, runtime, phaseLogs])
   const showLiveCodingCountdown = ticket.status === 'CODING' && phase === 'CODING'
 
   if (!phaseMeta) return null

@@ -29,7 +29,13 @@ function renderWithLogContext(ui: ReactElement, logsByPhase: Record<string, LogE
     isLoadingLogs: false,
     addLog: vi.fn(),
     addLogRecord: vi.fn(),
-    getLogsForPhase: (phase: string) => logsByPhase[phase] ?? [],
+    getLogsForPhase: (phase: string, options?: { phaseAttempt?: number }) => {
+      const logs = logsByPhase[phase] ?? []
+      if (options?.phaseAttempt !== undefined) {
+        return logs.filter(e => e.phaseAttempt === options.phaseAttempt)
+      }
+      return logs
+    },
     getAllLogs: () => Object.values(logsByPhase).flat(),
     setActivePhase: vi.fn(),
     clearLogs: vi.fn(),
@@ -440,6 +446,95 @@ describe('WorkspacePhaseSummary', () => {
 
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'Refining Specs (retry attempt 2)' })).toBeInTheDocument()
+    })
+  })
+
+  it('shows the live execution setup attempt when status is PREPARING_EXECUTION_ENV', async () => {
+    const ticket = makeTicket({ id: TEST.ticketId, status: 'PREPARING_EXECUTION_ENV' })
+    const logsByPhase = {
+      PREPARING_EXECUTION_ENV: [
+        {
+          id: 'log-1',
+          entryId: 'log-1',
+          line: 'Starting execution setup attempt 2 of 5.',
+          source: 'system',
+          status: 'PREPARING_EXECUTION_ENV',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          audience: 'all',
+          kind: 'info',
+          streaming: false,
+          op: 'append',
+        } as LogEntry,
+      ],
+    }
+
+    renderWithLogContext(
+      <WorkspacePhaseSummary phase="PREPARING_EXECUTION_ENV" ticket={ticket} />,
+      logsByPhase,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Preparing Workspace Runtime (execution setup attempt 2 of 5)' })).toBeInTheDocument()
+    })
+  })
+
+  it('shows the live execution setup attempt with phase attempt label when status is PREPARING_EXECUTION_ENV', async () => {
+    vi.mocked(globalThis.fetch).mockImplementation((input) => {
+      const url = String(input)
+      if (url.endsWith(`/api/tickets/${TEST.ticketId}/phases/PREPARING_EXECUTION_ENV/attempts`)) {
+        return createJsonResponse([
+          {
+            ticketId: TEST.ticketId,
+            phase: 'PREPARING_EXECUTION_ENV',
+            attemptNumber: 2,
+            state: 'active',
+            archivedReason: null,
+            createdAt: '2026-01-01T00:01:00.000Z',
+            archivedAt: null,
+          },
+          {
+            ticketId: TEST.ticketId,
+            phase: 'PREPARING_EXECUTION_ENV',
+            attemptNumber: 1,
+            state: 'archived',
+            archivedReason: 'manual_retry_after_blocked_error',
+            createdAt: '2026-01-01T00:00:00.000Z',
+            archivedAt: '2026-01-01T00:01:00.000Z',
+          },
+        ])
+      }
+      if (url.endsWith(`/api/tickets/${TEST.ticketId}/artifacts`)) {
+        return createJsonResponse([])
+      }
+      throw new Error(`Unhandled fetch: ${url}`)
+    })
+
+    const ticket = makeTicket({ id: TEST.ticketId, status: 'PREPARING_EXECUTION_ENV' })
+    const logsByPhase = {
+      PREPARING_EXECUTION_ENV: [
+        {
+          id: 'log-1',
+          entryId: 'log-1',
+          line: 'Starting execution setup attempt 3 of 5.',
+          source: 'system',
+          status: 'PREPARING_EXECUTION_ENV',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          audience: 'all',
+          kind: 'info',
+          streaming: false,
+          op: 'append',
+          phaseAttempt: 2,
+        } as LogEntry,
+      ],
+    }
+
+    renderWithLogContext(
+      <WorkspacePhaseSummary phase="PREPARING_EXECUTION_ENV" ticket={ticket} />,
+      logsByPhase,
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Preparing Workspace Runtime (retry attempt 2 - execution setup attempt 3 of 5)' })).toBeInTheDocument()
     })
   })
 })
