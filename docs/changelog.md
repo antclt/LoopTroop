@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Added a 'Delete the ticket completely' option to the ticket cancellation dialog to clean up all database records and local files.
 - Added the active execution setup attempt count (e.g. attempt 2 of 5) to the Preparing Workspace Runtime status title when running subsequent attempts.
 - Made workspace setup recoverable when isolated worktrees need approved ignored or untracked inputs, including one direct same-session manual retry after the automatic budget ends.
 - Made blocked errors immediately actionable and recovered safely wrapped YAML list prose across structured-output phases.
@@ -43,6 +44,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added `deleteTicket` option to the ticket cancellation endpoint and a corresponding checkbox in the Cancel Ticket dialog, allowing users to erase all database records and local files, automatically disabling other cleanup options when selected.
 - Added the active execution setup attempt count (e.g. `execution setup attempt 2 of 5`) from the phase logs to the `Preparing Workspace Runtime` status title when the setup attempt number is greater than 1.
 - Added user-reviewed workspace input files and directories to execution setup plans, plus setup-specific **Retry with extra note...** and **Edit setup plan...** recovery actions.
 - Added repository-level workspace probes and configurable explicit Git-hook validation with visible setup-plan evidence, editable validation commands, and audited internal-hook policies.

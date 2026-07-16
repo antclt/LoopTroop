@@ -13,11 +13,13 @@ export function CancelTicketDialog({ ticketId, open, onOpenChange }: CancelTicke
   const { mutate: cancelTicket, isPending } = useCancelTicket()
   const [deleteContent, setDeleteContent] = useState(false)
   const [deleteLog, setDeleteLog] = useState(false)
+  const [deleteTicket, setDeleteTicket] = useState(false)
 
   const close = () => {
     onOpenChange(false)
     setDeleteContent(false)
     setDeleteLog(false)
+    setDeleteTicket(false)
   }
 
   return (
@@ -34,11 +36,12 @@ export function CancelTicketDialog({ ticketId, open, onOpenChange }: CancelTicke
           Artifacts generated up to this point are preserved by default.
         </p>
         <div className="mt-3 space-y-3">
-          <label className="flex items-start gap-3 cursor-pointer group">
+          <label className={`flex items-start gap-3 cursor-pointer group ${deleteTicket ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer"
-              checked={deleteContent}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer disabled:cursor-not-allowed"
+              checked={deleteTicket || deleteContent}
+              disabled={deleteTicket}
               onChange={(event) => setDeleteContent(event.target.checked)}
               data-testid="delete-content-checkbox"
             />
@@ -48,11 +51,12 @@ export function CancelTicketDialog({ ticketId, open, onOpenChange }: CancelTicke
               Permanently removes all AI-generated content stored for this ticket — interview questions and answers, PRD drafts, beads plan entries — and deletes the isolated git worktree including its branch and any code written to it. This cannot be undone.
             </span>
           </label>
-          <label className="flex items-start gap-3 cursor-pointer group">
+          <label className={`flex items-start gap-3 cursor-pointer group ${deleteTicket ? 'opacity-50 cursor-not-allowed pointer-events-none' : ''}`}>
             <input
               type="checkbox"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer"
-              checked={deleteLog}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer disabled:cursor-not-allowed"
+              checked={deleteTicket || deleteLog}
+              disabled={deleteTicket}
               onChange={(event) => setDeleteLog(event.target.checked)}
               data-testid="delete-log-checkbox"
             />
@@ -60,6 +64,20 @@ export function CancelTicketDialog({ ticketId, open, onOpenChange }: CancelTicke
               <span className="font-medium text-foreground">Delete execution log</span>
               <br />
               Permanently removes both persisted execution logs: the normal phase log and the debug/forensic log. The log viewer will show no history for this ticket after deletion.
+            </span>
+          </label>
+          <label className="flex items-start gap-3 cursor-pointer group">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border border-border bg-background accent-destructive cursor-pointer"
+              checked={deleteTicket}
+              onChange={(event) => setDeleteTicket(event.target.checked)}
+              data-testid="delete-ticket-checkbox"
+            />
+            <span className="text-sm leading-snug text-muted-foreground group-hover:text-foreground transition-colors">
+              <span className="font-medium text-foreground">Delete the ticket completely</span>
+              <br />
+              Permanently deletes the ticket record from the database and removes all related files on disk. The ticket will be completely erased and will no longer appear in the UI.
             </span>
           </label>
         </div>
@@ -70,11 +88,11 @@ export function CancelTicketDialog({ ticketId, open, onOpenChange }: CancelTicke
             size="sm"
             disabled={isPending}
             onClick={() => {
-              cancelTicket({ id: ticketId, options: { deleteContent, deleteLog } })
+              cancelTicket({ id: ticketId, options: { deleteContent: deleteTicket || deleteContent, deleteLog: deleteTicket || deleteLog, deleteTicket } })
               close()
             }}
           >
-            Yes, Cancel Ticket
+            {deleteTicket ? 'Yes, Delete Ticket' : 'Yes, Cancel Ticket'}
           </Button>
         </div>
       </DialogContent>

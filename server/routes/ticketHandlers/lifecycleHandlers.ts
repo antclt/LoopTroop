@@ -11,6 +11,7 @@ import {
   listOpenCodeSessionsForTicket,
   reactivateOpenCodeSessionForContinuation,
 } from '../../opencode/sessionManager'
+import { clearContextCache } from '../../opencode/contextBuilder'
 import { getOpenCodeAdapter } from '../../opencode/factory'
 import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
 import { cancelTicket } from '../../workflow/runner'
@@ -21,6 +22,7 @@ import {
   archiveActivePhaseAttempts,
   cleanupCanceledTicketData,
   createFreshPhaseAttempts,
+  deleteTicket as deleteStoredTicket,
   ensureActivePhaseAttempt,
   findProjectExecutionBandConflict,
   getTicketByRef,
@@ -47,6 +49,7 @@ import { recoverCodingBeadWithReset } from '../../workflow/phases/beadsPhase'
 import { recoverSuccessfulExecutionCheckpointForFinalization } from '../../workflow/phases/executionPhase'
 import { isExecutionBandStatus } from '../../workflow/executionBand'
 import { getErrorMessage } from '@shared/typeGuards'
+import { broadcaster } from '../../sse/broadcaster'
 import {
   clearSessionContinuation,
   requestSessionContinuation,
@@ -357,29 +360,48 @@ export async function handleCancelTicket(c: Context) {
 
   let deleteContent = false
   let deleteLog = false
+  let deleteTicket = false
   const body = await c.req.json().catch(() => ({}))
   const cancelOptions = cancelTicketSchema.safeParse(body)
   if (cancelOptions.success) {
     deleteContent = cancelOptions.data.deleteContent
     deleteLog = cancelOptions.data.deleteLog
+    deleteTicket = cancelOptions.data.deleteTicket
   }
 
   try {
     if (isDisplayOnlyMockTicket(ticket)) {
-      patchTicket(ticketId, {
-        status: 'CANCELED',
-        xstateSnapshot: null,
-        errorMessage: null,
-      })
+      if (deleteTicket) {
+        deleteStoredTicket(ticketId)
+      } else {
+        patchTicket(ticketId, {
+          status: 'CANCELED',
+          xstateSnapshot: null,
+          errorMessage: null,
+        })
+      }
     } else {
       ensureActorForTicket(ticketId)
       sendTicketEvent(ticketId, { type: 'CANCEL' })
       cancelTicket(ticketId)
       await abortTicketSessions(ticketId)
+      if (deleteTicket) {
+        stopActor(ticketId)
+        clearContextCache(ticketId)
+        emitRoutePhaseLog(ticketId, ticket.status, 'info', `Deleting ticket ${ticket.externalId}: removing worktree, branch, and database records.`)
+        deleteStoredTicket(ticketId)
+      }
+    }
+    if (deleteTicket) {
+      broadcaster.clearTicket(ticketId)
     }
   } catch (err) {
     console.error(`[tickets] Failed to send CANCEL to ticket ${ticketId}:`, err)
     return c.json({ error: 'Failed to cancel ticket', details: String(err) }, 500)
+  }
+
+  if (deleteTicket) {
+    return c.json({ success: true, ticketId })
   }
 
   if (deleteContent || deleteLog) {

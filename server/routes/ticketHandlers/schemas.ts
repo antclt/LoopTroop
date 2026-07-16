@@ -18,6 +18,7 @@ export const updateTicketSchema = z.object({
 export const cancelTicketSchema = z.object({
   deleteContent: z.boolean().default(false),
   deleteLog: z.boolean().default(false),
+  deleteTicket: z.boolean().default(false),
 })
 
 export const retryTicketSchema = z.object({

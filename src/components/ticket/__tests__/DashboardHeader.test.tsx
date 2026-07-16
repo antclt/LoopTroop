@@ -322,7 +322,7 @@ describe('DashboardHeader', () => {
 
     expect(cancelMutate).toHaveBeenCalledWith({
       id: ticket.id,
-      options: { deleteContent: false, deleteLog: false },
+      options: { deleteContent: false, deleteLog: false, deleteTicket: false },
     })
   })
 
@@ -361,7 +361,7 @@ describe('DashboardHeader', () => {
 
     expect(cancelMutate).toHaveBeenCalledWith({
       id: ticket.id,
-      options: { deleteContent: false, deleteLog: false },
+      options: { deleteContent: false, deleteLog: false, deleteTicket: false },
     })
   })
 
@@ -383,7 +383,7 @@ describe('DashboardHeader', () => {
 
     expect(cancelMutate).toHaveBeenCalledWith({
       id: ticket.id,
-      options: { deleteContent: true, deleteLog: false },
+      options: { deleteContent: true, deleteLog: false, deleteTicket: false },
     })
   })
 
@@ -405,7 +405,47 @@ describe('DashboardHeader', () => {
 
     expect(cancelMutate).toHaveBeenCalledWith({
       id: ticket.id,
-      options: { deleteContent: false, deleteLog: true },
+      options: { deleteContent: false, deleteLog: true, deleteTicket: false },
+    })
+  })
+
+  it('passes deleteTicket=true and checks disabled state when delete ticket checkbox is checked', () => {
+    const cancelMutate = vi.fn()
+    mockUseCancelTicket.mockReturnValue({ mutate: cancelMutate, isPending: false })
+
+    const ticket = makeTicket({ status: 'DRAFTING_PRD', availableActions: ['cancel'] })
+
+    renderWithProviders(
+      <UIContext.Provider value={makeUIValue(ticket.id, ticket.externalId)}>
+        <DashboardHeader ticket={ticket} />
+      </UIContext.Provider>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /cancel…/i }))
+    
+    const deleteContentCheckbox = screen.getByTestId('delete-content-checkbox') as HTMLInputElement
+    const deleteLogCheckbox = screen.getByTestId('delete-log-checkbox') as HTMLInputElement
+    const deleteTicketCheckbox = screen.getByTestId('delete-ticket-checkbox') as HTMLInputElement
+    
+    expect(deleteContentCheckbox.disabled).toBe(false)
+    expect(deleteLogCheckbox.disabled).toBe(false)
+    expect(screen.getByRole('button', { name: 'Yes, Cancel Ticket' })).toBeInTheDocument()
+
+    // Check delete ticket completely
+    fireEvent.click(deleteTicketCheckbox)
+
+    // First two checkboxes should now be disabled and checked
+    expect(deleteContentCheckbox.disabled).toBe(true)
+    expect(deleteLogCheckbox.disabled).toBe(true)
+    expect(deleteContentCheckbox.checked).toBe(true)
+    expect(deleteLogCheckbox.checked).toBe(true)
+    expect(screen.getByRole('button', { name: 'Yes, Delete Ticket' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, Delete Ticket' }))
+
+    expect(cancelMutate).toHaveBeenCalledWith({
+      id: ticket.id,
+      options: { deleteContent: true, deleteLog: true, deleteTicket: true },
     })
   })
 

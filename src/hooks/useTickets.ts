@@ -313,13 +313,18 @@ export async function ticketAction(
 interface CancelTicketOptions {
   deleteContent?: boolean
   deleteLog?: boolean
+  deleteTicket?: boolean
 }
 
 async function cancelTicket(id: string, options: CancelTicketOptions = {}): Promise<TicketActionResponse> {
   const res = await fetch(`/api/tickets/${id}/cancel`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ deleteContent: options.deleteContent ?? false, deleteLog: options.deleteLog ?? false }),
+    body: JSON.stringify({
+      deleteContent: options.deleteContent ?? false,
+      deleteLog: options.deleteLog ?? false,
+      deleteTicket: options.deleteTicket ?? false,
+    }),
   })
   if (!res.ok) {
     throw new Error(await parseErrorBody(res, 'Failed to cancel ticket'))

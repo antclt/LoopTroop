@@ -197,6 +197,29 @@ describe('ticketRouter POST /tickets/:id/cancel', () => {
     expect(existsSync(aiLogPath)).toBe(false)
   })
 
+  it('completely deletes the ticket and all files when deleteTicket=true', async () => {
+    const repoDir = repoManager.createRepo()
+    const { ticket, init } = createCancelableTicket(repoDir)
+    const logPath = getTicketExecutionLogPath(repoDir, ticket.externalId)
+    const debugLogPath = getTicketDebugLogPath(repoDir, ticket.externalId)
+    const aiLogPath = getTicketAiLogPath(repoDir, ticket.externalId)
+
+    const response = await app.request(`/api/tickets/${ticket.id}/cancel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ deleteTicket: true }),
+    })
+
+    expect(response.status).toBe(200)
+    // The ticket record is completely deleted from DB.
+    expect(getTicketByRef(ticket.id)).toBeUndefined()
+    // Worktree and logs are gone.
+    expect(existsSync(init.worktreePath)).toBe(false)
+    expect(existsSync(logPath)).toBe(false)
+    expect(existsSync(debugLogPath)).toBe(false)
+    expect(existsSync(aiLogPath)).toBe(false)
+  })
+
   it('returns 404 when the ticket does not exist', async () => {
     const response = await app.request('/api/tickets/nonexistent-id/cancel', {
       method: 'POST',

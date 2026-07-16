@@ -410,12 +410,13 @@ Bead API/read-model payloads expose three independent append-only arrays: `faile
 
 The final-test file-effects recovery endpoints are available only from `BLOCKED_ERROR` when the active error code is `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` and the previous status is `INTEGRATING_CHANGES`. `include-final-test-files` writes a `final_test_file_effects_override` artifact with `include_unclassified_as_candidate`; `discard-final-test-files` removes/reverts only files listed by the latest `final_test_file_effects_audit` as produced or changed during final testing, then writes a `discard_unclassified` override. Both routes dispatch `RETRY` into a fresh integration attempt and do not use the OpenCode `/continue` session path.
 
-The cancel endpoint accepts an optional JSON request body to trigger cleanup at cancellation time. Both fields default to `false`; the ticket record itself is never deleted.
+The cancel endpoint accepts an optional JSON request body to trigger cleanup or complete deletion at cancellation time.
 
 ```json
 {
   "deleteContent": false,
-  "deleteLog": false
+  "deleteLog": false,
+  "deleteTicket": false
 }
 ```
 
@@ -423,6 +424,7 @@ The cancel endpoint accepts an optional JSON request body to trigger cleanup at 
 | --- | --- | --- | --- |
 | `deleteContent` | `boolean` | `false` | Permanently removes all AI-generated artifacts (interview Q&A, PRD drafts, beads plan) from the database and deletes the isolated git worktree and its branch |
 | `deleteLog` | `boolean` | `false` | Permanently removes the execution log files (`.ticket/runtime/execution-log.jsonl`, `.ticket/runtime/execution-log.debug.jsonl`, and `.ticket/runtime/execution-log.ai.jsonl`) for this ticket. This is only effective when the worktree still exists; if `deleteContent` is also `true` the worktree removal already covers the logs |
+| `deleteTicket` | `boolean` | `false` | Permanently deletes the ticket record from the database and removes all related files (equivalent to the DELETE ticket action once canceled) |
 
 ### Interview And Planning Editing
 
