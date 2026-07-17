@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Allowed native dependencies to build automatically on npm v12+ via allowScripts configuration.
 - Kept generated and cache outputs usable in ticket worktrees while automatically excluding them from implementation totals, checkpoints, and delivery.
 - Made interrupted coding recovery consume a bounded fresh bead iteration with an accurate restarted countdown.
 - Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) to customize model pricing, speed, and capability preferences.
@@ -99,6 +100,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed native dependency builds (like better-sqlite3 and esbuild) failing or being skipped on npm v12+ by adding them to the allowScripts allowlist in package.json.
 - Prevented generated and cache outputs from inflating implementation change totals or blocking final testing, Manual QA preparation, and integration when they are not delivery candidates.
 - Restored type-safe OpenRouter router-model detection in profile configuration so the full lint gate remains clean.
 - Fixed backend/OS restart recovery for an unresumable in-progress coding bead so the interrupted attempt is recorded in Failed Iteration Notes, the iteration number advances after the safe worktree reset, and the replacement attempt receives a fresh configured deadline.
