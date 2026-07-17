@@ -3,8 +3,8 @@ import { getLatestPhaseArtifact, getTicketPaths, insertPhaseArtifact } from '../
 import { isMockOpenCodeMode } from '../../opencode/factory'
 import { prepareSquashCandidate } from '../../phases/integration/squash'
 import {
-  FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
   resolveFinalTestCandidateFiles,
+  restoreTrackedFinalTestLocalFiles,
 } from '../../phases/finalTest/fileEffectsAudit'
 import { emitPhaseLog } from './helpers'
 import { handleMockExecutionUnsupported } from './executionPhase'
@@ -132,31 +132,20 @@ export async function handleIntegration(
     'Analyzing ticket branch for squash...', { source: 'system', audience: 'all' })
 
   const finalTestFileResolution = resolveFinalTestCandidateFiles(ticketId)
-  if (!finalTestFileResolution.ok) {
-    const message = finalTestFileResolution.message
-      ?? 'Final testing left unclassified dirty files that require a decision before integration can continue.'
-    insertPhaseArtifact(ticketId, {
-      phase: 'INTEGRATING_CHANGES',
-      artifactType: 'integration_report',
-      content: JSON.stringify({
-        status: 'blocked',
-        completedAt: new Date().toISOString(),
-        baseBranch: paths.baseBranch,
-        manualQa: readManualQaDeliverySummary(ticketId),
-        errorCode: FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
-        message,
-      }),
-    })
-    emitPhaseLog(ticketId, context.externalId, 'INTEGRATING_CHANGES', 'info',
-      message, { source: 'system', audience: 'all', audit: finalTestFileResolution.audit })
-    sendEvent({
-      type: 'ERROR',
-      message,
-      codes: [FINAL_TEST_FILE_EFFECTS_ERROR_CODE],
-    })
-    return
+  const restoredTrackedLocalFiles = restoreTrackedFinalTestLocalFiles(
+    paths.worktreePath,
+    finalTestFileResolution.audit,
+  )
+  if (restoredTrackedLocalFiles.length > 0) {
+    emitPhaseLog(
+      ticketId,
+      context.externalId,
+      'INTEGRATING_CHANGES',
+      'info',
+      `Restored ${restoredTrackedLocalFiles.length} tracked local-only final-test file${restoredTrackedLocalFiles.length === 1 ? '' : 's'} before candidate staging.`,
+      { source: 'system', audience: 'all', files: restoredTrackedLocalFiles },
+    )
   }
-
   const finalTestFilesToStage = finalTestFileResolution.audit
     ? finalTestFileResolution.candidateFiles
     : readFinalTestFilesToStage(ticketId)

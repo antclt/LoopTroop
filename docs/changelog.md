@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Kept generated and cache outputs usable in ticket worktrees while automatically excluding them from implementation totals, checkpoints, and delivery.
 - Made interrupted coding recovery consume a bounded fresh bead iteration with an accurate restarted countdown.
 - Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) to customize model pricing, speed, and capability preferences.
 - Added a 'Delete the ticket completely' option to the ticket cancellation dialog to clean up all database records and local files.
@@ -70,6 +71,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Changed final-test file handling to preserve explicit and tracked/staged project changes while leaving untracked generated, cache, and setup-local outputs on disk as local-only files. Unknown untracked files receive one classification retry before continuing with a warning; unresolved tracked changes remain candidates for the final PR audit instead of blocking integration.
 - Changed setup **Retry with extra note...** to send only the entered text to the preserved setup session and grant one manual attempt beyond the automatic retry budget without archiving the runtime phase attempt or saving the note as future context. **Edit setup plan...** now asks for confirmation before rewinding, and both dialog-opening labels use an ellipsis.
 - Changed execution setup planning to compare the original checkout with the ticket worktree, propose only evidence-backed missing inputs, and materialize approved inputs before setup commands run.
 - Made every held dependency and audit detail self-explanatory by naming the exact release-age, metadata, version, or peer-compatibility reason and showing the eligibility timestamp when applicable.
@@ -97,6 +99,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Prevented generated and cache outputs from inflating implementation change totals or blocking final testing, Manual QA preparation, and integration when they are not delivery candidates.
+- Restored type-safe OpenRouter router-model detection in profile configuration so the full lint gate remains clean.
 - Fixed backend/OS restart recovery for an unresumable in-progress coding bead so the interrupted attempt is recorded in Failed Iteration Notes, the iteration number advances after the safe worktree reset, and the replacement attempt receives a fresh configured deadline.
 - Fixed active bead countdowns after restart by retaining each attempt's `updatedAt` timestamp in public runtime and materialized ticket-state projections instead of falling back to the bead's original first-attempt `startedAt`.
 - Fixed Vitest environment-specific test suite warnings and failures caused by `nvm` shell initialization warnings on stderr and mismatched prompt expectations.

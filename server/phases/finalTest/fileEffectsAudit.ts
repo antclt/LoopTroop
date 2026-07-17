@@ -1,16 +1,12 @@
 import { spawnSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
-import { getLatestPhaseArtifact, insertPhaseArtifact } from '../../storage/tickets'
+import { getLatestPhaseArtifact } from '../../storage/tickets'
+import { classifyWorktreePath } from '../../git/worktreeChanges'
 import {
   FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
-  FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
-  FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT,
 } from '@shared/finalTestFileEffects'
 
 export {
   FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
-  FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
-  FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT,
 } from '@shared/finalTestFileEffects'
 
 export type FinalTestFileEffectIntent = 'candidate' | 'temporary' | 'unexpected'
@@ -30,36 +26,51 @@ export interface FinalTestDirtyFile {
   contentSignature: string | null
 }
 
+export type FinalTestFileEffectDisposition = 'candidate' | 'local_only'
+
+export type FinalTestFileEffectResolutionReason =
+  | 'declared_candidate'
+  | 'declared_temporary'
+  | 'declared_unexpected'
+  | 'tracked'
+  | 'setup_temporary'
+  | 'generated_noise'
+  | 'undeclared_fallback'
+
+export interface FinalTestResolvedFileEffect {
+  path: string
+  disposition: FinalTestFileEffectDisposition
+  reason: FinalTestFileEffectResolutionReason
+  detail?: string
+  warning?: string
+}
+
 export interface FinalTestFileEffectsAudit {
-  status: 'passed' | 'blocked'
+  status: 'passed'
   capturedAt: string
   baselineDirtyFiles: FinalTestDirtyFile[]
   dirtyFilesAfterTesting: FinalTestDirtyFile[]
   producedByFinalTesting: FinalTestDirtyFile[]
   declaredEffects: FinalTestFileEffect[]
+  resolvedEffects: FinalTestResolvedFileEffect[]
   candidateFiles: string[]
+  localOnlyFiles: string[]
+  classificationRequiredFiles: string[]
+  classificationRetry: {
+    status: 'not_needed' | 'resolved' | 'fallback'
+    requestedFiles: string[]
+    warning?: string
+  }
   temporaryFiles: string[]
   unexpectedFiles: string[]
-  unclassifiedFiles: string[]
-  decisionRequiredFiles: string[]
+  warnings: string[]
   message: string
 }
 
-export interface FinalTestFileEffectsOverride {
-  decision: 'include_unclassified_as_candidate' | 'discard_unclassified'
-  files: string[]
-  auditFingerprint: string
-  createdAt: string
-  source: 'user'
-}
-
 export interface FinalTestCandidateResolution {
-  ok: boolean
+  ok: true
   candidateFiles: string[]
   audit?: FinalTestFileEffectsAudit
-  override?: FinalTestFileEffectsOverride
-  errorCode?: typeof FINAL_TEST_FILE_EFFECTS_ERROR_CODE
-  message?: string
 }
 
 function normalizeAuditPath(filePath: string): string | null {
@@ -133,7 +144,10 @@ function parseGitStatusPorcelain(stdout: string, worktreePath: string): FinalTes
   return dirtyFiles
 }
 
-export function captureFinalTestDirtyFiles(worktreePath: string): FinalTestDirtyFile[] {
+export function captureFinalTestDirtyFiles(
+  worktreePath: string,
+  explicitPaths: string[] = [],
+): FinalTestDirtyFile[] {
   const result = spawnSync('git', [
     '-C',
     worktreePath,
@@ -153,7 +167,36 @@ export function captureFinalTestDirtyFiles(worktreePath: string): FinalTestDirty
     throw new Error(`Failed to capture final-test dirty files: ${detail}`)
   }
 
-  return parseGitStatusPorcelain(result.stdout ?? '', worktreePath)
+  const dirtyFiles = parseGitStatusPorcelain(result.stdout ?? '', worktreePath)
+  const seenPaths = new Set(dirtyFiles.map((file) => file.path))
+
+  // Git omits ignored untracked files from normal status output. An exact
+  // model-declared effect is explicit delivery intent, so capture that path
+  // directly and let the audit apply the declaration before local-noise rules.
+  for (const path of uniqueNormalizedPaths(explicitPaths)) {
+    if (seenPaths.has(path)) continue
+    const contentSignature = getContentSignature(worktreePath, path)
+    if (!contentSignature) continue
+    const trackedProbe = spawnSync('git', [
+      '-C',
+      worktreePath,
+      'ls-files',
+      '--error-unmatch',
+      '--',
+      path,
+    ], { encoding: 'utf8' })
+    const tracked = trackedProbe.status === 0 && !trackedProbe.error
+    dirtyFiles.push({
+      path,
+      indexStatus: tracked ? ' ' : '?',
+      worktreeStatus: tracked ? 'M' : '?',
+      rawStatus: tracked ? ' M' : '??',
+      untracked: !tracked,
+      contentSignature,
+    })
+  }
+
+  return dirtyFiles
 }
 
 function normalizeDeclaredEffects(effects: FinalTestFileEffect[]): FinalTestFileEffect[] {
@@ -183,6 +226,8 @@ export function buildFinalTestFileEffectsAudit(input: {
   baselineDirtyFiles: FinalTestDirtyFile[]
   dirtyFilesAfterTesting: FinalTestDirtyFile[]
   declaredEffects: FinalTestFileEffect[]
+  setupExcludedRoots?: string[]
+  classificationRetry?: FinalTestFileEffectsAudit['classificationRetry']
   capturedAt?: string
 }): FinalTestFileEffectsAudit {
   const baselineByPath = new Map(input.baselineDirtyFiles.map((file) => [file.path, file]))
@@ -191,40 +236,121 @@ export function buildFinalTestFileEffectsAudit(input: {
   const declaredEffects = normalizeDeclaredEffects(input.declaredEffects)
   const effectsByPath = new Map(declaredEffects.map((effect) => [effect.path, effect]))
 
-  const candidateFiles: string[] = []
+  const resolvedEffects: FinalTestResolvedFileEffect[] = []
   const temporaryFiles: string[] = []
   const unexpectedFiles: string[] = []
-  const unclassifiedFiles: string[] = []
 
   for (const dirtyFile of producedByFinalTesting) {
     const effect = effectsByPath.get(dirtyFile.path)
-    if (!effect) {
-      unclassifiedFiles.push(dirtyFile.path)
+    if (effect?.intent === 'candidate') {
+      resolvedEffects.push({
+        path: dirtyFile.path,
+        disposition: 'candidate',
+        reason: 'declared_candidate',
+        ...(effect.reason ? { detail: effect.reason } : {}),
+      })
       continue
     }
-    if (effect.intent === 'candidate') candidateFiles.push(dirtyFile.path)
-    if (effect.intent === 'temporary') temporaryFiles.push(dirtyFile.path)
-    if (effect.intent === 'unexpected') unexpectedFiles.push(dirtyFile.path)
+    if (effect?.intent === 'temporary') {
+      temporaryFiles.push(dirtyFile.path)
+      resolvedEffects.push({
+        path: dirtyFile.path,
+        disposition: 'local_only',
+        reason: 'declared_temporary',
+        ...(effect.reason ? { detail: effect.reason } : {}),
+      })
+      continue
+    }
+    if (effect?.intent === 'unexpected') {
+      unexpectedFiles.push(dirtyFile.path)
+      resolvedEffects.push({
+        path: dirtyFile.path,
+        disposition: 'local_only',
+        reason: 'declared_unexpected',
+        ...(effect.reason ? { detail: effect.reason } : {}),
+      })
+      continue
+    }
+
+    if (!dirtyFile.untracked) {
+      resolvedEffects.push({
+        path: dirtyFile.path,
+        disposition: 'candidate',
+        reason: 'tracked',
+      })
+      continue
+    }
+
+    const classification = classifyWorktreePath(dirtyFile.path, {
+      setupExcludedRoots: input.setupExcludedRoots,
+      untracked: true,
+    })
+    if (classification.category === 'setupExcluded') {
+      resolvedEffects.push({
+        path: dirtyFile.path,
+        disposition: 'local_only',
+        reason: 'setup_temporary',
+      })
+      continue
+    }
+    if (classification.category === 'generatedNoise') {
+      resolvedEffects.push({
+        path: dirtyFile.path,
+        disposition: 'local_only',
+        reason: 'generated_noise',
+        ...(classification.generatedNoisePattern ? { detail: classification.generatedNoisePattern } : {}),
+      })
+      continue
+    }
+
+    resolvedEffects.push({
+      path: dirtyFile.path,
+      disposition: 'local_only',
+      reason: 'undeclared_fallback',
+      warning: `Undeclared untracked file was kept locally and excluded from delivery: ${dirtyFile.path}`,
+    })
   }
 
-  const decisionRequiredFiles = uniqueNormalizedPaths(unclassifiedFiles)
-  const status = decisionRequiredFiles.length > 0 ? 'blocked' : 'passed'
+  const candidateFiles = uniqueNormalizedPaths(
+    resolvedEffects
+      .filter((effect) => effect.disposition === 'candidate')
+      .map((effect) => effect.path),
+  )
+  const localOnlyFiles = uniqueNormalizedPaths(
+    resolvedEffects
+      .filter((effect) => effect.disposition === 'local_only')
+      .map((effect) => effect.path),
+  )
+  const warnings = resolvedEffects
+    .map((effect) => effect.warning)
+    .filter((warning): warning is string => Boolean(warning))
+  const classificationRequiredFiles = uniqueNormalizedPaths(
+    resolvedEffects
+      .filter((effect) => effect.reason === 'undeclared_fallback')
+      .map((effect) => effect.path),
+  )
 
   return {
-    status,
+    status: 'passed',
     capturedAt: input.capturedAt ?? new Date().toISOString(),
     baselineDirtyFiles: input.baselineDirtyFiles,
     dirtyFilesAfterTesting: input.dirtyFilesAfterTesting,
     producedByFinalTesting,
     declaredEffects,
-    candidateFiles: uniqueNormalizedPaths(candidateFiles),
+    resolvedEffects,
+    candidateFiles,
+    localOnlyFiles,
+    classificationRequiredFiles,
+    classificationRetry: input.classificationRetry ?? {
+      status: classificationRequiredFiles.length > 0 ? 'fallback' : 'not_needed',
+      requestedFiles: classificationRequiredFiles,
+    },
     temporaryFiles: uniqueNormalizedPaths(temporaryFiles),
     unexpectedFiles: uniqueNormalizedPaths(unexpectedFiles),
-    unclassifiedFiles: uniqueNormalizedPaths(unclassifiedFiles),
-    decisionRequiredFiles,
-    message: status === 'passed'
-      ? 'Final-test file effects were fully classified.'
-      : `Final testing left unclassified dirty file(s): ${decisionRequiredFiles.join(', ')}`,
+    warnings,
+    message: warnings.length > 0
+      ? `Final-test file effects were resolved with ${warnings.length} warning(s).`
+      : 'Final-test file effects were fully resolved.',
   }
 }
 
@@ -240,37 +366,59 @@ function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
 }
 
+function isFinalTestResolvedFileEffect(value: unknown): value is FinalTestResolvedFileEffect {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return (
+    typeof record.path === 'string'
+    && (record.disposition === 'candidate' || record.disposition === 'local_only')
+    && (
+      record.reason === 'declared_candidate'
+      || record.reason === 'declared_temporary'
+      || record.reason === 'declared_unexpected'
+      || record.reason === 'tracked'
+      || record.reason === 'setup_temporary'
+      || record.reason === 'generated_noise'
+      || record.reason === 'undeclared_fallback'
+    )
+  )
+}
+
+function isFinalTestClassificationRetry(
+  value: unknown,
+): value is FinalTestFileEffectsAudit['classificationRetry'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const record = value as Record<string, unknown>
+  return (
+    (
+      record.status === 'not_needed'
+      || record.status === 'resolved'
+      || record.status === 'fallback'
+    )
+    && isStringArray(record.requestedFiles)
+    && (record.warning === undefined || typeof record.warning === 'string')
+  )
+}
+
 function isFinalTestFileEffectsAudit(value: unknown): value is FinalTestFileEffectsAudit {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const record = value as Record<string, unknown>
   return (
-    (record.status === 'passed' || record.status === 'blocked')
+    record.status === 'passed'
     && Array.isArray(record.baselineDirtyFiles)
     && Array.isArray(record.dirtyFilesAfterTesting)
     && Array.isArray(record.producedByFinalTesting)
     && Array.isArray(record.declaredEffects)
+    && Array.isArray(record.resolvedEffects)
+    && record.resolvedEffects.every(isFinalTestResolvedFileEffect)
     && isStringArray(record.candidateFiles)
+    && isStringArray(record.localOnlyFiles)
+    && isStringArray(record.classificationRequiredFiles)
+    && isFinalTestClassificationRetry(record.classificationRetry)
     && isStringArray(record.temporaryFiles)
     && isStringArray(record.unexpectedFiles)
-    && isStringArray(record.unclassifiedFiles)
-    && isStringArray(record.decisionRequiredFiles)
+    && isStringArray(record.warnings)
   )
-}
-
-function isFinalTestFileEffectsOverride(value: unknown): value is FinalTestFileEffectsOverride {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
-  const record = value as Record<string, unknown>
-  return (
-    (record.decision === 'include_unclassified_as_candidate' || record.decision === 'discard_unclassified')
-    && isStringArray(record.files)
-    && typeof record.auditFingerprint === 'string'
-    && /^[a-f0-9]{64}$/.test(record.auditFingerprint)
-    && record.source === 'user'
-  )
-}
-
-function fingerprintFinalTestFileEffectsAudit(audit: FinalTestFileEffectsAudit): string {
-  return createHash('sha256').update(JSON.stringify(audit), 'utf8').digest('hex')
 }
 
 export function readLatestFinalTestFileEffectsAudit(ticketId: string): FinalTestFileEffectsAudit | null {
@@ -279,119 +427,42 @@ export function readLatestFinalTestFileEffectsAudit(ticketId: string): FinalTest
   return isFinalTestFileEffectsAudit(parsed) ? parsed : null
 }
 
-export function readLatestFinalTestFileEffectsOverride(ticketId: string): FinalTestFileEffectsOverride | null {
-  const artifact = getLatestPhaseArtifact(ticketId, FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT)
-  const parsed = artifact ? parseJsonArtifact<FinalTestFileEffectsOverride>(artifact.content) : null
-  return isFinalTestFileEffectsOverride(parsed) ? parsed : null
-}
-
-export function writeFinalTestFileEffectsOverride(
-  ticketId: string,
-  decision: FinalTestFileEffectsOverride['decision'],
-  files: string[],
-  phase: 'GENERATING_QA_CHECKLIST' | 'INTEGRATING_CHANGES' = 'INTEGRATING_CHANGES',
-): FinalTestFileEffectsOverride {
-  const audit = readLatestFinalTestFileEffectsAudit(ticketId)
-  if (!audit || audit.status !== 'blocked') {
-    throw new Error('A blocked final-test file-effects audit is required before recording a decision.')
-  }
-  const normalizedFiles = uniqueNormalizedPaths(files)
-  const expectedFiles = [...audit.decisionRequiredFiles].sort()
-  if (JSON.stringify([...normalizedFiles].sort()) !== JSON.stringify(expectedFiles)) {
-    throw new Error('Final-test file-effects decision does not match the current audit.')
-  }
-  const override: FinalTestFileEffectsOverride = {
-    decision,
-    files: normalizedFiles,
-    auditFingerprint: fingerprintFinalTestFileEffectsAudit(audit),
-    createdAt: new Date().toISOString(),
-    source: 'user',
-  }
-  insertPhaseArtifact(ticketId, {
-    phase,
-    artifactType: FINAL_TEST_FILE_EFFECTS_OVERRIDE_ARTIFACT,
-    content: JSON.stringify(override),
-  })
-  return override
-}
-
 export function resolveFinalTestCandidateFiles(ticketId: string): FinalTestCandidateResolution {
   const audit = readLatestFinalTestFileEffectsAudit(ticketId)
   if (!audit) {
     return { ok: true, candidateFiles: [] }
   }
 
-  const latestOverride = readLatestFinalTestFileEffectsOverride(ticketId) ?? undefined
-  const override = latestOverride?.auditFingerprint === fingerprintFinalTestFileEffectsAudit(audit)
-    ? latestOverride
-    : undefined
-  if (audit.status === 'blocked' && !override) {
-    return {
-      ok: false,
-      candidateFiles: [],
-      audit,
-      errorCode: FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
-      message: audit.message,
-    }
-  }
-
-  const overrideFiles = override?.decision === 'include_unclassified_as_candidate'
-    ? override.files
-    : []
-
   return {
     ok: true,
-    candidateFiles: uniqueNormalizedPaths([
-      ...audit.candidateFiles,
-      ...overrideFiles,
-    ]),
+    candidateFiles: uniqueNormalizedPaths(audit.candidateFiles),
     audit,
-    override,
   }
 }
 
-export function discardFinalTestProducedFiles(
+export function restoreTrackedFinalTestLocalFiles(
   worktreePath: string,
-  audit: FinalTestFileEffectsAudit,
-  files: string[],
-): void {
-  const allowedFiles = new Set(audit.decisionRequiredFiles)
+  audit: FinalTestFileEffectsAudit | undefined,
+): string[] {
+  if (!audit) return []
   const producedByPath = new Map(audit.producedByFinalTesting.map((file) => [file.path, file]))
-  const filesToDiscard = uniqueNormalizedPaths(files)
-    .filter((file) => allowedFiles.has(file) && producedByPath.has(file))
-  if (filesToDiscard.length === 0) return
+  const trackedLocalOnlyFiles = uniqueNormalizedPaths(audit.localOnlyFiles)
+    .filter((file) => producedByPath.has(file) && !producedByPath.get(file)?.untracked)
+  if (trackedLocalOnlyFiles.length === 0) return []
 
-  const trackedFiles = filesToDiscard.filter((file) => !producedByPath.get(file)?.untracked)
-  const untrackedFiles = filesToDiscard.filter((file) => producedByPath.get(file)?.untracked)
-
-  if (trackedFiles.length > 0) {
-    const result = spawnSync('git', [
-      '-C',
-      worktreePath,
-      'restore',
-      '--staged',
-      '--worktree',
-      '--',
-      ...trackedFiles.map(toLiteralPathspec),
-    ], { encoding: 'utf8' })
-    if (result.status !== 0 || result.error) {
-      const detail = result.error?.message ?? ((result.stderr ?? '').trim() || `exit code ${result.status ?? '?'}`)
-      throw new Error(`Failed to restore final-test file(s): ${detail}`)
-    }
+  const result = spawnSync('git', [
+    '-C',
+    worktreePath,
+    'restore',
+    '--staged',
+    '--worktree',
+    '--',
+    ...trackedLocalOnlyFiles.map(toLiteralPathspec),
+  ], { encoding: 'utf8' })
+  if (result.status !== 0 || result.error) {
+    const detail = result.error?.message
+      ?? ((result.stderr ?? '').trim() || `exit code ${result.status ?? '?'}`)
+    throw new Error(`Failed to restore tracked local-only final-test file(s): ${detail}`)
   }
-
-  if (untrackedFiles.length > 0) {
-    const result = spawnSync('git', [
-      '-C',
-      worktreePath,
-      'clean',
-      '-fd',
-      '--',
-      ...untrackedFiles.map(toLiteralPathspec),
-    ], { encoding: 'utf8' })
-    if (result.status !== 0 || result.error) {
-      const detail = result.error?.message ?? ((result.stderr ?? '').trim() || `exit code ${result.status ?? '?'}`)
-      throw new Error(`Failed to remove final-test file(s): ${detail}`)
-    }
-  }
+  return trackedLocalOnlyFiles
 }

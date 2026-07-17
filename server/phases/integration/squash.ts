@@ -150,7 +150,10 @@ export function prepareSquashCandidate(
 
     for (let index = 0; index < candidateFiles.length; index += GIT_ADD_BATCH_SIZE) {
       const batch = candidateFiles.slice(index, index + GIT_ADD_BATCH_SIZE)
-      runGit(['add', '-v', '-A', '--', ...batch.map(toLiteralPathspec)])
+      // Candidate paths are explicit, validated delivery decisions. `-f`
+      // lets an explicitly declared permanent artifact override a repository
+      // ignore rule without sweeping any other ignored/local files.
+      runGit(['add', '-v', '-f', '-A', '--', ...batch.map(toLiteralPathspec)])
     }
 
     const stagedChanges = runGit(['diff', '--cached', '--name-only', '--', '.', ':(top,exclude).ticket', ':(top,exclude).looptroop'])

@@ -673,6 +673,8 @@ Final test command plans use a `<FINAL_TEST_COMMANDS>…</FINAL_TEST_COMMANDS>` 
 | `temporary`, `temp`, `scratch`, `artifact`, `generated`, `exclude` | `temporary` |
 | `unexpected`, `unknown`, `unintended`, `accidental` | `unexpected` |
 
+At execution time, explicit candidate intent overrides generated-looking or ignored paths. Existing tracked or staged changes are also preserved. Undeclared untracked files in Git-ignored, setup-temporary, dependency, cache, or output locations remain on disk as local-only and are excluded from change totals and delivery. Other unknown untracked files receive one same-session classification retry; if still undeclared, they continue as local-only with a warning. Unresolved tracked changes remain candidates for the final PR audit.
+
 ---
 
 ### Manual QA Checklist Artifact

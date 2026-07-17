@@ -2,7 +2,7 @@
 
 Post-implementation is LoopTroop's delivery pipeline. After `CODING` finishes, LoopTroop does **not** immediately push or merge the result. It first validates the whole ticket, turns bead-level history into one candidate commit, audits the final diff again before any remote side effects, pauses for human PR review, and only then removes temporary runtime state.
 
-This stage is intentionally conservative: final testing can still block delivery, integration will not continue past unresolved final-test file effects, PR creation can still rewrite the candidate to exclude unrelated byproducts, and cleanup preserves the audit trail rather than deleting evidence.
+This stage is intentionally conservative: final testing can still fail delivery, explicit intent and tracked or staged changes are preserved, PR creation can still rewrite the candidate to exclude unrelated byproducts, and cleanup preserves the audit trail rather than deleting evidence. Untracked generated, cache, and setup-local outputs remain usable in the worktree but do not inflate implementation totals or enter checkpoints and delivery.
 
 | Status | Purpose | Main outputs |
 | --- | --- | --- |
@@ -61,11 +61,13 @@ When a final-test attempt passes, LoopTroop compares git-visible dirty files fro
 - files produced or changed by final testing
 - declared `file_effects`
 - classified `candidate`, `temporary`, and `unexpected` files
-- any `unclassified` files that still need a human decision
+- local-only files, their deterministic classification reasons, and any warning produced after classification retry
 
-Integration only carries forward **audited candidate files** from this pass. If final testing leaves dirty files that were not declared, integration blocks with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` until the user explicitly includes or discards those files.
+Integration carries forward **audited candidate files** from this pass. Explicit candidate declarations and tracked or staged project changes are preserved even when a path looks generated. Untracked outputs under Git-ignored paths, recognized dependency/cache/output roots, or setup-declared temporary roots stay on disk for later tests but are excluded from implementation totals, checkpoints, commits, and PR delivery.
 
-Each include/discard receipt is bound to the exact final-test audit that produced it. Retrying the same blocked generation or integration step reuses that decision, but a fresh final-test attempt after Manual QA fixes must produce its own decision; an older round's override cannot resolve newly unclassified files.
+An unknown untracked file receives one same-session classification retry. If it is still undeclared, LoopTroop records a local-only warning, excludes it from delivery, and continues unattended. An unresolved modification to an existing tracked file remains a candidate so the later whole-PR candidate audit can review it without risking silent loss.
+
+Explicitly temporary or unexpected changes to tracked files are restored to their committed contents before candidate staging so local test mutations cannot leak into delivery. Untracked local-only outputs are not deleted and remain available to later tests and Manual QA.
 
 ### 1.5 Optional Manual QA route
 
@@ -79,9 +81,9 @@ RUNNING_FINAL_TEST → GENERATING_QA_CHECKLIST → WAITING_MANUAL_QA
 
 #### `GENERATING_QA_CHECKLIST`
 
-“LoopTroop is preparing a human-facing Manual QA checklist with live checkpoint, context, model/tool, validation, and persistence milestones; the completed checklist opens as a readable artifact with an exact Raw view.”
+“LoopTroop is preparing a candidate-only checkpoint and human-facing Manual QA checklist while keeping local generated/cache outputs available to tests and outside delivery.”
 
-No user action is needed. LoopTroop first resolves the current final-test audit, commits accepted candidate effects into a dedicated local checkpoint, quarantines ticket-owned temporary/unexpected or prior residue, and records HEAD/status/file signatures. Generation requires a clean Git-visible worktree so the first QA-fix bead cannot accidentally commit test or application-runtime residue.
+No user action is needed. LoopTroop first resolves the current final-test audit, commits accepted candidate effects into a dedicated local checkpoint, leaves local-only generated/test outputs in place, and records HEAD/status/file signatures for delivery-relevant files. Manual QA and later tests can continue using local-only outputs, while exact candidate staging prevents a later QA-fix bead from sweeping them into its commit.
 
 Before the model call, `vN` is reserved and projected immediately. A restart or retry reuses that incomplete version even if the checklist was already written; valid checklist/coverage files advance without another call, and a missing deterministic coverage file is rebuilt from the frozen PRD. The locked main implementer and variant receive the ticket title and description, frozen approved PRD, selected bead fields (including verification intent, labels, and issue type), the current final-test report, latest previous checklist/results/coverage/summary, and targeted metadata for the complete merge-base-to-checkpoint candidate range. Focused read-only diff inspection is allowed; whole-repository dumps are not.
 
@@ -126,10 +128,10 @@ The current implementation uses **two different audit layers**, and they solve d
 
 | Audit | Status | Decisions | Scope |
 | --- | --- | --- | --- |
-| **Final-test file effects audit** | `RUNNING_FINAL_TEST` -> `INTEGRATING_CHANGES` | `candidate`, `temporary`, `unexpected`, plus possible `unclassified` leftovers | Only files produced or changed by final testing |
+| **Final-test file effects audit** | `RUNNING_FINAL_TEST` -> `INTEGRATING_CHANGES` | candidate or local-only, with explicit, tracked/staged, Git-ignored, setup-temporary, generated-noise, and undeclared-fallback reasons | Only files produced or changed by final testing |
 | **Candidate file audit** | `CREATING_PULL_REQUEST` | `include`, `exclude`, `review` | The entire final diff that would be pushed in the PR |
 
-This distinction matters: the first audit controls which final-test byproducts are allowed into integration, while the second audit can still trim unrelated files from the candidate commit before the remote branch is updated.
+This distinction matters: the first audit automatically separates delivery candidates from local-only final-test byproducts, while the second audit can still trim unrelated files from the candidate commit before the remote branch is updated.
 
 ---
 
@@ -137,9 +139,9 @@ This distinction matters: the first audit controls which final-test byproducts a
 
 Integration is a deterministic git phase. It does not ask the model to rediscover scope.
 
-### 3.1 Final-test audit gate first
+### 3.1 Final-test audit resolution first
 
-Before creating a candidate commit, LoopTroop resolves the latest `final_test_file_effects_audit` and any user override. If unclassified final-test files still exist and no override is present, integration blocks immediately instead of guessing.
+Before creating a candidate commit, LoopTroop resolves the latest `final_test_file_effects_audit`. Explicit candidate intent and tracked or staged changes remain eligible for delivery. Local-only files remain in the worktree, and unknown untracked files that stayed undeclared after one classification retry are omitted with a recorded warning rather than creating a human recovery gate.
 
 ### 3.2 Approved Git-hook policy gate
 
@@ -151,7 +153,7 @@ Once the final-test and hook-policy gates are clear, LoopTroop:
 
 1. resolves the merge base and pre-squash head
 2. soft-resets the ticket branch back to the merge base
-3. stages the allowed candidate files
+3. stages the exact allowed candidate files, including explicitly intended ignored paths when applicable
 4. creates one local squash commit that represents the whole ticket
 
 The resulting `integration_report` is the handoff contract for PR creation. It records the candidate SHA, merge base, pre-squash head, commit count, completion time, and whether remote push is still deferred.
@@ -280,8 +282,7 @@ Cleanup writes a `cleanup_report` with `status: clean` or `status: warning`. A w
 | --- | --- | --- |
 | `final_test_report` | `RUNNING_FINAL_TEST` | Canonical record of the generated test plan, command results, retries, and validation outcome |
 | `final_test_retry_notes` | `RUNNING_FINAL_TEST` | Notes passed into later final-test attempts after failures |
-| `final_test_file_effects_audit` | `RUNNING_FINAL_TEST` | Audit of files produced or changed by the passing final-test attempt |
-| `final_test_file_effects_override` | `INTEGRATING_CHANGES` | Explicit user decision to include or discard unresolved final-test byproducts |
+| `final_test_file_effects_audit` | `RUNNING_FINAL_TEST` | Resolved candidate/local-only audit of files produced or changed by the passing final-test attempt |
 | `manual_qa_checklist` / `manual_qa_coverage` | `GENERATING_QA_CHECKLIST` | Versioned instructions and advisory approved-PRD coverage |
 | `manual_qa_draft` / `manual_qa_results` / `manual_qa_summary` | `WAITING_MANUAL_QA` | Immutable action snapshot and outcome; `manual_qa_results` is present only after Submit, not Skip |
 | Manual QA reservation/baseline/drift/submission receipts | Both Manual QA statuses | Restart idempotency, clean-workspace proof, and include/discard/create audit |

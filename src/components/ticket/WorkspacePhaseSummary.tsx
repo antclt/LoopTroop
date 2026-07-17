@@ -407,9 +407,6 @@ function getBlockedErrorSummary(
   if (ticket.availableActions.includes('continue')) {
     recoveryGuidance.push('Continue resumes the preserved provider session')
   }
-  if (ticket.availableActions.includes('include_final_test_files') || ticket.availableActions.includes('discard_final_test_files')) {
-    recoveryGuidance.push('Choose whether final-test file changes should be included or discarded')
-  }
   if (recoveryGuidance.length === 0) {
     recoveryGuidance.push('Open Details to review the failure and available recovery options')
   }

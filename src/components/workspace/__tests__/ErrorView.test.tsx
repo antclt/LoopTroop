@@ -4,10 +4,6 @@ import { renderWithProviders } from '@/test/renderHelpers'
 import { makeTicket } from '@/test/factories'
 import { ErrorView } from '../ErrorView'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '@shared/errorCodes'
-import {
-  FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION,
-  FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION,
-} from '@shared/finalTestFileEffects'
 
 const logSectionMock = vi.hoisted(() => vi.fn(() => <div data-testid="phase-log-section" />))
 const mockUseTicketAction = vi.hoisted(() => vi.fn())
@@ -575,41 +571,6 @@ describe('ErrorView', () => {
     renderWithProviders(<ErrorView ticket={ticket} />)
 
     expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument()
-  })
-
-  it('shows final-test file effect recovery actions when exposed by the blocked ticket', () => {
-    const mutate = vi.fn()
-    mockUseTicketAction.mockReturnValue({ mutate, isPending: false })
-    const ticket = makeTicket({
-      status: 'BLOCKED_ERROR',
-      previousStatus: 'INTEGRATING_CHANGES',
-      availableActions: ['retry', FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION, FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION, 'cancel'],
-      activeErrorOccurrenceId: 'file-effects',
-      errorOccurrences: [{
-        id: 'file-effects',
-        occurrenceNumber: 1,
-        blockedFromStatus: 'INTEGRATING_CHANGES',
-        errorMessage: 'Final testing left unclassified dirty file(s): tmp/output.log',
-        errorCodes: ['FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED'],
-        occurredAt: '2026-01-01T00:00:00.000Z',
-        resolvedAt: null,
-        resolutionStatus: null,
-        resumedToStatus: null,
-      }],
-    })
-
-    renderWithProviders(<ErrorView ticket={ticket} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Include in PR' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Discard and Continue' }))
-
-    expect(mutate).toHaveBeenCalledWith(
-      { id: ticket.id, action: FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION },
-      expect.objectContaining({ onError: expect.any(Function) }),
-    )
-    expect(mutate).toHaveBeenCalledWith(
-      { id: ticket.id, action: FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION },
-      expect.objectContaining({ onError: expect.any(Function) }),
-    )
   })
 
   it('renders structured blocked-error diagnostics when present', () => {

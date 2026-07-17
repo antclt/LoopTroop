@@ -6,6 +6,7 @@ import { LoadingText } from '@/components/ui/LoadingText'
 import { ModelPicker } from './ModelPicker'
 import { EffortPicker } from './EffortPicker'
 import { OpenRouterRoutingPicker } from './OpenRouterRoutingPicker'
+import type { OpenCodeModel } from '@/hooks/useOpenCodeModels'
 
 function cleanModelId(id: string | null | undefined): string {
   if (id && id.startsWith('openrouter/')) {
@@ -28,7 +29,7 @@ function parseOpenRouterModel(modelId: string | null | undefined) {
   return { base: val, suffix: '' }
 }
 
-function isRouterModel(modelId: string | null | undefined, modelsList?: any[]): boolean {
+function isRouterModel(modelId: string | null | undefined, modelsList?: OpenCodeModel[]): boolean {
   const clean = cleanModelId(modelId)
   if (!clean.startsWith('openrouter/')) return false
   if (clean.startsWith('openrouter/openrouter/')) return true

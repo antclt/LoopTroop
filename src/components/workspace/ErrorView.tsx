@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AlertTriangle, CirclePlay, Clock3, FilePenLine, FilePlus2, Info, MessageSquarePlus, RotateCcw, Trash2 } from 'lucide-react'
+import { AlertTriangle, CirclePlay, Clock3, FilePenLine, Info, MessageSquarePlus, RotateCcw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,10 +25,6 @@ import {
 } from '@/lib/errorOccurrences'
 import { getStatusUserLabel } from '@/lib/workflowMeta'
 import { BEAD_RETRY_BUDGET_EXHAUSTED } from '@shared/errorCodes'
-import {
-  FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION,
-  FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION,
-} from '@shared/finalTestFileEffects'
 import type { WorkflowAction } from '@shared/workflowMeta'
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { CancelTicketDialog } from '@/components/ticket/CancelTicketDialog'
@@ -202,8 +198,6 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
     && (visibleOccurrence?.blockedFromStatus === 'CODING' || isSetupRuntimeError)
     && ticket.availableActions.includes('retry')
   const canEditExecutionSetupPlan = isSetupRuntimeError
-  const canIncludeFinalTestFiles = isLiveError && ticket.availableActions.includes(FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION)
-  const canDiscardFinalTestFiles = isLiveError && ticket.availableActions.includes(FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION)
   const pausedCodingBead = isLiveError
     && visibleOccurrence?.blockedFromStatus === 'CODING'
     && activeRuntimeBead?.status === 'in_progress'
@@ -439,44 +433,6 @@ export function ErrorView({ ticket, occurrence, readOnly = false }: ErrorViewPro
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs text-center text-balance">
                         Sends only "continue please" to the preserved session. It does not restart the original prompt.
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {canDiscardFinalTestFiles && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAction(FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION)}
-                          disabled={isPending}
-                          className="h-7 text-xs"
-                        >
-                          <Trash2 className="mr-1 h-3.5 w-3.5" />
-                          Discard and Continue
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs text-center text-balance">
-                        Removes only files the audit proves were produced or changed during final testing.
-                      </TooltipContent>
-                    </Tooltip>
-                  )}
-                  {canIncludeFinalTestFiles && (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleAction(FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION)}
-                          disabled={isPending}
-                          className="h-7 text-xs"
-                        >
-                          <FilePlus2 className="mr-1 h-3.5 w-3.5" />
-                          Include in PR
-                        </Button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs text-center text-balance">
-                        Records an override so integration treats the unclassified final-test files as candidate changes.
                       </TooltipContent>
                     </Tooltip>
                   )}

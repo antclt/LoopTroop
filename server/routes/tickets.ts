@@ -25,8 +25,6 @@ import {
   handleVerifyTicket,
   handleRetryTicket,
   handleContinueTicket,
-  handleIncludeFinalTestFilesTicket,
-  handleDiscardFinalTestFilesTicket,
   handleListAllOpenCodeQuestions,
   handleListOpenCodeQuestions,
   handleReplyOpenCodeQuestion,
@@ -85,8 +83,6 @@ ticketRouter.post('/tickets/:id/close-unmerged', (c) => handleCloseUnmergedTicke
 ticketRouter.post('/tickets/:id/verify', (c) => handleVerifyTicket(c))
 ticketRouter.post('/tickets/:id/retry', async (c) => handleRetryTicket(c))
 ticketRouter.post('/tickets/:id/continue', async (c) => handleContinueTicket(c))
-ticketRouter.post('/tickets/:id/include-final-test-files', (c) => handleIncludeFinalTestFilesTicket(c))
-ticketRouter.post('/tickets/:id/discard-final-test-files', (c) => handleDiscardFinalTestFilesTicket(c))
 ticketRouter.get('/opencode/questions', (c) => handleListAllOpenCodeQuestions(c))
 ticketRouter.get('/tickets/:id/opencode/questions', (c) => handleListOpenCodeQuestions(c))
 ticketRouter.post('/tickets/:id/opencode/questions/:requestId/reply', (c) => handleReplyOpenCodeQuestion(c))

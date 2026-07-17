@@ -80,7 +80,6 @@ import {
   handleCleanup,
 } from './phases'
 import { handleManualQaChecklistGeneration } from '../phases/manualQa'
-import { ManualQaCheckpointBlockedError } from '../phases/manualQa/checkpoint'
 
 // Re-export public API for external callers
 export {
@@ -574,13 +573,7 @@ export function attachWorkflowRunner(
           if (isCancellationError(err, signal)) return
           const errMsg = getErrorMessage(err)
           emitPhaseLog(ticketId, context.externalId, 'GENERATING_QA_CHECKLIST', 'error', errMsg)
-          sendEvent(buildWorkflowErrorEvent(
-            errMsg,
-            err instanceof ManualQaCheckpointBlockedError
-              ? [err.code]
-              : ['MANUAL_QA_CHECKLIST_FAILED'],
-            err,
-          ))
+          sendEvent(buildWorkflowErrorEvent(errMsg, ['MANUAL_QA_CHECKLIST_FAILED'], err))
         })
         .finally(() => {
           runningPhases.delete(key)

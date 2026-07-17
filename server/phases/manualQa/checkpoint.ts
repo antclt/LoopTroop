@@ -14,20 +14,15 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import {
   captureFinalTestDirtyFiles,
   resolveFinalTestCandidateFiles,
+  restoreTrackedFinalTestLocalFiles,
   type FinalTestDirtyFile,
 } from '../finalTest/fileEffectsAudit'
 import { getTicketByRef, getTicketPaths } from '../../storage/tickets'
-import { FINAL_TEST_FILE_EFFECTS_ERROR_CODE } from '@shared/finalTestFileEffects'
 import { appendManualQaEvent } from './storage'
-
-export class ManualQaCheckpointBlockedError extends Error {
-  readonly code = FINAL_TEST_FILE_EFFECTS_ERROR_CODE
-
-  constructor(message: string) {
-    super(message)
-    this.name = 'ManualQaCheckpointBlockedError'
-  }
-}
+import {
+  classifyWorktreePath,
+  getExecutionSetupCommitExcludedRoots,
+} from '../../git/worktreeChanges'
 
 export interface ManualQaWorkspaceBaseline {
   schemaVersion: 1
@@ -35,6 +30,7 @@ export interface ManualQaWorkspaceBaseline {
   createdAt: string
   head: string
   status: FinalTestDirtyFile[]
+  localOnlyPaths: string[]
   trackedSignatures: Record<string, string>
 }
 
@@ -171,13 +167,39 @@ function captureTrackedSignatures(worktreePath: string): Record<string, string> 
   return signatures
 }
 
-function captureBaseline(worktreePath: string, version: number): ManualQaWorkspaceBaseline {
+function filterDeliveryRelevantDirtyFiles(
+  worktreePath: string,
+  dirtyFiles: FinalTestDirtyFile[],
+  localOnlyPaths: string[] = [],
+): FinalTestDirtyFile[] {
+  const localOnly = new Set(uniqueProjectPaths(localOnlyPaths))
+  const setupExcludedRoots = getExecutionSetupCommitExcludedRoots(worktreePath)
+  return dirtyFiles.filter((file) => (
+    !localOnly.has(file.path)
+    && classifyWorktreePath(file.path, {
+      setupExcludedRoots,
+      untracked: file.untracked,
+    }).category === 'committable'
+  ))
+}
+
+function captureBaseline(
+  worktreePath: string,
+  version: number,
+  localOnlyPaths: string[] = [],
+): ManualQaWorkspaceBaseline {
+  const normalizedLocalOnlyPaths = uniqueProjectPaths(localOnlyPaths)
   return {
     schemaVersion: 1,
     version,
     createdAt: new Date().toISOString(),
     head: runGit(worktreePath, ['rev-parse', 'HEAD']),
-    status: captureFinalTestDirtyFiles(worktreePath),
+    status: filterDeliveryRelevantDirtyFiles(
+      worktreePath,
+      captureFinalTestDirtyFiles(worktreePath),
+      normalizedLocalOnlyPaths,
+    ),
+    localOnlyPaths: normalizedLocalOnlyPaths,
     trackedSignatures: captureTrackedSignatures(worktreePath),
   }
 }
@@ -186,7 +208,12 @@ function readBaseline(ticketDir: string, version: number): ManualQaWorkspaceBase
   const path = baselinePath(ticketDir, version)
   if (!existsSync(path)) throw new Error(`Manual QA workspace baseline is missing for v${version}`)
   const value = JSON.parse(readFileSync(path, 'utf8')) as ManualQaWorkspaceBaseline
-  if (value.schemaVersion !== 1 || value.version !== version || !value.head) {
+  if (
+    value.schemaVersion !== 1
+    || value.version !== version
+    || !value.head
+    || !Array.isArray(value.localOnlyPaths)
+  ) {
     throw new Error(`Manual QA workspace baseline is invalid for v${version}`)
   }
   return value
@@ -259,7 +286,7 @@ function commitExactFiles(worktreePath: string, files: string[], message: string
   const normalizedFiles = uniqueProjectPaths(files)
   if (normalizedFiles.length === 0) return null
   const pathspecs = normalizedFiles.map(literalPathspec)
-  runGit(worktreePath, ['add', '-A', '--', ...pathspecs], true)
+  runGit(worktreePath, ['add', '-f', '-A', '--', ...pathspecs], true)
   const staged = runGit(worktreePath, ['diff', '--cached', '--name-only', '--', ...pathspecs], true)
   if (!staged) return null
   // `git commit` normally includes every path already staged in the worktree.
@@ -290,19 +317,17 @@ export function prepareManualQaCheckpoint(ticketId: string, version: number): Ma
   const existingBaselinePath = baselinePath(paths.ticketDir, version)
   if (existsSync(existingBaselinePath)) {
     const baseline = JSON.parse(readFileSync(existingBaselinePath, 'utf8')) as ManualQaWorkspaceBaseline
-    const currentStatus = captureFinalTestDirtyFiles(paths.worktreePath)
+    const currentStatus = filterDeliveryRelevantDirtyFiles(
+      paths.worktreePath,
+      captureFinalTestDirtyFiles(paths.worktreePath),
+      baseline.localOnlyPaths,
+    )
     if (baseline.head === runGit(paths.worktreePath, ['rev-parse', 'HEAD']) && currentStatus.length === 0) {
       return { baseline, checkpointCommit: baseline.head, candidateFiles: [], quarantinedFiles: [] }
     }
   }
 
   const resolution = resolveFinalTestCandidateFiles(ticketId)
-  if (!resolution.ok) {
-    throw new ManualQaCheckpointBlockedError(
-      resolution.message ?? 'Final-test file effects require a user decision',
-    )
-  }
-
   const audit = resolution.audit
   const candidateFiles = uniqueProjectPaths(resolution.candidateFiles)
   const checkpointCommit = commitExactFiles(
@@ -311,24 +336,25 @@ export function prepareManualQaCheckpoint(ticketId: string, version: number): Ma
     `${ticket.externalId}: checkpoint accepted final-test effects for Manual QA v${version}`,
   )
 
-  const currentDirtyFiles = captureFinalTestDirtyFiles(paths.worktreePath)
-  const removableFiles = uniqueProjectPaths([
-    ...(audit?.temporaryFiles ?? []),
-    ...(audit?.unexpectedFiles ?? []),
-    ...(audit?.baselineDirtyFiles.map(file => file.path) ?? []),
-    ...(resolution.override?.decision === 'discard_unclassified' ? resolution.override.files : []),
-  ]).filter(file => !candidateFiles.includes(file))
-  const quarantinedFiles = quarantineFiles(paths.worktreePath, paths.ticketDir, version, removableFiles)
-  discardExactFiles(paths.worktreePath, removableFiles, currentDirtyFiles)
+  const localOnlyPaths = uniqueProjectPaths(audit?.localOnlyFiles ?? [])
+  // Tracked temporary/unexpected mutations cannot remain in the worktree:
+  // later exact staging could otherwise carry their local contents into the
+  // candidate. Restore only those tracked paths; untracked local outputs stay
+  // available on disk for subsequent testing and Manual QA.
+  restoreTrackedFinalTestLocalFiles(paths.worktreePath, audit)
 
-  const remainingStatus = captureFinalTestDirtyFiles(paths.worktreePath)
+  const remainingStatus = filterDeliveryRelevantDirtyFiles(
+    paths.worktreePath,
+    captureFinalTestDirtyFiles(paths.worktreePath),
+    localOnlyPaths,
+  )
   if (remainingStatus.length > 0) {
-    throw new Error(`Manual QA checkpoint requires a clean worktree; remaining files: ${remainingStatus.map(file => file.path).join(', ')}`)
+    throw new Error(`Manual QA checkpoint has unresolved delivery changes: ${remainingStatus.map(file => file.path).join(', ')}`)
   }
 
-  const baseline = captureBaseline(paths.worktreePath, version)
+  const baseline = captureBaseline(paths.worktreePath, version, localOnlyPaths)
   atomicWriteJson(existingBaselinePath, baseline)
-  return { baseline, checkpointCommit, candidateFiles, quarantinedFiles }
+  return { baseline, checkpointCommit, candidateFiles, quarantinedFiles: [] }
 }
 
 function applyManualQaDriftDecision(
@@ -353,9 +379,13 @@ function applyManualQaDriftDecision(
   }
 
   const requestedFiles = uniqueProjectPaths(files)
-  const currentDirty = captureFinalTestDirtyFiles(paths.worktreePath)
-  const currentDirtyPaths = new Set(currentDirty.map(file => file.path))
   const baseline = readBaseline(paths.ticketDir, version)
+  const currentDirty = filterDeliveryRelevantDirtyFiles(
+    paths.worktreePath,
+    captureFinalTestDirtyFiles(paths.worktreePath),
+    baseline.localOnlyPaths,
+  )
+  const currentDirtyPaths = new Set(currentDirty.map(file => file.path))
   const currentHead = runGit(paths.worktreePath, ['rev-parse', 'HEAD'])
   const committedDrift = captureCommittedDrift(paths.worktreePath, baseline.head, currentHead)
   const auditedFiles = new Set([...currentDirtyPaths, ...committedDrift.keys()])
@@ -404,11 +434,15 @@ function applyManualQaDriftDecision(
     )
   }
 
-  const remainingStatus = captureFinalTestDirtyFiles(paths.worktreePath)
+  const remainingStatus = filterDeliveryRelevantDirtyFiles(
+    paths.worktreePath,
+    captureFinalTestDirtyFiles(paths.worktreePath),
+    baseline.localOnlyPaths,
+  )
   if (remainingStatus.length > 0) {
     throw new Error(`Manual QA workspace still has unresolved drift: ${remainingStatus.map(file => file.path).join(', ')}`)
   }
-  const nextBaseline = captureBaseline(paths.worktreePath, version)
+  const nextBaseline = captureBaseline(paths.worktreePath, version, baseline.localOnlyPaths)
   atomicWriteJson(baselinePath(paths.ticketDir, version), nextBaseline)
   const receipt: ManualQaDriftReceipt = {
     schemaVersion: 1,

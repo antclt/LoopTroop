@@ -3,10 +3,6 @@ import { clearPersistedTicketLogs } from '@/context/logUtils'
 import { clearTicketArtifactsCache } from './useTicketArtifacts'
 import { mergeTicketInCache, patchTicketStatusInCache } from './ticketStatusCache'
 import type { WorkflowAction } from '@shared/workflowMeta'
-import {
-  FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION,
-  FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION,
-} from '@shared/finalTestFileEffects'
 import type { InterviewSessionSnapshot, InterviewSessionView, PersistedInterviewBatch } from '@shared/interviewSession'
 import { clearErrorTicketSeen } from '@/lib/errorTicketSeen'
 import type { TicketErrorOccurrence } from '@/lib/errorOccurrences'
@@ -275,10 +271,6 @@ function getTicketActionPath(id: string, action: WorkflowAction): string {
   switch (action) {
     case 'close_unmerged':
       return `/api/tickets/${id}/close-unmerged`
-    case FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION:
-      return `/api/tickets/${id}/include-final-test-files`
-    case FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION:
-      return `/api/tickets/${id}/discard-final-test-files`
     case 'edit_execution_setup_plan':
       return `/api/tickets/${id}/edit-execution-setup-plan`
     default:

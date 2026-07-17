@@ -39,12 +39,6 @@ import {
   completeMergedPullRequest,
   readPullRequestReport,
 } from '../../workflow/phases/pullRequestPhase'
-import {
-  discardFinalTestProducedFiles,
-  FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
-  readLatestFinalTestFileEffectsAudit,
-  writeFinalTestFileEffectsOverride,
-} from '../../phases/finalTest/fileEffectsAudit'
 import { recoverCodingBeadWithReset } from '../../workflow/phases/beadsPhase'
 import { recoverSuccessfulExecutionCheckpointForFinalization } from '../../workflow/phases/executionPhase'
 import { isExecutionBandStatus } from '../../workflow/executionBand'
@@ -63,7 +57,6 @@ import {
   respondWithState,
 } from './routeUtils'
 import { cancelTicketSchema, retryTicketSchema } from './schemas'
-import type { PublicTicket } from '../../storage/tickets'
 
 function rollbackTicketStartToDraft(ticketId: string): void {
   patchTicket(ticketId, {
@@ -89,42 +82,6 @@ function rollbackTicketStartToDraft(ticketId: string): void {
 }
 
 const startingTickets = new Set<string>()
-
-function getActiveFinalTestFileEffectsBlock(ticket: PublicTicket) {
-  if (
-    ticket.status !== 'BLOCKED_ERROR'
-    || (ticket.previousStatus !== 'INTEGRATING_CHANGES' && ticket.previousStatus !== 'GENERATING_QA_CHECKLIST')
-    || ticket.activeErrorOccurrenceId == null
-  ) {
-    return null
-  }
-
-  const occurrence = ticket.errorOccurrences.find((entry) => entry.id === ticket.activeErrorOccurrenceId)
-  if (
-    !occurrence
-    || occurrence.resolvedAt !== null
-    || !occurrence.errorCodes.includes(FINAL_TEST_FILE_EFFECTS_ERROR_CODE)
-  ) {
-    return null
-  }
-
-  return occurrence
-}
-
-function prepareFreshFinalTestFileEffectsRetryAttempt(
-  ticketId: string,
-  phase: 'GENERATING_QA_CHECKLIST' | 'INTEGRATING_CHANGES',
-): void {
-  if (!isAttemptTrackedPhase(phase)) return
-  ensureActivePhaseAttempt(ticketId, phase)
-  archiveActivePhaseAttempts(ticketId, [phase], 'manual_final_test_file_effects_recovery')
-  createFreshPhaseAttempts(ticketId, [phase])
-}
-
-function resumeIntegrationAfterFinalTestFileEffectsDecision(ticketId: string): void {
-  ensureActorForTicket(ticketId)
-  sendTicketEvent(ticketId, { type: 'RETRY' })
-}
 
 export async function handleStartTicket(c: Context) {
   const ticketId = getTicketParam(c)
@@ -712,98 +669,4 @@ export async function handleContinueTicket(c: Context) {
   }
 
   return respondWithState(c, ticketId, 'Continue action accepted')
-}
-
-export function handleIncludeFinalTestFilesTicket(c: Context) {
-  const ticketId = getTicketParam(c)
-  const ticket = getTicketByRef(ticketId)
-  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
-  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
-  if (mockResponse) return mockResponse
-  if (!getActiveFinalTestFileEffectsBlock(ticket)) {
-    return c.json({ error: 'Include is only available for unresolved final-test file effects blocks' }, 409)
-  }
-
-  const audit = readLatestFinalTestFileEffectsAudit(ticketId)
-  if (!audit || audit.status !== 'blocked' || audit.decisionRequiredFiles.length === 0) {
-    return c.json({ error: 'Final-test file effects audit is not blocked or could not be found' }, 409)
-  }
-
-  const retryPhase = ticket.previousStatus === 'GENERATING_QA_CHECKLIST'
-    ? 'GENERATING_QA_CHECKLIST'
-    : 'INTEGRATING_CHANGES'
-  if (isExecutionBandStatus(retryPhase)) {
-    const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
-    if (executionConflict) {
-      return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
-    }
-  }
-
-  try {
-    prepareFreshFinalTestFileEffectsRetryAttempt(ticketId, retryPhase)
-    const override = writeFinalTestFileEffectsOverride(
-      ticketId,
-      'include_unclassified_as_candidate',
-      audit.decisionRequiredFiles,
-      retryPhase,
-    )
-    emitRoutePhaseLog(ticketId, retryPhase, 'info',
-      `User chose to include final-test-produced file(s) in the candidate checkpoint: ${override.files.join(', ')}`)
-    resumeIntegrationAfterFinalTestFileEffectsDecision(ticketId)
-  } catch (err) {
-    console.error(`[tickets] Failed to include final-test files for ticket ${ticketId}:`, err)
-    return c.json({ error: 'Failed to include final-test files', details: getErrorMessage(err) }, 500)
-  }
-
-  return respondWithState(c, ticketId, 'Include final-test files action accepted')
-}
-
-export function handleDiscardFinalTestFilesTicket(c: Context) {
-  const ticketId = getTicketParam(c)
-  const ticket = getTicketByRef(ticketId)
-  if (!ticket) return c.json({ error: 'Ticket not found' }, 404)
-  const mockResponse = rejectDisplayOnlyMockTicket(c, ticket)
-  if (mockResponse) return mockResponse
-  if (!getActiveFinalTestFileEffectsBlock(ticket)) {
-    return c.json({ error: 'Discard and Continue is only available for unresolved final-test file effects blocks' }, 409)
-  }
-
-  const paths = getTicketPaths(ticketId)
-  if (!paths) {
-    return c.json({ error: 'Ticket workspace could not be resolved' }, 409)
-  }
-
-  const audit = readLatestFinalTestFileEffectsAudit(ticketId)
-  if (!audit || audit.status !== 'blocked' || audit.decisionRequiredFiles.length === 0) {
-    return c.json({ error: 'Final-test file effects audit is not blocked or could not be found' }, 409)
-  }
-
-  const retryPhase = ticket.previousStatus === 'GENERATING_QA_CHECKLIST'
-    ? 'GENERATING_QA_CHECKLIST'
-    : 'INTEGRATING_CHANGES'
-  if (isExecutionBandStatus(retryPhase)) {
-    const executionConflict = findProjectExecutionBandConflict(ticket.projectId, ticket.id)
-    if (executionConflict) {
-      return c.json({ error: buildExecutionBandConflictMessage(executionConflict) }, 409)
-    }
-  }
-
-  try {
-    discardFinalTestProducedFiles(paths.worktreePath, audit, audit.decisionRequiredFiles)
-    prepareFreshFinalTestFileEffectsRetryAttempt(ticketId, retryPhase)
-    const override = writeFinalTestFileEffectsOverride(
-      ticketId,
-      'discard_unclassified',
-      audit.decisionRequiredFiles,
-      retryPhase,
-    )
-    emitRoutePhaseLog(ticketId, retryPhase, 'info',
-      `User chose Discard and Continue for final-test-produced file(s): ${override.files.join(', ')}`)
-    resumeIntegrationAfterFinalTestFileEffectsDecision(ticketId)
-  } catch (err) {
-    console.error(`[tickets] Failed to discard final-test files for ticket ${ticketId}:`, err)
-    return c.json({ error: 'Failed to discard final-test files', details: getErrorMessage(err) }, 500)
-  }
-
-  return respondWithState(c, ticketId, 'Discard and Continue action accepted')
 }

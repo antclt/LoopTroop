@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
-import { writeFileSync } from 'fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'fs'
 import {
   makeBeadsYaml,
   makeInterviewYaml,
@@ -7,7 +7,7 @@ import {
   TEST,
 } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
-import { upsertLatestPhaseArtifact } from '../../storage/tickets'
+import { getLatestPhaseArtifact, upsertLatestPhaseArtifact } from '../../storage/tickets'
 import { updateProject } from '../../storage/projects'
 
 const {
@@ -15,11 +15,13 @@ const {
   recordWorktreeStartCommitMock,
   resetWorktreeToCommitMock,
   isMockOpenCodeModeMock,
+  runOpenCodeSessionPromptMock,
 } = vi.hoisted(() => ({
   executeFinalTestWithRetriesMock: vi.fn(),
   recordWorktreeStartCommitMock: vi.fn(),
   resetWorktreeToCommitMock: vi.fn(),
   isMockOpenCodeModeMock: vi.fn(),
+  runOpenCodeSessionPromptMock: vi.fn(),
 }))
 
 vi.mock('../../phases/finalTest/executor', () => ({
@@ -28,6 +30,7 @@ vi.mock('../../phases/finalTest/executor', () => ({
 
 vi.mock('../../phases/execution/gitOps', () => ({
   WORKTREE_RESET_PRESERVE_PATHS: ['.ticket'],
+  getExecutionSetupCommitExcludedRoots: vi.fn(() => []),
   recordWorktreeStartCommit: recordWorktreeStartCommitMock,
   resetWorktreeToCommit: resetWorktreeToCommitMock,
   recordBeadStartCommit: vi.fn(),
@@ -44,6 +47,14 @@ vi.mock('../../opencode/factory', async () => {
   }
 })
 
+vi.mock('../runOpenCodePrompt', async () => {
+  const actual = await vi.importActual<typeof import('../runOpenCodePrompt')>('../runOpenCodePrompt')
+  return {
+    ...actual,
+    runOpenCodeSessionPrompt: runOpenCodeSessionPromptMock,
+  }
+})
+
 import { handleFinalTest } from '../phases/verificationPhase'
 
 const repoManager = createTestRepoManager('verification-final-test-')
@@ -55,6 +66,7 @@ describe('handleFinalTest', () => {
     recordWorktreeStartCommitMock.mockReset()
     resetWorktreeToCommitMock.mockReset()
     isMockOpenCodeModeMock.mockReset()
+    runOpenCodeSessionPromptMock.mockReset()
 
     recordWorktreeStartCommitMock.mockReturnValue('abc123')
     isMockOpenCodeModeMock.mockReturnValue(false)
@@ -217,6 +229,151 @@ describe('handleFinalTest', () => {
         preservePaths: expect.arrayContaining(['.ticket']),
       }),
     )
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'TESTS_PASSED' })
+  })
+
+  it('reuses the final-test session once to classify an unknown untracked file', async () => {
+    const { ticket, context, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Final-test file classification retry',
+    })
+    mkdirSync(`${paths.worktreePath}/diagnostics`, { recursive: true })
+
+    executeFinalTestWithRetriesMock.mockImplementationOnce(async (
+      _adapter: unknown,
+      _contextParts: unknown,
+      _projectPath: unknown,
+      _signal: AbortSignal,
+      _options: unknown,
+      callbacks: { onSessionCreated: (sessionId: string, attempt: number) => void },
+    ) => {
+      callbacks.onSessionCreated('final-test-session', 1)
+      writeFileSync(`${paths.worktreePath}/diagnostics/final-output.txt`, 'keep this regression artifact\n')
+      return {
+        status: 'passed' as const,
+        passed: true,
+        checkedAt: '2026-04-09T12:00:00.000Z',
+        plannedBy: TEST.implementer,
+        summary: 'classify final output',
+        testFiles: ['diagnostics/final-output.txt'],
+        modifiedFiles: ['diagnostics/final-output.txt'],
+        fileEffects: [],
+        testsCount: 1,
+        modelOutput: '<FINAL_TEST_COMMANDS>{"commands":["true"],"test_files":["diagnostics/final-output.txt"],"modified_files":["diagnostics/final-output.txt"],"file_effects":[]}</FINAL_TEST_COMMANDS>',
+        commands: [{
+          command: 'true',
+          exitCode: 0,
+          signal: null,
+          stdout: '',
+          stderr: '',
+          durationMs: 1,
+          timedOut: false,
+        }],
+        errors: [],
+        attempt: 1,
+        maxIterations: 1,
+        attemptHistory: [],
+        retryNotes: [],
+      }
+    })
+    runOpenCodeSessionPromptMock.mockResolvedValueOnce({
+      session: { id: 'final-test-session' },
+      response: '<FINAL_TEST_COMMANDS>{"commands":["true"],"test_files":["diagnostics/final-output.txt"],"modified_files":["diagnostics/final-output.txt"],"file_effects":[{"path":"diagnostics/final-output.txt","intent":"candidate"}]}</FINAL_TEST_COMMANDS>',
+      messages: [],
+    })
+
+    const sendEvent = vi.fn()
+    await handleFinalTest(
+      ticket.id,
+      { ...context, lockedMainImplementer: TEST.implementer },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    expect(runOpenCodeSessionPromptMock).toHaveBeenCalledWith(expect.objectContaining({
+      session: { id: 'final-test-session' },
+      toolPolicy: 'disabled',
+    }))
+    const artifact = getLatestPhaseArtifact(
+      ticket.id,
+      'final_test_file_effects_audit',
+      'RUNNING_FINAL_TEST',
+    )
+    expect(artifact).toBeTruthy()
+    const audit = JSON.parse(artifact!.content)
+    expect(audit.candidateFiles).toEqual(['diagnostics/final-output.txt'])
+    expect(audit.localOnlyFiles).toEqual([])
+    expect(audit.classificationRetry).toEqual({
+      status: 'resolved',
+      requestedFiles: ['diagnostics/final-output.txt'],
+    })
+    expect(sendEvent).toHaveBeenCalledWith({ type: 'TESTS_PASSED' })
+  })
+
+  it('keeps an unknown untracked file local-only when the classification retry fails', async () => {
+    const { ticket, context, paths } = createInitializedTestTicket(repoManager, {
+      title: 'Final-test file classification fallback',
+    })
+
+    executeFinalTestWithRetriesMock.mockImplementationOnce(async (
+      _adapter: unknown,
+      _contextParts: unknown,
+      _projectPath: unknown,
+      _signal: AbortSignal,
+      _options: unknown,
+      callbacks: { onSessionCreated: (sessionId: string, attempt: number) => void },
+    ) => {
+      callbacks.onSessionCreated('final-test-session', 1)
+      writeFileSync(`${paths.worktreePath}/local-output.txt`, 'leave on disk\n')
+      return {
+        status: 'passed' as const,
+        passed: true,
+        checkedAt: '2026-04-09T12:00:00.000Z',
+        plannedBy: TEST.implementer,
+        testFiles: [],
+        modifiedFiles: [],
+        fileEffects: [],
+        testsCount: 1,
+        modelOutput: '<FINAL_TEST_COMMANDS>{"commands":["true"],"test_files":[],"modified_files":[],"file_effects":[]}</FINAL_TEST_COMMANDS>',
+        commands: [{
+          command: 'true',
+          exitCode: 0,
+          signal: null,
+          stdout: '',
+          stderr: '',
+          durationMs: 1,
+          timedOut: false,
+        }],
+        errors: [],
+        attempt: 1,
+        maxIterations: 1,
+        attemptHistory: [],
+        retryNotes: [],
+      }
+    })
+    runOpenCodeSessionPromptMock.mockRejectedValueOnce(new Error('provider unavailable'))
+
+    const sendEvent = vi.fn()
+    await handleFinalTest(
+      ticket.id,
+      { ...context, lockedMainImplementer: TEST.implementer },
+      sendEvent,
+      new AbortController().signal,
+    )
+
+    const artifact = getLatestPhaseArtifact(
+      ticket.id,
+      'final_test_file_effects_audit',
+      'RUNNING_FINAL_TEST',
+    )
+    const audit = JSON.parse(artifact!.content)
+    expect(audit.candidateFiles).toEqual([])
+    expect(audit.localOnlyFiles).toEqual(['local-output.txt'])
+    expect(audit.classificationRetry).toMatchObject({
+      status: 'fallback',
+      requestedFiles: ['local-output.txt'],
+      warning: expect.stringContaining('provider unavailable'),
+    })
+    expect(readFileSync(`${paths.worktreePath}/local-output.txt`, 'utf8')).toBe('leave on disk\n')
     expect(sendEvent).toHaveBeenCalledWith({ type: 'TESTS_PASSED' })
   })
 })

@@ -34,6 +34,7 @@ import { resolve } from 'path'
 import { runPreFlightChecks } from '../../phases/preflight/doctor'
 import type { FinalTestGenerationResult } from '../../phases/finalTest/generator'
 import { executeFinalTestWithRetries } from '../../phases/finalTest/executor'
+import { parseFinalTestCommands } from '../../phases/finalTest/parser'
 import { executeFinalTestCommands } from '../../phases/finalTest/runner'
 import {
   EXECUTION_SETUP_PROFILE_ARTIFACT_TYPE,
@@ -44,9 +45,15 @@ import {
   buildFinalTestFileEffectsAudit,
   captureFinalTestDirtyFiles,
   FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
+  type FinalTestFileEffect,
   type FinalTestDirtyFile,
 } from '../../phases/finalTest/fileEffectsAudit'
-import { recordWorktreeStartCommit, resetWorktreeToCommit, WORKTREE_RESET_PRESERVE_PATHS } from '../../phases/execution/gitOps'
+import {
+  getExecutionSetupCommitExcludedRoots,
+  recordWorktreeStartCommit,
+  resetWorktreeToCommit,
+  WORKTREE_RESET_PRESERVE_PATHS,
+} from '../../phases/execution/gitOps'
 import { broadcaster } from '../../sse/broadcaster'
 import { resolveInterviewCoverageFollowUpResolution } from '../interviewCoverageFollowUps'
 import { resolveCoverageGapDisposition, resolveCoverageRunState } from '../coverageControl'
@@ -4549,6 +4556,7 @@ export async function handleFinalTest(
   const phaseStartCommit = recordWorktreeStartCommit(worktreePath)
   const setupEnvironment = resolveFinalTestSetupEnvironment(ticketId, worktreePath)
   let finalTestBaselineDirtyFiles: FinalTestDirtyFile[] = captureFinalTestDirtyFiles(worktreePath)
+  let finalTestSessionId = ''
   const streamStates = new Map<string, OpenCodeStreamState>()
   const report = await executeFinalTestWithRetries(
     adapter,
@@ -4733,6 +4741,7 @@ export async function handleFinalTest(
         )
       },
       onSessionCreated: (sessionId, attempt) => {
+        finalTestSessionId = sessionId
         emitAiMilestone(
           ticketId,
           context.externalId,
@@ -4855,12 +4864,171 @@ export async function handleFinalTest(
     },
   )
   if (report.passed) {
-    const dirtyFilesAfterTesting = captureFinalTestDirtyFiles(worktreePath)
-    const fileEffectsAudit = buildFinalTestFileEffectsAudit({
+    const dirtyFilesAfterTesting = captureFinalTestDirtyFiles(
+      worktreePath,
+      report.fileEffects.map((effect) => effect.path),
+    )
+    const setupExcludedRoots = getExecutionSetupCommitExcludedRoots(worktreePath)
+    let fileEffectsAudit = buildFinalTestFileEffectsAudit({
       baselineDirtyFiles: finalTestBaselineDirtyFiles,
       dirtyFilesAfterTesting,
       declaredEffects: report.fileEffects,
+      setupExcludedRoots,
     })
+
+    const classificationRequiredFiles = [...fileEffectsAudit.classificationRequiredFiles]
+    if (classificationRequiredFiles.length > 0) {
+      const fallbackWarning = finalTestSessionId
+        ? ''
+        : 'The final-test planning session was unavailable for the automatic file-classification retry.'
+      try {
+        if (!finalTestSessionId) throw new Error(fallbackWarning)
+
+        emitPhaseLog(
+          ticketId,
+          context.externalId,
+          'RUNNING_FINAL_TEST',
+          'info',
+          `Requesting one automatic classification retry for ${classificationRequiredFiles.length} undeclared untracked file${classificationRequiredFiles.length === 1 ? '' : 's'}.`,
+        )
+        const retryResult = await runOpenCodeSessionPrompt({
+          adapter,
+          session: { id: finalTestSessionId },
+          parts: [{
+            type: 'text',
+            content: [
+              'The final-test commands already passed. Do not run commands or modify files.',
+              'Your accepted response did not classify every untracked file left by final testing.',
+              'Return exactly one corrected <FINAL_TEST_COMMANDS>...</FINAL_TEST_COMMANDS> block.',
+              'Keep the accepted commands, test_files, modified_files, and summary unchanged.',
+              'Add one file_effects entry for every path below, using candidate, temporary, or unexpected.',
+              'Use candidate only for permanent ticket work that belongs in the pull request.',
+              '',
+              'Files requiring classification:',
+              ...classificationRequiredFiles.map((file) => `- ${file}`),
+              '',
+              'Previously accepted response:',
+              report.modelOutput,
+            ].join('\n'),
+          }],
+          signal,
+          timeoutMs: aiResponseSettings.timeoutMs,
+          timeoutKind: 'ai_response',
+          model: finalTestModelId,
+          erroredSessionPolicy: 'discard_errored_session_output',
+          toolPolicy: 'disabled',
+          onStreamEvent: (event) => {
+            const streamState = streamStates.get(finalTestSessionId) ?? createOpenCodeStreamState()
+            streamStates.set(finalTestSessionId, streamState)
+            emitOpenCodeStreamEvent(
+              ticketId,
+              context.externalId,
+              'RUNNING_FINAL_TEST',
+              finalTestModelId,
+              finalTestSessionId,
+              event,
+              streamState,
+            )
+          },
+          onPromptDispatched: (event) => {
+            emitOpenCodePromptLog(
+              ticketId,
+              context.externalId,
+              'RUNNING_FINAL_TEST',
+              finalTestModelId,
+              event,
+            )
+          },
+          onPromptCompleted: (event) => {
+            emitOpenCodeSessionLogs(
+              ticketId,
+              context.externalId,
+              'RUNNING_FINAL_TEST',
+              finalTestModelId,
+              event.session.id,
+              'final_test_file_effects_retry',
+              event.response,
+              event.messages,
+              streamStates.get(event.session.id),
+            )
+          },
+        })
+        throwIfAborted(signal, ticketId)
+
+        const repairedPlan = parseFinalTestCommands(retryResult.response)
+        if (repairedPlan.errors.length > 0) {
+          throw new Error(repairedPlan.validationError ?? repairedPlan.errors.join('; '))
+        }
+
+        const normalizeEffectPath = (path: string) => path.trim().replace(/\\/g, '/').replace(/^\.\//, '')
+        const requiredPaths = new Set(classificationRequiredFiles)
+        const repairedByPath = new Map(
+          repairedPlan.fileEffects.map((effect) => [normalizeEffectPath(effect.path), effect]),
+        )
+        const missingPaths = classificationRequiredFiles.filter((file) => !repairedByPath.has(file))
+        if (missingPaths.length > 0) {
+          throw new Error(`Classification retry omitted: ${missingPaths.join(', ')}`)
+        }
+
+        const retainedEffects = report.fileEffects.filter(
+          (effect) => !requiredPaths.has(normalizeEffectPath(effect.path)),
+        )
+        const repairedEffects: FinalTestFileEffect[] = classificationRequiredFiles
+          .map((file) => repairedByPath.get(file))
+          .filter((effect): effect is FinalTestFileEffect => Boolean(effect))
+        fileEffectsAudit = buildFinalTestFileEffectsAudit({
+          baselineDirtyFiles: finalTestBaselineDirtyFiles,
+          dirtyFilesAfterTesting,
+          declaredEffects: [...retainedEffects, ...repairedEffects],
+          setupExcludedRoots,
+          classificationRetry: {
+            status: 'resolved',
+            requestedFiles: classificationRequiredFiles,
+          },
+        })
+        emitPhaseLog(
+          ticketId,
+          context.externalId,
+          'RUNNING_FINAL_TEST',
+          'info',
+          `Automatic file-classification retry resolved ${classificationRequiredFiles.length} file${classificationRequiredFiles.length === 1 ? '' : 's'}.`,
+        )
+      } catch (error) {
+        const warning = [
+          `Automatic file-classification retry did not resolve ${classificationRequiredFiles.length} file${classificationRequiredFiles.length === 1 ? '' : 's'}.`,
+          getErrorMessage(error),
+          'The files remain local-only and delivery will continue.',
+        ].filter(Boolean).join(' ')
+        fileEffectsAudit = {
+          ...fileEffectsAudit,
+          classificationRetry: {
+            status: 'fallback',
+            requestedFiles: classificationRequiredFiles,
+            warning,
+          },
+          warnings: [...fileEffectsAudit.warnings, warning],
+          message: `Final-test file effects were resolved with ${fileEffectsAudit.warnings.length + 1} warning(s).`,
+        }
+        emitPhaseLog(
+          ticketId,
+          context.externalId,
+          'RUNNING_FINAL_TEST',
+          'info',
+          warning,
+        )
+      }
+    }
+    if (fileEffectsAudit.classificationRetry.status === 'resolved') {
+      upsertLatestPhaseArtifact(
+        ticketId,
+        'final_test_report',
+        'RUNNING_FINAL_TEST',
+        JSON.stringify({
+          ...report,
+          fileEffects: fileEffectsAudit.declaredEffects,
+        }),
+      )
+    }
     insertPhaseArtifact(ticketId, {
       phase: 'RUNNING_FINAL_TEST',
       artifactType: FINAL_TEST_FILE_EFFECTS_AUDIT_ARTIFACT,
@@ -4871,9 +5039,7 @@ export async function handleFinalTest(
       context.externalId,
       'RUNNING_FINAL_TEST',
       'info',
-      fileEffectsAudit.status === 'passed'
-        ? `Final-test file effects audit passed (${fileEffectsAudit.producedByFinalTesting.length} dirty file effect${fileEffectsAudit.producedByFinalTesting.length === 1 ? '' : 's'} classified).`
-        : `Final-test file effects audit needs a decision for ${fileEffectsAudit.decisionRequiredFiles.join(', ')}.`,
+      `Final-test file effects audit resolved ${fileEffectsAudit.producedByFinalTesting.length} dirty file effect${fileEffectsAudit.producedByFinalTesting.length === 1 ? '' : 's'} (${fileEffectsAudit.candidateFiles.length} candidate, ${fileEffectsAudit.localOnlyFiles.length} local-only).`,
       {
         audit: fileEffectsAudit,
       },

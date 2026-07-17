@@ -17,11 +17,6 @@ import {
 } from './paths'
 import { readJsonl } from '../io/jsonl'
 import { getAvailableWorkflowActions } from '@shared/workflowMeta'
-import {
-  FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION,
-  FINAL_TEST_FILE_EFFECTS_ERROR_CODE,
-  FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION,
-} from '@shared/finalTestFileEffects'
 import { getTicketBeadsPath, resolveTicketBaseBranch } from '../ticket/metadata'
 import type { ArtifactSnapshot } from '../sse/eventTypes'
 import { EXECUTION_BAND_STATUSES } from '../workflow/executionBand'
@@ -458,33 +453,6 @@ function addContinueActionWhenAvailable(
   ]
 }
 
-function addFinalTestFileEffectActionsWhenAvailable(
-  actions: string[],
-  activeErrorOccurrence: TicketErrorOccurrence | null,
-): string[] {
-  if (
-    !activeErrorOccurrence
-    || activeErrorOccurrence.resolvedAt !== null
-    || !activeErrorOccurrence.errorCodes.includes(FINAL_TEST_FILE_EFFECTS_ERROR_CODE)
-  ) {
-    return actions
-  }
-
-  const additions = [
-    FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION,
-    FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION,
-  ].filter((action) => !actions.includes(action))
-  if (additions.length === 0) return actions
-
-  const retryIndex = actions.indexOf('retry')
-  if (retryIndex === -1) return [...additions, ...actions]
-  return [
-    ...actions.slice(0, retryIndex + 1),
-    ...additions,
-    ...actions.slice(retryIndex + 1),
-  ]
-}
-
 function readErrorSeenSignature(projectContext: NonNullable<ReturnType<typeof getProjectContextById>>, localTicketId: number): string | null {
   const artifact = projectContext.projectDb.select().from(phaseArtifacts)
     .where(and(
@@ -661,9 +629,6 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
   const snapshot = parseJsonObject<{ context?: { previousStatus?: unknown } }>(ticket.xstateSnapshot)
   const errorOccurrences = readTicketErrorOccurrences(projectContext, ticket.id)
   const activeErrorOccurrenceId = readActiveErrorOccurrenceId(errorOccurrences)
-  const activeErrorOccurrence = activeErrorOccurrenceId == null
-    ? null
-    : errorOccurrences.find((occurrence) => occurrence.id === activeErrorOccurrenceId) ?? null
   const previousStatusFromSnapshot = typeof snapshot?.context?.previousStatus === 'string' ? snapshot.context.previousStatus : null
   const previousStatus = previousStatusFromSnapshot
     ?? (ticket.status === 'BLOCKED_ERROR' ? errorOccurrences.at(-1)?.blockedFromStatus ?? null : null)
@@ -739,12 +704,9 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
     manualQaOrigin,
     availableActions: isMockTicket
       ? getDisplayOnlyMockTicketActions(ticket.status)
-      : addFinalTestFileEffectActionsWhenAvailable(
-        addContinueActionWhenAvailable(
-          getAvailableWorkflowActions(ticket.status),
-          continuationCandidate,
-        ),
-        activeErrorOccurrence,
+      : addContinueActionWhenAvailable(
+        getAvailableWorkflowActions(ticket.status),
+        continuationCandidate,
       ),
     previousStatus,
     reviewCutoffStatus,

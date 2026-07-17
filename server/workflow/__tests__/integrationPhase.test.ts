@@ -211,12 +211,19 @@ describe('handleIntegration', () => {
               dirtyFilesAfterTesting: [],
               producedByFinalTesting: [],
               declaredEffects: [{ path: 'tests/final.spec', intent: 'candidate' }],
+              resolvedEffects: [{
+                path: 'tests/final.spec',
+                disposition: 'candidate',
+                reason: 'declared_candidate',
+              }],
               candidateFiles: ['tests/final.spec'],
+              localOnlyFiles: [],
+              classificationRequiredFiles: [],
+              classificationRetry: { status: 'not_needed', requestedFiles: [] },
               temporaryFiles: [],
               unexpectedFiles: [],
-              unclassifiedFiles: [],
-              decisionRequiredFiles: [],
-              message: 'Final-test file effects were fully classified.',
+              warnings: [],
+              message: 'Final-test file effects were fully resolved.',
             }),
           }
         : undefined
@@ -233,24 +240,35 @@ describe('handleIntegration', () => {
     )
   })
 
-  it('blocks integration when the latest final-test file effects audit is unresolved', async () => {
+  it('continues integration when the audit keeps undeclared untracked output local-only', async () => {
     const sendEvent = vi.fn<(event: TicketEvent) => void>()
     getLatestPhaseArtifactMock.mockImplementation((_ticketId: string, artifactType: string) => (
       artifactType === 'final_test_file_effects_audit'
         ? {
             content: JSON.stringify({
-              status: 'blocked',
+              status: 'passed',
               capturedAt: '2026-05-26T00:00:00.000Z',
               baselineDirtyFiles: [],
               dirtyFilesAfterTesting: [],
               producedByFinalTesting: [],
               declaredEffects: [],
-              candidateFiles: [],
+              resolvedEffects: [{
+                path: 'tmp/output.log',
+                disposition: 'local_only',
+                reason: 'undeclared_fallback',
+                warning: 'Undeclared untracked file was kept locally and excluded from delivery: tmp/output.log',
+              }],
+              candidateFiles: ['tests/final.spec'],
+              localOnlyFiles: ['tmp/output.log'],
+              classificationRequiredFiles: ['tmp/output.log'],
+              classificationRetry: {
+                status: 'fallback',
+                requestedFiles: ['tmp/output.log'],
+              },
               temporaryFiles: [],
               unexpectedFiles: [],
-              unclassifiedFiles: ['tmp/output.log'],
-              decisionRequiredFiles: ['tmp/output.log'],
-              message: 'Final testing left unclassified dirty file(s): tmp/output.log',
+              warnings: ['Undeclared untracked file was kept locally and excluded from delivery: tmp/output.log'],
+              message: 'Final-test file effects were resolved with 1 warning(s).',
             }),
           }
         : undefined
@@ -258,15 +276,14 @@ describe('handleIntegration', () => {
 
     await handleIntegration(TEST.ticketId, context, sendEvent)
 
-    expect(prepareSquashCandidateMock).not.toHaveBeenCalled()
-    expect(sendEvent).toHaveBeenCalledWith({
-      type: 'ERROR',
-      message: 'Final testing left unclassified dirty file(s): tmp/output.log',
-      codes: ['FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED'],
-    })
-    const report = JSON.parse(insertPhaseArtifactMock.mock.calls[0]![1].content)
-    expect(report.status).toBe('blocked')
-    expect(report.errorCode).toBe('FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED')
+    expect(prepareSquashCandidateMock).toHaveBeenCalledWith(
+      defaultPaths.worktreePath,
+      defaultPaths.baseBranch,
+      context.title,
+      context.externalId,
+      ['tests/final.spec'],
+    )
+    expect(sendEvent).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'ERROR' }))
   })
 
   it('missing ticket paths throws', async () => {

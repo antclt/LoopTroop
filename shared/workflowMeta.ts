@@ -1,8 +1,3 @@
-import {
-  FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION,
-  FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION,
-} from './finalTestFileEffects'
-
 /** Kanban column a workflow phase maps to — drives the kanban board layout. */
 export type KanbanPhase = 'todo' | 'in_progress' | 'needs_input' | 'done'
 export type WorkflowGroupId =
@@ -827,26 +822,26 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   RUNNING_FINAL_TEST: {
-    overview: 'After all beads finish successfully, LoopTroop runs a ticket-level final test to verify the complete implementation as a whole — not just individual beads in isolation. The main implementer generates a comprehensive test plan based on focused implementation context (ticket details, PRD, beads, and any final-test retry notes), and then the generated test commands are executed on the current ticket branch. If execution setup declared a reusable command wrapper, LoopTroop applies it automatically unless the command already uses it. LoopTroop audits any dirty files produced during final testing so permanent candidate changes, temporary test artifacts, and unexpected leftovers are visible before integration.',
+    overview: 'After all beads finish successfully, LoopTroop runs a ticket-level final test to verify the complete implementation as a whole — not just individual beads in isolation. The main implementer generates a comprehensive test plan based on focused implementation context (ticket details, PRD, beads, and any final-test retry notes), and then the generated test commands are executed on the current ticket branch. If execution setup declared a reusable command wrapper, LoopTroop applies it automatically unless the command already uses it. LoopTroop audits dirty files so explicit and tracked/staged project changes remain delivery candidates while untracked generated, cache, and setup-local outputs stay usable on disk without entering totals, checkpoints, or delivery.',
     steps: [
       'Context Assembly: LoopTroop loads ticket details, the approved PRD, the beads plan, and any final-test retry notes. The interview and Full Answers artifacts are intentionally not fed because the PRD and beads already carry the approved implementation intent.',
       'Test Plan Generation: The locked main implementer analyzes the full context and generates a structured final-test plan under the configured AI Response Timeout. This plan includes test commands to execute, expected outcomes, what each test is verifying, and language-agnostic `file_effects` entries classifying files it expects to create or change as candidate, temporary, or unexpected. Tests may include unit tests, integration tests, build verification, and acceptance criteria validation. Malformed final-test plan responses use the ticket\'s configured Structured Output Retries count and are preserved as Raw attempt variants.',
       'Test Execution: LoopTroop executes the generated test commands in the ticket worktree under the execution/final-test command timeout budget. Tests run on the actual branch state produced by the coding phase, through the validated setup wrapper when the setup profile declares one and the command is not already wrapped. Reports preserve both the original command and the effective wrapped command when wrapping is applied.',
       'Retry Reset: Between failed final-test attempts, LoopTroop resets project files back to the final-test start commit while preserving LoopTroop-owned ticket artifacts under `.ticket`.',
       'Result Recording: A final test report artifact is written whether tests pass or fail. The report includes the generated test plan, actual command output, pass/fail status for each test, and any error messages or stack traces from failures.',
-      'File Effects Audit: When final tests pass, LoopTroop compares dirty git state from before the passing final-test attempt with dirty git state afterward, records a `final_test_file_effects_audit` artifact, and carries only audited candidate files into integration. Existing `modified_files` and `test_files` outputs remain compatible by mapping to candidate effects when `file_effects` is absent.',
+      'File Effects Audit: When final tests pass, LoopTroop compares dirty git state from before the passing final-test attempt with dirty git state afterward and records a `final_test_file_effects_audit`. Explicit candidate intent and tracked/staged changes are preserved. Recognized untracked generated/cache/setup-local files remain on disk as local-only; an unknown untracked file receives one classification retry and then continues as local-only with a warning if it is still undeclared. An unresolved tracked change remains a candidate for the later PR audit, while an explicitly temporary or unexpected tracked mutation is restored to committed content before candidate staging.',
       'Phase Logging: The normal phase log captures the test lifecycle — plan generation, command execution, output streams, and final results — for review and diagnosis. LoopTroop-owned reset and git inspection commands are logged as completed-command summaries rather than recurring progress rows.',
     ],
     outputs: [
       'Final test report with the generated test plan, file effects declarations, execution results, pass/fail status, error details, and raw attempt diagnostics for final-test generation retries.',
-      'Final-test file effects audit listing baseline dirty files, post-test dirty files, files produced or changed by final testing, declared effects, candidate files, temporary files, unexpected files, and any unclassified files.',
+      'Final-test file effects audit listing baseline and post-test dirty files, produced or changed files, declared effects, candidate files, local-only files, deterministic classification reasons, retry outcomes, and warnings.',
       'Phase logs showing test command execution and output.',
       'A pass/fail gate that determines whether the implementation proceeds to the locked Manual QA route, direct integration, or recoverable error handling.',
     ],
     transitions: [
       'All Tests Pass + Manual QA Disabled → Preparing Final Commit: Successful final tests advance directly to integration using the ticket’s start-time Manual QA lock.',
-      'All Tests Pass + Manual QA Enabled → Preparing Manual QA: Successful final tests advance to automated checklist generation; that phase resolves the file-effects audit and prepares the clean QA checkpoint before asking for user verification.',
-      'Unclassified File Effects → Blocked Error: If final testing leaves dirty files that were not declared in `file_effects` or the legacy candidate fields, the next post-test phase blocks with `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` so you can include those files, discard them, or cancel.',
+      'All Tests Pass + Manual QA Enabled → Preparing Manual QA: Successful final tests advance to automated checklist generation; that phase resolves the file-effects audit and prepares the candidate-only QA checkpoint before asking for user verification.',
+      'Local-Only File Effects → Continue Automatically: Generated/cache/setup-local outputs remain in the worktree but are omitted from totals, checkpoints, and delivery. Unknown untracked files receive one classification retry, then continue as local-only with a recorded warning when still undeclared.',
       'Any Test Failure → Blocked Error: Failed tests or test generation failures route the ticket to Blocked Error, where you can retry (re-run tests) or cancel.',
     ],
     notes: [
@@ -859,7 +854,7 @@ const WORKFLOW_PHASE_DETAILS = {
   GENERATING_QA_CHECKLIST: {
     overview: 'LoopTroop automatically prepares the next Manual QA checklist after final tests pass. This automation-only checkpoint reports each meaningful preparation milestone, keeps the phase log visible, and presents the completed checklist as a readable artifact with an exact Raw view; no user action is requested, and LoopTroop never starts, stops, previews, or controls the user’s application.',
     steps: [
-      'Clean Checkpoint Preparation: LoopTroop resolves the final-test file-effects audit, checkpoints accepted candidate changes, quarantines ticket-owned test residue, and records a clean workspace baseline for detecting later application drift.',
+      'Candidate Checkpoint Preparation: LoopTroop resolves the final-test file-effects audit, exactly checkpoints accepted candidate changes, leaves local-only test/runtime outputs available in the worktree, and records a delivery-relevant workspace baseline for detecting later application drift.',
       'Version Reservation: The next `vN` directory is reserved before model work. A reservation is not treated as an available artifact; the UI exposes version selection only when more than one checklist-backed round exists.',
       'Focused Context Assembly and Inspection: The locked main implementer receives ticket details, the frozen approved PRD, selected bead fields, the current final-test report, the latest prior Manual QA artifacts, and targeted diff metadata. Focused read-only repository inspection is available, while repository-wide raw dumps are prohibited.',
       'Checklist Generation and Validation: One strict tagged YAML response supplies checklist items, PRD references, and any approved-PRD criteria that are not applicable to human verification. Formatting-only repairs may normalize envelopes, YAML syntax, aliases, and safely quote YAML-sensitive text, but never invent checklist text, actions, observations, or expected results. Invalid or overlapping PRD references use the normal structured-output retry policy.',
@@ -870,7 +865,7 @@ const WORKFLOW_PHASE_DETAILS = {
     outputs: [
       'A validated, immutable `manual_qa_checklist` artifact with app-assigned item/version ids, stable lineage, behavior and severity metadata, prerequisites, actions, expected results, watch notes, bead references, and PRD references.',
       'Advisory PRD coverage showing covered, partially covered, uncovered, and explicitly not-applicable acceptance criteria with reasons.',
-      'A clean Manual QA workspace baseline and durable version reservation for restart-safe generation.',
+      'A candidate-only Manual QA workspace baseline and durable version reservation for restart-safe generation; local-only outputs may remain available to testing tools.',
     ],
     transitions: [
       'Checklist Ready → Waiting for Manual QA: A valid durable checklist advances automatically to the user-run verification gate.',
@@ -926,10 +921,10 @@ const WORKFLOW_PHASE_DETAILS = {
     overview: 'LoopTroop first applies the approved Git-hook policy, rerunning ordered explicit hook validation commands through the setup wrapper when `validate_explicitly` is selected and recording executed or skipped outcomes. It then turns bead commits into one clean candidate commit while preserving bead history and the final-test file-effects audit.',
     steps: [
       'Branch Analysis: LoopTroop resolves the ticket worktree and base branch, calculates the merge base (where the ticket branch diverged), and counts the number of individual commits made during bead execution. These internal git commands are audited in `SYS > CMD` as concise completed-command rows.',
-      'Final-Test Audit Gate: LoopTroop checks the latest `final_test_file_effects_audit` before staging. If final testing left unclassified dirty files and no user override exists, integration blocks before creating a candidate commit.',
+      'Final-Test Audit Resolution: LoopTroop checks the latest `final_test_file_effects_audit` before staging. Explicit candidate intent and tracked/staged changes are preserved, local-only outputs remain unstaged, unknown untracked files continue with a warning after one unresolved classification retry, and unresolved tracked changes remain candidates for the PR audit.',
       'Git-Hook Validation Gate: Under `validate_explicitly`, LoopTroop reruns the exact approved hook validation commands with timeouts, captured output, wrapper support, and tracked-file auditing before integration. Under `use_on_internal_commits`, Git runs hooks normally; under `ignore_internal_only`, hooks are bypassed and the skipped outcome is recorded.',
       'Soft Reset: The branch is soft-reset back to the merge base, which unstages all bead-level commits but keeps all file changes in the working directory. This effectively "un-commits" the individual bead commits.',
-      'Reviewer-Facing Candidate: All ticket changes (excluding LoopTroop-owned operational files that should not appear in the final PR) are staged and committed as a single candidate commit with LoopTroop-specific commit metadata.',
+      'Reviewer-Facing Candidate: Exact audited candidate paths are staged and committed as a single candidate commit with LoopTroop-specific commit metadata. Explicitly intended ignored files can be staged by exact path, while local-only generated/cache/setup outputs remain available but unstaged.',
       'Handoff Metadata: Integration records the candidate SHA, merge base, pre-squash HEAD, and squash statistics. That metadata becomes the source of truth for the next phase, which will push the candidate and create or update the draft PR.',
       'Integration Report: The integration report captures the candidate commit SHA, merge base SHA, pre-squash HEAD, total commit count that was squashed, and file change statistics. This report is persisted for audit and troubleshooting.',
       'Edge Case Handling: If no staged changes exist (e.g., the beads produced no file modifications), or if git operations fail (merge conflicts, corrupt index), the phase records the failure and stops before advancing to PR creation.',
@@ -937,12 +932,12 @@ const WORKFLOW_PHASE_DETAILS = {
     outputs: [
       'Integration report artifact with candidate commit SHA, merge base, pre-squash HEAD, commit counts, and file change statistics.',
       'Candidate squash commit on the ticket branch — a single clean commit containing all implementation changes.',
-      'Audited final-test candidate files included in the squash commit, while temporary files and LoopTroop internals stay out of the PR.',
+      'Audited final-test candidate files included in the squash commit, while local-only generated/cache/setup files and LoopTroop internals remain on disk but stay out of the PR.',
       'Pre-squash metadata for audit, rollback reference, and troubleshooting.',
     ],
     transitions: [
       'Success → Creating Pull Request: A successful candidate commit advances the workflow to the GitHub sync phase, which creates or updates the draft PR.',
-      'Failure → Blocked Error: Unresolved final-test file effects, git operation failures, empty changesets, or merge conflicts route the ticket to Blocked Error.',
+      'Failure → Blocked Error: Git operation failures, empty changesets, or merge conflicts route the ticket to Blocked Error. Local-only final-test outputs do not block integration.',
     ],
     notes: [
       'Context available: Git state, integration metadata, and final test report. No new model context is assembled in this deterministic git phase.',
@@ -1079,24 +1074,23 @@ const WORKFLOW_PHASE_DETAILS = {
     ],
   },
   BLOCKED_ERROR: {
-    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The workspace summary names the phase that failed, shows its captured error, and explains the recovery actions currently available; historical occurrences are identified as read-only. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so recovery knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, OpenCode retry, output-truncation, rate-limit-style failures, and final-test file-effects audit failures alongside the human-readable error. Generic OpenCode provider errors are best-effort enriched from matching local OpenCode logs before display. You can inspect the error and choose Retry; Retry with extra note... for a live implementation or workspace setup block; Edit setup plan... for workspace setup; Continue when a provider interruption preserved an addressable session; a final-test file decision; or Cancel.',
+    overview: 'A blocking failure interrupted the workflow and LoopTroop is waiting for a human decision before it can continue. The workspace summary names the phase that failed, shows its captured error, and explains the recovery actions currently available; historical occurrences are identified as read-only. The error is tied to the specific phase where the failure occurred, and the previous status is preserved so recovery knows exactly where to return. When available, persisted structured diagnostics expose underlying provider, model, session, timeout, OpenCode retry, output-truncation, and rate-limit-style failures alongside the human-readable error. Generic OpenCode provider errors are best-effort enriched from matching local OpenCode logs before display. You can inspect the error and choose Retry; Retry with extra note... for a live implementation or workspace setup block; Edit setup plan... for workspace setup; Continue when a provider interruption preserved an addressable session; or Cancel. Final-test local-only files are classified automatically and do not create a human recovery gate.',
     steps: [
       'Error Recording: LoopTroop captures the error message, error codes (if available), the precise timestamp of the failure, and the workflow status where the failure occurred. Provider, model, session, timeout, OpenCode retry, output-truncation, and rate-limit-style diagnostics are persisted as structured fields when the failing subsystem exposes them. If OpenCode streams only a generic provider error, LoopTroop checks matching local OpenCode logs by session id and persists the sanitized provider cause when available. If structured-output validation later fails because OpenCode returned no usable content or stopped with an output-length finish reason, the latest underlying OpenCode failure is preserved instead of replacing it with only the parser wrapper. This information is stored as an error occurrence record.',
       'State Preservation: The blocked error becomes the active workflow state while preserving the previous status (the phase that failed). This preserved status is critical — it tells Retry and eligible Continue exactly which phase to re-enter. Backend, OpenCode, WSL, OS, and machine restarts revalidate an eligible continuation by the unresolved occurrence\'s exact session id and blocked-from phase; transient verification failures keep the session eligible instead of abandoning it.',
       'Error History: If a ticket has been blocked multiple times (e.g., retry → fail → retry → fail), all error occurrences are preserved in a history list. This helps you identify recurring issues and decide whether retry is likely to succeed.',
       'Diagnostic Context: The workspace surfaces the relevant failure details — error messages, stack traces, the combined logs around the failing moment, persisted structured provider/model/session/OpenCode retry/output-truncation diagnostics, local-log-correlated provider causes when available, and any bead-specific context (if the failure happened during coding). This gives you enough information to understand what went wrong.',
-      'Decision Point: You choose Retry, Retry with extra note..., Edit setup plan... when workspace setup failed, eligible same-session Continue, a final-test file-effects decision, or Cancel. For coding, the note is appended to User Retry Notes after safe bead recovery. For workspace setup, only the note is sent to the preserved setup session for one manual attempt. Finalization failures already have their own concise Finalization Failure Note and remain manual Retry/Cancel blocks; Ralph is used only for iteration failures such as the shared coding/verification deadline.',
+      'Decision Point: You choose Retry, Retry with extra note..., Edit setup plan... when workspace setup failed, eligible same-session Continue, or Cancel. For coding, the note is appended to User Retry Notes after safe bead recovery. For workspace setup, only the note is sent to the preserved setup session for one manual attempt. Finalization failures already have their own concise Finalization Failure Note and remain manual Retry/Cancel blocks; Ralph is used only for iteration failures such as the shared coding/verification deadline.',
     ],
     outputs: [
       'Error occurrence history with timestamps, error messages, error codes, structured provider/model/session/timeout/OpenCode retry/output-truncation/rate-limit diagnostics when available, log-correlated provider causes when available, and the phase where each failure occurred.',
       'Blocked state metadata linking the error to the specific phase that failed.',
-      'Retry, phase-specific Retry with extra note..., setup-plan editing, eligible same-session Continue, final-test file-effect Include in PR / Discard and Continue, or cancel decision point for manual intervention.',
+      'Retry, phase-specific Retry with extra note..., setup-plan editing, eligible same-session Continue, or cancel decision point for manual intervention.',
     ],
     transitions: [
       'Retry → Previous Status: Retry archives the active phase attempt with `manual_retry_after_blocked_error`, creates the next active attempt, and returns the workflow to the previously blocked status for every non-implementation phase. CODING keeps its special failed-bead reset before re-entering and does not create phase versions. For a live CODING block, Retry with extra note... performs the same safe recovery and appends a timestamped entry only to User Retry Notes after the bead can be identified and reset; OpenCode retry-budget or provider/session blocks may instead use Continue when the session remains addressable by exact id.',
       'Setup Retry With Note → Preparing Workspace Runtime: Retry with extra note... requires a preserved setup session. It keeps the current phase attempt, sends only the entered note to that session, and allows exactly one additional manual setup attempt. The user note is not appended to setup retry notes or later setup context.',
       'Continue → Previous Status: Continue is available only for eligible OpenCode/provider interruptions with a preserved active session addressable by exact id, including transient provider stalls, provider/session timeouts, selected 5xx/529 or 408/429 responses, transport failures, and `HTTP 402 Payment Required` blocks that can be cleared outside the session. It is not available for CODING workflow-owned iteration timeouts, which reset/retry until the bead budget is exhausted. Eligible sessions survive backend, OpenCode, WSL, OS, and machine restarts when the unresolved error occurrence, previous phase, and exact remote session still match; temporary verification failures preserve the active record for a later check, while only confirmed absence or stale ownership abandons it. Continue returns to the previous status without archiving or creating phase attempts and dispatches exactly `continue please` into that same session. For CODING provider interruptions, the blocked view treats the bead as paused rather than actively counting down; after Continue, LoopTroop starts a fresh per-iteration timeout window while reusing the preserved OpenCode session.',
-      'Include in PR / Discard and Continue → Integrating Changes: These actions are available only for `FINAL_TEST_FILE_EFFECTS_UNCLASSIFIED` blocks. Include in PR writes an override that treats all unclassified final-test-produced files as candidate files. Discard and Continue removes untracked final-test-produced files and reverts tracked final-test-produced changes proven by the audit. Both actions create a fresh integration attempt and retry integration; they do not use the OpenCode `/continue` path.',
       'Cancel → Canceled: Cancel moves the ticket to the terminal Canceled state. Artifacts and error history are preserved by default; the cancellation dialog offers optional cleanup of AI-generated artifacts and/or the execution log.',
     ],
     notes: [
@@ -1104,7 +1098,7 @@ const WORKFLOW_PHASE_DETAILS = {
       'Manual retry versions for non-implementation phases are reviewed through the phase previous-version selector; automatic structured retries inside a version are reviewed through artifact Raw attempt tabs, with parser/retry intervention warnings summarized on the primary artifact tab. CODING retry history remains bead-scoped.',
       'Retry with extra note... is shown only on the live Blocked Error view when `previousStatus` is CODING or PREPARING_EXECUTION_ENV. It requires between 1 and 20,000 characters after rejecting whitespace-only input. Coding appends the text unchanged to User Retry Notes and starts a fresh bead recovery. Workspace setup sends it directly to the preserved session for one manual attempt. Historical errors and blocks from other phases do not offer note-bearing retry.',
       'Continue is deliberately narrower than Retry: it is hidden unless the active error has a session id, the matching OpenCode session is preserved locally and addressable by exact id, and diagnostics point to a continuable provider/session condition such as HTTP 402 Payment Required, transient limits, overload, provider/session timeout, selected 5xx/529 or 408/429 responses, or transport interruption rather than a LoopTroop-owned iteration timeout, auth, non-402 quota, configuration, invalid-request, model-not-found, or request-size errors. Restart reconciliation applies this same centralized eligibility classifier to every continuable error type instead of special-casing usage limits.',
-      'Final-test file-effect recovery is audit-bound: Discard and Continue only touches files listed as produced or changed by the final-test audit, and Include in PR records an explicit override artifact before integration stages the files.',
+      'Final-test file classification is unattended: explicit candidate intent and tracked/staged changes are preserved, recognized local outputs stay on disk but out of delivery, unknown untracked files receive one classification retry and then a warning, and unresolved tracked changes remain candidates for PR audit.',
       'Context available: Current Bead Data (if the failure occurred during the coding phase) + Error Context (error message, codes, phase, timing).',
       'Common causes of blocked errors: provider or model failures, session interruptions, model timeouts, output-length truncation, rate-limit-style failures, API connectivity issues, malformed AI output that fails validation, git operation failures, test failures, and dependency graph violations.',
       'Tip: Before retrying, check the error details. If the error is a transient issue (timeout, connectivity), retry is likely to succeed. If the error indicates a fundamental problem (malformed output, missing configuration), retry may fail again.',
@@ -1481,7 +1475,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'RUNNING_FINAL_TEST',
     label: 'Testing Implementation',
-    description: 'The main implementer generates a comprehensive test plan under AI Response Timeout, preserves final-test generation retries in Raw attempts, then runs the accepted commands against the ticket branch under the execution command timeout, automatically reusing any validated setup wrapper.',
+    description: 'Generates and runs whole-ticket tests, preserving explicit and tracked/staged changes while leaving untracked generated/cache/setup-local outputs usable on disk but outside totals, checkpoints, and delivery.',
     details: WORKFLOW_PHASE_DETAILS.RUNNING_FINAL_TEST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1493,7 +1487,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'GENERATING_QA_CHECKLIST',
     label: 'Preparing Manual QA',
-    description: 'LoopTroop is preparing a human-facing Manual QA checklist with live checkpoint, context, model/tool, validation, and persistence milestones; the completed checklist opens as a readable artifact with an exact Raw view.',
+    description: 'LoopTroop is preparing a candidate-only checkpoint and human-facing Manual QA checklist while keeping local generated/cache outputs available to tests and outside delivery.',
     details: WORKFLOW_PHASE_DETAILS.GENERATING_QA_CHECKLIST,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1519,7 +1513,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'INTEGRATING_CHANGES',
     label: 'Preparing Final Commit',
-    description: 'Reruns approved explicit Git-hook validation when selected, records executed or skipped outcomes, and squashes individual bead commits into one clean candidate commit while preserving the audit trail.',
+    description: 'Reruns approved explicit Git-hook validation and exactly stages audited candidates into one clean commit; local-only outputs remain in the worktree and out of delivery.',
     details: WORKFLOW_PHASE_DETAILS.INTEGRATING_CHANGES,
     kanbanPhase: 'in_progress',
     groupId: 'post_implementation',
@@ -1591,7 +1585,7 @@ const BASE_WORKFLOW_PHASES: WorkflowPhaseMeta[] = [
   {
     id: 'BLOCKED_ERROR',
     label: 'Error (reason)',
-    description: 'A workflow phase failed and needs a recovery decision. The workspace summary identifies the failed phase, shows the captured error, and explains what the currently available recovery actions will do.',
+    description: 'A workflow phase failed and needs a recovery decision. Local-only generated/cache file classification never enters this status; other failures show their captured error and available recovery actions.',
     details: WORKFLOW_PHASE_DETAILS.BLOCKED_ERROR,
     kanbanPhase: 'needs_input',
     groupId: 'errors',
@@ -1624,8 +1618,6 @@ export type WorkflowAction =
   | 'continue'
   | 'merge'
   | 'close_unmerged'
-  | typeof FINAL_TEST_FILE_EFFECTS_INCLUDE_ACTION
-  | typeof FINAL_TEST_FILE_EFFECTS_DISCARD_ACTION
 
 /** Returns `true` when `status` precedes the execution band (before PRE_FLIGHT_CHECK). Resolves BLOCKED_ERROR via `previousStatus`. */
 export function isBeforeExecution(status: string, previousStatus?: string | null, depth?: number): boolean {
@@ -1650,9 +1642,9 @@ export function isStatusAtOrPast(currentStatus: string, targetStatus: string): b
  * Returns the statically-known available workflow actions for a given status.
  *
  * NOTE: The server may dynamically add `'continue'` to BLOCKED_ERROR actions
- * when a resumable OpenCode session is available, and final-test file-effect
- * recovery actions when an unresolved file-effects audit block is active — see
- * `server/storage/ticketQueries.ts`.
+ * when a resumable OpenCode session is available — see
+ * `server/storage/ticketQueries.ts`. Final-test local-only files are resolved
+ * automatically and do not add recovery actions.
  */
 export function getAvailableWorkflowActions(status: string): WorkflowAction[] {
   switch (status) {
