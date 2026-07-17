@@ -1,6 +1,7 @@
-import { existsSync, rmSync, chmodSync, lstatSync, readdirSync } from 'fs'
+import { existsSync, rmSync } from 'fs'
 import { resolve } from 'path'
 import { getTicketPaths } from '../../storage/tickets'
+import { makeOwnerWritableRecursive } from '../../io/removal'
 
 export interface CleanupReport {
   status: 'clean' | 'warning'
@@ -8,22 +9,6 @@ export interface CleanupReport {
   removedFiles: string[]
   errors: string[]
   preservedPaths: string[]
-}
-
-function makeWritableRecursive(targetPath: string) {
-  try {
-    const stats = lstatSync(targetPath)
-    // Add owner write permission
-    chmodSync(targetPath, stats.mode | 0o200)
-    if (stats.isDirectory()) {
-      const files = readdirSync(targetPath)
-      for (const file of files) {
-        makeWritableRecursive(resolve(targetPath, file))
-      }
-    }
-  } catch {
-    // Ignore nested permission/missing errors during walking
-  }
 }
 
 export function cleanupTicketResources(ticketId: string): CleanupReport {
@@ -64,7 +49,7 @@ export function cleanupTicketResources(ticketId: string): CleanupReport {
   for (const targetPath of runtimePaths) {
     if (existsSync(targetPath)) {
       try {
-        makeWritableRecursive(targetPath)
+        makeOwnerWritableRecursive(targetPath)
         rmSync(targetPath, { recursive: true, force: true })
         if (targetPath === paths.executionSetupProfilePath || targetPath.endsWith('.yaml') || targetPath.endsWith('.json')) {
           report.removedFiles.push(targetPath)

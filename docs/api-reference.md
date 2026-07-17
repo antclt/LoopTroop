@@ -138,7 +138,7 @@ Selected validation ranges that are easy to miss when calling the API directly:
 | `PATCH` | `/api/projects/:id` | Update project settings |
 | `DELETE` | `/api/projects/:id` | Delete a project if no active tickets remain |
 | `GET` | `/api/projects/:id/worktrees/size` | Get the total disk size of all worktrees for a project |
-| `DELETE` | `/api/projects/:id/worktrees` | Delete worktrees for completed and canceled tickets only; active ticket worktrees are left untouched |
+| `DELETE` | `/api/projects/:id/worktrees` | Delete worktrees for completed and canceled tickets only, including same-user read-only cache trees; active ticket worktrees are left untouched |
 
 `GET /api/projects/check-git` returns attach-flow metadata in addition to simple validity. When relevant, the response also includes `scope` (`root` or `subfolder`), `repoRoot`, `githubRepoSlug`, `hasLoopTroopState`, `existingProject`, and `performanceWarning` for WSL mounted-drive performance warnings.
 
@@ -195,7 +195,7 @@ Worktree delete response:
 { "success": true, "freedBytes": 1234567 }
 ```
 
-Project deletion (`DELETE /api/projects/:id`) returns 409 when any ticket in the project is not in `DRAFT`, `COMPLETED`, or `CANCELED` status. Finish or cancel all active tickets before deleting the project. Worktree deletion is narrower: it only removes completed and canceled ticket worktrees and leaves active ticket worktrees untouched.
+Project deletion (`DELETE /api/projects/:id`) returns 409 when any ticket in the project is not in `DRAFT`, `COMPLETED`, or `CANCELED` status. Finish or cancel all active tickets before deleting the project. Worktree deletion is narrower: it only removes completed and canceled ticket worktrees and leaves active ticket worktrees untouched. Before removal, LoopTroop safely restores owner permissions throughout each managed worktree without following symlinks, allowing cleanup of read-only outputs created by project tooling while preserving targets outside the worktree.
 
 ## Ticket Routes
 

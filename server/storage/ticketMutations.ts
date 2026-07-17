@@ -24,7 +24,7 @@ function logCmd(
 }
 import { getProjectContextById } from './projects'
 import { manualQaImprovementTickets, opencodeSessions, phaseArtifacts, projects, ticketErrorOccurrences, ticketPhaseAttempts, ticketStatusHistory, tickets } from '../db/schema'
-import { getTicketAiLogPath, getTicketDebugLogPath, getTicketDir, getTicketExecutionLogPath, getTicketWorktreePath } from './paths'
+import { getProjectWorktreesRoot, getTicketAiLogPath, getTicketDebugLogPath, getTicketDir, getTicketExecutionLogPath, getTicketWorktreePath } from './paths'
 import { safeAtomicWrite } from '../io/atomicWrite'
 import { lockTicketModelSelection, resolveTicketBaseBranch } from '../ticket/metadata'
 import type {
@@ -34,6 +34,7 @@ import type {
 } from './ticketQueries'
 import { normalizeBlockedErrorDiagnostics, type BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
 import { syncTicketRuntimeProjection } from './ticketRuntimeProjection'
+import { removeWorktree } from '../git/worktreeRemoval'
 import {
   getTicketContext,
   toPublicTicket,
@@ -336,16 +337,12 @@ function removeTicketFilesystem(projectRoot: string, externalId: string, branchN
   const resolvedBranchName = branchName?.trim() || externalId
 
   if (existsSync(worktreePath)) {
-    try {
-      runGit(projectRoot, ['worktree', 'remove', '--force', worktreePath])
-    } catch {
-      rmSync(worktreePath, { recursive: true, force: true })
-      try {
-        runGit(projectRoot, ['worktree', 'prune'])
-      } catch {
-        // Best-effort cleanup only.
-      }
-    }
+    removeWorktree({
+      projectRoot,
+      worktreesRoot: getProjectWorktreesRoot(projectRoot),
+      worktreePath,
+      runGit: (args) => runGit(projectRoot, args),
+    })
   }
 
   if (resolvedBranchName !== baseBranch) {

@@ -1,12 +1,13 @@
 import { eq, or } from 'drizzle-orm'
 import { rmSync } from 'fs'
-import { access, lstat, readdir, rm } from 'fs/promises'
+import { access, lstat, readdir } from 'fs/promises'
 import { resolve as resolvePath } from 'path'
 import { spawnSync } from 'child_process'
 import { db as appDb } from '../db/index'
 import { closeProjectDatabase, getExistingProjectDatabase, getProjectDatabase } from '../db/project'
 import { attachedProjects, projects, tickets } from '../db/schema'
 import { ensureLocalGitExclude } from '../git/repository'
+import { removeWorktree } from '../git/worktreeRemoval'
 import {
   ensureProjectStorageDirs,
   getProjectLoopTroopDir,
@@ -428,10 +429,7 @@ export async function deleteProjectWorktrees(projectRoot: string): Promise<{ fre
     const worktreePath = resolvePath(worktreesRoot, externalId)
     if (!(await existsAsync(worktreePath))) continue
     freedBytes += await calcDirSize(worktreePath)
-    spawnSync('git', ['-C', projectRoot, 'worktree', 'remove', '--force', worktreePath], {
-      encoding: 'utf8',
-    })
-    await rm(worktreePath, { recursive: true, force: true })
+    removeWorktree({ projectRoot, worktreesRoot, worktreePath })
   }
 
   spawnSync('git', ['-C', projectRoot, 'worktree', 'prune'], { encoding: 'utf8' })

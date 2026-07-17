@@ -262,6 +262,8 @@ Use the UI cleanup flow:
 
 **Deleted:** temporary directories at `.looptroop/worktrees/<ticket>/` for tickets in the Completed or Canceled column, including code checkouts, execution logs, and AI-generated file artifacts.
 
+LoopTroop restores owner removal permissions before deleting each eligible worktree. This handles project-agnostic read-only outputs such as dependency caches, downloaded toolchains, generated directories, and language package caches without requiring ecosystem-specific cleanup settings. Symlinks are removed without changing or traversing their external targets. Files owned by another operating-system user or protected by ACLs, immutable flags, or equivalent platform controls may still require the underlying ownership or protection to be corrected.
+
 **Preserved:**
 
 - project source code and normal repository files

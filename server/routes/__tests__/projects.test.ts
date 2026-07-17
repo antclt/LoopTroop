@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { Hono } from 'hono'
 import { resolve } from 'node:path'
 import { initializeDatabase } from '../../db/init'
@@ -240,6 +240,39 @@ describe('projectRouter project cleanup', () => {
     expect(deleteResponse.status).toBe(200)
     const payload = await deleteResponse.json() as { success: boolean; freedBytes: number }
     expect(payload.success).toBe(true)
+  })
+
+  it.runIf(process.platform !== 'win32')('deletes terminal worktrees containing read-only cache directories', async () => {
+    const repoDir = repoManager.createRepo()
+    addGithubOrigin(repoDir)
+    const app = new Hono()
+    app.route('/api', projectRouter)
+
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'Read-only Cache Project',
+      shortname: 'ROC',
+    })
+    const ticket = createTicket({ projectId: project.id, title: 'Read-only cache ticket' })
+    patchTicket(ticket.id, { status: 'COMPLETED' })
+
+    const worktreePath = resolve(repoDir, '.looptroop', 'worktrees', ticket.externalId)
+    const cacheRoot = resolve(
+      worktreePath,
+      '.ticket/runtime/execution-setup/tool-cache/gomodcache/example.test/module@v1.0.0',
+    )
+    const readOnlyDir = resolve(cacheRoot, '.github')
+    mkdirSync(readOnlyDir, { recursive: true })
+    writeFileSync(resolve(readOnlyDir, 'dependabot.yml'), 'version: 2\n')
+    chmodSync(readOnlyDir, 0o555)
+    chmodSync(cacheRoot, 0o555)
+
+    const response = await app.request(`/api/projects/${project.id}/worktrees`, {
+      method: 'DELETE',
+    })
+
+    expect(response.status).toBe(200)
+    expect(existsSync(worktreePath)).toBe(false)
   })
 
   it('refuses direct project deletion while active tickets exist', () => {
