@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Made interrupted coding recovery consume a bounded fresh bead iteration with an accurate restarted countdown.
 - Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) to customize model pricing, speed, and capability preferences.
 - Added a 'Delete the ticket completely' option to the ticket cancellation dialog to clean up all database records and local files.
 - Added the active execution setup attempt count (e.g. attempt 2 of 5) to the Preparing Workspace Runtime status title when running subsequent attempts.
@@ -95,6 +96,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed backend/OS restart recovery for an unresumable in-progress coding bead so the interrupted attempt is recorded in Failed Iteration Notes, the iteration number advances after the safe worktree reset, and the replacement attempt receives a fresh configured deadline.
+- Fixed active bead countdowns after restart by retaining each attempt's `updatedAt` timestamp in public runtime and materialized ticket-state projections instead of falling back to the bead's original first-attempt `startedAt`.
 - Fixed Vitest environment-specific test suite warnings and failures caused by `nvm` shell initialization warnings on stderr and mismatched prompt expectations.
 - Preserved line breaks in long blocked-error details and cleaned ANSI sequences from those details as well as the main message, while preserving the raw logs. Terminal decoration, carriage-return artifacts, and repeated single-line or multiline warnings are also removed from the displayed error.
 - Replaced the generic Blocked Error workspace essay with the failed phase, a bounded version of the captured error, and guidance for only the recovery actions currently available; historical occurrences are clearly read-only.

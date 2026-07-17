@@ -13,7 +13,12 @@ import { emitPhaseLog, emitDebugLog, emitAiMilestone, emitOpenCodeSessionLogs, e
 import type { OpenCodeStreamState } from './types'
 import { readTicketBeads, recoverCodingBeadWithReset, writeTicketBeads, updateTicketProgressFromBeads } from './beadsPhase'
 import { recordBeadMetric } from '../../storage/executionTelemetry'
-import { hasPendingSessionContinuationForTicketPhase } from '../../opencode/sessionContinuation'
+import {
+  clearSessionContinuation,
+  hasPendingSessionContinuationForTicketPhase,
+} from '../../opencode/sessionContinuation'
+import { listOpenCodeSessionsForTicket, SessionManager } from '../../opencode/sessionManager'
+import { clearOpenCodePromptDispatchCount } from '../runOpenCodePrompt'
 import { ensureLocalGitExclude } from '../../git/repository'
 import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
 import { resolve } from 'path'
@@ -78,6 +83,34 @@ function conciseFinalizationFailure(message: string): string {
   const clean = stripAnsiSequences(message).trim()
   const excerpt = clean.length <= 1_000 ? clean : `${clean.slice(0, 1_000)}...`
   return `Finalization failed after successful implementation: ${excerpt || 'Unknown error'}`
+}
+
+async function abandonInterruptedCodingSessions(
+  ticketId: string,
+  beadId: string,
+  iteration: number,
+): Promise<void> {
+  const interruptedSessions = listOpenCodeSessionsForTicket(ticketId, ['active'])
+    .filter((session) => session.phase === 'CODING'
+      && session.beadId === beadId
+      && session.iteration === iteration)
+  if (interruptedSessions.length === 0) return
+
+  const sessionManager = new SessionManager(adapter)
+  await Promise.all(interruptedSessions.map(async (session) => {
+    try {
+      await adapter.abortSession(session.sessionId)
+    } catch (err) {
+      console.warn(
+        `[executionPhase] Failed to abort interrupted OpenCode session ${session.sessionId}:`,
+        err,
+      )
+    } finally {
+      await sessionManager.abandonSession(session.sessionId)
+      clearSessionContinuation(session.sessionId)
+      clearOpenCodePromptDispatchCount(session.sessionId)
+    }
+  }))
 }
 
 function compareBeadRecoveryOrder(left: Bead, right: Bead) {
@@ -354,6 +387,9 @@ export async function handleCoding(
         if (!isPersistedExecutionResult(parsed, activeBead.id)) {
           throw new Error('artifact payload did not match the execution result schema')
         }
+        if (!parsed.success) {
+          throw new Error('artifact does not contain a successful result awaiting finalization')
+        }
         if (!isCurrentExecutionCheckpoint(parsed, activeBead)) {
           throw new Error('artifact checkpoint does not match the current in-progress bead state')
         }
@@ -401,15 +437,25 @@ export async function handleCoding(
         onlyInProgress: true,
         requireReset: true,
         preservePaths: [...WORKTREE_RESET_PRESERVE_PATHS],
+        consumeInterruptedIteration: {
+          failureNote: 'Iteration was interrupted before its OpenCode session could be resumed; restarted from the bead start snapshot.',
+        },
       })
       if (interruptedBead) {
+        const interruptedIteration = interruptedBead.iteration - 1
+        await abandonInterruptedCodingSessions(ticketId, interruptedBead.id, interruptedIteration)
         emitPhaseLog(
           ticketId,
           context.externalId,
           'CODING',
           'info',
-          `Recovered interrupted bead ${interruptedBead.id} from its start snapshot and returned it to pending before resuming.`,
-          { source: 'system', modelId: codingModelId, beadId: interruptedBead.id },
+          `Recovered interrupted bead ${interruptedBead.id} from its start snapshot, recorded failed iteration ${interruptedIteration}, and returned it to pending for iteration ${interruptedBead.iteration}.`,
+          {
+            source: 'system',
+            modelId: codingModelId,
+            beadId: interruptedBead.id,
+            beadIteration: interruptedIteration,
+          },
         )
         beads = readTicketBeads(ticketId)
       }

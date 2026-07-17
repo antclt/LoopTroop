@@ -78,4 +78,21 @@ describe('runtime Manual QA bead origin projection', () => {
     expect(runtimeBeads?.[0]?.qaOrigin).toEqual(origin)
     expect(runtimeBeads?.[1]?.qaOrigin).toBeNull()
   })
+
+  it('preserves the bead update timestamp used to time the active iteration', () => {
+    const setup = createInitializedTestTicket(runtimeRepoManager, { title: 'Runtime bead timestamp' })
+    writeJsonl(setup.paths.beadsPath, [{
+      id: 'active-bead',
+      title: 'Active bead',
+      status: 'in_progress',
+      iteration: 2,
+      startedAt: '2026-07-16T12:00:00.000Z',
+      updatedAt: '2026-07-17T04:45:20.704Z',
+    }])
+
+    expect(getTicketByRef(setup.ticket.id)?.runtime.beads[0]).toMatchObject({
+      startedAt: '2026-07-16T12:00:00.000Z',
+      updatedAt: '2026-07-17T04:45:20.704Z',
+    })
+  })
 })

@@ -64,6 +64,8 @@ describe('ticket runtime projection', () => {
       makeBead({
         status: 'in_progress',
         iteration: 2,
+        startedAt: '2026-07-16T12:00:00.000Z',
+        updatedAt: '2026-07-17T04:45:20.704Z',
         failedIterationNotes: [{ timestamp: TEST.timestamp, iteration: 2, content: 'retry with refreshed context' }],
       }),
     ])
@@ -76,12 +78,19 @@ describe('ticket runtime projection', () => {
     const state = yaml.load(readFileSync(statePath, 'utf8')) as {
       ticket: { status: string }
       runtime: { activeBeadId: string | null; activeBeadIteration: number | null }
-      beads: Array<{ id: string; failedIterationNotes: Bead['failedIterationNotes'] }>
+      beads: Array<{
+        id: string
+        startedAt: string | null
+        updatedAt: string | null
+        failedIterationNotes: Bead['failedIterationNotes']
+      }>
     }
 
     expect(state.ticket.status).toBe('CODING')
     expect(state.runtime.activeBeadId).toBe('bead-1')
     expect(state.runtime.activeBeadIteration).toBe(2)
+    expect(state.beads[0]?.startedAt).toBe('2026-07-16T12:00:00.000Z')
+    expect(state.beads[0]?.updatedAt).toBe('2026-07-17T04:45:20.704Z')
     expect(state.beads[0]?.failedIterationNotes).toEqual([
       { timestamp: TEST.timestamp, iteration: 2, content: 'retry with refreshed context' },
     ])

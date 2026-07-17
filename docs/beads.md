@@ -62,7 +62,7 @@ A bead is the smallest unit LoopTroop will schedule for coding. It carries enoug
 
 - **Planning fields** (`prdRefs`, `description`, `acceptanceCriteria`, `testCommands`, `targetFiles`) keep each coding session narrow.
 - **Graph fields** (`priority`, `dependencies`) let the scheduler choose work deterministically instead of letting the model decide its own sequence.
-- **Recovery fields** (`status`, `iteration`, the three typed note histories, `startedAt`, `beadStartCommit`) make retries durable across resets, backend restarts, and blocked-error recovery without mixing distinct failure sources.
+- **Recovery fields** (`status`, `iteration`, the three typed note histories, `startedAt`, attempt-level `updatedAt`, and `beadStartCommit`) make retries durable across resets, backend restarts, and blocked-error recovery without mixing distinct failure sources.
 
 ### Example Bead
 
@@ -253,7 +253,7 @@ LoopTroop keeps scheduling intentionally simple and deterministic.
 Important consequences:
 
 - beads in `error` are never auto-selected again
-- interrupted `in_progress` beads are handled by recovery logic first, not by the scheduler
+- interrupted `in_progress` beads are handled by recovery logic first, not by the scheduler; a current execution checkpoint may finalize without rerunning, a preserved continuation may reuse its exact session, and an otherwise unresumable attempt is recorded, reset, and advanced to the next iteration
 - the model never chooses its own work order
 
 ---
@@ -326,6 +326,8 @@ For ordinary implementation failure or a workflow-owned per-iteration timeout:
 3. hard-reset the worktree to `beadStartCommit`
 4. abandon the old session
 5. retry in a fresh session with the accumulated notes as compact guidance
+
+An application, OpenCode, OS, or machine restart uses the same bounded failure semantics when the active coding attempt has neither an explicitly preserved continuation nor a current execution checkpoint. LoopTroop appends a deterministic Failed Iteration Note for the interrupted attempt, resets to `beadStartCommit`, increments the bead iteration, and starts the replacement attempt with a fresh configured per-iteration deadline. This prevents the restored attempt from inheriting an expired clock or running outside the normal iteration accounting.
 
 ```mermaid
 flowchart TD

@@ -236,7 +236,7 @@ describe('WorkspacePhaseSummary', () => {
     expect(screen.queryByText(/working on bead/)).not.toBeInTheDocument()
   })
 
-  it('shows the bead countdown only while CODING is the live ticket status', () => {
+  it('shows the bead countdown from the active iteration update while CODING is live', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:02:00.000Z'))
     const runtime = {
@@ -249,7 +249,7 @@ describe('WorkspacePhaseSummary', () => {
         status: 'in_progress',
         iteration: 1,
         startedAt: '2026-01-01T00:00:00.000Z',
-        updatedAt: null,
+        updatedAt: '2026-01-01T00:01:00.000Z',
       }],
     }
     const liveTicket = makeTicket({
@@ -261,7 +261,7 @@ describe('WorkspacePhaseSummary', () => {
       <WorkspacePhaseSummary phase="CODING" ticket={liveTicket} />,
     )
 
-    expect(screen.getByText('06:00')).toBeInTheDocument()
+    expect(screen.getByText('07:00')).toBeInTheDocument()
     expect(screen.getByText('08:00')).toBeInTheDocument()
   })
 

@@ -941,6 +941,7 @@ function buildRuntime(
       userRetryNotes: bead.userRetryNotes,
       finalizationFailureNotes: bead.finalizationFailureNotes,
       startedAt: bead.startedAt,
+      updatedAt: bead.updatedAt,
       qaOrigin: bead.qaOrigin,
     })),
     candidateCommitSha: integrationReport?.candidateCommitSha ?? null,

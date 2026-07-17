@@ -913,6 +913,9 @@ export function recoverCodingBeadWithReset(
     requireReset?: boolean
     preservePaths?: string[]
     userRetryNote?: string
+    consumeInterruptedIteration?: {
+      failureNote: string
+    }
   },
 ): Bead | null {
   const beads = readTicketBeads(ticketId)
@@ -926,7 +929,7 @@ export function recoverCodingBeadWithReset(
   if (!failedBead) return null
 
   if (!failedBead.beadStartCommit) {
-    if (options.requireReset) {
+    if (options.requireReset || options.consumeInterruptedIteration) {
       throw new Error(`Cannot safely recover bead ${failedBead.id}: missing bead start commit`)
     }
   } else {
@@ -935,7 +938,13 @@ export function recoverCodingBeadWithReset(
     })
   }
 
-  return recoverCodingBead(ticketId, beads, failedBead, options.userRetryNote)
+  return recoverCodingBead(
+    ticketId,
+    beads,
+    failedBead,
+    options.userRetryNote,
+    options.consumeInterruptedIteration,
+  )
 }
 
 function recoverCodingBead(
@@ -943,6 +952,9 @@ function recoverCodingBead(
   beads: Bead[],
   failedBead: Bead,
   userRetryNote?: string,
+  consumeInterruptedIteration?: {
+    failureNote: string
+  },
 ): Bead | null {
   const now = new Date().toISOString()
   const recoveredBeads = beads.map((bead) => bead.id === failedBead.id
@@ -959,6 +971,19 @@ function recoverCodingBead(
                 content: userRetryNote,
               },
             ],
+        failedIterationNotes: consumeInterruptedIteration === undefined
+          ? bead.failedIterationNotes
+          : [
+              ...bead.failedIterationNotes,
+              {
+                timestamp: now,
+                iteration: bead.iteration,
+                content: consumeInterruptedIteration.failureNote,
+              },
+            ],
+        iteration: consumeInterruptedIteration === undefined
+          ? bead.iteration
+          : bead.iteration + 1,
         updatedAt: now,
       }
     : bead)

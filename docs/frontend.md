@@ -116,6 +116,8 @@ Current `CodingView` composes:
 
 It also merges persisted bead artifacts with runtime bead overlays from the live ticket payload so the UI can show in-progress status and notes without waiting for a full artifact refresh. Bead details render append-only **Failed Iteration Notes**, **User Retry Notes**, and **Finalization Failure Notes** sections independently, preserving their timestamp, iteration, content, and optional error code.
 
+The live bead countdown uses the runtime bead's attempt-level `updatedAt` as its deadline anchor and falls back to the first-attempt `startedAt` only for legacy data. Restart recovery advances `updatedAt` when the replacement attempt begins, so the displayed clock and backend-owned per-iteration deadline both restart from the new attempt instead of remaining at `00:00`.
+
 QA-origin beads receive a **Manual QA Fix** badge and keep their version, source items, observations, expected behavior, and evidence thumbnails/references visible across Coding, Details, selected-bead, artifact, and log surfaces. Normal retry notes are presented separately.
 
 Execution setup approval exposes workspace inputs, functional workspace probes, and Git-hook handling as first-class plan fields. The user can review and edit each ignored or untracked file or directory before approval. Detected hooks are read-only evidence; the selected policy and ordered validation commands are editable, including adding, reordering, changing, or removing every command without an additional waiver gate. The runtime/final review surfaces whether input materialization and hook validation executed, failed, or was deliberately skipped.

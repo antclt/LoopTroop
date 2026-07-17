@@ -2,7 +2,9 @@ import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Bead } from '../../phases/beads/types'
 import { makeTicketContextFromTicket } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
-import { getLatestPhaseArtifact, getTicketByRef, upsertLatestPhaseArtifact } from '../../storage/tickets'
+import { getLatestPhaseArtifact, getTicketByRef, getTicketContext, upsertLatestPhaseArtifact } from '../../storage/tickets'
+import { opencodeSessions } from '../../db/schema'
+import { listOpenCodeSessionsForTicket } from '../../opencode/sessionManager'
 import {
   readTicketBeads,
   recoverCodingBeadWithReset,
@@ -25,6 +27,7 @@ const {
   assembleBeadContextMock,
   isMockOpenCodeModeMock,
   broadcastMock,
+  abortSessionMock,
 } = vi.hoisted(() => ({
   executeBeadMock: vi.fn(),
   recordBeadStartCommitMock: vi.fn(),
@@ -34,6 +37,7 @@ const {
   assembleBeadContextMock: vi.fn(),
   isMockOpenCodeModeMock: vi.fn(),
   broadcastMock: vi.fn(),
+  abortSessionMock: vi.fn(),
 }))
 
 vi.mock('../../opencode/factory', () => ({
@@ -59,6 +63,7 @@ vi.mock('../phases/state', async () => {
     ...actual,
     adapter: {
       assembleBeadContext: assembleBeadContextMock,
+      abortSession: abortSessionMock,
     },
   }
 })
@@ -130,6 +135,7 @@ describe('handleCoding', () => {
     assembleBeadContextMock.mockReset()
     isMockOpenCodeModeMock.mockReset()
     broadcastMock.mockReset()
+    abortSessionMock.mockReset()
 
     // Deterministic defaults
     isMockOpenCodeModeMock.mockReturnValue(false)
@@ -601,12 +607,32 @@ describe('handleCoding', () => {
         beadStartCommit: 'start-sha',
       }),
     ])
+    const ticketContext = getTicketContext(ticket.id)
+    if (!ticketContext) throw new Error('Expected ticket context')
+    ticketContext.projectDb.insert(opencodeSessions).values({
+      sessionId: 'ses-interrupted',
+      ticketId: ticketContext.localTicketId,
+      phase: 'CODING',
+      phaseAttempt: 1,
+      beadId: 'bead-1',
+      iteration: 2,
+      state: 'active',
+    }).run()
+    ticketContext.projectDb.insert(opencodeSessions).values({
+      sessionId: 'ses-other-iteration',
+      ticketId: ticketContext.localTicketId,
+      phase: 'CODING',
+      phaseAttempt: 1,
+      beadId: 'bead-1',
+      iteration: 1,
+      state: 'active',
+    }).run()
     const sendEvent = vi.fn()
 
     executeBeadMock.mockResolvedValueOnce({
       success: true,
       beadId: 'bead-1',
-      iteration: 2,
+      iteration: 3,
       output: 'done',
       errors: [],
     })
@@ -622,7 +648,22 @@ describe('handleCoding', () => {
     )
     const executedBead = executeBeadMock.mock.calls[0]![1] as Bead
     expect(executedBead.status).toBe('in_progress')
-    expect(executedBead.failedIterationNotes).toEqual([makeNote('prior interrupted attempt')])
+    expect(executedBead.iteration).toBe(3)
+    expect(executedBead.updatedAt).not.toBe('2026-01-01T00:00:00.000Z')
+    expect(executeBeadMock.mock.calls[0]![5]).toBe(20 * 60 * 1000)
+    expect(executedBead.failedIterationNotes).toEqual([
+      makeNote('prior interrupted attempt'),
+      expect.objectContaining({
+        iteration: 2,
+        content: 'Iteration was interrupted before its OpenCode session could be resumed; restarted from the bead start snapshot.',
+      }),
+    ])
+    expect(abortSessionMock).toHaveBeenCalledWith('ses-interrupted')
+    expect(abortSessionMock).not.toHaveBeenCalledWith('ses-other-iteration')
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['active']).map((session) => session.sessionId))
+      .toEqual(['ses-other-iteration'])
+    expect(listOpenCodeSessionsForTicket(ticket.id, ['abandoned']).map((session) => session.sessionId))
+      .toEqual(['ses-interrupted'])
     expect(sendEvent).toHaveBeenCalledWith({ type: 'ALL_BEADS_DONE' })
   })
 
@@ -732,7 +773,7 @@ describe('handleCoding', () => {
     executeBeadMock.mockResolvedValueOnce({
       success: true,
       beadId: 'bead-1',
-      iteration: 2,
+      iteration: 3,
       output: 'fresh done',
       errors: [],
     })
@@ -758,6 +799,15 @@ describe('handleCoding', () => {
     expect(payload.output).toBe('fresh done')
     expect(payload.checkpoint?.beadStartCommit).toBe('abc123')
     expect(payload.checkpoint?.updatedAt).not.toBe('2026-01-01T00:00:00.000Z')
+    expect(readTicketBeads(ticket.id).find((bead) => bead.id === 'bead-1')).toMatchObject({
+      iteration: 3,
+      failedIterationNotes: [
+        expect.objectContaining({
+          iteration: 2,
+          content: 'Iteration was interrupted before its OpenCode session could be resumed; restarted from the bead start snapshot.',
+        }),
+      ],
+    })
   })
 
   it('blocks interrupted coding recovery when no bead start commit exists', async () => {
