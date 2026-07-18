@@ -164,7 +164,7 @@ You can change the main implementer between tickets. The choice is locked per-ti
 
 ### Council Members
 
-**Type:** model selector (1–3 slots, in addition to the main implementer)  
+**Type:** model selector (1–5 slots, in addition to the main implementer)
 **Required:** at least 1 additional member
 
 Council members are the additional models that participate in independent drafting and structured voting during the interview, PRD, and beads planning phases.
@@ -188,7 +188,7 @@ The minimum viable council is the main implementer plus one additional member. T
 The UI prevents duplicate picks across council slots, so if you cannot select a model twice that is intentional rather than a catalog bug.
 
 ::: tip
-Up to 3 council slots are available in addition to the main implementer, for a maximum council size of 4.
+Up to 5 council slots are available in addition to the main implementer, for a maximum council size of 6.
 :::
 
 **See also:** [LLM Council → Council Members](/llm-council#council-members)

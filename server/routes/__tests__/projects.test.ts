@@ -6,8 +6,28 @@ import { resolve } from 'node:path'
 import { initializeDatabase } from '../../db/init'
 import { sqlite } from '../../db/index'
 import { clearProjectDatabaseCache } from '../../db/project'
+import {
+  beadExecutionMetrics,
+  manualQaImprovementTickets,
+  manualQaOperations,
+  opencodeSessions,
+  phaseArtifacts,
+  projects,
+  ticketErrorOccurrences,
+  ticketPhaseAttempts,
+  ticketStatusHistory,
+  tickets,
+} from '../../db/schema'
 import { getProjectLoopTroopDir } from '../../storage/paths'
-import { attachExistingProject, attachProject, deleteProject, listProjects, resolveProjectState, updateProject } from '../../storage/projects'
+import {
+  attachExistingProject,
+  attachProject,
+  deleteProject,
+  getProjectContextById,
+  listProjects,
+  resolveProjectState,
+  updateProject,
+} from '../../storage/projects'
 import { createTicket, patchTicket } from '../../storage/ticketMutations'
 import { createFixtureRepoManager } from '../../test/fixtureRepo'
 import { projectRouter } from '../projects'
@@ -165,6 +185,279 @@ describe('projectRouter project cleanup', () => {
     }
     expect(recreated.name).toBe('Fresh Project')
     expect(recreated.shortname).toBe('NEW')
+  })
+
+  it('previews active tickets and saved editable settings', async () => {
+    const repoDir = repoManager.createRepo()
+    addGithubOrigin(repoDir)
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'Saved Project',
+      shortname: 'SVD',
+      icon: '🔎',
+      color: '#a855f7',
+      gitHookPolicy: 'ignore_internal_only',
+      manualQaOverride: false,
+    })
+    createTicket({ projectId: project.id, title: 'Draft ticket' })
+    const activeTicket = createTicket({ projectId: project.id, title: 'Active ticket' })
+    patchTicket(activeTicket.id, { status: 'CODING' })
+    const completedTicket = createTicket({ projectId: project.id, title: 'Completed ticket' })
+    patchTicket(completedTicket.id, { status: 'COMPLETED' })
+
+    const app = new Hono()
+    app.route('/api', projectRouter)
+    const response = await app.request(`/api/projects/check-git?path=${encodeURIComponent(repoDir)}`)
+    expect(response.status).toBe(200)
+    const payload = await response.json() as {
+      existingProject: {
+        name: string
+        shortname: string
+        icon: string | null
+        color: string | null
+        gitHookPolicy: string | null
+        manualQaOverride: boolean | null
+        ticketCount: number
+        activeTicketCount: number
+      }
+    }
+
+    expect(payload.existingProject).toMatchObject({
+      name: 'Saved Project',
+      shortname: 'SVD',
+      icon: '🔎',
+      color: '#a855f7',
+      gitHookPolicy: 'ignore_internal_only',
+      manualQaOverride: false,
+      ticketCount: 3,
+      activeTicketCount: 1,
+    })
+  })
+
+  it('restores existing state by default and updates its current repository path', async () => {
+    const repoDir = repoManager.createRepo()
+    addGithubOrigin(repoDir)
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'Saved Project',
+      shortname: 'SVD',
+    })
+    const ticket = createTicket({ projectId: project.id, title: 'Keep me' })
+    const context = getProjectContextById(project.id)!
+    context.projectDb.update(projects)
+      .set({ folderPath: '/old-machine/saved-project' })
+      .run()
+
+    const app = new Hono()
+    app.route('/api', projectRouter)
+    const response = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Renamed Project',
+        shortname: 'IGN',
+        folderPath: repoDir,
+        icon: '✨',
+        color: '#123456',
+      }),
+    })
+    expect(response.status).toBe(201)
+    const restored = await response.json() as {
+      name: string
+      shortname: string
+      icon: string | null
+      color: string | null
+      folderPath: string
+    }
+    expect(restored).toMatchObject({
+      name: 'Renamed Project',
+      shortname: 'SVD',
+      icon: '✨',
+      color: '#123456',
+      folderPath: repoDir,
+    })
+    expect(getProjectContextById(project.id)?.projectDb.select().from(tickets).all())
+      .toContainEqual(expect.objectContaining({ externalId: ticket.externalId }))
+
+    const explicitRestoreResponse = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Explicit Restore',
+        shortname: 'SVD',
+        folderPath: repoDir,
+        existingStateAction: 'restore',
+      }),
+    })
+    expect(explicitRestoreResponse.status).toBe(201)
+    expect(await explicitRestoreResponse.json()).toMatchObject({
+      name: 'Explicit Restore',
+      shortname: 'SVD',
+      folderPath: repoDir,
+    })
+  })
+
+  it('clears every ticket-owned row and managed worktree while retaining project settings', async () => {
+    const repoDir = repoManager.createRepo()
+    addGithubOrigin(repoDir)
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'Saved Project',
+      shortname: 'SVD',
+      icon: '🔎',
+      color: '#a855f7',
+      councilMembers: '["provider/model"]',
+      maxIterations: 9,
+      gitHookPolicy: 'validate_explicitly',
+      manualQaOverride: true,
+    })
+    const ticket = createTicket({ projectId: project.id, title: 'Active ticket' })
+    patchTicket(ticket.id, { status: 'CODING' })
+    const context = getProjectContextById(project.id)!
+    const localTicket = context.projectDb.select().from(tickets).get()!
+    context.projectDb.update(projects)
+      .set({ updatedAt: '2000-01-01T00:00:00.000Z' })
+      .run()
+    const originalCreatedAt = context.project.createdAt
+    const worktreePath = resolve(repoDir, '.looptroop', 'worktrees', ticket.externalId)
+    rmSync(worktreePath, { recursive: true, force: true })
+    git(repoDir, ['worktree', 'add', '-b', 'looptroop-clear-test', worktreePath])
+    writeFileSync(resolve(worktreePath, 'worktree-marker.txt'), 'remove me\n')
+
+    context.projectDb.insert(phaseArtifacts).values({
+      ticketId: localTicket.id, phase: 'CODING', content: '{}',
+    }).run()
+    context.projectDb.insert(ticketPhaseAttempts).values({
+      ticketId: localTicket.id, phase: 'CODING', attemptNumber: 1,
+    }).run()
+    context.projectDb.insert(manualQaOperations).values({
+      ticketId: localTicket.id,
+      actionId: 'action',
+      version: 1,
+      checklistHash: 'hash',
+      draftRevision: 1,
+      payload: '{}',
+    }).run()
+    context.projectDb.insert(manualQaImprovementTickets).values({
+      originId: 'origin',
+      destinationTicketId: localTicket.id,
+      actionId: 'action',
+    }).run()
+    context.projectDb.insert(opencodeSessions).values({
+      sessionId: 'session',
+      ticketId: localTicket.id,
+      phase: 'CODING',
+    }).run()
+    context.projectDb.insert(ticketStatusHistory).values({
+      ticketId: localTicket.id,
+      newStatus: 'CODING',
+    }).run()
+    context.projectDb.insert(ticketErrorOccurrences).values({
+      ticketId: localTicket.id,
+      occurrenceNumber: 1,
+      blockedFromStatus: 'CODING',
+    }).run()
+    context.projectDb.insert(beadExecutionMetrics).values({
+      ticketId: localTicket.id,
+      beadId: 'bead-1',
+      sizeBucket: 'S',
+      effortTier: 'medium',
+      activeDurationMs: 100,
+      completedAt: new Date().toISOString(),
+    }).run()
+
+    const app = new Hono()
+    app.route('/api', projectRouter)
+    const response = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Updated Name',
+        shortname: 'SVD',
+        folderPath: repoDir,
+        icon: '✨',
+        color: '#123456',
+        gitHookPolicy: 'ignore_internal_only',
+        manualQaOverride: false,
+        existingStateAction: 'clear_tickets',
+      }),
+    })
+    expect(response.status, await response.clone().text()).toBe(201)
+
+    const cleared = getProjectContextById(project.id)!
+    expect(cleared.project).toMatchObject({
+      name: 'Updated Name',
+      shortname: 'SVD',
+      icon: '✨',
+      color: '#123456',
+      councilMembers: '["provider/model"]',
+      maxIterations: 9,
+      gitHookPolicy: 'ignore_internal_only',
+      manualQaOverride: false,
+      ticketCounter: 0,
+      folderPath: repoDir,
+      createdAt: originalCreatedAt,
+    })
+    expect(cleared.project.updatedAt).not.toBe('2000-01-01T00:00:00.000Z')
+    for (const table of [
+      manualQaImprovementTickets,
+      manualQaOperations,
+      phaseArtifacts,
+      ticketPhaseAttempts,
+      opencodeSessions,
+      ticketStatusHistory,
+      ticketErrorOccurrences,
+      beadExecutionMetrics,
+      tickets,
+    ]) {
+      expect(cleared.projectDb.select().from(table).all()).toHaveLength(0)
+    }
+    expect(existsSync(worktreePath)).toBe(false)
+    expect(git(repoDir, ['worktree', 'list', '--porcelain'])).not.toContain(worktreePath)
+    expect(git(repoDir, ['show-ref', '--verify', 'refs/heads/looptroop-clear-test'])).toContain('looptroop-clear-test')
+  })
+
+  it('starts fresh with form metadata after removing existing state and tickets', async () => {
+    const repoDir = repoManager.createRepo()
+    addGithubOrigin(repoDir)
+    const original = attachProject({
+      folderPath: repoDir,
+      name: 'Saved Project',
+      shortname: 'SVD',
+      councilMembers: '["old/model"]',
+    })
+    createTicket({ projectId: original.id, title: 'Remove me' })
+
+    const app = new Hono()
+    app.route('/api', projectRouter)
+    const response = await app.request('/api/projects', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Fresh Project',
+        shortname: 'NEW',
+        folderPath: repoDir,
+        icon: '🌱',
+        color: '#654321',
+        councilMembers: '["new/model"]',
+        existingStateAction: 'start_fresh',
+      }),
+    })
+    expect(response.status).toBe(201)
+    const fresh = await response.json() as {
+      id: number
+      name: string
+      shortname: string
+      ticketCounter: number
+      councilMembers: string | null
+    }
+    expect(fresh).toMatchObject({
+      name: 'Fresh Project',
+      shortname: 'NEW',
+      ticketCounter: 0,
+      councilMembers: '["new/model"]',
+    })
+    expect(getProjectContextById(fresh.id)?.projectDb.select().from(tickets).all()).toHaveLength(0)
   })
 
   it('drops stale cached state after .looptroop is removed outside the app', () => {

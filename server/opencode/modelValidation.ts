@@ -1,6 +1,8 @@
 import { fetchConnectedModelIds } from './providerCatalog'
 import { parseCouncilMembers } from '../council/members'
 
+export const MAX_COUNCIL_MEMBERS = 6
+
 export interface ValidatedModelSelection {
   mainImplementer: string
   councilMembers: string[]
@@ -37,6 +39,9 @@ export async function validateModelSelection(
 
   if (normalizedCouncilMembers.length < 2) {
     throw new Error('At least two distinct council members are required, including the main implementer.')
+  }
+  if (normalizedCouncilMembers.length > MAX_COUNCIL_MEMBERS) {
+    throw new Error(`At most ${MAX_COUNCIL_MEMBERS} distinct council members are allowed, including the main implementer.`)
   }
 
   const invalidCouncilMembers = normalizedCouncilMembers.filter((memberId) => {

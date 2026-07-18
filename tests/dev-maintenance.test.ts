@@ -17,6 +17,7 @@ import {
   getHeldDependencyReleaseDetails,
   isExpectedAuditFindingsExit,
   isPeerResolutionFailure,
+  parseNpmViewPublishTimes,
   recordDailyMaintenanceSuccess,
   summarizePeerResolutionFailure,
   type DailyMaintenanceState,
@@ -179,6 +180,26 @@ describe('aged dependency update selection', () => {
   })
 })
 
+describe('npm publish-time metadata parsing', () => {
+  const publishTimes = {
+    created: '2026-05-01T00:00:00.000Z',
+    '1.2.3': '2026-05-02T00:00:00.000Z',
+  }
+
+  it('accepts the object shape returned by older npm releases', () => {
+    expect(parseNpmViewPublishTimes(JSON.stringify(publishTimes))).toEqual(publishTimes)
+  })
+
+  it('accepts the one-element array shape returned by npm 12', () => {
+    expect(parseNpmViewPublishTimes(JSON.stringify([publishTimes]))).toEqual(publishTimes)
+  })
+
+  it('rejects output without publish-time entries', () => {
+    expect(parseNpmViewPublishTimes(JSON.stringify([]))).toBeNull()
+    expect(parseNpmViewPublishTimes('not json')).toBeNull()
+  })
+})
+
 describe('peer-safe dependency maintenance', () => {
   it('recognizes npm peer-resolution failures without treating unrelated failures as compatibility holds', () => {
     expect(isPeerResolutionFailure('npm error code ERESOLVE\nnpm error Could not resolve dependency:')).toBe(true)
@@ -329,7 +350,8 @@ describe('held dependency detail formatting', () => {
     expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
       'held runtime dependency alpha 1.0.0 -> 1.1.0; because the 7-day release-safety period has not passed; ' +
       'eligible after 2026-05-15T00:00:00.000Z',
-      'held dev dependency beta 2.0.0 -> 2.1.0; because npm publish metadata could not be verified',
+      'held dev dependency beta 2.0.0 -> 2.1.0; because npm could not return usable registry publish metadata, ' +
+      'so the 7-day release age could not be verified',
     ])
   })
 
@@ -368,7 +390,8 @@ describe('held dependency detail formatting', () => {
     })
 
     expect(details.map(formatHeldDependencyReleaseDetail)).toEqual([
-      'held runtime dependency metadata-package 1.0.0 -> 1.1.0; because npm publish metadata could not be verified',
+      'held runtime dependency metadata-package 1.0.0 -> 1.1.0; ' +
+      'because npm could not return usable registry publish metadata, so the 7-day release age could not be verified',
       'held dev dependency tagged-package workspace:latest -> 2.0.0; ' +
       'because the current version is not a stable semantic version',
     ])

@@ -16,7 +16,7 @@ const profileSchema = z.object({
   mainImplementerVariant: z.string().optional(),
   councilMembers: z.string().optional(),
   councilMemberVariants: z.string().optional(),
-  minCouncilQuorum: z.number().int().min(1).max(4).optional(),
+  minCouncilQuorum: z.number().int().min(1).max(6).optional(),
   perIterationTimeout: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(), // 0 = no timeout
   executionSetupTimeout: z.number().int().min(0).max(MAX_TIMEOUT_MS).optional(), // 0 = no timeout
   councilResponseTimeout: z.number().int().min(10_000).max(MAX_TIMEOUT_MS).optional(),

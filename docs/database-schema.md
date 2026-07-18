@@ -119,6 +119,16 @@ Operational notes:
 - project-level overrides are read directly from this row at runtime; they do not require joining back into the app DB
 - `git_hook_policy` resolves project → profile and is then locked into the approved ticket setup plan; it never rewrites the target repository's Git configuration
 
+### Reattaching Existing Project State
+
+Selecting a repository with an existing `.looptroop/db.sqlite` exposes three storage operations:
+
+- **Restore** preserves the project row and all ticket-owned rows/files. Current visible form edits are applied, and `projects.folder_path` plus the app-level `attached_projects.folder_path` are aligned to the repository root on the current machine.
+- **Clear tickets** preserves the complete project row, including its short name, appearance, creation timestamp, profile association, and nullable overrides. It removes every ticket and all dependent records, artifacts, attempts, QA operations/metrics, status/error history, OpenCode session ownership, ticket files, and managed worktrees. It then sets `ticket_counter` to `0`, applies current visible form edits, updates `folder_path`, and advances `updated_at`.
+- **Start fresh** removes managed worktrees, prunes Git worktree registrations, deletes the entire `.looptroop` directory, and creates a new project database from the current form.
+
+Clear/start-fresh cleanup includes active tickets; it is not constrained by the normal project-deletion rule. Repository source files, commits, and branches remain outside these deletion boundaries. Resetting `ticket_counter` makes the next ticket `<SHORTNAME>-1`, so a surviving old branch can share the restarted ticket identifier.
+
 ### `tickets`
 
 This is the operational center of a ticket.

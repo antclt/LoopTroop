@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCreateProject, useUpdateProject, useDeleteProject } from '@/hooks/useProjects'
-import type { ExistingProjectPreview, Project } from '@/hooks/useProjects'
+import type { ExistingProjectPreview, ExistingStateAction, Project } from '@/hooks/useProjects'
 import { useToast } from '@/components/shared/useToast'
 import { ArrowLeft, HardDrive, Trash2, CheckCircle2, XCircle, CircleDot, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,7 @@ import { ConfigurationDocsLink } from '@/components/config/ConfigurationDocsLink
 import type { ManualQaOverride } from '@/lib/manualQaSetting'
 import { useProfile } from '@/hooks/useProfile'
 import type { GitHookPolicy } from '@/lib/executionSetupPlan'
+import { ExistingProjectActionDialog } from './ExistingProjectActionDialog'
 
 interface ProjectFormProps {
   onClose: () => void
@@ -67,9 +68,12 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
   const [gitInfo, setGitInfo] = useState<GitCheckResponse>({ isGit: false, status: 'none' })
   const [isFolderPickerOpen, setIsFolderPickerOpen] = useState(false)
   const [isWorktreesDialogOpen, setIsWorktreesDialogOpen] = useState(false)
+  const [existingStateAction, setExistingStateAction] = useState<ExistingStateAction>('restore')
+  const [isExistingStateConfirmOpen, setIsExistingStateConfirmOpen] = useState(false)
   const restorePrefillKeyRef = useRef<string | null>(null)
   const closeView = onBack ?? onClose
   const restoreMode = !isEditing && gitInfo.hasLoopTroopState === true && !!gitInfo.existingProject
+  const isSavedShortnameLocked = restoreMode && existingStateAction !== 'start_fresh'
   const gitStatus = gitInfo.status
   const gitMessage = gitInfo.message ?? ''
   const projectStatePath = `${folder.replace(/[\\/]+$/, '')}/.looptroop`
@@ -91,6 +95,27 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
         .then(r => r.json())
         .then((data: GitCheckResponse) => {
           if (cancelled) return
+          if (
+            !isEditing
+            && data.hasLoopTroopState === true
+            && data.existingProject
+            && data.repoRoot
+            && restorePrefillKeyRef.current !== data.repoRoot
+          ) {
+            setName(data.existingProject.name)
+            setShortname(data.existingProject.shortname)
+            setIcon(data.existingProject.icon ?? '📁')
+            setColor(data.existingProject.color ?? '#3b82f6')
+            if (data.existingProject.manualQaOverride !== undefined) {
+              setManualQaOverride(data.existingProject.manualQaOverride)
+            }
+            if (data.existingProject.gitHookPolicy !== undefined) {
+              setGitHookPolicy(data.existingProject.gitHookPolicy)
+            }
+            setExistingStateAction('restore')
+            setIsExistingStateConfirmOpen(false)
+            restorePrefillKeyRef.current = data.repoRoot
+          }
           setGitInfo(data)
         })
         .catch(() => {
@@ -106,18 +131,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [folder])
-
-  useEffect(() => {
-    if (isEditing || !restoreMode || !gitInfo.existingProject || !gitInfo.repoRoot) return
-    if (restorePrefillKeyRef.current === gitInfo.repoRoot) return
-
-    setName(gitInfo.existingProject.name)
-    setShortname(gitInfo.existingProject.shortname)
-    setIcon(gitInfo.existingProject.icon ?? '📁')
-    setColor(gitInfo.existingProject.color ?? '#3b82f6')
-    restorePrefillKeyRef.current = gitInfo.repoRoot
-  }, [gitInfo.existingProject, gitInfo.repoRoot, isEditing, restoreMode])
+  }, [folder, isEditing])
 
   const handleBrowseFolder = () => {
     setIsFolderPickerOpen(true)
@@ -126,6 +140,36 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
   const handleFolderSelected = (path: string) => {
     setFolder(path)
     setIsFolderPickerOpen(false)
+  }
+
+  const createProjectWithSelectedAction = () => {
+    createProject.mutate(
+      {
+        name,
+        shortname,
+        folderPath: folder,
+        icon,
+        color,
+        gitHookPolicy,
+        manualQaOverride: restoreMode
+          ? manualQaOverride
+          : manualQaOverride ?? profile?.manualQaEnabled ?? false,
+        ...(restoreMode ? { existingStateAction } : {}),
+      },
+      {
+        onSuccess: () => {
+          const successMessage = !restoreMode
+            ? 'Project created.'
+            : existingStateAction === 'clear_tickets'
+              ? 'Project attached with its settings and a clean ticket list.'
+              : existingStateAction === 'start_fresh'
+                ? 'Fresh project created after removing existing LoopTroop state.'
+                : 'Project restored from existing LoopTroop data.'
+          addToast('success', successMessage)
+          closeView()
+        },
+      },
+    )
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -140,16 +184,20 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
           },
         },
       )
-    } else {
-      createProject.mutate(
-        { name, shortname, folderPath: folder, icon, color, gitHookPolicy, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
-        {
-          onSuccess: () => {
-            addToast('success', restoreMode ? 'Project restored from existing LoopTroop data.' : 'Project created.')
-            closeView()
-          },
-        },
-      )
+      return
+    }
+
+    if (restoreMode && existingStateAction !== 'restore') {
+      setIsExistingStateConfirmOpen(true)
+      return
+    }
+    createProjectWithSelectedAction()
+  }
+
+  const handleExistingStateActionChange = (action: ExistingStateAction) => {
+    setExistingStateAction(action)
+    if (action !== 'start_fresh' && gitInfo.existingProject) {
+      setShortname(gitInfo.existingProject.shortname)
     }
   }
 
@@ -207,7 +255,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
             </div>
             <div className="w-32">
               <label htmlFor="project-shortname" className="text-sm font-medium block mb-1">Short Name</label>
-              {isEditing || restoreMode ? (
+              {isEditing || isSavedShortnameLocked ? (
                 <span className="inline-block px-3 py-2 text-sm font-mono text-muted-foreground uppercase">{shortname}</span>
               ) : (
                 <input
@@ -223,8 +271,11 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
                   required
                 />
               )}
-              {restoreMode && (
-                <p className="mt-1 text-xs text-muted-foreground">Restored from existing project data and kept immutable.</p>
+              {isSavedShortnameLocked && (
+                <p className="mt-1 text-xs text-muted-foreground">Kept from the existing project identity.</p>
+              )}
+              {restoreMode && existingStateAction === 'start_fresh' && (
+                <p className="mt-1 text-xs text-muted-foreground">Editable because fresh state will be created.</p>
               )}
             </div>
           </div>
@@ -407,40 +458,124 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
             </div>
           )}
           {restoreMode && gitInfo.existingProject && (
-            <div className="rounded-lg border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-700/60 dark:bg-amber-950/20">
+            <div className="space-y-4 rounded-lg border border-amber-300/70 bg-amber-50/70 p-4 text-sm dark:border-amber-700/60 dark:bg-amber-950/20">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
-                <div className="min-w-0 space-y-3">
-                  <div>
-                    <p className="font-medium text-amber-900 dark:text-amber-100">Existing LoopTroop project detected</p>
+                <div className="min-w-0">
+                  <p className="font-medium text-amber-900 dark:text-amber-100">Existing LoopTroop project detected</p>
+                  <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/80">
+                    Choose which saved project data to keep when attaching this repository.
+                  </p>
+                  {gitInfo.scope === 'subfolder' && gitInfo.repoRoot && (
                     <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/80">
-                      This folder already contains LoopTroop state. Attaching it will restore the existing tickets and workflow data from disk.
+                      Repository root: <span className="font-mono">{gitInfo.repoRoot}</span>
                     </p>
-                    {gitInfo.scope === 'subfolder' && gitInfo.repoRoot && (
-                      <p className="mt-1 text-xs text-amber-800/90 dark:text-amber-200/80">
-                        Repository root: <span className="font-mono">{gitInfo.repoRoot}</span>
-                      </p>
+                  )}
+                </div>
+              </div>
+
+              <fieldset className="grid gap-2" disabled={isBusy}>
+                <legend className="sr-only">Existing project action</legend>
+                {([
+                  {
+                    value: 'restore',
+                    title: 'Restore everything',
+                    description: `Keep all ${gitInfo.existingProject.ticketCount} tickets, workflow data, settings, and the current counter.`,
+                  },
+                  {
+                    value: 'clear_tickets',
+                    title: 'Keep project settings, clear tickets',
+                    description: 'Keep project identity and overrides, but permanently remove every ticket and its content.',
+                  },
+                  {
+                    value: 'start_fresh',
+                    title: 'Start fresh',
+                    description: 'Delete the entire .looptroop state folder and create a new project from this form.',
+                  },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={cn(
+                      'flex cursor-pointer gap-3 rounded-md border bg-background/70 p-3 transition-colors',
+                      existingStateAction === option.value
+                        ? 'border-primary ring-1 ring-primary'
+                        : 'border-border hover:border-muted-foreground/50',
                     )}
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-100">Restored from existing project data</p>
-                      <ul className="mt-1 space-y-1 text-xs text-amber-800 dark:text-amber-200/90">
-                        <li>Short name: <span className="font-mono">{gitInfo.existingProject.shortname}</span></li>
-                        <li>Ticket counter: <span className="font-mono">{gitInfo.existingProject.ticketCounter}</span></li>
-                        <li>Existing tickets: {gitInfo.existingProject.ticketCount}</li>
-                        <li>Ticket workflow and artifact state</li>
-                      </ul>
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-wide text-amber-900 dark:text-amber-100">Updated from your current form</p>
-                      <ul className="mt-1 space-y-1 text-xs text-amber-800 dark:text-amber-200/90">
+                  >
+                    <input
+                      type="radio"
+                      name="existing-state-action"
+                      value={option.value}
+                      checked={existingStateAction === option.value}
+                      onChange={() => handleExistingStateActionChange(option.value)}
+                      className="mt-0.5 h-4 w-4 accent-primary"
+                    />
+                    <span>
+                      <span className="block font-medium text-foreground">{option.title}</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">{option.description}</span>
+                    </span>
+                  </label>
+                ))}
+              </fieldset>
+
+              {existingStateAction !== 'restore' && (gitInfo.existingProject.activeTicketCount ?? 0) > 0 && (
+                <p className="rounded-md border border-destructive/40 bg-destructive/5 p-2 text-xs font-medium text-destructive">
+                  Warning: {gitInfo.existingProject.activeTicketCount}{' '}
+                  {gitInfo.existingProject.activeTicketCount === 1 ? 'ticket is' : 'tickets are'} currently active and will be deleted.
+                </p>
+              )}
+
+              <div className="grid gap-3 rounded-md border border-amber-300/60 bg-background/50 p-3 sm:grid-cols-2 dark:border-amber-700/50">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-green-700 dark:text-green-300">
+                    {existingStateAction === 'start_fresh' ? 'Created from current form' : 'Kept'}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                    {existingStateAction === 'restore' && (
+                      <>
+                        <li>{gitInfo.existingProject.ticketCount} tickets and all workflow/artifact data</li>
+                        <li>Ticket counter at {gitInfo.existingProject.ticketCounter}</li>
+                        <li>Project identity, timestamps, and overrides</li>
+                      </>
+                    )}
+                    {existingStateAction === 'clear_tickets' && (
+                      <>
+                        <li>Short name <span className="font-mono">{gitInfo.existingProject.shortname}</span></li>
+                        <li>Project identity, appearance, creation time, and overrides</li>
+                      </>
+                    )}
+                    {existingStateAction === 'start_fresh' && (
+                      <>
                         <li>Name: {name}</li>
-                        <li>Icon: {icon?.startsWith('data:') ? 'Custom image' : icon}</li>
-                        <li>Color: <span className="font-mono">{color}</span></li>
-                      </ul>
-                    </div>
-                  </div>
+                        <li>Short name: <span className="font-mono">{shortname}</span></li>
+                        <li>Appearance and settings shown above</li>
+                      </>
+                    )}
+                    {existingStateAction !== 'start_fresh' && (
+                      <li>Current form edits to visible project settings</li>
+                    )}
+                  </ul>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-destructive">
+                    {existingStateAction === 'restore' ? 'Not deleted' : 'Deleted'}
+                  </p>
+                  <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted-foreground">
+                    {existingStateAction === 'restore' ? (
+                      <li>No saved LoopTroop data</li>
+                    ) : existingStateAction === 'clear_tickets' ? (
+                      <>
+                        <li>All tickets, workflow data, logs, and artifacts</li>
+                        <li>Managed worktrees and saved OpenCode sessions</li>
+                        <li>Ticket counter resets to 0</li>
+                      </>
+                    ) : (
+                      <>
+                        <li>The entire existing <span className="font-mono">.looptroop</span> state folder</li>
+                        <li>All tickets, artifacts, worktrees, and saved metadata</li>
+                      </>
+                    )}
+                  </ul>
                 </div>
               </div>
             </div>
@@ -468,7 +603,15 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
         <div className="flex gap-2 ml-auto">
           <Button type="button" variant="outline" onClick={closeView}>Cancel</Button>
           <Button type="submit" disabled={isBusy || (!isEditing && gitStatus !== 'valid')}>
-            {isEditing ? 'Save Changes' : restoreMode ? 'Restore Project' : 'Create Project'}
+            {isEditing
+              ? 'Save Changes'
+              : restoreMode
+                ? existingStateAction === 'clear_tickets'
+                  ? 'Clear Tickets & Attach'
+                  : existingStateAction === 'start_fresh'
+                    ? 'Start Fresh'
+                    : 'Restore Project'
+                : 'Create Project'}
           </Button>
         </div>
       </div>
@@ -487,6 +630,17 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
         onClose={() => setIsWorktreesDialogOpen(false)}
         projectId={project.id}
         projectName={project.name}
+      />
+    )}
+    {restoreMode && gitInfo.existingProject && existingStateAction !== 'restore' && (
+      <ExistingProjectActionDialog
+        open={isExistingStateConfirmOpen}
+        action={existingStateAction}
+        project={gitInfo.existingProject}
+        nextShortname={shortname}
+        isPending={createProject.isPending}
+        onCancel={() => setIsExistingStateConfirmOpen(false)}
+        onConfirm={createProjectWithSelectedAction}
       />
     )}
     </>

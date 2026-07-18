@@ -34,7 +34,12 @@ interface ExistingProjectPreview {
   color: string | null
   ticketCounter: number
   ticketCount: number
+  activeTicketCount: number
+  gitHookPolicy?: GitHookPolicy | null
+  manualQaOverride?: boolean | null
 }
+
+type ExistingStateAction = 'restore' | 'clear_tickets' | 'start_fresh'
 
 interface CreateProjectInput {
   name: string
@@ -46,6 +51,7 @@ interface CreateProjectInput {
   executionSetupTimeout?: number
   gitHookPolicy?: GitHookPolicy | null
   manualQaOverride?: boolean | null
+  existingStateAction?: ExistingStateAction
 }
 
 interface CachedProjectTicket {
@@ -201,4 +207,4 @@ export function useDeleteProjectWorktrees() {
   })
 }
 
-export type { Project, CreateProjectInput, ExistingProjectPreview }
+export type { Project, CreateProjectInput, ExistingProjectPreview, ExistingStateAction }

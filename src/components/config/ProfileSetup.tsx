@@ -359,7 +359,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
             <label className="text-sm font-medium block mb-1">Council Members</label>
             <div className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
               <p className="min-w-0 flex-1">
-                Choose up to 4 models to form the review council. The main implementer is automatically included.
+                Choose up to 6 models to form the review council. The main implementer is automatically included.
               </p>
               <ConfigurationDocsLink docsPath={descriptionDocs.councilMembers} label="Council Members" />
             </div>
@@ -442,7 +442,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                   </button>
                 </div>
               ))}
-              {councilSlots.length < 3 && (
+              {councilSlots.length < 5 && (
                 <Button
                   type="button"
                   variant="outline"
@@ -481,7 +481,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">AI Thinking</div>
           <div className="grid grid-cols-2 gap-3">
             <NumericField fieldKey="councilResponseTimeout" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Wait time for AI model responses (10–3600s)" />
-            <NumericField fieldKey="minCouncilQuorum" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Minimum council votes required (1–4)" />
+            <NumericField fieldKey="minCouncilQuorum" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Minimum council votes required (1–6)" />
           </div>
           <div className="mt-3">
             <NumericField fieldKey="interviewQuestions" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum initial clarifying questions (0–50; keep above 0 for normal runs)." />

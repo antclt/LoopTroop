@@ -355,10 +355,15 @@ Improvement ticket Details/audit UI reads `.ticket/meta/manual-qa-origin.json` p
 
 - it lists attached repositories, supports sort-by name/ticket-count/created/updated, and opens `ProjectForm` for create/edit flows
 - the create flow validates the selected folder with `/api/projects/check-git`, requires a git-initialized repository, and surfaces WSL mounted-drive performance warnings before attachment
-- if the selected repository already contains LoopTroop local state, the form switches into restore mode and explains which values are restored from disk versus taken from the current form
+- if the selected repository already contains LoopTroop local state, the form previews saved project settings plus total and active ticket counts, then offers **Restore everything**, **Keep project settings, clear tickets**, or **Start fresh**
+- the comparison for each action clearly separates retained project metadata/settings from deleted tickets, artifacts, logs, and managed worktrees; the saved short name remains locked for restore/clear and becomes editable only for start-fresh
+- restore remains the default and submits immediately, while either destructive action opens a confirmation dialog that prominently names active tickets, the counter reset to `<SHORTNAME>-1`, possible collisions with surviving old branches, and the repository data that remains untouched
+- destructive confirmation stays open with its controls disabled while the request is pending; a failure remains visible without discarding the chosen action, and success refreshes both project and ticket caches
 - the edit flow focuses on project identity and maintenance: rename, recolor, re-icon, inspect timestamps, delete the project, or open `DeleteWorktreesDialog` to reclaim disk space
 
-The current frontend project modal is intentionally scoped to attachment metadata, restore awareness, and cleanup. It does not expose advanced per-project workflow override editing in the modal today.
+Restore keeps all existing workflow state. Clear-tickets preserves project identity, appearance, creation time, profile association, and project-level overrides while removing every ticket and its content; its last-update time records the clear. Start-fresh deletes and recreates `.looptroop` from the current form. Both destructive paths can remove active ticket worktrees, but none of the attachment choices delete repository source files, commits, or branches.
+
+The current frontend project modal is intentionally scoped to attachment metadata, restore/clear/start-fresh decisions, and cleanup. It does not expose every advanced per-project workflow override in the modal today.
 
 ## 11. Context Providers
 

@@ -187,9 +187,9 @@ function formatHeldReleaseTiming(
 ) {
   switch (reason) {
     case 'metadata-unavailable':
-      return 'because npm publish metadata could not be verified'
+      return 'because npm could not return usable registry publish metadata, so the 7-day release age could not be verified'
     case 'missing-version':
-      return 'because npm did not report comparable version metadata'
+      return 'because the version needed for the 7-day release-age check was missing from npm registry metadata'
     case 'non-semver-current':
       return 'because the current version is not a stable semantic version'
     case 'no-aged-version':
@@ -817,6 +817,26 @@ function toIsoTimestamp(timestamp: number | null) {
   return timestamp == null || !isFiniteTimestamp(timestamp) ? undefined : new Date(timestamp).toISOString()
 }
 
+export function parseNpmViewPublishTimes(text: string): Record<string, string> | null {
+  const parsed = parseJson<unknown>(text)
+  const candidates = Array.isArray(parsed) ? parsed : [parsed]
+  const times: Record<string, string> = {}
+
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+      return null
+    }
+
+    for (const [key, value] of Object.entries(candidate)) {
+      if (typeof value === 'string') {
+        times[key] = value
+      }
+    }
+  }
+
+  return Object.keys(times).length > 0 ? times : null
+}
+
 function getPackagePublishTimes(packageName: string) {
   const result = runCommand(['view', packageName, 'time', '--json'], `npm view ${packageName} time`, { verbose: false })
   if (result.status !== 0 || !result.stdout) {
@@ -826,7 +846,9 @@ function getPackagePublishTimes(packageName: string) {
     }
   }
 
-  const times = parseJson<Record<string, string>>(result.stdout)
+  // npm 12 wraps a single `npm view ... --json` result in a one-element
+  // array, while older npm releases return the object directly.
+  const times = parseNpmViewPublishTimes(result.stdout)
   if (!times) {
     return {
       times: null,

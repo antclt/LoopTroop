@@ -12,6 +12,9 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Added safe restore, clear-tickets, and start-fresh choices when attaching repositories that already contain LoopTroop state.
+- Expanded councils to support up to six distinct models, including the main implementer.
+- Kept dependency release-age checks compatible with npm 12 publish-metadata output.
 - Allowed native dependencies to build automatically on npm v12+ via allowScripts configuration.
 - Kept generated and cache outputs usable in ticket worktrees while automatically excluding them from implementation totals, checkpoints, and delivery.
 - Made interrupted coding recovery consume a bounded fresh bead iteration with an accurate restarted countdown.
@@ -49,6 +52,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added three explicit existing-project attachment actions: restore all state, retain project settings while clearing every ticket, or delete `.looptroop` and start fresh. Destructive actions include active-ticket warnings, a keep/delete comparison, and a required confirmation.
 - Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) in model configuration and validation, with a dedicated selector in the configuration profile setup.
 - Added `deleteTicket` option to the ticket cancellation endpoint and a corresponding checkbox in the Cancel Ticket dialog, allowing users to erase all database records and local files, automatically disabling other cleanup options when selected.
 - Added the active execution setup attempt count (e.g. `execution setup attempt 2 of 5`) from the phase logs to the `Preparing Workspace Runtime` status title when the setup attempt number is greater than 1.
@@ -72,6 +76,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Expanded the model council to a maximum of six distinct members (the main implementer plus up to five additional members) and raised the supported minimum-quorum range to six.
+- Existing-state attachment now updates the saved project path to the repository root on the current machine. Clear-tickets preserves project identity, appearance, creation time, profile association, and overrides while removing all ticket-linked records/content/worktrees, recording a new update time, and resetting numbering to `<SHORTNAME>-1`; start-fresh recreates the complete local state folder without altering repository commits or branches.
 - Changed final-test file handling to preserve explicit and tracked/staged project changes while leaving untracked generated, cache, and setup-local outputs on disk as local-only files. Unknown untracked files receive one classification retry before continuing with a warning; unresolved tracked changes remain candidates for the final PR audit instead of blocking integration.
 - Changed setup **Retry with extra note...** to send only the entered text to the preserved setup session and grant one manual attempt beyond the automatic retry budget without archiving the runtime phase attempt or saving the note as future context. **Edit setup plan...** now asks for confirmation before rewinding, and both dialog-opening labels use an ellipsis.
 - Changed execution setup planning to compare the original checkout with the ticket worktree, propose only evidence-backed missing inputs, and materialize approved inputs before setup commands run.
@@ -100,6 +106,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Extended final delivery and PR summaries with the latest Manual QA outcome, created fix-bead/improvement-ticket IDs, and skip/waiver state while keeping evidence binaries out of prompts, commits, diffs, and PRs.
 
 #### Fixed
+- Fixed npm 12 dependency maintenance incorrectly holding releases whose publish-time metadata was returned as a one-element JSON array; both the legacy object and npm 12 array shapes now participate in the seven-day release-age check.
 - Fixed native dependency builds (like better-sqlite3 and esbuild) failing or being skipped on npm v12+ by adding them to the allowScripts allowlist in package.json.
 - Prevented generated and cache outputs from inflating implementation change totals or blocking final testing, Manual QA preparation, and integration when they are not delivery candidates.
 - Restored type-safe OpenRouter router-model detection in profile configuration so the full lint gate remains clean.

@@ -37,8 +37,31 @@ export interface ExistingProjectMetadata {
   shortname: string
   icon: string | null
   color: string | null
+  gitHookPolicy: LocalProjectRow['gitHookPolicy']
+  manualQaOverride: LocalProjectRow['manualQaOverride']
   ticketCounter: number
   ticketCount: number
+  activeTicketCount: number
+}
+
+export type ExistingStateAction = 'restore' | 'clear_tickets' | 'start_fresh'
+
+interface ProjectAttachmentInput {
+  folderPath: string
+  name: string
+  shortname: string
+  icon?: string
+  color?: string
+  profileId?: number
+  councilMembers?: string
+  manualQaOverride?: boolean | null
+  gitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only' | null
+  maxIterations?: number
+  perIterationTimeout?: number
+  executionSetupTimeout?: number
+  councilResponseTimeout?: number
+  minCouncilQuorum?: number
+  interviewQuestions?: number
 }
 
 function hydrateProject(attached: AttachedProjectRow, project: LocalProjectRow): PublicProject {
@@ -85,22 +108,7 @@ function ensureAttachedProject(projectRoot: string): AttachedProjectRow {
   return attached
 }
 
-function ensureLocalProject(projectRoot: string, input?: {
-  name: string
-  shortname: string
-  icon?: string
-  color?: string
-  profileId?: number
-  councilMembers?: string
-  manualQaOverride?: boolean | null
-  gitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only' | null
-  maxIterations?: number
-  perIterationTimeout?: number
-  executionSetupTimeout?: number
-  councilResponseTimeout?: number
-  minCouncilQuorum?: number
-  interviewQuestions?: number
-}): LocalProjectRow {
+function ensureLocalProject(projectRoot: string, input?: ProjectAttachmentInput): LocalProjectRow {
   const existing = readLocalProject(projectRoot)
   if (existing) return existing
   if (!input) {
@@ -143,23 +151,7 @@ export function hasLoopTroopState(projectRoot: string): boolean {
   return !!readLocalProject(repoRoot)
 }
 
-export function attachProject(input: {
-  folderPath: string
-  name: string
-  shortname: string
-  icon?: string
-  color?: string
-  profileId?: number
-  councilMembers?: string
-  manualQaOverride?: boolean | null
-  gitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only' | null
-  maxIterations?: number
-  perIterationTimeout?: number
-  executionSetupTimeout?: number
-  councilResponseTimeout?: number
-  minCouncilQuorum?: number
-  interviewQuestions?: number
-}): PublicProject {
+export function attachProject(input: ProjectAttachmentInput): PublicProject {
   const projectRoot = resolveGitRepoRoot(input.folderPath)
   if (!projectRoot) {
     throw new Error(`Folder is not a git repository: ${input.folderPath}`)
@@ -172,12 +164,7 @@ export function attachProject(input: {
   return hydrateProject(attached, localProject)
 }
 
-export function attachExistingProject(input: {
-  folderPath: string
-  name?: string
-  icon?: string
-  color?: string
-} | string): PublicProject {
+export function attachExistingProject(input: Partial<ProjectAttachmentInput> & { folderPath: string } | string): PublicProject {
   const projectRootOrFolder = typeof input === 'string' ? input : input.folderPath
   const projectRoot = resolveGitRepoRoot(projectRootOrFolder)
   if (!projectRoot) {
@@ -192,22 +179,29 @@ export function attachExistingProject(input: {
         name: input.name ?? localProject.name,
         icon: input.icon ?? localProject.icon,
         color: input.color ?? localProject.color,
+        folderPath: projectRoot,
+        profileId: input.profileId ?? localProject.profileId,
+        councilMembers: input.councilMembers ?? localProject.councilMembers,
+        manualQaOverride: input.manualQaOverride === undefined
+          ? localProject.manualQaOverride
+          : input.manualQaOverride,
+        gitHookPolicy: input.gitHookPolicy === undefined
+          ? localProject.gitHookPolicy
+          : input.gitHookPolicy,
+        maxIterations: input.maxIterations ?? localProject.maxIterations,
+        perIterationTimeout: input.perIterationTimeout ?? localProject.perIterationTimeout,
+        executionSetupTimeout: input.executionSetupTimeout ?? localProject.executionSetupTimeout,
+        councilResponseTimeout: input.councilResponseTimeout ?? localProject.councilResponseTimeout,
+        minCouncilQuorum: input.minCouncilQuorum ?? localProject.minCouncilQuorum,
+        interviewQuestions: input.interviewQuestions ?? localProject.interviewQuestions,
+        updatedAt: new Date().toISOString(),
       }
 
   let effectiveProject = localProject
-  if (patch && (
-    patch.name !== localProject.name
-    || patch.icon !== localProject.icon
-    || patch.color !== localProject.color
-  )) {
+  if (patch) {
     const { db } = getProjectDatabase(projectRoot)
     db.update(projects)
-      .set({
-        name: patch.name,
-        icon: patch.icon,
-        color: patch.color,
-        updatedAt: new Date().toISOString(),
-      })
+      .set(patch)
       .where(eq(projects.id, localProject.id))
       .run()
     effectiveProject = db.select().from(projects).where(eq(projects.id, localProject.id)).get() ?? localProject
@@ -345,13 +339,19 @@ export function getExistingProjectMetadata(projectRootOrFolder: string): Existin
   if (!project) return null
 
   const ticketCount = db.select().from(tickets).all().length
+  const activeTicketCount = db.select({ status: tickets.status }).from(tickets).all()
+    .filter(ticket => !DETACHABLE_TICKET_STATUSES.has(ticket.status))
+    .length
   return {
     name: project.name,
     shortname: project.shortname,
     icon: project.icon ?? null,
     color: project.color ?? null,
+    gitHookPolicy: project.gitHookPolicy,
+    manualQaOverride: project.manualQaOverride,
     ticketCounter: project.ticketCounter ?? 0,
     ticketCount,
+    activeTicketCount,
   }
 }
 
@@ -435,4 +435,97 @@ export async function deleteProjectWorktrees(projectRoot: string): Promise<{ fre
   spawnSync('git', ['-C', projectRoot, 'worktree', 'prune'], { encoding: 'utf8' })
 
   return { freedBytes }
+}
+
+/**
+ * Removes every filesystem entry under LoopTroop's managed worktree root,
+ * including worktrees owned by active tickets. Repository branches and source
+ * files outside that root are intentionally left untouched.
+ */
+export async function deleteAllProjectWorktrees(projectRoot: string): Promise<{ freedBytes: number }> {
+  const worktreesRoot = getProjectWorktreesRoot(projectRoot)
+  if (!(await existsAsync(worktreesRoot))) {
+    spawnSync('git', ['-C', projectRoot, 'worktree', 'prune'], { encoding: 'utf8' })
+    return { freedBytes: 0 }
+  }
+
+  let freedBytes = 0
+  const entries = await readdir(worktreesRoot, { withFileTypes: true })
+  for (const entry of entries) {
+    const worktreePath = resolvePath(worktreesRoot, entry.name)
+    freedBytes += await calcDirSize(worktreePath)
+    if (entry.isDirectory() && !entry.isSymbolicLink()) {
+      removeWorktree({ projectRoot, worktreesRoot, worktreePath })
+    } else {
+      rmSync(worktreePath, { recursive: true, force: true })
+    }
+  }
+
+  spawnSync('git', ['-C', projectRoot, 'worktree', 'prune'], { encoding: 'utf8' })
+  return { freedBytes }
+}
+
+export async function clearExistingProjectTickets(input: ProjectAttachmentInput): Promise<PublicProject> {
+  const projectRoot = resolveGitRepoRoot(input.folderPath)
+  if (!projectRoot) {
+    throw new Error(`Folder is not a git repository: ${input.folderPath}`)
+  }
+
+  await deleteAllProjectWorktrees(projectRoot)
+  const projectDb = getExistingProjectDatabase(projectRoot)
+  if (!projectDb) {
+    throw new Error(`No LoopTroop project state found in ${projectRoot}`)
+  }
+  const project = projectDb.db.select().from(projects).limit(1).get()
+  if (!project) {
+    throw new Error(`No LoopTroop project state found in ${projectRoot}`)
+  }
+  const manualQaOverride = input.manualQaOverride === undefined
+    ? project.manualQaOverride
+    : input.manualQaOverride
+
+  projectDb.sqlite.transaction(() => {
+    projectDb.sqlite.exec(`
+      DELETE FROM manual_qa_improvement_tickets;
+      DELETE FROM manual_qa_operations;
+      DELETE FROM phase_artifacts;
+      DELETE FROM ticket_phase_attempts;
+      DELETE FROM opencode_sessions;
+      DELETE FROM ticket_status_history;
+      DELETE FROM ticket_error_occurrences;
+      DELETE FROM bead_execution_metrics;
+      DELETE FROM tickets;
+    `)
+    projectDb.sqlite.prepare(`
+      UPDATE projects
+      SET name = ?, icon = ?, color = ?, folder_path = ?,
+          manual_qa_override = ?, git_hook_policy = ?, ticket_counter = 0,
+          updated_at = ?
+      WHERE id = ?
+    `).run(
+      input.name,
+      input.icon ?? project.icon,
+      input.color ?? project.color,
+      projectRoot,
+      manualQaOverride === null ? null : Number(manualQaOverride),
+      input.gitHookPolicy === undefined ? project.gitHookPolicy : input.gitHookPolicy,
+      new Date().toISOString(),
+      project.id,
+    )
+  })()
+
+  ensureProjectStorageDirs(projectRoot)
+  return attachExistingProject(projectRoot)
+}
+
+export async function replaceExistingProjectState(input: ProjectAttachmentInput): Promise<PublicProject> {
+  const projectRoot = resolveGitRepoRoot(input.folderPath)
+  if (!projectRoot) {
+    throw new Error(`Folder is not a git repository: ${input.folderPath}`)
+  }
+
+  await deleteAllProjectWorktrees(projectRoot)
+  closeProjectDatabase(projectRoot)
+  rmSync(getProjectLoopTroopDir(projectRoot), { recursive: true, force: true })
+  return attachProject({ ...input, folderPath: projectRoot })
 }

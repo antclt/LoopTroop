@@ -69,7 +69,7 @@ export const numericFields = {
   },
   minCouncilQuorum: {
     min: 1,
-    max: 4,
+    max: 6,
     label: 'Min Council Quorum',
     docsPath: '/configuration#min-council-quorum',
     fromStore: (v: number) => String(v),

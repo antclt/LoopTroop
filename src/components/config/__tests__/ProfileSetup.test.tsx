@@ -126,7 +126,7 @@ describe('ProfileSetup', () => {
     const refetchQueriesSpy = vi.spyOn(queryClient, 'refetchQueries').mockResolvedValue()
     await renderProfileSetup(queryClient)
 
-    expect(screen.getByText('Minimum council votes required (1–4)')).toBeInTheDocument()
+    expect(screen.getByText('Minimum council votes required (1–6)')).toBeInTheDocument()
     expect(screen.getByText('Coverage')).toBeInTheDocument()
     expect(screen.getByText('OpenCode Provider Recovery')).toBeInTheDocument()
     expect(screen.getByText('Manual QA')).toBeInTheDocument()
@@ -155,6 +155,19 @@ describe('ProfileSetup', () => {
       exact: true,
       type: 'active',
     })
+  })
+
+  it('allows a council of six models including the main implementer', async () => {
+    await renderProfileSetup()
+
+    const addButton = screen.getByRole('button', { name: 'Add Council Member' })
+    fireEvent.click(addButton)
+    fireEvent.click(addButton)
+    fireEvent.click(addButton)
+    fireEvent.click(addButton)
+
+    expect(screen.getByText('Council member 6…')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add Council Member' })).not.toBeInTheDocument()
   })
 
   it('renders documentation links for configuration descriptions', async () => {

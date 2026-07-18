@@ -23,6 +23,8 @@ const mockProjectMutations = vi.hoisted(() => ({
   },
 }))
 
+const mockAddToast = vi.hoisted(() => vi.fn())
+
 vi.mock('@/hooks/useProjects', () => ({
   useCreateProject: () => mockProjectMutations.create,
   useUpdateProject: () => mockProjectMutations.update,
@@ -39,7 +41,7 @@ vi.mock('@/hooks/useProjects', () => ({
 }))
 
 vi.mock('@/components/shared/useToast', () => ({
-  useToast: () => ({ addToast: vi.fn() }),
+  useToast: () => ({ addToast: mockAddToast }),
 }))
 
 vi.mock('@/hooks/useProfile', () => ({
@@ -83,6 +85,10 @@ describe('ProjectForm', () => {
     mockProjectMutations.remove.mutate.mockReset()
     mockProjectMutations.create.error = null
     mockProjectMutations.update.error = null
+    mockProjectMutations.create.isPending = false
+    mockProjectMutations.update.isPending = false
+    mockProjectMutations.remove.isPending = false
+    mockAddToast.mockReset()
   })
 
   it('shows the WSL mounted-drive warning returned by project path validation', async () => {
@@ -151,5 +157,193 @@ describe('ProjectForm', () => {
 
     fireEvent.focus(screen.getByRole('button', { name: 'State folder info' }))
     expect(await screen.findByRole('tooltip')).toHaveTextContent("LoopTroop keeps this project's local runtime state here.")
+  })
+
+  it('defaults existing state to restore and submits the restore action with saved editable settings', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({
+        isGit: true,
+        status: 'valid',
+        scope: 'root',
+        repoRoot: '/work/meili',
+        hasLoopTroopState: true,
+        existingProject: {
+          name: 'MeiliSearch',
+          shortname: 'MESE',
+          icon: '🔎',
+          color: '#a855f7',
+          ticketCounter: 7,
+          ticketCount: 7,
+          activeTicketCount: 2,
+          gitHookPolicy: 'use_on_internal_commits',
+          manualQaOverride: true,
+        },
+      }),
+    })))
+
+    render(<ProjectForm onClose={vi.fn()} />, { wrapper: Wrapper })
+    fireEvent.change(screen.getByLabelText(/Project Folder/i), { target: { value: '/work/meili' } })
+
+    expect(await screen.findByText('Existing LoopTroop project detected')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: /Restore everything/i })).toBeChecked()
+    await waitFor(() => {
+      expect(screen.getByDisplayValue('MeiliSearch')).toBeInTheDocument()
+      expect(screen.getByText('MESE')).toBeInTheDocument()
+    })
+    expect(screen.queryByLabelText(/Short Name/i)).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Git hook policy')).toHaveValue('use_on_internal_commits')
+    expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByText('7 tickets and all workflow/artifact data')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Restore Project' }))
+
+    expect(mockProjectMutations.create.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'MeiliSearch',
+        shortname: 'MESE',
+        folderPath: '/work/meili',
+        existingStateAction: 'restore',
+        gitHookPolicy: 'use_on_internal_commits',
+        manualQaOverride: true,
+      }),
+      expect.any(Object),
+    )
+    mockProjectMutations.create.mutate.mock.calls[0]?.[1]?.onSuccess()
+    expect(mockAddToast).toHaveBeenCalledWith('success', 'Project restored from existing LoopTroop data.')
+  })
+
+  it('shows clear-ticket impact, confirms destruction, and submits clear_tickets', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({
+        isGit: true,
+        status: 'valid',
+        scope: 'root',
+        repoRoot: '/work/meili',
+        hasLoopTroopState: true,
+        existingProject: {
+          name: 'MeiliSearch',
+          shortname: 'MESE',
+          icon: '🔎',
+          color: '#a855f7',
+          ticketCounter: 7,
+          ticketCount: 7,
+          activeTicketCount: 2,
+        },
+      }),
+    })))
+
+    render(<ProjectForm onClose={vi.fn()} />, { wrapper: Wrapper })
+    fireEvent.change(screen.getByLabelText(/Project Folder/i), { target: { value: '/work/meili' } })
+    fireEvent.click(await screen.findByRole('radio', { name: /Keep project settings, clear tickets/i }))
+
+    expect(screen.getByText(/2 tickets are currently active and will be deleted/i)).toBeInTheDocument()
+    expect(screen.getByText('Managed worktrees and saved OpenCode sessions')).toBeInTheDocument()
+    expect(screen.queryByLabelText(/Short Name/i)).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Tickets & Attach' }))
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByText('7 tickets will be deleted', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText(/including 2 active/i)).toBeInTheDocument()
+    expect(screen.getByText(/Existing Git branches are not deleted/i)).toBeInTheDocument()
+    expect(screen.getByText(/repository source files, commits, and remote branches are not changed/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Tickets & Attach' }))
+
+    expect(mockProjectMutations.create.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shortname: 'MESE',
+        existingStateAction: 'clear_tickets',
+        manualQaOverride: null,
+      }),
+      expect.any(Object),
+    )
+    mockProjectMutations.create.mutate.mock.calls[0]?.[1]?.onSuccess()
+    expect(mockAddToast).toHaveBeenCalledWith('success', 'Project attached with its settings and a clean ticket list.')
+  })
+
+  it('unlocks the short name for start-fresh and submits only after confirmation', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({
+        isGit: true,
+        status: 'valid',
+        scope: 'root',
+        repoRoot: '/work/meili',
+        hasLoopTroopState: true,
+        existingProject: {
+          name: 'MeiliSearch',
+          shortname: 'MESE',
+          icon: '🔎',
+          color: '#a855f7',
+          ticketCounter: 7,
+          ticketCount: 7,
+          activeTicketCount: 0,
+        },
+      }),
+    })))
+
+    render(<ProjectForm onClose={vi.fn()} />, { wrapper: Wrapper })
+    fireEvent.change(screen.getByLabelText(/Project Folder/i), { target: { value: '/work/meili' } })
+    fireEvent.click(await screen.findByRole('radio', { name: /Start fresh/i }))
+
+    const shortnameInput = screen.getByLabelText(/Short Name/i)
+    expect(shortnameInput).toHaveValue('MESE')
+    fireEvent.change(shortnameInput, { target: { value: 'NEW' } })
+    expect(screen.getByText(/All tickets, artifacts, worktrees, and saved metadata/i)).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Fresh' }))
+    expect(mockProjectMutations.create.mutate).not.toHaveBeenCalled()
+    expect(screen.getByRole('dialog')).toHaveTextContent('New project settings used')
+    expect(screen.getByRole('dialog')).toHaveTextContent('NEW-1')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Start Fresh' }))
+    expect(mockProjectMutations.create.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shortname: 'NEW',
+        existingStateAction: 'start_fresh',
+      }),
+      expect.any(Object),
+    )
+    mockProjectMutations.create.mutate.mock.calls[0]?.[1]?.onSuccess()
+    expect(mockAddToast).toHaveBeenCalledWith('success', 'Fresh project created after removing existing LoopTroop state.')
+  })
+
+  it('keeps destructive confirmation open and disabled while submission is pending or fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => ({
+      json: async () => ({
+        isGit: true,
+        status: 'valid',
+        scope: 'root',
+        repoRoot: '/work/meili',
+        hasLoopTroopState: true,
+        existingProject: {
+          name: 'MeiliSearch',
+          shortname: 'MESE',
+          icon: null,
+          color: null,
+          ticketCounter: 1,
+          ticketCount: 1,
+          activeTicketCount: 1,
+        },
+      }),
+    })))
+
+    const view = render(<ProjectForm onClose={vi.fn()} />, { wrapper: Wrapper })
+    fireEvent.change(screen.getByLabelText(/Project Folder/i), { target: { value: '/work/meili' } })
+    fireEvent.click(await screen.findByRole('radio', { name: /Keep project settings, clear tickets/i }))
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Tickets & Attach' }))
+
+    mockProjectMutations.create.isPending = true
+    view.rerender(<ProjectForm onClose={vi.fn()} />)
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear Tickets & Attach' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+
+    mockProjectMutations.create.isPending = false
+    mockProjectMutations.create.error = new Error('Unable to clear project state')
+    view.rerender(<ProjectForm onClose={vi.fn()} />)
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
+    expect(mockAddToast).toHaveBeenCalledWith('error', 'Unable to clear project state', 5000)
   })
 })

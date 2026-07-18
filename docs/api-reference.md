@@ -116,7 +116,7 @@ Selected validation ranges that are easy to miss when calling the API directly:
 
 | Field(s) | Accepted values | Notes |
 | --- | --- | --- |
-| `minCouncilQuorum` | `1` to `4` | Must not exceed the practical council size |
+| `minCouncilQuorum` | `1` to `6` | Must not exceed the practical council size |
 | `interviewQuestions` | `0` to `50` | `0` is accepted, though normal runs typically keep a positive interview budget |
 | `coverageFollowUpBudgetPercent` | `0` to `100` | Percentage budget for coverage follow-up questions |
 | `maxCoveragePasses` | `1` to `10` | Shared generic coverage loop |
@@ -130,7 +130,7 @@ Selected validation ranges that are easy to miss when calling the API directly:
 
 | Method | Route | Notes |
 | --- | --- | --- |
-| `GET` | `/api/projects/check-git?path=...` | Validates git and GitHub origin status for a folder |
+| `GET` | `/api/projects/check-git?path=...` | Validates git/GitHub origin status and previews existing LoopTroop state for a folder |
 | `GET` | `/api/projects/ls?path=...` | Directory browser used by the attach-project flow |
 | `GET` | `/api/projects` | List attached projects |
 | `GET` | `/api/projects/:id` | Get one project |
@@ -140,7 +140,32 @@ Selected validation ranges that are easy to miss when calling the API directly:
 | `GET` | `/api/projects/:id/worktrees/size` | Get the total disk size of all worktrees for a project |
 | `DELETE` | `/api/projects/:id/worktrees` | Delete worktrees for completed and canceled tickets only, including same-user read-only cache trees; active ticket worktrees are left untouched |
 
-`GET /api/projects/check-git` returns attach-flow metadata in addition to simple validity. When relevant, the response also includes `scope` (`root` or `subfolder`), `repoRoot`, `githubRepoSlug`, `hasLoopTroopState`, `existingProject`, and `performanceWarning` for WSL mounted-drive performance warnings.
+`GET /api/projects/check-git` returns attach-flow metadata in addition to simple validity. When relevant, the response also includes `scope` (`root` or `subfolder`), `repoRoot`, `githubRepoSlug`, `hasLoopTroopState`, `existingProject`, and `performanceWarning` for WSL mounted-drive performance warnings. The `existingProject` preview contains the saved `name`, `shortname`, `icon`, `color`, `ticketCounter`, total `ticketCount`, `activeTicketCount`, `gitHookPolicy`, and `manualQaOverride`. `activeTicketCount` counts statuses other than `DRAFT`, `COMPLETED`, and `CANCELED`. This lets clients show exactly which project settings and ticket data each attachment action keeps or removes before submitting.
+
+Example existing-state preview:
+
+```json
+{
+  "isGit": true,
+  "status": "valid",
+  "scope": "root",
+  "repoRoot": "/home/liviu/MeiliSearch",
+  "githubRepoSlug": "meilisearch/meilisearch",
+  "hasLoopTroopState": true,
+  "existingProject": {
+    "name": "MeiliSearch",
+    "shortname": "MESE",
+    "icon": "🔎",
+    "color": "#a855f7",
+    "ticketCounter": 7,
+    "ticketCount": 7,
+    "activeTicketCount": 2,
+    "gitHookPolicy": "validate_explicitly",
+    "manualQaOverride": false
+  },
+  "message": "Existing LoopTroop project found at repository root"
+}
+```
 
 Example project attachment payload:
 
@@ -151,9 +176,20 @@ Example project attachment payload:
   "folderPath": "/home/liviu/LoopTroop",
   "icon": "📁",
   "color": "#3b82f6",
-  "profileId": 1
+  "profileId": 1,
+  "existingStateAction": "restore"
 }
 ```
+
+When the resolved repository root already contains `.looptroop` project state, `existingStateAction` controls the attachment:
+
+| Value | Behavior |
+| --- | --- |
+| `restore` | Keeps tickets, workflow/artifact state, ticket counter, saved short name, and project-level overrides. Applies current form edits to visible project settings. |
+| `clear_tickets` | Keeps the project row, saved short name, appearance, creation time, profile association, and every project-level override; applies current visible form edits; removes all ticket-linked database state, ticket content, and managed worktrees; then resets `ticketCounter` to `0` and advances the update time. |
+| `start_fresh` | Removes managed worktrees and the complete `.looptroop` folder, then creates a new project from the submitted form values. |
+
+The field is optional for API compatibility and defaults to `restore` when existing state is found. All three existing-state paths update the saved `folderPath` to the repository root resolved on the current machine. Destructive modes remove active tickets as well as terminal tickets, but never delete repository source files, commits, or local/remote branches. Because `clear_tickets` resets numbering, its next ticket is `<SHORTNAME>-1`; an old branch retained in the repository can therefore have the same ticket identifier.
 
 Direct attachment/update validation and mutability rules:
 
@@ -164,6 +200,7 @@ Direct attachment/update validation and mutability rules:
 | `folderPath` | required | not accepted | Must resolve to a git repository; outside tests, the repository must also have a GitHub `origin` |
 | `profileId` | optional | not accepted | Attach-time only |
 | `icon`, `color` | optional | optional | `color` must be `#RRGGBB` |
+| `existingStateAction` | optional | not accepted | Existing state only: `restore`, `clear_tickets`, or `start_fresh`; defaults to `restore` |
 | Project overrides listed below | optional | optional | Apply only to future ticket starts |
 
 Create and update routes also accept optional project-level overrides for future tickets in that project:

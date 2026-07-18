@@ -73,7 +73,7 @@ For non-mutating startup, forced maintenance, and manual maintenance commands, s
 
 LoopTroop works best with multiple AI models — they draft, vote on, and refine plans together before any code is written. You can configure your council models inside the app via the **Configuration** button on the dashboard.
 
-You need at least a **Main Implementer Model** (which writes and validates code) and **1–3 Council Members** (which challenge and improve the plan). See [Configuration](configuration.md) for all settings and trade-offs.
+You need at least a **Main Implementer Model** (which writes and validates code) and **1–5 additional Council Members** (which challenge and improve the plan), for a maximum council size of six. See [Configuration](configuration.md) for all settings and trade-offs.
 
 ### Choosing Your Main Implementer
 
@@ -123,7 +123,11 @@ Free APIs can experience rate-limiting or latency spikes. Community trackers hel
 1. Open `http://localhost:5173` in your browser.
 2. Click **Add Project** and provide the absolute path to your local git repository.
 3. LoopTroop verifies it is a valid git repo with a GitHub origin.
-4. Create your first **Ticket** with a description of the feature or fix you want.
+4. If the repository already has a `.looptroop` state folder, choose whether to restore everything, keep the project settings while clearing all tickets, or delete that state and start fresh. The two destructive choices show exactly what will be deleted and require confirmation.
+5. Create your first **Ticket** with a description of the feature or fix you want.
+
+> [!WARNING]
+> Clearing tickets or starting fresh also removes active ticket data, artifacts, logs, and managed worktrees. It does not delete repository source files, commits, or branches. Clearing tickets resets numbering, so the next ticket starts at `<SHORTNAME>-1` and can reuse an identifier found on an older surviving branch.
 
 Once submitted, LoopTroop kicks off an **interview phase** to clarify your intent, then generates a structured spec and implementation plan before any code is written. You review and approve at each gate.
 

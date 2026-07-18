@@ -9,6 +9,7 @@ import { promisify } from 'util'
 import {
   attachExistingProject,
   attachProject,
+  clearExistingProjectTickets,
   deleteProject,
   deleteProjectWorktrees,
   getProjectWorktreesSize,
@@ -18,6 +19,7 @@ import {
   listProjectTickets,
   listProjects,
   resolveProjectState,
+  replaceExistingProjectState,
   updateProject,
 } from '../storage/projects'
 import { parseGitHubRemoteUrl } from '../git/github'
@@ -37,7 +39,7 @@ const perProjectOverrides = {
   perIterationTimeout: z.number().int().nonnegative().optional(),
   executionSetupTimeout: z.number().int().nonnegative().optional(),
   councilResponseTimeout: z.number().int().positive().optional(),
-  minCouncilQuorum: z.number().int().min(1).max(4).optional(),
+  minCouncilQuorum: z.number().int().min(1).max(6).optional(),
   interviewQuestions: z.number().int().min(0).max(50).optional(),
 }
 
@@ -48,6 +50,7 @@ const createProjectSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
   folderPath: z.string().min(1),
   profileId: z.number().int().positive().optional(),
+  existingStateAction: z.enum(['restore', 'clear_tickets', 'start_fresh']).optional(),
   ...perProjectOverrides,
 })
 
@@ -264,11 +267,18 @@ projectRouter.post('/projects', async (c) => {
     }, 400)
   }
 
-  const projectState = resolveProjectState(parsed.data.folderPath)
+  const projectRootPath = repoRoot ?? parsed.data.folderPath
+  const projectState = resolveProjectState(projectRootPath)
   try {
+    const action = parsed.data.existingStateAction ?? 'restore'
+    const input = { ...parsed.data, folderPath: projectRootPath }
     const result = projectState.exists
-      ? attachExistingProject(parsed.data)
-      : attachProject(parsed.data)
+      ? action === 'clear_tickets'
+        ? await clearExistingProjectTickets(input)
+        : action === 'start_fresh'
+          ? await replaceExistingProjectState(input)
+          : attachExistingProject(input)
+      : attachProject(input)
     return c.json(result, 201)
   } catch (err) {
     return c.json({ error: 'Failed to attach project', details: String(err) }, 500)
