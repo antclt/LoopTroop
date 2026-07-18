@@ -79,4 +79,15 @@ describe('ModelPicker', () => {
 
     expect(screen.getByText('GPT Alpha')).toBeInTheDocument()
   })
+
+  it('loads the full catalog only after Show all providers is selected', () => {
+    render(<ModelPicker value="" onChange={vi.fn()} />)
+
+    expect(useAllOpenCodeModels).toHaveBeenLastCalledWith(false)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Pick a model' }))
+    fireEvent.click(screen.getByRole('checkbox', { name: /Show all providers/i }))
+
+    expect(useAllOpenCodeModels).toHaveBeenLastCalledWith(true)
+  })
 })

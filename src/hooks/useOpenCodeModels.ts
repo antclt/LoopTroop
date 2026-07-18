@@ -4,14 +4,14 @@ import { MODEL_FETCH_TIMEOUT_MS, QUERY_STALE_TIME_5M, OPENCODE_RETRY_COUNT, SSE_
 
 export interface ModelsApiResponse {
   models: OpenCodeCatalogModel[]
-  allModels: OpenCodeCatalogModel[]
   connectedProviders: string[]
   defaultModels: Record<string, string>
   message?: string
 }
 
 export type OpenCodeModel = OpenCodeCatalogModel
-export const OPENCODE_MODELS_QUERY_KEY = ['opencode-models'] as const
+export const OPENCODE_MODELS_QUERY_KEY = ['opencode-models', 'connected'] as const
+export const ALL_OPENCODE_MODELS_QUERY_KEY = ['opencode-models', 'all'] as const
 
 async function requestModelsApi(path: string, method: 'GET' | 'POST'): Promise<ModelsApiResponse> {
   const res = await fetch(path, { method, signal: AbortSignal.timeout(MODEL_FETCH_TIMEOUT_MS) })
@@ -28,14 +28,17 @@ export function fetchModelsApi(): Promise<ModelsApiResponse> {
   return requestModelsApi('/api/models', 'GET')
 }
 
+export function fetchAllModelsApi(): Promise<ModelsApiResponse> {
+  return requestModelsApi('/api/models?scope=all', 'GET')
+}
+
 export function refreshModelsApi(): Promise<ModelsApiResponse> {
   return requestModelsApi('/api/models/refresh', 'POST')
 }
 
 export function clearOpenCodeModelsQuery(queryClient: Pick<QueryClient, 'removeQueries'>) {
   queryClient.removeQueries({
-    queryKey: OPENCODE_MODELS_QUERY_KEY,
-    exact: true,
+    queryKey: ['opencode-models'],
   })
 }
 
@@ -50,8 +53,7 @@ export function refreshOpenCodeModelsQuery(queryClient: Pick<QueryClient, 'remov
 
 export function refetchOpenCodeModelsQuery(queryClient: Pick<QueryClient, 'refetchQueries'>) {
   return queryClient.refetchQueries({
-    queryKey: OPENCODE_MODELS_QUERY_KEY,
-    exact: true,
+    queryKey: ['opencode-models'],
     type: 'active',
   })
 }
@@ -68,14 +70,15 @@ export function useOpenCodeModels() {
   })
 }
 
-/** Returns all models from all providers */
-export function useAllOpenCodeModels() {
+/** Returns all models from all providers only when explicitly requested. */
+export function useAllOpenCodeModels(enabled = false) {
   return useQuery({
-    queryKey: OPENCODE_MODELS_QUERY_KEY,
-    queryFn: fetchModelsApi,
+    queryKey: ALL_OPENCODE_MODELS_QUERY_KEY,
+    queryFn: fetchAllModelsApi,
     staleTime: QUERY_STALE_TIME_5M,
     retry: OPENCODE_RETRY_COUNT,
     retryDelay: SSE_RECONNECT_DELAY_MS,
-    select: (data) => data.allModels,
+    select: (data) => data.models,
+    enabled,
   })
 }

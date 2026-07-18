@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Made model configuration load quickly by requesting the full OpenCode catalog only when **Show all providers** is selected.
 - Added safe restore, clear-tickets, and start-fresh choices when attaching repositories that already contain LoopTroop state.
 - Expanded councils to support up to six distinct models, including the main implementer.
 - Kept dependency release-age checks compatible with npm 12 publish-metadata output.
@@ -76,6 +77,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Model pickers and the model API now default to configured-provider models. `GET /api/models?scope=all` and the **Show all providers** option load the full catalog on demand through an independent cache, while Configuration reload clears both scopes and refreshes only configured models.
 - Expanded the model council to a maximum of six distinct members (the main implementer plus up to five additional members) and raised the supported minimum-quorum range to six.
 - Existing-state attachment now updates the saved project path to the repository root on the current machine. Clear-tickets preserves project identity, appearance, creation time, profile association, and overrides while removing all ticket-linked records/content/worktrees, recording a new update time, and resetting numbering to `<SHORTNAME>-1`; start-fresh recreates the complete local state folder without altering repository commits or branches.
 - Changed final-test file handling to preserve explicit and tracked/staged project changes while leaving untracked generated, cache, and setup-local outputs on disk as local-only files. Unknown untracked files receive one classification retry before continuing with a warning; unresolved tracked changes remain candidates for the final PR audit instead of blocking integration.

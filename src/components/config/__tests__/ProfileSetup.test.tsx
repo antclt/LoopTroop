@@ -104,7 +104,6 @@ describe('ProfileSetup', () => {
         ok: true,
         json: async () => ({
           models: [{ fullId: 'opencode/big-pickle' }],
-          allModels: [{ fullId: 'opencode/big-pickle' }],
           connectedProviders: ['opencode'],
           defaultModels: {},
         }),
@@ -151,8 +150,7 @@ describe('ProfileSetup', () => {
       expect(screen.getByText('OpenCode connected and working')).toBeInTheDocument()
     })
     expect(refetchQueriesSpy).toHaveBeenCalledWith({
-      queryKey: OPENCODE_MODELS_QUERY_KEY,
-      exact: true,
+      queryKey: ['opencode-models'],
       type: 'active',
     })
   })
@@ -271,7 +269,6 @@ describe('ProfileSetup', () => {
         ok: true,
         json: async () => ({
           models: [{ fullId: 'opencode/big-pickle' }],
-          allModels: [{ fullId: 'opencode/big-pickle' }],
           connectedProviders: ['opencode'],
           defaultModels: {},
         }),
@@ -289,8 +286,7 @@ describe('ProfileSetup', () => {
     expect(reloadBtn.querySelector('svg')).toHaveClass('animate-spin')
 
     expect(removeQueriesSpy).toHaveBeenCalledWith({
-      queryKey: OPENCODE_MODELS_QUERY_KEY,
-      exact: true,
+      queryKey: ['opencode-models'],
     })
     await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/models/refresh', {
       method: 'POST',
@@ -301,7 +297,6 @@ describe('ProfileSetup', () => {
     expect(reloadBtn.querySelector('svg')).not.toHaveClass('animate-spin')
     expect(queryClient.getQueryData(OPENCODE_MODELS_QUERY_KEY)).toEqual({
       models: [{ fullId: 'opencode/big-pickle' }],
-      allModels: [{ fullId: 'opencode/big-pickle' }],
       connectedProviders: ['opencode'],
       defaultModels: {},
     })

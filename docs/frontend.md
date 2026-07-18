@@ -308,7 +308,7 @@ This is why keeping the docs aligned with `workflowMeta` matters: the UI is buil
 
 `EffortPicker` (`src/components/config/EffortPicker.tsx`) appears next to a model selector when that model exposes variants (for example `high`, `low`, `medium`). The selected variant is stored per model id in `councilMemberVariants`.
 
-`ProfileSetup` also pings `/api/health/opencode` so the modal can show whether OpenCode is reachable, surface model-discovery failures separately from connection failures, and expose a reload button for the provider/model catalog.
+`ProfileSetup` also pings `/api/health/opencode` so the modal can show whether OpenCode is reachable, surface model-discovery failures separately from connection failures, and expose a reload button for the provider/model catalog. Model pickers keep configured-provider and full-catalog queries separate: the configured list loads normally, while the full catalog remains disabled until **Show all providers** is selected. Reload clears both caches and refreshes only the configured list.
 
 ### Numeric Settings
 

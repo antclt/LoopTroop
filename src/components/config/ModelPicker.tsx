@@ -186,7 +186,7 @@ export function ModelPicker({ value, onChange, placeholder = 'Search models…',
     isError: hasAllError,
     error: allError,
     isFetching: fetchingAll,
-  } = useAllOpenCodeModels()
+  } = useAllOpenCodeModels(isShowingAll)
   const models = isShowingAll ? allModels : connectedModels
   const isLoading = isShowingAll ? loadingAll : loadingConnected
   const isError = isShowingAll ? hasAllError : hasConnectedError

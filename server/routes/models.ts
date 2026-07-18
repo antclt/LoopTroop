@@ -5,10 +5,9 @@ import type { OpenCodeCatalogResponse } from '../../shared/opencodeCatalog'
 
 const modelsRouter = new Hono()
 
-function serializeCatalog(catalog: OpenCodeCatalogResponse) {
+function serializeCatalog(catalog: OpenCodeCatalogResponse, scope: 'connected' | 'all') {
   return {
-    models: flattenCatalogModels(catalog, 'connected'),
-    allModels: flattenCatalogModels(catalog, 'all'),
+    models: flattenCatalogModels(catalog, scope),
     connectedProviders: catalog.connected,
     defaultModels: catalog.default,
   }
@@ -19,7 +18,6 @@ async function modelDiscoveryFailure() {
   const health = await adapter.checkHealth()
   return {
     models: [],
-    allModels: [],
     connectedProviders: [],
     defaultModels: {},
     message: health.available
@@ -30,7 +28,8 @@ async function modelDiscoveryFailure() {
 
 modelsRouter.get('/models', async (c) => {
   try {
-    return c.json(serializeCatalog(await fetchProviderCatalog()))
+    const scope = c.req.query('scope') === 'all' ? 'all' : 'connected'
+    return c.json(serializeCatalog(await fetchProviderCatalog(), scope))
   } catch {
     return c.json(await modelDiscoveryFailure())
   }
@@ -38,7 +37,7 @@ modelsRouter.get('/models', async (c) => {
 
 modelsRouter.post('/models/refresh', async (c) => {
   try {
-    return c.json(serializeCatalog(await refreshProviderCatalog()))
+    return c.json(serializeCatalog(await refreshProviderCatalog(), 'connected'))
   } catch {
     return c.json(await modelDiscoveryFailure())
   }

@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test/renderHelpers'
 import {
+  ALL_OPENCODE_MODELS_QUERY_KEY,
   clearOpenCodeModelsQuery,
+  fetchAllModelsApi,
   fetchModelsApi,
   OPENCODE_MODELS_QUERY_KEY,
   refreshOpenCodeModelsQuery,
@@ -24,7 +26,6 @@ describe('useOpenCodeModels', () => {
       ok: true,
       json: async () => ({
         models: [{ fullId: 'openai/gpt-5.3-codex' }],
-        allModels: [{ fullId: 'openai/gpt-5.3-codex' }, { fullId: 'google/gemini-2.5-pro' }],
         connectedProviders: ['openai'],
         defaultModels: {},
       }),
@@ -35,7 +36,7 @@ describe('useOpenCodeModels', () => {
     vi.unstubAllGlobals()
   })
 
-  it('shares one cached query for connected and all models', async () => {
+  it('fetches connected models without requesting the full catalog', async () => {
     const queryClient = createTestQueryClient()
 
     render(
@@ -49,7 +50,6 @@ describe('useOpenCodeModels', () => {
     await waitFor(() => {
       expect(queryClient.getQueryData(OPENCODE_MODELS_QUERY_KEY)).toEqual({
         models: [{ fullId: 'openai/gpt-5.3-codex' }],
-        allModels: [{ fullId: 'openai/gpt-5.3-codex' }, { fullId: 'google/gemini-2.5-pro' }],
         connectedProviders: ['openai'],
         defaultModels: {},
       })
@@ -57,6 +57,16 @@ describe('useOpenCodeModels', () => {
 
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(fetch).toHaveBeenCalledWith('/api/models', { method: 'GET', signal: expect.any(AbortSignal) })
+    expect(queryClient.getQueryData(ALL_OPENCODE_MODELS_QUERY_KEY)).toBeUndefined()
+  })
+
+  it('requests the full catalog from its separate endpoint scope', async () => {
+    await fetchAllModelsApi()
+
+    expect(fetch).toHaveBeenCalledWith('/api/models?scope=all', {
+      method: 'GET',
+      signal: expect.any(AbortSignal),
+    })
   })
 
   it('treats a response with a message field as an error (opencode not ready)', async () => {
@@ -64,7 +74,6 @@ describe('useOpenCodeModels', () => {
       ok: true,
       json: async () => ({
         models: [],
-        allModels: [],
         connectedProviders: [],
         defaultModels: {},
         message: 'OpenCode server is not reachable. Start it with `opencode serve`.',
@@ -80,8 +89,7 @@ describe('useOpenCodeModels', () => {
     clearOpenCodeModelsQuery({ removeQueries })
 
     expect(removeQueries).toHaveBeenCalledWith({
-      queryKey: OPENCODE_MODELS_QUERY_KEY,
-      exact: true,
+      queryKey: ['opencode-models'],
     })
   })
 
