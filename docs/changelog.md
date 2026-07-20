@@ -50,6 +50,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Streamlined Manual QA with Pending-first items, inline Improvements, immediate evidence feedback, safer merge groups, autosave-only submission, and lossless skipping.
 - Added a new high-priority roadmap item for optional skip reasons to improve auditability of user skips across the workflow.
 - Added Show/Hide Mock Tickets option to the Kanban triage filter bar.
+- Consolidated the three separate chat roadmap items (Log AI Chat, Chat during execution, Chat in dashboard) into a unified **Ticket Chat & Action Assistant** with actionable write capabilities (approve/reject artifacts, edit artifacts and project files, trigger workflow actions) and full auto-execute with undo/rollback.
 
 ### Detailed Changes
 
@@ -79,6 +80,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Consolidated the three separate chat roadmap items (Log AI Chat, Chat during execution, Chat in dashboard) into a single unified **Ticket Chat & Action Assistant** roadmap entry. The unified item preserves all read-only Q&A capabilities (log-scoped, execution-scoped, dashboard-scoped) and adds a new **Actionable Chat** sub-item with write capabilities: approve/reject planning artifacts, edit artifact content, edit project files, and trigger workflow actions via natural language. Write actions use a full auto-execute safety model with an append-only audit journal (`chat-action-audit.jsonl`) and per-action undo/rollback.
 - Replaced Git-hook policy dropdowns and duplicate inheritance entries with linked **Validate**, **Ignore**, and **Run** buttons, keeping **Validate** as the recommended default in Pre-Implementation. Added multi-sentence behavioral tooltips to every Git-hook and Manual QA choice, renamed Configuration's Execution category to **Implementation Phase**, grouped Manual QA under **Post-Implementation**, and moved both project-level controls into one collapsed **Advanced** section. Project and new-ticket Advanced containers now use stronger borders so the settings are easier to notice.
 - Model pickers and the model API now default to configured-provider models. `GET /api/models?scope=all` and the **Show all providers** option load the full catalog on demand through an independent cache, while Configuration reload clears both scopes and refreshes only configured models.
 - Expanded the model council to a maximum of six distinct members (the main implementer plus up to five additional members) and raised the supported minimum-quorum range to six.

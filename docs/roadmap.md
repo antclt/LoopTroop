@@ -1423,28 +1423,6 @@ search: false
         *   local playbook `path` supports absolute and `~/` forms and must import directly from local filesystem (no network call),
         *   enforce path-traversal guards for local imports; invalid local entries are skipped with warnings (non-fatal),
         *   add hot reload by watching manifest file with debounce and broadcasting `playbook_manifest_changed`.
-    *   **Log AI Chat (log-scoped conversational analysis):** Add a lightweight AI chat widget to the ticket view's log panel that lets users ask natural-language questions about execution logs, powered by a separate fast/cheap model.
-        *   **Button placement:** A small chat icon button in the `PhaseLogPanel` toolbar area, alongside the existing entries count, color legend, and copy-button group.
-        *   **Chat panel:** Opens a slide-in drawer or expandable panel with a streaming message interface (markdown-rendered AI responses).
-        *   **Log scope selector:** A dropdown in the chat panel header to choose between `Current tab` (active filter tab) or `All ticket logs` (full execution history across all phases).
-        *   **Chat model:** Uses a separate configurable model (not the main implementer or council members), intended to be a fast/cheap model like GPT-4o-mini, Claude 3 Haiku, Gemini 2.0 Flash, or similar.
-        *   **Context construction:** Selected log entries are collected, formatted with metadata (timestamp, source, phase, bead, audience), and sent as system context along with the user's question to the chat model.
-        *   **Backend:** A new lightweight SSE streaming endpoint `/api/chat/logs` that accepts `{ ticketId, logEntries[], userMessage, scope }`, constructs the prompt, and streams the chat model's response.
-        *   **Ephemeral sessions:** Chat history is volatile — no persistence across page reloads or sessions. Keeps the feature lightweight and stateless.
-        *   **Configuration:** A new **Chat & Analysis** section in the Configuration UI with a model picker for the chat model (and its effort/variant selector where applicable). Stored separately from job-critical model settings.
-        *   **Example queries the widget should be able to answer:**
-            *   "What's happening right now in this phase?"
-            *   "Why did bead 7 take so long?"
-            *   "Why was model X the winner of the council vote? What was its score?"
-            *   "Show me all the errors in this ticket."
-            *   "Summarize what happened during the PRD drafting phase."
-        *   **Key files (implementation scope):**
-            *   `server/routes/chat.ts` — new SSE streaming endpoint
-            *   `server/db/schema.ts`, `server/db/defaults.ts`, `shared/appConfig.ts` — chat model config fields
-            *   `src/components/workspace/LogChatPanel.tsx` — new chat panel component
-            *   `src/components/workspace/PhaseLogPanel.tsx` — add chat button in toolbar
-            *   `src/components/config/ProfileSetup.tsx` — add Chat & Analysis section
-            *   `docs/configuration.md` — document the new settings
     *   Keep research track for integration methods with external plugins/channels.
     *   **Deep Repository Analysis + Agent Readiness Audit (two-tier):** before ticket creation, run a structured scan and score 8 pillars.
         *   Tier A (fix-eligible): Style/Validation, Build System, Testing, Documentation, Dev Environment.
@@ -1975,8 +1953,51 @@ search: false
     *   On reconnect/restart, restore pending steering messages and show applied vs skipped outcomes in the ticket dashboard.
     *   *Context wipe intervention:* while triggering context wipe, optionally open a countdown pause window (default OFF). Messages submitted in this window are stored as `user_steering_note` and attached to the next iteration context.
     *   Add explicit `BLOCKED_ERROR` steering UX: before retrying a blocked bead, show `Provide Steering` input and append accepted steering into bead notes (`source=steering`) for the next iteration.
-*   **Chat during execution:** The cheaper model is used to chat live during execution about what has been done and what is still needed, so the user does not need to read all logs.
-*   **Chat in dashboard:** The cheaper model is used to chat live about what tickets are doing, projects, statuses, etc., so the user does not need to read all logs, and the chat should be actionable (e.g., you type into a box: "Retry all the failed ones." The system understands and does it).
+*   **Ticket Chat & Action Assistant (unified conversational interface):** A single AI-powered chat surface that spans ticket logs, execution progress, and dashboard overview, powered by a separate fast/cheap model. Extends beyond read-only Q&A to support actionable write operations on ticket artifacts, project files, and workflow state.
+    *   **Read-only Q&A (conversational analysis):**
+        *   **Log-scoped chat (ticket view):** A lightweight chat widget in the ticket view's log panel that lets users ask natural-language questions about execution logs.
+            *   **Button placement:** A small chat icon button in the `PhaseLogPanel` toolbar area, alongside the existing entries count, color legend, and copy-button group.
+            *   **Chat panel:** Opens a slide-in drawer or expandable panel with a streaming message interface (markdown-rendered AI responses).
+            *   **Log scope selector:** A dropdown in the chat panel header to choose between `Current tab` (active filter tab) or `All ticket logs` (full execution history across all phases).
+            *   **Context construction:** Selected log entries are collected, formatted with metadata (timestamp, source, phase, bead, audience), and sent as system context along with the user's question to the chat model.
+            *   **Example queries:**
+                *   "What's happening right now in this phase?"
+                *   "Why did bead 7 take so long?"
+                *   "Why was model X the winner of the council vote? What was its score?"
+                *   "Show me all the errors in this ticket."
+                *   "Summarize what happened during the PRD drafting phase."
+        *   **Execution-scoped chat:** During execution, the chat model answers questions about what has been done and what is still needed, so the user does not need to read all logs. Context includes active bead progress, recent commits, verification results, and open blockers.
+        *   **Dashboard-scoped chat (cross-ticket):** The chat model answers questions about what tickets are doing, projects, statuses, etc., across the entire workspace, so the user does not need to read all logs. Context includes ticket summaries, statuses, recent activity, and project-level metrics.
+    *   **Chat model:** Uses a separate configurable model (not the main implementer or council members), intended to be a fast/cheap model like GPT-4o-mini, Claude 3 Haiku, Gemini 2.0 Flash, or similar.
+    *   **Backend:** A new lightweight SSE streaming endpoint `/api/chat` that accepts `{ ticketId?, logEntries[], userMessage, scope, actionContext? }`, constructs the prompt, and streams the chat model's response. The `scope` field selects the context source (`log_tab`, `all_ticket_logs`, `execution`, `dashboard`). When `actionContext` is present, the model may propose and execute write actions.
+    *   **Ephemeral sessions:** Chat history is volatile — no persistence across page reloads or sessions. Keeps the feature lightweight and stateless. Action audit trails are persisted separately (see below).
+    *   **Configuration:** A new **Chat & Analysis** section in the Configuration UI with a model picker for the chat model (and its effort/variant selector where applicable). Stored separately from job-critical model settings.
+    *   **Actionable Chat (write capabilities):** The chat assistant is not limited to read-only Q&A. It can perform write operations on ticket artifacts, project files, and workflow state through natural-language commands.
+        *   **Artifact approval/rejection:** Approve or reject planning artifacts (interview, PRD, beads, execution setup) via natural language (e.g., "Approve the PRD", "Reject the beads plan — the auth bead is missing rate limiting"). Rejection may include a reason that is persisted alongside the rejection receipt.
+        *   **Artifact content editing:** Edit artifact content through chat (e.g., "Change the PRD scope to exclude the admin panel", "Add a bead for database migration before the API bead", "Update interview answer 3 to prefer PostgreSQL over MySQL"). Edits are applied to the canonical artifact and trigger the same downstream invalidation rules as manual UI edits.
+        *   **Project file editing:** Edit project files related to the active ticket (source code, configs, docs) through chat (e.g., "Add a null check in the user service", "Update the vite config to alias @components"). File edits are scoped to the ticket's relevant files and planning context by default; editing files outside the ticket scope requires explicit user confirmation in the chat.
+        *   **Workflow action triggering:** Trigger workflow actions via natural language (e.g., "Retry the failed bead", "Skip the coverage check", "Cancel this ticket", "Re-run the PRD drafting phase", "Retry all the failed ones"). Actions map to the same state-machine transitions and handlers as UI buttons.
+        *   **Safety model — full auto-execute with undo/rollback:**
+            *   Actions execute immediately upon model interpretation — no separate confirmation dialog.
+            *   Every chat-initiated action is journaled in an append-only audit trail at `.looptroop/tickets/<ticket-id>/chat-action-audit.jsonl` with: `action_id`, `timestamp`, `action_type` (`approve`, `reject`, `edit_artifact`, `edit_file`, `workflow_action`), `target` (artifact path, file path, or transition), `before_state` (snapshot or hash of the affected state before the action), `after_state` (snapshot or hash after), `operator` (`chat_assistant`), `model_id`, `user_message` (the natural-language command that triggered the action), `result` (`success`, `failed`, `rolled_back`), and `rollback_of` (links to the original `action_id` when this entry is a rollback).
+            *   Every action is individually reversible: the user can say "Undo that" or "Rollback the last action" and the system restores the `before_state` from the audit journal. Rollback itself is journaled as a new entry with `result: rolled_back` linking to the original.
+            *   Multi-action rollback: "Undo the last N actions" replays rollbacks in reverse chronological order.
+            *   Actions that trigger irreversible external side effects (e.g., git push, PR creation) are flagged as `irreversible: true` in the audit journal; rollback for these restores only the local LoopTroop state and emits a warning that the external side effect cannot be undone.
+        *   **Scope guardrails:**
+            *   Chat actions are scoped to the active ticket context by default. Cross-ticket actions (e.g., "Retry all failed tickets") require explicit ticket references or a dashboard-scope chat session.
+            *   File edits are confined to the ticket's relevant files and planning context unless the user explicitly references a file outside that scope.
+            *   Workflow actions must be valid transitions in the ticket state machine; invalid transitions are rejected with a deterministic reason code and suggested alternatives.
+        *   **Action feedback:** After executing an action, the chat responds with a concise confirmation including what was changed, the affected artifact/file/transition, and a hint about how to undo if needed.
+    *   **Key files (implementation scope):**
+        *   `server/routes/chat.ts` — new SSE streaming endpoint with action dispatch
+        *   `server/chat/actionExecutor.ts` — chat action interpreter and executor (maps natural-language intents to existing handlers)
+        *   `server/chat/actionAudit.ts` — append-only audit journal and rollback engine
+        *   `server/db/schema.ts`, `server/db/defaults.ts`, `shared/appConfig.ts` — chat model config fields
+        *   `src/components/workspace/LogChatPanel.tsx` — new chat panel component
+        *   `src/components/workspace/PhaseLogPanel.tsx` — add chat button in toolbar
+        *   `src/components/dashboard/DashboardChatPanel.tsx` — dashboard-scoped chat surface
+        *   `src/components/config/ProfileSetup.tsx` — add Chat & Analysis section
+        *   `docs/configuration.md` — document the new settings
 *   **Different implementer per bead/component:** Manually or automatically assign an implementer per bead or group of beads (e.g., all UI components should be done by Gemini 3 Pro).
 *   **Ticket-Scoped Commands & Instructions (testing + workspace setup):** Allow users to attach executable commands and free-form instructions directly to a ticket at creation time, which are then consumed during execution by the appropriate workflow phases.
     *   **Testing commands/instructions:** Users can specify test commands or testing instructions in the ticket description at creation. These are persisted, validated, and injected into the execution loop so the implementing agent can use them when writing and running tests.
