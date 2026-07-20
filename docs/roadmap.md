@@ -1366,6 +1366,7 @@ search: false
 
 ## Medium Priority
 
+*   **Check documentation:** MANUAL audit of all documentation or information shown to the user that can be considered docs (like details per status, etc).
 *   **User background:** Users can write their background, and the interview will be tailored to their knowledge (e.g., carpenter, SRE, doctor), making the interview less or more technical. (It is implemented partially, but it is hidden right now.)
 *   **Community playbooks/presets (typed overlay + visual workflow + safe merge contract):** add a new category, besides projects and tickets, called playbooks. It will contain reusable workflows organized in categories (security, marketing, i18n, documentation, refactoring, optimization) and usable across many project types.
     *   Add workflow-oriented preset taxonomy (Ralph-style) alongside domain categories:
