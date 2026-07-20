@@ -105,6 +105,11 @@ describe('ProjectForm', () => {
     render(<ProjectForm onClose={vi.fn()} />, { wrapper: Wrapper })
 
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
+    const advancedButton = screen.getByRole('button', { name: /Advanced/ })
+    expect(advancedButton).toHaveAttribute('aria-expanded', 'false')
+    expect(screen.queryByRole('radio', { name: 'Disabled' })).not.toBeInTheDocument()
+    fireEvent.click(advancedButton)
+    expect(advancedButton).toHaveAttribute('aria-expanded', 'true')
     expect(screen.getByRole('radio', { name: 'Disabled' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('link', { name: 'Open documentation for project Manual QA checkpoint' })).toHaveAttribute(
       'href',
@@ -194,6 +199,7 @@ describe('ProjectForm', () => {
       expect(screen.getByText('MESE')).toBeInTheDocument()
     })
     expect(screen.queryByLabelText(/Short Name/i)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
     expect(screen.getByRole('radio', { name: 'Run' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('7 tickets and all workflow/artifact data')).toBeInTheDocument()

@@ -12,7 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
-- Simplified Git-hook policy controls with clear Validate, Ignore, and Run choices inherited across configuration, projects, and tickets.
+- Simplified inherited Git-hook and Manual QA controls with detailed hover guidance and lifecycle-organized Advanced settings.
 - Made model configuration load quickly by requesting the full OpenCode catalog only when **Show all providers** is selected.
 - Added safe restore, clear-tickets, and start-fresh choices when attaching repositories that already contain LoopTroop state.
 - Expanded councils to support up to six distinct models, including the main implementer.
@@ -54,7 +54,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
-- Added ticket-level Git-hook policy overrides, start-time inheritance locks, and contextual documentation links in Configuration, Project settings, new-ticket Advanced settings, and the Draft workspace.
+- Added ticket-level Git-hook policy overrides, start-time inheritance locks, and contextual documentation links in Configuration, Project Advanced settings, new-ticket Advanced settings, and the Draft workspace.
 - Added three explicit existing-project attachment actions: restore all state, retain project settings while clearing every ticket, or delete `.looptroop` and start fresh. Destructive actions include active-ticket warnings, a keep/delete comparison, and a required confirmation.
 - Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) in model configuration and validation, with a dedicated selector in the configuration profile setup.
 - Added `deleteTicket` option to the ticket cancellation endpoint and a corresponding checkbox in the Cancel Ticket dialog, allowing users to erase all database records and local files, automatically disabling other cleanup options when selected.
@@ -69,7 +69,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added `errors` array property to the cleanup payload in backend database queries and frontend ticket normalization.
 - Added a live voting-result tally to the ticket-view council card for `COUNCIL_VOTING_INTERVIEW` / `COUNCIL_VOTING_PRD` / `COUNCIL_VOTING_BEADS`: while a live voting attempt is selected, the header card's description line now appends ` · X/Y complete · Leading: <model> · <pts>` (switching to `Winner: <model> · <pts>` once a winner is selected), derived from the streamed vote companion artifact with no backend changes.
 - Added an extensible Advanced Settings section directly below Models Selected in Ticket Details, showing whether the ticket's effective Manual QA checkpoint is Enabled or Disabled.
-- Added contextual Manual QA help links to global Configuration, Project settings, new-ticket Advanced settings, and the Draft ticket workspace, with scope-specific tooltip guidance and direct navigation to the relevant documentation.
+- Added contextual Manual QA help links to global Configuration, Project Advanced settings, new-ticket Advanced settings, and the Draft ticket workspace, with scope-specific tooltip guidance and direct navigation to the relevant documentation.
 - Added the `GENERATING_QA_CHECKLIST` and `WAITING_MANUAL_QA` post-implementation statuses, versioned strict checklist/results/coverage schemas, stable item lineage, code-computed approved-PRD criterion coverage, and restart-safe generation reservations.
 - Added profile-level Manual QA enablement (off by default), project/ticket `Enabled / Disabled` controls, Draft-only ticket editing, and frozen effective value/source fields at ticket Start.
 - Added a lazy Manual QA workspace with generation guidance, required/optional result validation, pass/fail/waive/improvement/pending controls, five-second revision-checked autosave, evidence management, failure merge groups, improvement review, drift recovery, skip, and read-only historical rounds.
@@ -79,7 +79,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
-- Replaced Git-hook policy dropdowns and duplicate inheritance entries with linked **Validate**, **Ignore**, and **Run** buttons, keeping **Validate** as the recommended default and moving the global control into Pre-Implementation.
+- Replaced Git-hook policy dropdowns and duplicate inheritance entries with linked **Validate**, **Ignore**, and **Run** buttons, keeping **Validate** as the recommended default in Pre-Implementation. Added multi-sentence behavioral tooltips to every Git-hook and Manual QA choice, renamed Configuration's Execution category to **Implementation Phase**, grouped Manual QA under **Post-Implementation**, and moved both project-level controls into one collapsed **Advanced** section.
 - Model pickers and the model API now default to configured-provider models. `GET /api/models?scope=all` and the **Show all providers** option load the full catalog on demand through an independent cache, while Configuration reload clears both scopes and refreshes only configured models.
 - Expanded the model council to a maximum of six distinct members (the main implementer plus up to five additional members) and raised the supported minimum-quorum range to six.
 - Existing-state attachment now updates the saved project path to the repository root on the current machine. Clear-tickets preserves project identity, appearance, creation time, profile association, and overrides while removing all ticket-linked records/content/worktrees, recording a new update time, and resetting numbering to `<SHORTNAME>-1`; start-fresh recreates the complete local state folder without altering repository commits or branches.

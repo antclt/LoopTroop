@@ -531,8 +531,8 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
 
           <Separator />
 
-          {/* ── Execution Phase ── */}
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Execution Phase</div>
+          {/* ── Implementation Phase ── */}
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Implementation Phase</div>
           <div className="grid grid-cols-2 gap-3">
             <NumericField fieldKey="maxIterations" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Maximum automatic retries per bead during coding (0–20). Final test retries use the same limit." />
             <NumericField fieldKey="perIterationTimeout" rawNumeric={rawNumeric} onChange={(k, v) => setRawNumeric(prev => ({ ...prev, [k]: v }))} hint="Timeout for each attempt (10–3600s)" />
@@ -549,7 +549,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
 
           <Separator />
 
-          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Manual QA</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Post-Implementation</div>
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="flex items-center gap-1.5">

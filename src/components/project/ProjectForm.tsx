@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCreateProject, useUpdateProject, useDeleteProject } from '@/hooks/useProjects'
 import type { ExistingProjectPreview, ExistingStateAction, Project } from '@/hooks/useProjects'
 import { useToast } from '@/components/shared/useToast'
-import { ArrowLeft, HardDrive, Trash2, CheckCircle2, XCircle, CircleDot, AlertTriangle } from 'lucide-react'
+import { ArrowLeft, HardDrive, Trash2, CheckCircle2, XCircle, CircleDot, AlertTriangle, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { FolderPicker } from '@/components/project/FolderPicker'
 import { EmojiPickerSection, ColorPickerSection } from './AppearancePickers'
@@ -71,6 +71,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
   const [isWorktreesDialogOpen, setIsWorktreesDialogOpen] = useState(false)
   const [existingStateAction, setExistingStateAction] = useState<ExistingStateAction>('restore')
   const [isExistingStateConfirmOpen, setIsExistingStateConfirmOpen] = useState(false)
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false)
   const restorePrefillKeyRef = useRef<string | null>(null)
   const closeView = onBack ?? onClose
   const restoreMode = !isEditing && gitInfo.hasLoopTroopState === true && !!gitInfo.existingProject
@@ -318,51 +319,63 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
               </div>
             </div>
           </div>
-          <div className="rounded-md border border-border p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-sm font-medium">Manual QA checkpoint</label>
-                  <ConfigurationDocsLink
-                    docsPath="/configuration#manual-qa"
-                    label="project Manual QA checkpoint"
-                    description="Choose whether tickets in this project pause for your verification. Open the Manual QA documentation."
+          <div className="rounded-md border border-border">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-medium"
+              onClick={() => setIsAdvancedOpen((open) => !open)}
+              aria-expanded={isAdvancedOpen}
+            >
+              Advanced
+              <ChevronDown className={cn('h-4 w-4 transition-transform', isAdvancedOpen && 'rotate-180')} />
+            </button>
+            {isAdvancedOpen && (
+              <div className="space-y-3 border-t border-border px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-sm font-medium">Manual QA checkpoint</label>
+                      <ConfigurationDocsLink
+                        docsPath="/configuration#manual-qa"
+                        label="project Manual QA checkpoint"
+                        description="Choose whether tickets in this project pause for your verification. Open the Manual QA documentation."
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose whether newly started tickets pause for your QA checklist after final tests.
+                    </p>
+                  </div>
+                  <ManualQaSetting
+                    idPrefix="project-manual-qa"
+                    value={manualQaOverride}
+                    onChange={setManualQaOverride}
+                    inheritedEnabled={profile?.manualQaEnabled ?? false}
+                    compact
                   />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Choose whether newly started tickets in this project pause for a user-run QA checklist after final tests.
-                </p>
-              </div>
-              <ManualQaSetting
-                idPrefix="project-manual-qa"
-                value={manualQaOverride}
-                onChange={setManualQaOverride}
-                inheritedEnabled={profile?.manualQaEnabled ?? false}
-              />
-            </div>
-          </div>
-          <div className="rounded-md border border-border p-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5">
-                  <label className="text-sm font-medium">Git hook policy</label>
-                  <ConfigurationDocsLink
-                    docsPath="/configuration#git-hook-policy"
-                    label="project Git hook policy"
-                    description="Choose the default hook behavior for tickets in this project. Open the Git hook policy documentation."
+                <div className="flex flex-wrap items-start justify-between gap-3 border-t border-border pt-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <label className="text-sm font-medium">Git hook policy</label>
+                      <ConfigurationDocsLink
+                        docsPath="/configuration#git-hook-policy"
+                        label="project Git hook policy"
+                        description="Choose the default hook behavior for tickets in this project. Open the Git hook policy documentation."
+                      />
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Choose how LoopTroop handles repository hooks.
+                    </p>
+                  </div>
+                  <GitHookPolicySetting
+                    value={gitHookPolicy}
+                    onChange={setGitHookPolicy}
+                    inheritedPolicy={profile?.gitHookPolicy ?? 'validate_explicitly'}
+                    compact
                   />
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Choose how LoopTroop handles repository hooks.
-                </p>
               </div>
-              <GitHookPolicySetting
-                value={gitHookPolicy}
-                onChange={setGitHookPolicy}
-                inheritedPolicy={profile?.gitHookPolicy ?? 'validate_explicitly'}
-                compact
-              />
-            </div>
+            )}
           </div>
           {isEditing ? (
             <div className="space-y-4">

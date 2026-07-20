@@ -108,18 +108,18 @@ This is meant to answer two quick questions without opening logs or artifacts:
 | [Beads Coverage Passes](#beads-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
 | [Manual QA](#manual-qa) | disabled | enabled / disabled | Post-Implementation | ticket start lock |
 | [Git Hook Policy](#git-hook-policy) | Validate | Validate / Ignore / Run | Pre-Implementation | ticket start lock |
-| [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Execution Phase | next coding/final-test attempt |
-| [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Execution Phase | next execution-setup attempt |
-| [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Execution Phase | next execution/final-test attempt |
+| [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Implementation Phase | next coding/final-test attempt |
+| [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Implementation Phase | next execution-setup attempt |
+| [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Implementation Phase | next execution/final-test attempt |
 | [Tool Input Max Chars](#tool-input-max-chars) | 4,000 | 500–50,000 | Logging | live log formatting (cached briefly) |
 | [Tool Output Max Chars](#tool-output-max-chars) | 12,000 | 1,000–100,000 | Logging | live log formatting (cached briefly) |
 | [Tool Error Max Chars](#tool-error-max-chars) | 6,000 | 500–50,000 | Logging | live log formatting (cached briefly) |
 
 ## Manual QA
 
-Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. Configuration, Project, and ticket controls expose only `Enabled / Disabled`; new project and ticket saves persist the selected boolean explicitly. Legacy unset values remain readable and display their resolved parent/default boolean until the user chooses an explicit value. The ticket control remains available in the Draft workspace until **Start**.
+Manual QA is an optional human verification loop between final tests and integration. Its profile default is `manualQaEnabled: false`. Configuration places it in **Post-Implementation**, while Project **Advanced** settings place it beside Git hooks in one collapsed section. Ticket controls expose it in Advanced and the Draft workspace until **Start**. All scopes offer only `Enabled / Disabled`; new project and ticket saves persist the selected boolean explicitly. Legacy unset values remain readable and display their resolved parent/default boolean until the user chooses an explicit value.
 
-The help button beside each Manual QA control briefly explains that scope and opens this section in the locally served documentation started with the application.
+Hovering **Enabled** or **Disabled** explains the resulting workflow route, including whether LoopTroop creates a checklist and waits for user verification. The help button beside each Manual QA control explains that scope and opens this section in the locally served documentation started with the application.
 
 Resolution is deterministic:
 
@@ -526,7 +526,7 @@ Once coverage is clean or this cap is reached, LoopTroop advances to `EXPANDING_
 **Type:** three-choice policy
 **Default:** **Validate** (recommended)
 
-Choose how LoopTroop handles repository hooks. The same linked buttons appear in Configuration, Project settings, and the new-ticket **Advanced** settings; Draft tickets can also change their choice before Start. The active inherited choice is highlighted, so there is no separate or duplicate **Inherit** option.
+Choose how LoopTroop handles repository hooks. The same linked buttons appear in Configuration, Project **Advanced** settings, and the new-ticket **Advanced** settings; Draft tickets can also change their choice before Start. The active inherited choice is highlighted, so there is no separate or duplicate **Inherit** option. Hovering each button summarizes whether hooks are bypassed, whether explicit checks run, and whether a hook can block an internal Git operation.
 
 | Choice | Stored value | What LoopTroop does |
 | --- | --- | --- |
@@ -550,7 +550,7 @@ This policy affects only LoopTroop's internal Git operations. It does not alter 
 
 ---
 
-## Execution Phase
+## Implementation Phase
 
 ### Per-Iteration Timeout
 

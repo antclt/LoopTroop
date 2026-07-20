@@ -1,5 +1,6 @@
 import { cn } from '@/lib/utils'
 import type { ManualQaOverride } from '@/lib/manualQaSetting'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 interface ManualQaSettingProps {
   value: ManualQaOverride
@@ -10,9 +11,17 @@ interface ManualQaSettingProps {
   compact?: boolean
 }
 
-const OPTIONS: Array<{ value: boolean; label: string }> = [
-  { value: true, label: 'Enabled' },
-  { value: false, label: 'Disabled' },
+const OPTIONS: Array<{ value: boolean; label: string; tooltip: string }> = [
+  {
+    value: true,
+    label: 'Enabled',
+    tooltip: 'After final tests pass, LoopTroop generates a checklist and pauses the ticket for your review. You run and control the application; LoopTroop never launches it. Passing, waiving, or skipping continues to integration, while failures can create QA-fix work. The effective choice is frozen when the ticket starts.',
+  },
+  {
+    value: false,
+    label: 'Disabled',
+    tooltip: 'After final tests pass, the ticket proceeds directly to integration without a Manual QA checkpoint. No checklist or evidence round is created. Automated tests and the normal integration checks still run. The effective choice is frozen when the ticket starts.',
+  },
 ]
 
 export function ManualQaSetting({
@@ -31,22 +40,28 @@ export function ManualQaSetting({
         {OPTIONS.map((option) => {
           const selected = option.value === selectedValue
           return (
-            <button
-              key={option.label}
-              id={`${idPrefix}-${option.label.toLowerCase()}`}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              disabled={disabled}
-              onClick={() => onChange(option.value)}
-              className={cn(
-                'rounded px-2.5 py-1 text-xs transition-colors',
-                selected ? 'bg-background font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-                disabled && 'cursor-not-allowed opacity-60',
-              )}
-            >
-              {option.label}
-            </button>
+            <Tooltip key={option.label}>
+              <TooltipTrigger asChild>
+                <button
+                  id={`${idPrefix}-${option.label.toLowerCase()}`}
+                  type="button"
+                  role="radio"
+                  aria-checked={selected}
+                  disabled={disabled}
+                  onClick={() => onChange(option.value)}
+                  className={cn(
+                    'rounded px-2.5 py-1 text-xs transition-colors',
+                    selected ? 'bg-background font-medium text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                    disabled && 'cursor-not-allowed opacity-60',
+                  )}
+                >
+                  {option.label}
+                </button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-sm text-xs leading-relaxed">
+                {option.tooltip}
+              </TooltipContent>
+            </Tooltip>
           )
         })}
       </div>
