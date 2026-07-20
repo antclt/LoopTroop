@@ -28,6 +28,7 @@ import {
   useApprovalPaneState,
 } from './approvalHooks'
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
+import { AutosaveStatus } from './AutosaveStatus'
 
 const SKIPPED_QUESTIONS_NOTICE = 'Some interview questions were skipped. That is OK: if you approve this interview with skipped answers, PRD drafting will first create per-model Full Answers artifacts where each council model fills only those skipped answers using the ticket details, relevant files, and the rest of the interview. If you want human-approved answers instead, edit the interview before approving.'
 
@@ -154,7 +155,7 @@ export function InterviewApprovalPane({
 
   useApprovalFocusAnchor(ticket.id, INTERVIEW_APPROVAL_FOCUS_EVENT)
 
-  useDebouncedApprovalUiState({
+  const approvalAutosave = useDebouncedApprovalUiState({
     enabled: !isLoading && restoredDraftRef.current,
     snapshot: {
       isEditMode,
@@ -166,6 +167,7 @@ export function InterviewApprovalPane({
     scope: uiStateScope,
     saveUiState,
     lastSavedSnapshotRef,
+    initialUpdatedAt: persistedUiState?.updatedAt,
   })
 
   function resetDraftsFromSaved(nextTab: EditTab = 'answers') {
@@ -406,6 +408,11 @@ export function InterviewApprovalPane({
             </div>
 
             <div className="flex items-center gap-2">
+              <AutosaveStatus
+                state={approvalAutosave.state}
+                lastSavedAt={approvalAutosave.lastSavedAt}
+                label="Draft autosave on"
+              />
               <Button
                 size="sm"
                 variant="secondary"

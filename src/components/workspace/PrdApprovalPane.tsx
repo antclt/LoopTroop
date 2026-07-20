@@ -37,6 +37,7 @@ import {
   useApprovalPaneState,
 } from './approvalHooks'
 import { buildReadableRawDisplayContent } from './rawDisplayContent'
+import { AutosaveStatus } from './AutosaveStatus'
 import {
   findLatestArtifact,
   findLatestCompanionArtifact,
@@ -240,7 +241,7 @@ export function PrdApprovalPane({
 
   useApprovalFocusAnchor(ticket.id, PRD_APPROVAL_FOCUS_EVENT)
 
-  useDebouncedApprovalUiState({
+  const approvalAutosave = useDebouncedApprovalUiState({
     enabled: !isLoading && restoredDraftRef.current && structuredDraft !== null,
     snapshot: {
       isEditMode,
@@ -252,6 +253,7 @@ export function PrdApprovalPane({
     scope: uiStateScope,
     saveUiState,
     lastSavedSnapshotRef,
+    initialUpdatedAt: persistedUiState?.updatedAt,
   })
 
   function resetDraftsFromSaved(nextTab: EditTab = 'structured') {
@@ -551,15 +553,20 @@ export function PrdApprovalPane({
             </div>
 
             <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              onClick={handleSave}
-              disabled={isSaving || !hasUnsavedChanges || structuredEditorUnavailable}
-            >
-              {isSaving ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
+              <AutosaveStatus
+                state={approvalAutosave.state}
+                lastSavedAt={approvalAutosave.lastSavedAt}
+                label="Draft autosave on"
+              />
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={handleSave}
+                disabled={isSaving || !hasUnsavedChanges || structuredEditorUnavailable}
+              >
+                {isSaving ? 'Saving…' : 'Save'}
+              </Button>
+            </div>
           </div>
         ) : null}
 

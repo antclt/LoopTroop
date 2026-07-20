@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LoadingText } from '@/components/ui/LoadingText'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ChoiceAnswerInput } from './ChoiceAnswerInput'
+import { AutosaveStatus, type AutosaveStatusState } from './AutosaveStatus'
 
 function priorityBadgeVariant(priority: string): 'destructive' | 'default' | 'secondary' | 'outline' {
   switch (priority) {
@@ -42,6 +43,8 @@ export interface AnswerEditorProps {
   batchSelectedOptions: Record<string, string[]>
   isBusy: boolean
   isSubmitting: boolean
+  autosaveState: AutosaveStatusState
+  lastAutosavedAt: Date | null
   allBatchAnswersFilled: boolean
   onBatchAnswer: (questionId: string, value: string) => void
   onOptionToggle: (questionId: string, optionId: string) => void
@@ -67,6 +70,8 @@ export function AnswerEditor({
   batchSelectedOptions,
   isBusy,
   isSubmitting,
+  autosaveState,
+  lastAutosavedAt,
   allBatchAnswersFilled,
   onBatchAnswer,
   onOptionToggle,
@@ -229,18 +234,21 @@ export function AnswerEditor({
             >
               Skip All Questions
             </Button>
-            <Button
-              size="sm"
-              onClick={onSubmitBatch}
-              disabled={isBusy || questions.length === 0}
-              className="h-8 text-xs"
-            >
-              {isSubmitting
-                ? <LoadingText text="Submitting" />
-                : allBatchAnswersFilled
-                  ? 'Submit Answers'
-                  : 'Submit Batch'}
-            </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <AutosaveStatus state={autosaveState} lastSavedAt={lastAutosavedAt} />
+              <Button
+                size="sm"
+                onClick={onSubmitBatch}
+                disabled={isBusy || questions.length === 0}
+                className="h-8 text-xs"
+              >
+                {isSubmitting
+                  ? <LoadingText text="Submitting" />
+                  : allBatchAnswersFilled
+                    ? 'Submit Answers'
+                    : 'Submit Batch'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

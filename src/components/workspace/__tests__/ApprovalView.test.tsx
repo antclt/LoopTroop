@@ -302,6 +302,8 @@ describe('Interview approval UI', () => {
     clickHeaderEditButton()
 
     expect(screen.getByText('Answer-only editor')).toBeInTheDocument()
+    expect(screen.getByText(/Draft autosave on/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
     expect(screen.queryByLabelText('YAML editor')).not.toBeInTheDocument()
     openFoundationSection()
     await waitFor(() => {
@@ -644,6 +646,30 @@ describe('Interview approval UI', () => {
     expect(screen.getByText('Lifecycle')).toBeInTheDocument()
     expect(screen.getByText(/^pending$/i)).toBeInTheDocument()
   }, 30_000)
+
+  it('shows draft autosave status and retains Save in beads edit mode', async () => {
+    mockUseTicketUIState.mockReturnValue({
+      data: {
+        scope: 'approval_beads',
+        exists: true,
+        data: { isEditMode: true, editTab: 'structured' },
+        updatedAt: TEST.timestamp,
+      },
+    })
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = String(input)
+      if (url === `/api/tickets/${TEST.ticketId}/beads`) {
+        return createJsonResponse([{ id: 'bead-1', title: 'Autosaved bead', status: 'pending' }])
+      }
+      if (url === `/api/tickets/${TEST.ticketId}/artifacts`) return createJsonResponse([])
+      throw new Error(`Unexpected fetch: ${url}`)
+    })
+
+    renderApprovalView(makeTicket({ status: 'WAITING_BEADS_APPROVAL' }), 'beads')
+
+    expect(await screen.findByText(/Draft autosave on/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+  })
 
   it('shows unresolved beads coverage gaps as a collapsible warning during approval', async () => {
     mockUseTicketArtifacts.mockReturnValue({

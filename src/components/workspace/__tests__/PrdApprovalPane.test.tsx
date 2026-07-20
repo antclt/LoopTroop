@@ -302,6 +302,8 @@ describe('PrdApprovalPane', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('structured-prd-editor')).toBeInTheDocument()
     })
+    expect(screen.getByText(/Draft autosave on/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('structured-prd-editor'), {
       target: { value: 'Updated problem statement.' },

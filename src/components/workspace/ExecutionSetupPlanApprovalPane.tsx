@@ -25,6 +25,7 @@ import {
   useApprovalPaneState,
 } from './approvalHooks'
 import { requestWorkspacePhaseNavigation } from '@/lib/workspaceNavigation'
+import { AutosaveStatus } from './AutosaveStatus'
 
 type EditTab = 'structured' | 'raw'
 type RuntimeRewindTarget = 'edit' | 'regenerate' | null
@@ -423,7 +424,7 @@ export function ExecutionSetupPlanApprovalPane({
 
   useApprovalFocusAnchor(ticket.id, EXECUTION_SETUP_PLAN_APPROVAL_FOCUS_EVENT)
 
-  useDebouncedApprovalUiState({
+  const approvalAutosave = useDebouncedApprovalUiState({
     enabled: !readOnly && restoredDraftRef.current,
     snapshot: {
       isEditMode,
@@ -436,6 +437,7 @@ export function ExecutionSetupPlanApprovalPane({
     scope: uiStateScope,
     saveUiState,
     lastSavedSnapshotRef,
+    initialUpdatedAt: persistedUiState?.updatedAt,
   })
 
   function resetDraftsFromSaved(nextTab: EditTab = 'structured') {
@@ -789,6 +791,11 @@ export function ExecutionSetupPlanApprovalPane({
               </button>
             </div>
             <div className="flex items-center gap-2">
+              <AutosaveStatus
+                state={approvalAutosave.state}
+                lastSavedAt={approvalAutosave.lastSavedAt}
+                label="Draft autosave on"
+              />
               <Button size="sm" variant="secondary" onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>
                 {isSaving ? 'Saving…' : 'Save'}
               </Button>

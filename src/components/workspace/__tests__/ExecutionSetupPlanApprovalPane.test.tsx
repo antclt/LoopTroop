@@ -323,6 +323,21 @@ describe('ExecutionSetupPlanApprovalPane', () => {
     })
   })
 
+  it('shows draft autosave status beside Save only while editing the active plan', async () => {
+    renderWithProviders(<ExecutionSetupPlanApprovalPane ticket={makeTicket({ status: 'WAITING_EXECUTION_SETUP_APPROVAL' })} />)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('artifact-content')).toHaveTextContent('execution-setup-plan:with-report:plan')
+    })
+
+    expect(screen.queryByText(/Draft autosave on/)).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+    expect(await screen.findByTestId('execution-setup-plan-editor')).toBeInTheDocument()
+    expect(screen.getByText(/Draft autosave on/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
+  })
+
   it('opens regenerate in a modal from the header and submits commentary through the regenerate route', async () => {
     const queryClient = createTestQueryClient()
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries')

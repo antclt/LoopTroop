@@ -100,6 +100,39 @@ describe.concurrent('workflow metadata', () => {
     expect(WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_MANUAL_QA')?.uiView).toBe('manual_qa')
   })
 
+  it('documents visible autosave state for interview drafts', () => {
+    const interviewPhase = WORKFLOW_PHASES.find((phase) => phase.id === 'WAITING_INTERVIEW_ANSWERS')
+
+    expect(interviewPhase?.description).toContain('Draft answers autosave with visible state and last-save time.')
+    expect(interviewPhase?.details.overview).toContain(
+      'visible status showing when the server last acknowledged a save',
+    )
+    expect(interviewPhase?.details.steps).toContain(
+      'Answering Questions And Autosave: You can answer questions in any order. Free-text questions accept open-ended responses; choice-based questions present the available options. Draft changes autosave while you work, and the visible Autosave on indicator reports pending, saving, saved, conflict, or failure state plus the last server-acknowledged save time.',
+    )
+  })
+
+  it('distinguishes autosaved approval drafts from explicit artifact saves', () => {
+    const approvalPhaseIds = [
+      'WAITING_INTERVIEW_APPROVAL',
+      'WAITING_PRD_APPROVAL',
+      'WAITING_BEADS_APPROVAL',
+      'WAITING_EXECUTION_SETUP_APPROVAL',
+    ]
+
+    for (const phaseId of approvalPhaseIds) {
+      const phase = WORKFLOW_PHASES.find((candidate) => candidate.id === phaseId)
+
+      expect(phase?.description).toContain('Draft edits autosave with visible state and last-save time')
+      expect(phase?.description).toContain('explicit Save is required to update the authoritative')
+      expect(phase?.details.overview).toContain('Draft edits autosave with a visible last-save status')
+      expect(phase?.details.steps.join(' ')).toContain(
+        'visible Draft autosave on indicator reports pending, saving, saved, conflict, or failure state',
+      )
+      expect(phase?.details.steps.join(' ').toLowerCase()).toContain('explicit save')
+    }
+  })
+
   it('shows only ticket details as allowed context while scanning relevant files', () => {
     const scanningPhase = WORKFLOW_PHASES.find((phase) => phase.id === 'SCANNING_RELEVANT_FILES')
 

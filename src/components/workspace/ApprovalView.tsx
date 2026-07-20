@@ -29,6 +29,7 @@ import {
   useApprovalFocusAnchor,
   useDebouncedApprovalUiState,
 } from './approvalHooks'
+import { AutosaveStatus } from './AutosaveStatus'
 
 interface ApprovalViewProps {
   ticket: Ticket
@@ -243,7 +244,7 @@ function BeadsApprovalPane({
 
   useApprovalFocusAnchor(ticket.id, BEADS_APPROVAL_FOCUS_EVENT)
 
-  useDebouncedApprovalUiState({
+  const approvalAutosave = useDebouncedApprovalUiState({
     enabled: !isLoading && restoredDraftRef.current,
     snapshot: {
       isEditMode,
@@ -255,6 +256,7 @@ function BeadsApprovalPane({
     scope: uiStateScope,
     saveUiState,
     lastSavedSnapshotRef,
+    initialUpdatedAt: persistedUiState?.updatedAt,
   })
 
   function resetDraftsFromSaved(nextTab: EditTab = 'structured') {
@@ -492,6 +494,11 @@ function BeadsApprovalPane({
             </div>
 
             <div className="flex items-center gap-2">
+              <AutosaveStatus
+                state={approvalAutosave.state}
+                lastSavedAt={approvalAutosave.lastSavedAt}
+                label="Draft autosave on"
+              />
               <Button
                 size="sm"
                 variant="secondary"

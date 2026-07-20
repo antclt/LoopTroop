@@ -11,7 +11,7 @@ interface HarnessProps {
 function useHarness({ snapshot, saveUiState }: HarnessProps) {
   const lastSavedSnapshotRef = useRef('')
 
-  useDebouncedApprovalUiState({
+  const autosave = useDebouncedApprovalUiState({
     enabled: true,
     snapshot,
     ticketId: '1:T-42',
@@ -21,7 +21,7 @@ function useHarness({ snapshot, saveUiState }: HarnessProps) {
     delayMs: 10,
   })
 
-  return lastSavedSnapshotRef
+  return { lastSavedSnapshotRef, autosave }
 }
 
 describe('useDebouncedApprovalUiState', () => {
@@ -47,16 +47,84 @@ describe('useDebouncedApprovalUiState', () => {
       })
 
       expect(saveUiState).toHaveBeenCalledTimes(1)
-      expect(result.current.current).toBe('')
+      expect(result.current.lastSavedSnapshotRef.current).toBe('')
+      expect(result.current.autosave.state).toBe('error')
 
-      rerender({ snapshot: { value: 'first' }, saveUiState })
+      rerender({ snapshot: { value: 'second' }, saveUiState })
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10)
         await Promise.resolve()
       })
 
-      expect(result.current.current).toBe(JSON.stringify({ value: 'first' }))
+      expect(result.current.lastSavedSnapshotRef.current).toBe(JSON.stringify({ value: 'second' }))
+      expect(result.current.autosave.state).toBe('saved')
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    }
+  })
+
+  it('reports acknowledged timestamps and conflicts without marking the local snapshot saved', async () => {
+    vi.useFakeTimers()
+    const updatedAt = '2026-07-20T12:00:00.000Z'
+    const saveUiState = vi.fn()
+      .mockResolvedValueOnce({ conflict: false, updatedAt })
+      .mockResolvedValueOnce({ conflict: true, updatedAt: '2026-07-20T12:01:00.000Z' })
+
+    try {
+      const { result, rerender } = renderHook(
+        (props: HarnessProps) => useHarness(props),
+        { initialProps: { snapshot: { value: 'first' }, saveUiState } },
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10)
+      })
+
+      expect(result.current.autosave.state).toBe('saved')
+      expect(result.current.autosave.lastSavedAt?.toISOString()).toBe(updatedAt)
+
+      rerender({ snapshot: { value: 'second' }, saveUiState })
+      expect(result.current.autosave.state).toBe('pending')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10)
+      })
+
+      expect(result.current.autosave.state).toBe('conflict')
+      expect(result.current.lastSavedSnapshotRef.current).toBe(JSON.stringify({ value: 'first' }))
+    } finally {
+      vi.clearAllTimers()
+      vi.useRealTimers()
+    }
+  })
+
+  it('remains saving until the in-flight request is acknowledged', async () => {
+    vi.useFakeTimers()
+    let resolveSave: ((value: unknown) => void) | undefined
+    const saveUiState = vi.fn(() => new Promise((resolve) => {
+      resolveSave = resolve
+    }))
+
+    try {
+      const { result } = renderHook(
+        (props: HarnessProps) => useHarness(props),
+        { initialProps: { snapshot: { value: 'delayed' }, saveUiState } },
+      )
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10)
+      })
+      expect(result.current.autosave.state).toBe('saving')
+      expect(result.current.lastSavedSnapshotRef.current).toBe('')
+
+      await act(async () => {
+        resolveSave?.({ conflict: false, updatedAt: '2026-07-20T12:00:00.000Z' })
+        await Promise.resolve()
+      })
+      expect(result.current.autosave.state).toBe('saved')
+      expect(result.current.lastSavedSnapshotRef.current).toBe(JSON.stringify({ value: 'delayed' }))
     } finally {
       vi.clearAllTimers()
       vi.useRealTimers()

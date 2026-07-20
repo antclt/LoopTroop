@@ -356,6 +356,7 @@ describe('InterviewQAView', () => {
     await waitFor(() => {
       expect(screen.getByText('How will retries be tested?')).toBeInTheDocument()
     })
+    expect(screen.getByText(/Autosave on/)).toHaveTextContent('Changes save automatically')
 
     vi.useFakeTimers()
     try {
@@ -369,9 +370,46 @@ describe('InterviewQAView', () => {
       })
 
       expect(savedUiState).not.toBeNull()
+      expect(screen.getByText(/Autosave on/)).toHaveTextContent(/Last save/)
 
       const data = savedUiState!.data as { draftAnswers: Record<string, Record<string, string>> }
       expect(data.draftAnswers['prom4:0:2']).toEqual({ QF01: 'My draft answer' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('surfaces an interview draft autosave conflict', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input, init) => {
+      const url = String(input)
+      if (url.includes(`/api/tickets/${TEST.ticketId}/ui-state`)) {
+        if (init?.method === 'PUT') {
+          return createJsonResponse({
+            conflict: true,
+            scope: 'interview-drafts',
+            updatedAt: '2026-07-20T12:00:00.000Z',
+            revision: 2,
+            clientRevision: 1,
+          }, 409)
+        }
+        return createJsonResponse(emptyUiState())
+      }
+      if (url.endsWith(`/api/tickets/${TEST.ticketId}/interview`)) return createJsonResponse(interviewData)
+      throw new Error(`Unhandled fetch: ${url}`)
+    }))
+
+    renderWithProviders(<InterviewQAView ticket={makeTicket({ status: 'WAITING_INTERVIEW_ANSWERS' })} />)
+    await waitFor(() => {
+      expect(screen.getByText('How will retries be tested?')).toBeInTheDocument()
+    })
+
+    vi.useFakeTimers()
+    try {
+      fireEvent.change(screen.getAllByRole('textbox')[0]!, { target: { value: 'Conflicting draft' } })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(350)
+      })
+      expect(screen.getByText('Autosave on · Autosave conflict')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

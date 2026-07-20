@@ -3,6 +3,7 @@ import { useSubmitBatch, useSkipInterview, useTicketUIState, useSaveTicketUIStat
 import { flushTicketUiStateSnapshot } from '@/components/workspace/approvalHooks'
 import { INTERVIEW_BATCH_EVENT, parseInterviewBatchEventDetail } from '@/lib/interviewBatchEvents'
 import type { PersistedInterviewBatch } from '@shared/interviewSession'
+import type { AutosaveStatusState } from '@/components/workspace/AutosaveStatus'
 
 const INTERVIEW_DRAFTS_SCOPE = 'interview-drafts'
 const DRAFT_SAVE_DEBOUNCE_MS = 350
@@ -69,6 +70,8 @@ export function useBatchSubmit(ticketId: string) {
   const [sseBatch, setSseBatch] = useState<PersistedInterviewBatch | null>(null)
   const [processingError, setProcessingError] = useState<string | null>(null)
   const [draftsRestoreTick, setDraftsRestoreTick] = useState(0)
+  const [autosaveState, setAutosaveState] = useState<AutosaveStatusState>('pending')
+  const [lastAutosavedAt, setLastAutosavedAt] = useState<Date | null>(null)
 
   const restoredDraftRef = useRef(false)
   const lastSavedSnapshotRef = useRef('')
@@ -81,6 +84,8 @@ export function useBatchSubmit(ticketId: string) {
     restoredDraftRef.current = false
     lastSavedSnapshotRef.current = ''
     latestDraftSnapshotRef.current = null
+    setAutosaveState('pending')
+    setLastAutosavedAt(null)
   }, [ticketId])
 
   // Restore persisted drafts once on mount / ticket change
@@ -120,6 +125,8 @@ export function useBatchSubmit(ticketId: string) {
         snapshot,
       }
       restoredDraftRef.current = true
+      setLastAutosavedAt(persistedDrafts.updatedAt ? new Date(persistedDrafts.updatedAt) : null)
+      setAutosaveState('saved')
       setDraftsRestoreTick((current) => current + 1)
     })
     return () => cancelAnimationFrame(frame)
@@ -158,19 +165,31 @@ export function useBatchSubmit(ticketId: string) {
     }
     const serialized = JSON.stringify(snapshot)
     latestDraftSnapshotRef.current = { serialized, snapshot }
-    if (serialized === lastSavedSnapshotRef.current) return
+    if (serialized === lastSavedSnapshotRef.current) {
+      setAutosaveState('saved')
+      return
+    }
+    setAutosaveState('pending')
 
     let canceled = false
     const timer = window.setTimeout(() => {
+      if (!canceled) setAutosaveState('saving')
       void saveUiState({
         ticketId,
         scope: INTERVIEW_DRAFTS_SCOPE,
         data: snapshot,
-      }).then(() => {
-        if (!canceled && latestDraftSnapshotRef.current?.serialized === serialized) {
-          lastSavedSnapshotRef.current = serialized
+      }).then((saved) => {
+        if (canceled || latestDraftSnapshotRef.current?.serialized !== serialized) return
+        if (saved.conflict) {
+          setAutosaveState('conflict')
+          return
         }
-      }).catch(() => undefined)
+        lastSavedSnapshotRef.current = serialized
+        if (saved.updatedAt) setLastAutosavedAt(new Date(saved.updatedAt))
+        setAutosaveState('saved')
+      }).catch(() => {
+        if (!canceled && latestDraftSnapshotRef.current?.serialized === serialized) setAutosaveState('error')
+      })
     }, DRAFT_SAVE_DEBOUNCE_MS)
 
     return () => {
@@ -345,12 +364,17 @@ export function useBatchSubmit(ticketId: string) {
       const serializedEmptySnapshot = JSON.stringify(emptySnapshot)
       latestDraftSnapshotRef.current = { serialized: serializedEmptySnapshot, snapshot: emptySnapshot }
       void saveUiState({ ticketId, scope: INTERVIEW_DRAFTS_SCOPE, data: emptySnapshot })
-        .then(() => {
-          if (latestDraftSnapshotRef.current?.serialized === serializedEmptySnapshot) {
-            lastSavedSnapshotRef.current = serializedEmptySnapshot
+        .then((saved) => {
+          if (latestDraftSnapshotRef.current?.serialized !== serializedEmptySnapshot) return
+          if (saved.conflict) {
+            setAutosaveState('conflict')
+            return
           }
+          lastSavedSnapshotRef.current = serializedEmptySnapshot
+          if (saved.updatedAt) setLastAutosavedAt(new Date(saved.updatedAt))
+          setAutosaveState('saved')
         })
-        .catch(() => undefined)
+        .catch(() => setAutosaveState('error'))
       setSseBatch(null)
     } catch (err) {
       console.error('Failed to skip remaining interview questions:', err)
@@ -366,6 +390,8 @@ export function useBatchSubmit(ticketId: string) {
     submittedBatchKey,
     isSubmitting,
     isSkipping,
+    autosaveState,
+    lastAutosavedAt,
     setProcessingError,
     handleBatchAnswer,
     handleOptionToggle,

@@ -222,7 +222,7 @@ The canonical properties for every workflow phase are detailed in the inventory 
 | `CANCELED` | Canceled | `done` | `canceled` | `done` | — | no | no | — |
 | `BLOCKED_ERROR` | Error | `errors` | `error` | `needs_input` | — | no | no | — |
 
-**Note:** `editable: yes` means the review artifact or planning document can be manually saved from that phase. Interview and PRD edits are accepted only before `PRE_FLIGHT_CHECK`; setup-plan edits are also accepted during `PREPARING_EXECUTION_ENV`, where they trigger a one-step rewind back to setup approval.
+**Note:** `editable: yes` means the review artifact or planning document can be manually saved from that phase. Interview answers and active approval-editor drafts autosave, with visible save state and last-save time. In approval phases, autosave only preserves the draft; **Save** still applies it to the authoritative artifact and triggers any downstream workflow effects. Interview and PRD edits are accepted only before `PRE_FLIGHT_CHECK`; setup-plan edits are also accepted during `PREPARING_EXECUTION_ENV`, where they trigger a one-step rewind back to setup approval.
 
 ---
 
@@ -248,16 +248,16 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`COUNCIL_DELIBERATING`:** All configured council members draft interview strategies in parallel, producing candidate question lists.
 - **`COUNCIL_VOTING_INTERVIEW`:** Council models rate the anonymized questionnaires using a structural rubric to select the best intake framework.
 - **`COMPILING_INTERVIEW`:** LoopTroop normalizes the selected plan into the canonical `interview.yaml` session file.
-- **`WAITING_INTERVIEW_ANSWERS`:** The dashboard pauses for user answers. Questions are presented in adaptive, dynamic batches of 1 to 3 to optimize cognitive load. Skip and "skip all" choices are supported.
+- **`WAITING_INTERVIEW_ANSWERS`:** The dashboard pauses for user answers. Questions are presented in adaptive, dynamic batches of 1 to 3 to optimize cognitive load. Skip and "skip all" choices are supported. The active draft shows that autosave is on, reports pending/saving/saved/conflict/failure state, and displays the last acknowledged save as a relative time with the exact local timestamp on hover.
 - **`VERIFYING_INTERVIEW_COVERAGE`:** The winner checks the answers for ambiguities or gaps, spawning targeted follow-up rounds if budget permits.
-- **`WAITING_INTERVIEW_APPROVAL`:** Gatekeeper review. The user approves the structured YAML specs with content-hash protection (`expectedContentSha256` matching check).
+- **`WAITING_INTERVIEW_APPROVAL`:** Gatekeeper review. The user approves the structured YAML specs with content-hash protection (`expectedContentSha256` matching check). The editable draft visibly autosaves across reloads, but the user must click **Save** to apply it to the authoritative interview artifact and trigger downstream effects.
 
 ### Specs Loop (PRD)
 - **`DRAFTING_PRD`:** Models resolve skipped questions into a Full Answers artifact (`answered_by: ai_skip`), then draft comprehensive feature requirements.
 - **`COUNCIL_VOTING_PRD`:** Anonymized votes are cast on rival PRD drafts based on completeness, risk, and feasibility metrics.
 - **`REFINING_PRD`:** The winner incorporates the strongest elements from competing drafts into PRD Candidate v1.
 - **`VERIFYING_PRD_COVERAGE`:** The candidate PRD is audited against the approved Full Answers context, revising in-phase until clean or capped.
-- **`WAITING_PRD_APPROVAL`:** Gatekeeper review of the PRD requirements spec with content-hash matching, supported by the winning Full Answers reference context. If unresolved coverage gaps remain, the user can run one manual extra fix at a time before approving or approving with gaps.
+- **`WAITING_PRD_APPROVAL`:** Gatekeeper review of the PRD requirements spec with content-hash matching, supported by the winning Full Answers reference context. The editor visibly autosaves its draft, while **Save** remains required to update the authoritative PRD and apply downstream effects. If unresolved coverage gaps remain, the user can run one manual extra fix at a time before approving or approving with gaps.
 
 ### Blueprint Loop (Beads)
 - **`DRAFTING_BEADS`:** Council members draft blueprints decomposing the approved spec into semantic dependency graphs of beads.
@@ -265,11 +265,11 @@ The state machine metadata directly drives the React user interface. Developers 
 - **`REFINING_BEADS`:** Winning blueprint merges strong verification steps from alternative drafts.
 - **`VERIFYING_BEADS_COVERAGE`:** Blueprint is verified against the PRD, revising in-phase when missing criteria are found.
 - **`EXPANDING_BEADS`:** LoopTroop expands the blueprint into live execution bead lists, specifying exact file scopes and test suites.
-- **`WAITING_BEADS_APPROVAL`:** Gatekeeper review of the dependency graph and executable plan before coding starts. If unresolved coverage gaps remain, the user can run one manual extra fix at a time; changed semantic blueprints are expanded again before approval.
+- **`WAITING_BEADS_APPROVAL`:** Gatekeeper review of the dependency graph and executable plan before coding starts. The editor visibly autosaves its draft, while **Save** remains required to update the authoritative blueprint and apply downstream effects. If unresolved coverage gaps remain, the user can run one manual extra fix at a time; changed semantic blueprints are expanded again before approval.
 
 ### Pre-Implementation
 - **`PRE_FLIGHT_CHECK`:** Verifies workspace sanitation, Git worktree hygiene, OpenCode reachability, and execution locks. Committable changes outside LoopTroop fail the checks.
-- **`WAITING_EXECUTION_SETUP_APPROVAL`:** The setup-plan draft presents the readiness assessment, approved ignored or untracked workspace inputs, required temporary setup steps, ordered workspace probes, detected Git hooks, the policy inherited from ticket → project → profile and frozen at Start, editable explicit hook commands, and regenerate history. The user can review each proposed file or directory, edit the plan, or regenerate it with commentary.
+- **`WAITING_EXECUTION_SETUP_APPROVAL`:** The setup-plan draft presents the readiness assessment, approved ignored or untracked workspace inputs, required temporary setup steps, ordered workspace probes, detected Git hooks, the policy inherited from ticket → project → profile and frozen at Start, editable explicit hook commands, and regenerate history. The user can review each proposed file or directory, edit the plan, or regenerate it with commentary. The editor visibly autosaves its draft, while **Save** remains required to update the authoritative setup plan and apply its downstream effects.
 - **`PREPARING_EXECUTION_ENV`:** Materializes approved workspace inputs without replacing tracked ticket source, runs only the approved temporary setup, verifies wrappers/tooling probes and at least one functional repository probe when project commands require it, executes approved explicit hook validations, audits tracked effects, may perform setup-scoped online lookup, and emits the reusable execution-setup profile under `.ticket/runtime/execution-setup/**`.
 
 ### Implementation (Coding)

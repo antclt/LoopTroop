@@ -32,6 +32,7 @@ import { CollapsiblePhaseLogSection } from '@/components/workspace/CollapsiblePh
 import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
 import { resolveManualQaSettingLabel } from '@/lib/manualQaSetting'
 import { buildCanonicalManualQaDraft, buildDefaultManualQaImprovementContext, composeManualQaImprovementPreview, validateManualQaItem, validateManualQaMergeGroups } from '@/lib/manualQaDraft'
+import { AutosaveStatus } from './AutosaveStatus'
 
 interface ManualQAViewProps {
   ticket: Ticket
@@ -118,16 +119,6 @@ function durationLabel(milliseconds: number) {
   const minutes = Math.floor(seconds / 60)
   const remainder = seconds % 60
   return remainder > 0 ? `${minutes}m ${remainder}s` : `${minutes}m`
-}
-
-function relativeSaveLabel(savedAt: Date, now: number) {
-  const seconds = Math.max(0, Math.floor((now - savedAt.getTime()) / 1000))
-  if (seconds < 5) return 'just now'
-  if (seconds < 60) return `${seconds} seconds ago`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`
-  const hours = Math.floor(minutes / 60)
-  return `${hours} hour${hours === 1 ? '' : 's'} ago`
 }
 
 function ManualQaRoundSummary({ summary }: { summary: ManualQaSummary }) {
@@ -222,7 +213,6 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
   const [driftError, setDriftError] = useState<string | null>(null)
   const [removingEvidenceIds, setRemovingEvidenceIds] = useState<Set<string>>(new Set())
   const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
-  const [nowMs, setNowMs] = useState(() => Date.now())
   const draftRef = useRef(draft)
   const saveQueueRef = useRef<Promise<unknown>>(Promise.resolve())
   const latestDraftRevisionRef = useRef(0)
@@ -279,11 +269,6 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
     setOpenLinkEditors(new Set())
     setLastSavedAt(uiState.data?.updatedAt ? new Date(uiState.data.updatedAt) : null)
   }, [draftSourceKey, round, uiState.data?.data, uiState.data?.updatedAt, version])
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 5_000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   useEffect(() => {
     latestDraftRevisionRef.current = expectedDraftRevision
@@ -842,9 +827,11 @@ export function ManualQAView({ ticket, readOnly = false }: ManualQAViewProps) {
           <div className="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
             <div className="space-y-0.5 text-xs text-muted-foreground">
               <p>{incompleteRequired > 0 ? `${incompleteRequired} required check${incompleteRequired === 1 ? '' : 's'} incomplete` : hasFailures ? 'Failures will create Manual QA fix beads and return the ticket to Coding.' : 'Ready to submit for integration.'}</p>
-              <p title={lastSavedAt?.toLocaleString()}>
-                Autosave on · {saveState === 'saving' ? 'Saving…' : saveState === 'conflict' ? 'A newer draft must be reloaded' : saveState === 'error' ? 'Autosave failed' : dirty ? 'Changes save automatically' : lastSavedAt ? `Last save ${relativeSaveLabel(lastSavedAt, nowMs)}` : 'Changes save automatically'}
-              </p>
+              <AutosaveStatus
+                state={saveState === 'idle' ? (dirty ? 'pending' : 'saved') : saveState}
+                lastSavedAt={lastSavedAt}
+                conflictMessage="A newer draft must be reloaded"
+              />
             </div>
             <div className="flex gap-2">
               <Button variant="ghost" onClick={() => setSkipOpen(true)} disabled={submissionInProgress || submit.isPending || skip.isPending || saveState === 'conflict' || evidenceMutationInProgress}><SkipForward className="mr-1 h-4 w-4" />Skip Manual QA…</Button>

@@ -163,6 +163,8 @@ Read more: [System Architecture](https://www.looptroop.ovh/docs/system-architect
 
 LoopTroop keeps you in control of critical state transitions. You actively review and sign off on planning specs, execution blueprints, and final pull request deliverables. *(Note: Human approval gates will become optional in future releases).*
 
+While you answer Interviewing questions, LoopTroop visibly reports that autosave is on and when the draft was last saved. The Interview Approval, Specs Approval, Blueprint Approval, and Workspace Setup Approval editors provide the same feedback for their drafts. In approval editors, autosave protects work across reloads but does not change the authoritative artifact: you must still click **Save** to apply the draft and any downstream workflow effects.
+
 For tickets with Manual QA enabled, the post-test gate is intentionally hands-off: LoopTroop prepares the checklist and stores evidence, but never launches, previews, stops, or otherwise controls your application. Preparation reports live milestones and exposes a readable checklist plus its exact Raw YAML. Checklist drafts autosave and report when they were last saved, historical checklist-backed rounds remain reviewable, and workspace changes caused while testing must be explicitly included or discarded before submission. Manual QA status titles remain version-free; the normal version selector appears only after multiple checklists exist. Skip can archive an incomplete draft without creating QA-fix beads or Improvement tickets.
 
 Read more: [Ticket Flow](https://www.looptroop.ovh/docs/ticket-flow)

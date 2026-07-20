@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, type Dispatch, type SetStateAction, type MutableRefObject } from 'react'
 import { createTicketUiStateActionId, getTicketUiStateRevision } from '@/lib/ticketUiStateRevision'
+import type { AutosaveStatusState } from './AutosaveStatus'
 
 interface SaveTicketUiStateInput<T> {
   ticketId: string
@@ -16,7 +17,22 @@ interface UseDebouncedApprovalUiStateOptions<T> {
   scope: string
   saveUiState: SaveTicketUiStateFn<T>
   lastSavedSnapshotRef: MutableRefObject<string>
+  initialUpdatedAt?: string | null
   delayMs?: number
+}
+
+export interface ApprovalAutosaveStatus {
+  state: AutosaveStatusState
+  lastSavedAt: Date | null
+}
+
+function parseAutosaveResponse(value: unknown): { conflict: boolean; updatedAt: string | null } {
+  if (!value || typeof value !== 'object') return { conflict: false, updatedAt: null }
+  const candidate = value as { conflict?: unknown; updatedAt?: unknown }
+  return {
+    conflict: candidate.conflict === true,
+    updatedAt: typeof candidate.updatedAt === 'string' ? candidate.updatedAt : null,
+  }
 }
 
 export function flushTicketUiStateSnapshot<T>(ticketId: string, scope: string, data: T): boolean {
@@ -85,8 +101,14 @@ export function useDebouncedApprovalUiState<T>({
   scope,
   saveUiState,
   lastSavedSnapshotRef,
+  initialUpdatedAt = null,
   delayMs = 5_000,
-}: UseDebouncedApprovalUiStateOptions<T>) {
+}: UseDebouncedApprovalUiStateOptions<T>): ApprovalAutosaveStatus {
+  const [state, setState] = useState<AutosaveStatusState>('pending')
+  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(
+    initialUpdatedAt ? new Date(initialUpdatedAt) : null,
+  )
+  const serializedSnapshot = JSON.stringify(snapshot)
   const latestSnapshotRef = useRef<{
     enabled: boolean
     serialized: string
@@ -96,41 +118,71 @@ export function useDebouncedApprovalUiState<T>({
   } | null>(null)
 
   useEffect(() => {
+    setState('pending')
+    setLastSavedAt(null)
+  }, [scope, ticketId])
+
+  useEffect(() => {
+    if (!initialUpdatedAt) return
+    const parsed = new Date(initialUpdatedAt)
+    if (!Number.isNaN(parsed.getTime())) setLastSavedAt(parsed)
+  }, [initialUpdatedAt])
+
+  useEffect(() => {
     latestSnapshotRef.current = {
       enabled,
-      serialized: JSON.stringify(snapshot),
+      serialized: serializedSnapshot,
       snapshot,
       ticketId,
       scope,
     }
-  }, [enabled, scope, snapshot, ticketId])
+  }, [enabled, scope, serializedSnapshot, snapshot, ticketId])
 
   useEffect(() => {
     if (!enabled) return
 
-    const serialized = JSON.stringify(snapshot)
-    if (serialized === lastSavedSnapshotRef.current) return
+    const serialized = serializedSnapshot
+    if (serialized === lastSavedSnapshotRef.current) {
+      setState('saved')
+      return
+    }
+    setState('pending')
 
     let canceled = false
     const timer = window.setTimeout(() => {
+      if (!canceled) setState('saving')
+      const latest = latestSnapshotRef.current
+      if (!latest || latest.serialized !== serialized) return
       const result = saveUiState({
         ticketId,
         scope,
-        data: snapshot,
+        data: latest.snapshot,
       })
       void Promise.resolve(result).then((saved) => {
-        const isConflict = saved && typeof saved === 'object' && 'conflict' in saved && saved.conflict === true
-        if (!canceled && !isConflict && latestSnapshotRef.current?.serialized === serialized) {
-          lastSavedSnapshotRef.current = serialized
+        const response = parseAutosaveResponse(saved)
+        if (canceled || latestSnapshotRef.current?.serialized !== serialized) return
+        if (response.conflict) {
+          setState('conflict')
+          return
         }
-      }).catch(() => undefined)
+        if (response.updatedAt) {
+          const parsed = new Date(response.updatedAt)
+          if (!Number.isNaN(parsed.getTime())) setLastSavedAt(parsed)
+        }
+        if (!canceled) {
+          lastSavedSnapshotRef.current = serialized
+          setState('saved')
+        }
+      }).catch(() => {
+        if (!canceled && latestSnapshotRef.current?.serialized === serialized) setState('error')
+      })
     }, delayMs)
 
     return () => {
       canceled = true
       window.clearTimeout(timer)
     }
-  }, [delayMs, enabled, lastSavedSnapshotRef, saveUiState, scope, snapshot, ticketId])
+  }, [delayMs, enabled, lastSavedSnapshotRef, saveUiState, scope, serializedSnapshot, ticketId])
 
   useEffect(() => {
     const flushLatest = () => {
@@ -146,6 +198,8 @@ export function useDebouncedApprovalUiState<T>({
       window.removeEventListener('beforeunload', flushLatest)
     }
   }, [lastSavedSnapshotRef])
+
+  return { state, lastSavedAt }
 }
 
 export type ApprovalDiscardTarget<TEditTab extends string = string> =

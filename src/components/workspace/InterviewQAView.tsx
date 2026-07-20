@@ -56,6 +56,8 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
     submittedBatchKey,
     isSubmitting,
     isSkipping,
+    autosaveState,
+    lastAutosavedAt,
     setProcessingError,
     handleBatchAnswer,
     handleOptionToggle,
@@ -284,6 +286,8 @@ export function InterviewQAView({ ticket }: InterviewQAViewProps) {
             batchSelectedOptions={batchCurrentSelectedOptions}
             isBusy={isBusy}
             isSubmitting={isSubmitting}
+            autosaveState={autosaveState}
+            lastAutosavedAt={lastAutosavedAt}
             allBatchAnswersFilled={allBatchAnswersFilled}
             onBatchAnswer={onBatchAnswer}
             onOptionToggle={onOptionToggle}

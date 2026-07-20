@@ -92,8 +92,8 @@ That split matters because the workspace is designed for both live work and hist
 | --- | --- |
 | `DraftView` | Ticket editing and start controls |
 | `CouncilView` | Multi-model draft and vote phases with artifacts |
-| `InterviewQAView` | Interactive interview batches, draft persistence, skip flow |
-| `ApprovalView` | Review and edit interview, PRD, beads, and execution setup artifacts; PRD approval also exposes the winning model's Full Answers as compact read-only context, and execution setup approval keeps live logs expanded until the setup plan is ready |
+| `InterviewQAView` | Interactive interview batches, visible autosave state and last-save time, draft persistence, and skip flow |
+| `ApprovalView` | Review and edit interview, PRD, beads, and execution setup artifacts with visible draft-autosave feedback; PRD approval also exposes the winning model's Full Answers as compact read-only context, and execution setup approval keeps live logs expanded until the setup plan is ready |
 | `CodingView` | Active bead execution, bead list, logs, diffs, verification actions |
 | `ManualQAView` | Live verification draft, evidence, submission/drift recovery, and read-only round history after the generated checklist is handed off |
 | `ErrorView` | Live blocked state or historical error occurrence review |
@@ -201,6 +201,8 @@ It does more than submit answers:
 - tracks selected options
 - restores drafts from persisted UI state
 - auto-saves drafts with debounce through ticket UI-state artifacts and only marks a draft saved after the write succeeds
+- exposes pending, saving, saved, conflict, and failure states through the shared autosave indicator near the batch actions
+- shows a relative last-save time that refreshes every five seconds, with the exact local timestamp on hover
 - flushes the latest unsaved snapshot with a keepalive request on `pagehide` or `beforeunload`
 - coordinates submit and skip mutations
 - listens for interview batch updates coming back from the runtime
@@ -217,7 +219,9 @@ That makes `InterviewQAView` resilient across reloads, view changes, and follow-
 
 The current batch can come from the persisted interview session snapshot or the latest SSE-driven batch. History groups are derived from the normalized question source (`compiled`, `prompt_follow_up`, `coverage_follow_up`, `final_free_form`) and rendered with user-facing labels such as `PROM4 Follow-ups` and `Coverage Follow-ups`.
 
-Approval panes use the same success-aware debounced UI-state pattern for editor drafts. This protects large manual edits if the browser tab closes before the debounce timer finishes.
+Approval panes use the same success-aware debounced UI-state pattern for editor drafts. While the active Interview Approval, Specs Approval, Blueprint Approval, or Workspace Setup Approval editor is editable, a shared **Draft autosave on** indicator beside **Save** reports pending, saving, saved, conflict, and failure states. Its relative last-save time refreshes every five seconds, and its hover text gives the exact local timestamp of the last server-acknowledged save. Historical and other read-only views do not show autosave as enabled.
+
+Approval autosave protects the editor draft across reloads; it does not update the authoritative interview, PRD, blueprint, or execution setup artifact. The user must still click **Save** to apply the draft, including any downstream invalidation or workflow effects.
 
 Artifact edits in the approval panes are made through the shared `YamlEditor` (`src/components/editor/YamlEditor.tsx`), a CodeMirror-based YAML surface with line numbers, syntax highlighting, and bracket matching, used in both editable and read-only modes. When a manual edit would invalidate downstream artifacts, the pane raises a `CascadeWarning` (`src/components/editor/CascadeWarning.tsx`) confirmation dialog before committing the change, so the user knows the edit cascades into later phases. The interview, PRD, and execution-setup-plan approval panes all share these two surfaces via `ApprovalView`.
 
