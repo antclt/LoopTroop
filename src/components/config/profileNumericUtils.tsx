@@ -54,7 +54,11 @@ export function NumericField({ fieldKey, rawNumeric, onChange, hint, tooltip }: 
       ) : (
         <div className="mt-1 flex items-start gap-1.5 text-xs text-muted-foreground">
           <p className="min-w-0 flex-1">{hint}</p>
-          <ConfigurationDocsLink docsPath={cfg.docsPath} label={cfg.label} />
+          <ConfigurationDocsLink
+            docsPath={cfg.docsPath}
+            label={cfg.label}
+            description={`${hint} Open the detailed documentation.`}
+          />
         </div>
       )}
     </div>

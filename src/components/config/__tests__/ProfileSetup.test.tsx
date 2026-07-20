@@ -233,7 +233,15 @@ describe('ProfileSetup', () => {
     )
 
     fireEvent.focus(mainImplementerLink)
-    expect(await screen.findByRole('tooltip')).toHaveTextContent('Open detailed documentation')
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Select the primary model that writes and implements code. You can choose any available OpenCode model. Open the detailed documentation.',
+    )
+
+    const responseTimeoutLink = screen.getByRole('link', { name: 'Open documentation for AI Response Timeout' })
+    fireEvent.focus(responseTimeoutLink)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Wait time for AI model responses (10–3600s) Open the detailed documentation.',
+    )
   })
 
   it('validates PRD, beads, structured retry, and OpenCode retry numeric inputs', async () => {

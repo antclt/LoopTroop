@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Added concise, setting-specific guidance to Configuration documentation-link tooltips.
 - Simplified inherited Git-hook and Manual QA controls with detailed hover guidance and lifecycle-organized Advanced settings.
 - Made model configuration load quickly by requesting the full OpenCode catalog only when **Show all providers** is selected.
 - Added safe restore, clear-tickets, and start-fresh choices when attaching repositories that already contain LoopTroop state.
@@ -80,6 +81,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Configuration documentation-link tooltips now explain each setting's effect and available range or choice before linking to the detailed documentation.
 - Consolidated the three separate chat roadmap items (Log AI Chat, Chat during execution, Chat in dashboard) into a single unified **Ticket Chat & Action Assistant** roadmap entry. The unified item preserves all read-only Q&A capabilities (log-scoped, execution-scoped, dashboard-scoped) and adds a new **Actionable Chat** sub-item with write capabilities: approve/reject planning artifacts, edit artifact content, edit project files, and trigger workflow actions via natural language. Write actions use a full auto-execute safety model with an append-only audit journal (`chat-action-audit.jsonl`) and per-action undo/rollback.
 - Replaced Git-hook policy dropdowns and duplicate inheritance entries with linked **Validate**, **Ignore**, and **Run** buttons, keeping **Validate** as the recommended default in Pre-Implementation. Added multi-sentence behavioral tooltips to every Git-hook and Manual QA choice, renamed Configuration's Execution category to **Implementation Phase**, grouped Manual QA under **Post-Implementation**, and moved both project-level controls into one collapsed **Advanced** section. Project and new-ticket Advanced containers now use stronger borders so the settings are easier to notice.
 - Model pickers and the model API now default to configured-provider models. `GET /api/models?scope=all` and the **Show all providers** option load the full catalog on demand through an independent cache, while Configuration reload clears both scopes and refreshes only configured models.

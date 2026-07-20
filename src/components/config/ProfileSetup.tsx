@@ -316,7 +316,11 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
             </label>
             <div className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
               <p className="min-w-0 flex-1">Primary model used for code generation and implementation</p>
-              <ConfigurationDocsLink docsPath={descriptionDocs.mainImplementer} label="Main Implementer Model" />
+              <ConfigurationDocsLink
+                docsPath={descriptionDocs.mainImplementer}
+                label="Main Implementer Model"
+                description="Select the primary model that writes and implements code. You can choose any available OpenCode model. Open the detailed documentation."
+              />
             </div>
             <ModelPicker
               value={formData.mainImplementer ?? ''}
@@ -362,7 +366,11 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
               <p className="min-w-0 flex-1">
                 Choose up to 10 models to form the review council. The main implementer is automatically included.
               </p>
-              <ConfigurationDocsLink docsPath={descriptionDocs.councilMembers} label="Council Members" />
+              <ConfigurationDocsLink
+                docsPath={descriptionDocs.councilMembers}
+                label="Council Members"
+                description="Choose the models that review plans and proposals alongside the main implementer. You can select up to nine additional models. Open the detailed documentation."
+              />
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
