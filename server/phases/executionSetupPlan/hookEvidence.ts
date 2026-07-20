@@ -4,11 +4,18 @@ import { profiles } from '../../db/schema'
 import { discoverGitHooks } from '../../git/hookDiscovery'
 import { isGitHookPolicy } from '../../git/hookPolicy'
 import { getProjectContextById } from '../../storage/projects'
-import { getTicketPaths, getTicketStorageContext } from '../../storage/tickets'
+import { getTicketContext, getTicketPaths } from '../../storage/tickets'
 import type { ExecutionSetupPlan } from './types'
 
 function resolveConfiguredPolicy(ticketId: string): ExecutionSetupPlan['gitHooks']['policy'] {
-  const storage = getTicketStorageContext(ticketId)
+  const storage = getTicketContext(ticketId)
+  const ticket = storage?.localTicket
+  if (ticket?.startedAt) {
+    return isGitHookPolicy(ticket.lockedGitHookPolicy)
+      ? ticket.lockedGitHookPolicy
+      : PROFILE_DEFAULTS.gitHookPolicy
+  }
+  if (isGitHookPolicy(ticket?.gitHookPolicy)) return ticket.gitHookPolicy
   const projectPolicy = storage ? getProjectContextById(storage.projectId)?.project.gitHookPolicy : null
   if (isGitHookPolicy(projectPolicy)) return projectPolicy
   const profilePolicy = appDb.select().from(profiles).limit(1).get()?.gitHookPolicy

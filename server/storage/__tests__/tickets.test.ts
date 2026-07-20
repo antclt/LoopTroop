@@ -101,6 +101,8 @@ describe('ticket start configuration locking', () => {
     expect(lockedTicket?.lockedStructuredRetryCount).toBe(3)
     expect(lockedTicket?.lockedManualQaEnabled).toBe(false)
     expect(lockedTicket?.lockedManualQaSource).toBe('profile')
+    expect(lockedTicket?.lockedGitHookPolicy).toBe('validate_explicitly')
+    expect(lockedTicket?.lockedGitHookPolicySource).toBe('profile')
     expect(lockedTicket?.startedAt).toBe(startedAt)
 
     const meta = readTicketMeta(repoDir, ticket.externalId)
@@ -151,6 +153,10 @@ describe('ticket start configuration locking', () => {
       lockedManualQaEnabled: true,
     })).toThrow(/Manual QA configuration is immutable after start/i)
 
+    expect(() => patchTicket(ticket.id, {
+      lockedGitHookPolicy: 'ignore_internal_only',
+    })).toThrow(/Git hook configuration is immutable after start/i)
+
     const progressUpdate = patchTicket(ticket.id, {
       percentComplete: 25,
     })
@@ -159,6 +165,30 @@ describe('ticket start configuration locking', () => {
     expect(getTicketByRef(ticket.id)?.lockedCouncilMembers).toEqual(lockedCouncilMembers)
     expect(getTicketPaths(ticket.id)?.debugLogPath).toBe(getTicketDebugLogPath(repoDir, ticket.externalId))
     expect(getTicketPaths(ticket.id)?.aiLogPath).toBe(getTicketAiLogPath(repoDir, ticket.externalId))
+  })
+
+  it('allows a Draft ticket hook override and exposes its effective inheritance source', () => {
+    const repoDir = lockRepoManager.createRepo()
+    const project = attachProject({
+      folderPath: repoDir,
+      name: 'LoopTroop Hook Settings',
+      shortname: 'HOOK',
+      gitHookPolicy: 'ignore_internal_only',
+    })
+    const ticket = createTicket({ projectId: project.id, title: 'Draft hook override', gitHookPolicy: null })
+
+    expect(ticket).toMatchObject({
+      gitHookPolicy: null,
+      effectiveGitHookPolicy: 'ignore_internal_only',
+      effectiveGitHookPolicySource: 'project',
+    })
+    expect(updateTicket(ticket.id, { gitHookPolicy: 'use_on_internal_commits' })).toMatchObject({
+      gitHookPolicy: 'use_on_internal_commits',
+      effectiveGitHookPolicy: 'use_on_internal_commits',
+      effectiveGitHookPolicySource: 'ticket',
+    })
+    patchTicket(ticket.id, { status: 'SCANNING_RELEVANT_FILES' })
+    expect(() => updateTicket(ticket.id, { gitHookPolicy: 'validate_explicitly' })).toThrow(/DRAFT status/)
   })
 
   it('recovers the same improvement ticket after database creation but before origin files exist', () => {

@@ -14,6 +14,7 @@ import {
 import { clearContextCache } from '../../opencode/contextBuilder'
 import { getOpenCodeAdapter } from '../../opencode/factory'
 import { normalizeStructuredRetryCount } from '../../lib/structuredRetryPolicy'
+import { isGitHookPolicy } from '../../git/hookPolicy'
 import { cancelTicket } from '../../workflow/runner'
 import { TicketInitializationError, initializeTicket } from '../../ticket/initialize'
 import { withCommandLogging } from '../../log/commandLogger'
@@ -77,6 +78,8 @@ function rollbackTicketStartToDraft(ticketId: string): void {
     lockedStructuredRetryCount: null,
     lockedManualQaEnabled: null,
     lockedManualQaSource: null,
+    lockedGitHookPolicy: null,
+    lockedGitHookPolicySource: null,
   })
   stopActor(ticketId)
 }
@@ -214,6 +217,16 @@ export async function handleStartTicket(c: Context) {
     : ticketContext.localProject.manualQaOverride !== null
       ? { enabled: ticketContext.localProject.manualQaOverride, source: 'project' as const }
       : { enabled: profile?.manualQaEnabled ?? PROFILE_DEFAULTS.manualQaEnabled, source: 'profile' as const }
+  const gitHookPolicyResolution = isGitHookPolicy(ticketContext.localTicket.gitHookPolicy)
+    ? { policy: ticketContext.localTicket.gitHookPolicy, source: 'ticket' as const }
+    : isGitHookPolicy(ticketContext.localProject.gitHookPolicy)
+      ? { policy: ticketContext.localProject.gitHookPolicy, source: 'project' as const }
+      : {
+          policy: isGitHookPolicy(profile?.gitHookPolicy)
+            ? profile.gitHookPolicy
+            : PROFILE_DEFAULTS.gitHookPolicy,
+          source: 'profile' as const,
+        }
   const lockedMainImplementerVariant = profile?.mainImplementerVariant ?? null
   let lockedCouncilMemberVariants: Record<string, string> | null = null
   if (profile?.councilMemberVariants) {
@@ -248,6 +261,8 @@ export async function handleStartTicket(c: Context) {
       lockedStructuredRetryCount,
       lockedManualQaEnabled: manualQaResolution.enabled,
       lockedManualQaSource: manualQaResolution.source,
+      lockedGitHookPolicy: gitHookPolicyResolution.policy,
+      lockedGitHookPolicySource: gitHookPolicyResolution.source,
     })
     if (!lockedTicket) {
       rollbackTicketStartToDraft(ticketId)
@@ -259,6 +274,8 @@ export async function handleStartTicket(c: Context) {
       startedAt,
       manualQaEnabled: manualQaResolution.enabled,
       manualQaSource: manualQaResolution.source,
+      gitHookPolicy: gitHookPolicyResolution.policy,
+      gitHookPolicySource: gitHookPolicyResolution.source,
     })
   } catch (err) {
     const details = getErrorMessage(err)

@@ -30,6 +30,8 @@ import {
   type ManualQaImprovementOrigin,
 } from '../phases/manualQa/types'
 import type { QaOrigin } from '../phases/beads/types'
+import { isGitHookPolicy } from '../git/hookPolicy'
+import type { GitHookPolicy } from '../structuredOutput/types'
 
 type LocalTicketRow = typeof tickets.$inferSelect
 type LocalProjectRow = typeof projects.$inferSelect
@@ -119,7 +121,7 @@ export interface TicketErrorOccurrence {
 }
 
 /** Full public projection of a ticket row, enriched with runtime data, error history, and available actions. */
-export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncilMembers' | 'lockedCouncilMemberVariants' | 'lockedManualQaSource'> {
+export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncilMembers' | 'lockedCouncilMemberVariants' | 'lockedManualQaSource' | 'lockedGitHookPolicy' | 'lockedGitHookPolicySource'> {
   id: string
   projectId: number
   isDisplayOnlyMock: boolean
@@ -128,6 +130,10 @@ export interface PublicTicket extends Omit<LocalTicketRow, 'id' | 'lockedCouncil
   lockedManualQaSource: 'ticket' | 'project' | 'profile' | null
   effectiveManualQaEnabled: boolean
   effectiveManualQaSource: 'ticket' | 'project' | 'profile'
+  lockedGitHookPolicy: GitHookPolicy | null
+  lockedGitHookPolicySource: 'ticket' | 'project' | 'profile' | null
+  effectiveGitHookPolicy: GitHookPolicy
+  effectiveGitHookPolicySource: 'ticket' | 'project' | 'profile'
   visitedStatuses: string[]
   manualQa: {
     activeVersion: number | null
@@ -684,6 +690,23 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
       : project?.manualQaOverride !== null && project?.manualQaOverride !== undefined
         ? { enabled: project.manualQaOverride, source: 'project' as const }
         : { enabled: profile?.manualQaEnabled ?? PROFILE_DEFAULTS.manualQaEnabled, source: 'profile' as const }
+  const gitHookPolicyResolution: { policy: GitHookPolicy; source: 'ticket' | 'project' | 'profile' } = ticket.startedAt !== null
+    ? {
+        policy: isGitHookPolicy(ticket.lockedGitHookPolicy)
+          ? ticket.lockedGitHookPolicy
+          : PROFILE_DEFAULTS.gitHookPolicy,
+        source: ticket.lockedGitHookPolicySource === 'ticket' || ticket.lockedGitHookPolicySource === 'project'
+          ? ticket.lockedGitHookPolicySource
+          : 'profile',
+      }
+    : isGitHookPolicy(ticket.gitHookPolicy)
+      ? { policy: ticket.gitHookPolicy, source: 'ticket' as const }
+      : isGitHookPolicy(project?.gitHookPolicy)
+        ? { policy: project.gitHookPolicy, source: 'project' as const }
+        : {
+            policy: isGitHookPolicy(profile?.gitHookPolicy) ? profile.gitHookPolicy : PROFILE_DEFAULTS.gitHookPolicy,
+            source: 'profile' as const,
+          }
 
   return {
     ...ticket,
@@ -699,6 +722,14 @@ export function toPublicTicket(projectId: number, ticket: LocalTicketRow): Publi
       : null,
     effectiveManualQaEnabled: manualQaResolution.enabled,
     effectiveManualQaSource: manualQaResolution.source,
+    lockedGitHookPolicy: isGitHookPolicy(ticket.lockedGitHookPolicy) ? ticket.lockedGitHookPolicy : null,
+    lockedGitHookPolicySource: ticket.lockedGitHookPolicySource === 'ticket'
+      || ticket.lockedGitHookPolicySource === 'project'
+      || ticket.lockedGitHookPolicySource === 'profile'
+      ? ticket.lockedGitHookPolicySource
+      : null,
+    effectiveGitHookPolicy: gitHookPolicyResolution.policy,
+    effectiveGitHookPolicySource: gitHookPolicyResolution.source,
     visitedStatuses,
     manualQa,
     manualQaOrigin,

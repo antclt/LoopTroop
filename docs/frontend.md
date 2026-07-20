@@ -341,7 +341,7 @@ Profile settings are inherited by new tickets at start time. The locked copies i
 
 ### Git Hook Policy
 
-Configuration and Project settings expose the three language-agnostic choices documented in [Git Hook Policy](configuration.md#git-hook-policy). `validate_explicitly` is the profile default, while a project may select `use_on_internal_commits` or `ignore_internal_only`. The execution setup plan remains the ticket-specific review point for the resolved policy and explicit validation commands.
+Configuration, Project settings, new-ticket **Advanced** settings, and the Draft workspace expose the linked **Validate**, **Ignore**, and **Run** choices documented in [Git Hook Policy](configuration.md#git-hook-policy). Each scope includes a contextual `?` link to those details, and started-ticket Details repeats the locked choice under **Advanced Settings** with the same help link. **Validate** (`validate_explicitly`) is the recommended profile default; nullable project/ticket values display the inherited active choice without adding a duplicate Inherit option. Start freezes the effective ticket → project → profile value and source, while the execution setup plan remains the ticket-specific review point for detected hooks and explicit validation commands.
 
 ### Manual QA Settings
 

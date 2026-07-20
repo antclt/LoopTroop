@@ -269,7 +269,7 @@ The state machine metadata directly drives the React user interface. Developers 
 
 ### Pre-Implementation
 - **`PRE_FLIGHT_CHECK`:** Verifies workspace sanitation, Git worktree hygiene, OpenCode reachability, and execution locks. Committable changes outside LoopTroop fail the checks.
-- **`WAITING_EXECUTION_SETUP_APPROVAL`:** The setup-plan draft presents the readiness assessment, approved ignored or untracked workspace inputs, required temporary setup steps, ordered workspace probes, detected Git hooks, resolved policy, editable explicit hook commands, and regenerate history. The user can review each proposed file or directory, edit the plan, or regenerate it with commentary.
+- **`WAITING_EXECUTION_SETUP_APPROVAL`:** The setup-plan draft presents the readiness assessment, approved ignored or untracked workspace inputs, required temporary setup steps, ordered workspace probes, detected Git hooks, the policy inherited from ticket → project → profile and frozen at Start, editable explicit hook commands, and regenerate history. The user can review each proposed file or directory, edit the plan, or regenerate it with commentary.
 - **`PREPARING_EXECUTION_ENV`:** Materializes approved workspace inputs without replacing tracked ticket source, runs only the approved temporary setup, verifies wrappers/tooling probes and at least one functional repository probe when project commands require it, executes approved explicit hook validations, audits tracked effects, may perform setup-scoped online lookup, and emits the reusable execution-setup profile under `.ticket/runtime/execution-setup/**`.
 
 ### Implementation (Coding)

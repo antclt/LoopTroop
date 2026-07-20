@@ -80,6 +80,7 @@ export const tickets = sqliteTable('tickets', {
   percentComplete: real('percent_complete'),
   errorMessage: text('error_message'),
   manualQaOverride: integer('manual_qa_override', { mode: 'boolean' }),
+  gitHookPolicy: text('git_hook_policy'),
   lockedMainImplementer: text('locked_main_implementer'),
   lockedMainImplementerVariant: text('locked_main_implementer_variant'),
   lockedCouncilMembers: text('locked_council_members'), // JSON array of model IDs, frozen at start
@@ -92,6 +93,8 @@ export const tickets = sqliteTable('tickets', {
   lockedStructuredRetryCount: integer('locked_structured_retry_count'),
   lockedManualQaEnabled: integer('locked_manual_qa_enabled', { mode: 'boolean' }),
   lockedManualQaSource: text('locked_manual_qa_source'),
+  lockedGitHookPolicy: text('locked_git_hook_policy'),
+  lockedGitHookPolicySource: text('locked_git_hook_policy_source'),
   workflowRevision: integer('workflow_revision').notNull().default(0),
   startedAt: text('started_at'),
   plannedDate: text('planned_date'),

@@ -260,6 +260,40 @@ describe('ticketRouter POST /tickets/:id/start', () => {
     broadcaster.clearTicket(overridden.ticket.id)
   })
 
+  it('freezes the effective Git hook policy and its inheritance source at start', async () => {
+    sqlite.exec(`
+      INSERT INTO profiles (main_implementer, council_members, git_hook_policy)
+      VALUES ('openai/codex-mini-latest', '["openai/codex-mini-latest"]', 'ignore_internal_only');
+    `)
+    const inherited = setupStartTicketApp()
+    expect((await inherited.app.request(`/api/tickets/${inherited.ticket.id}/start`, { method: 'POST' })).status).toBe(200)
+    expect(getTicketByRef(inherited.ticket.id)).toMatchObject({
+      lockedGitHookPolicy: 'ignore_internal_only',
+      lockedGitHookPolicySource: 'profile',
+    })
+
+    const projectOverride = setupStartTicketApp()
+    updateProject(projectOverride.project.id, { gitHookPolicy: 'use_on_internal_commits' })
+    expect((await projectOverride.app.request(`/api/tickets/${projectOverride.ticket.id}/start`, { method: 'POST' })).status).toBe(200)
+    expect(getTicketByRef(projectOverride.ticket.id)).toMatchObject({
+      lockedGitHookPolicy: 'use_on_internal_commits',
+      lockedGitHookPolicySource: 'project',
+    })
+
+    const overridden = setupStartTicketApp()
+    updateProject(overridden.project.id, { gitHookPolicy: 'use_on_internal_commits' })
+    updateTicket(overridden.ticket.id, { gitHookPolicy: 'validate_explicitly' })
+    expect((await overridden.app.request(`/api/tickets/${overridden.ticket.id}/start`, { method: 'POST' })).status).toBe(200)
+    expect(getTicketByRef(overridden.ticket.id)).toMatchObject({
+      lockedGitHookPolicy: 'validate_explicitly',
+      lockedGitHookPolicySource: 'ticket',
+    })
+
+    broadcaster.clearTicket(inherited.ticket.id)
+    broadcaster.clearTicket(projectOverride.ticket.id)
+    broadcaster.clearTicket(overridden.ticket.id)
+  })
+
   it('writes a DRAFT error log when model validation fails and leaves the ticket in DRAFT', async () => {
     const { app, ticket } = setupStartTicketApp()
 

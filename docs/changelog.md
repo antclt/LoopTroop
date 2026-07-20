@@ -12,6 +12,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ::: details Show unreleased changes
 
 #### Summary
+- Simplified Git-hook policy controls with clear Validate, Ignore, and Run choices inherited across configuration, projects, and tickets.
 - Made model configuration load quickly by requesting the full OpenCode catalog only when **Show all providers** is selected.
 - Added safe restore, clear-tickets, and start-fresh choices when attaching repositories that already contain LoopTroop state.
 - Expanded councils to support up to six distinct models, including the main implementer.
@@ -53,6 +54,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 ### Detailed Changes
 
 #### Added
+- Added ticket-level Git-hook policy overrides, start-time inheritance locks, and contextual documentation links in Configuration, Project settings, new-ticket Advanced settings, and the Draft workspace.
 - Added three explicit existing-project attachment actions: restore all state, retain project settings while clearing every ticket, or delete `.looptroop` and start fresh. Destructive actions include active-ticket warnings, a keep/delete comparison, and a required confirmation.
 - Added support for OpenRouter routing modifiers (such as `:floor`, `:nitro`, `:thinking`, `:extended`, and `:free`) in model configuration and validation, with a dedicated selector in the configuration profile setup.
 - Added `deleteTicket` option to the ticket cancellation endpoint and a corresponding checkbox in the Cancel Ticket dialog, allowing users to erase all database records and local files, automatically disabling other cleanup options when selected.
@@ -77,6 +79,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Added typed `qaOrigin` metadata and Manual QA Fix presentation across coding/bead/artifact/log views, with image evidence delivered through OpenCode SDK file parts for image-capable locked models.
 
 #### Changed
+- Replaced Git-hook policy dropdowns and duplicate inheritance entries with linked **Validate**, **Ignore**, and **Run** buttons, keeping **Validate** as the recommended default and moving the global control into Pre-Implementation.
 - Model pickers and the model API now default to configured-provider models. `GET /api/models?scope=all` and the **Show all providers** option load the full catalog on demand through an independent cache, while Configuration reload clears both scopes and refreshes only configured models.
 - Expanded the model council to a maximum of six distinct members (the main implementer plus up to five additional members) and raised the supported minimum-quorum range to six.
 - Existing-state attachment now updates the saved project path to the repository root on the current machine. Clear-tickets preserves project identity, appearance, creation time, profile association, and overrides while removing all ticket-linked records/content/worktrees, recording a new update time, and resetting numbering to `<SHORTNAME>-1`; start-fresh recreates the complete local state folder without altering repository commits or branches.
@@ -150,6 +153,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - Isolated the pull-request workflow suite from the shared pure-test module graph so its prompt-runner mocks cannot race with real council and PRD prompt tests during full parallel verification.
 
 #### Documentation
+- Reworked Git-hook guidance around the three user-facing choices, inheritance and locking, and the operational difference between explicit validation and running repository hooks.
 - Documented workspace input approval and materialization, setup-runtime recovery actions, retry API behavior, and readable blocked-error output across the execution guides and references.
 - Documented the **Retry with extra note...** workflow, validation, context contract, and API behavior across the Implementing and Blocked Error status details and focused execution guides.
 - Updated Manual QA status Details and reference guides for version-free titles, structured history, activity/log/artifact presentation, four-state PRD coverage, configurable Improvements, and failure-safe AI-planned QA beads. Existing testing tickets/artifacts are intentionally not migrated.

@@ -110,8 +110,11 @@ describe('ProjectForm', () => {
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
     )
-    expect(screen.getByLabelText('Git hook policy')).toHaveValue('')
-    expect(screen.getByRole('option', { name: 'Inherit profile (validate explicitly)' })).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Validate' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('link', { name: 'Open documentation for project Git hook policy' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#git-hook-policy`,
+    )
 
     fireEvent.change(screen.getByLabelText(/Project Name/i), { target: { value: 'Mounted Repo' } })
     fireEvent.change(screen.getByLabelText(/Short Name/i), { target: { value: 'MNT' } })
@@ -191,7 +194,7 @@ describe('ProjectForm', () => {
       expect(screen.getByText('MESE')).toBeInTheDocument()
     })
     expect(screen.queryByLabelText(/Short Name/i)).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Git hook policy')).toHaveValue('use_on_internal_commits')
+    expect(screen.getByRole('radio', { name: 'Run' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.getByText('7 tickets and all workflow/artifact data')).toBeInTheDocument()
 

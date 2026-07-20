@@ -13,7 +13,7 @@ vi.mock('@/hooks/useProjects', () => ({
 }))
 
 vi.mock('@/hooks/useProfile', () => ({
-  useProfile: () => ({ data: { manualQaEnabled: false } }),
+  useProfile: () => ({ data: { manualQaEnabled: false, gitHookPolicy: 'validate_explicitly' } }),
 }))
 
 vi.mock('@/hooks/useTickets', async () => {
@@ -74,6 +74,7 @@ describe('TicketForm', () => {
         minCouncilQuorum: null,
         interviewQuestions: null,
         manualQaOverride: true,
+        gitHookPolicy: 'ignore_internal_only',
         ticketCounter: 1,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
@@ -112,6 +113,7 @@ describe('TicketForm', () => {
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.queryByText(/Effective setting:/)).not.toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Ignore' })).toHaveAttribute('aria-checked', 'true')
     const helpLink = screen.getByRole('link', { name: 'Open documentation for ticket Manual QA checkpoint' })
     expect(helpLink).toHaveAttribute(
       'href',
@@ -119,11 +121,15 @@ describe('TicketForm', () => {
     )
     fireEvent.focus(helpLink)
     expect(await screen.findByRole('tooltip')).toHaveTextContent('Choose whether this ticket pauses for your verification after final tests.')
+    expect(screen.getByRole('link', { name: 'Open documentation for ticket Git hook policy' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#git-hook-policy`,
+    )
 
     fireEvent.change(screen.getByPlaceholderText('Brief summary of the work'), { target: { value: 'Verify checkout' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create Ticket' }))
     expect(mockUseCreateTicket().mutate).toHaveBeenCalledWith(
-      expect.objectContaining({ manualQaOverride: true }),
+      expect.objectContaining({ manualQaOverride: true, gitHookPolicy: 'ignore_internal_only' }),
       expect.any(Object),
     )
   })

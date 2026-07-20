@@ -17,6 +17,7 @@ import type { ManualQaOverride } from '@/lib/manualQaSetting'
 import { useProfile } from '@/hooks/useProfile'
 import type { GitHookPolicy } from '@/lib/executionSetupPlan'
 import { ExistingProjectActionDialog } from './ExistingProjectActionDialog'
+import { GitHookPolicySetting } from '@/components/git-hooks/GitHookPolicySetting'
 
 interface ProjectFormProps {
   onClose: () => void
@@ -150,7 +151,9 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
         folderPath: folder,
         icon,
         color,
-        gitHookPolicy,
+        gitHookPolicy: restoreMode
+          ? gitHookPolicy
+          : gitHookPolicy ?? profile?.gitHookPolicy ?? 'validate_explicitly',
         manualQaOverride: restoreMode
           ? manualQaOverride
           : manualQaOverride ?? profile?.manualQaEnabled ?? false,
@@ -176,7 +179,14 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
     e.preventDefault()
     if (isEditing) {
       updateProject.mutate(
-        { id: project.id, name, icon, color, gitHookPolicy, manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false },
+        {
+          id: project.id,
+          name,
+          icon,
+          color,
+          gitHookPolicy: gitHookPolicy ?? profile?.gitHookPolicy ?? 'validate_explicitly',
+          manualQaOverride: manualQaOverride ?? profile?.manualQaEnabled ?? false,
+        },
         {
           onSuccess: () => {
             addToast('success', 'Project updated.')
@@ -332,21 +342,27 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
             </div>
           </div>
           <div className="rounded-md border border-border p-3">
-            <label htmlFor="project-git-hook-policy" className="text-sm font-medium">Git hook policy</label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Choose how LoopTroop handles repository hooks. The ticket setup plan will show detected hooks and lets you edit the explicit validation commands.
-            </p>
-            <select
-              id="project-git-hook-policy"
-              value={gitHookPolicy ?? ''}
-              onChange={(event) => setGitHookPolicy(event.target.value ? event.target.value as GitHookPolicy : null)}
-              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              <option value="">Inherit profile ({(profile?.gitHookPolicy ?? 'validate_explicitly').replaceAll('_', ' ')})</option>
-              <option value="validate_explicitly">Validate explicitly (recommended)</option>
-              <option value="use_on_internal_commits">Run on internal commits</option>
-              <option value="ignore_internal_only">Ignore for internal commits</option>
-            </select>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <label className="text-sm font-medium">Git hook policy</label>
+                  <ConfigurationDocsLink
+                    docsPath="/configuration#git-hook-policy"
+                    label="project Git hook policy"
+                    description="Choose the default hook behavior for tickets in this project. Open the Git hook policy documentation."
+                  />
+                </div>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Choose how LoopTroop handles repository hooks.
+                </p>
+              </div>
+              <GitHookPolicySetting
+                value={gitHookPolicy}
+                onChange={setGitHookPolicy}
+                inheritedPolicy={profile?.gitHookPolicy ?? 'validate_explicitly'}
+                compact
+              />
+            </div>
           </div>
           {isEditing ? (
             <div className="space-y-4">

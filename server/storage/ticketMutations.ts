@@ -76,6 +76,7 @@ const CreateTicketInputSchema = z.object({
   description: z.string().max(10000).optional(),
   priority: z.number().int().min(1).max(5).optional(),
   manualQaOverride: z.boolean().nullable().optional(),
+  gitHookPolicy: z.enum(['validate_explicitly', 'use_on_internal_commits', 'ignore_internal_only']).nullable().optional(),
 })
 
 function truncateLoggedValue(value: string, maxLength = 200): string {
@@ -313,6 +314,24 @@ function assertLockedManualQaConfigurationMutable(
   }
 }
 
+function assertLockedGitHookConfigurationMutable(
+  ticket: LocalTicketRow,
+  patch: Partial<Omit<LocalTicketRow, 'id' | 'projectId' | 'externalId' | 'createdAt'>>,
+) {
+  const updatesLock = 'lockedGitHookPolicy' in patch || 'lockedGitHookPolicySource' in patch
+  if (!updatesLock || ticket.startedAt === null || patch.startedAt === null) return
+
+  const nextPolicy = 'lockedGitHookPolicy' in patch
+    ? patch.lockedGitHookPolicy ?? null
+    : ticket.lockedGitHookPolicy
+  const nextSource = 'lockedGitHookPolicySource' in patch
+    ? patch.lockedGitHookPolicySource ?? null
+    : ticket.lockedGitHookPolicySource
+  if (nextPolicy !== ticket.lockedGitHookPolicy || nextSource !== ticket.lockedGitHookPolicySource) {
+    throw new Error(`Ticket Git hook configuration is immutable after start: ${ticket.externalId}`)
+  }
+}
+
 function runGit(projectRoot: string, args: string[]) {
   const fullArgs = ['-C', projectRoot, ...args]
   const result = spawnSync('git', fullArgs, { encoding: 'utf8' })
@@ -360,6 +379,7 @@ export function createTicket(input: {
   description?: string
   priority?: number
   manualQaOverride?: boolean | null
+  gitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only' | null
 }): PublicTicket {
   const parsedInput = CreateTicketInputSchema.safeParse(input)
   if (!parsedInput.success) {
@@ -389,6 +409,7 @@ export function createTicket(input: {
       description: validatedInput.description ?? null,
       priority: validatedInput.priority ?? 3,
       manualQaOverride: validatedInput.manualQaOverride ?? null,
+      gitHookPolicy: validatedInput.gitHookPolicy ?? null,
       status: 'DRAFT',
     })
     .returning()
@@ -503,11 +524,14 @@ export function createManualQaImprovementTicket(input: {
   return materializeTicketFiles(created)
 }
 
-export function updateTicket(ticketRef: string, patch: Partial<Pick<LocalTicketRow, 'title' | 'description' | 'priority' | 'manualQaOverride'>>): PublicTicket | undefined {
+export function updateTicket(ticketRef: string, patch: Partial<Pick<LocalTicketRow, 'title' | 'description' | 'priority' | 'manualQaOverride' | 'gitHookPolicy'>>): PublicTicket | undefined {
   const context = getTicketContext(ticketRef)
   if (!context) return undefined
   if ('manualQaOverride' in patch && context.localTicket.status !== 'DRAFT') {
     throw new Error('Manual QA override can only be changed while the ticket is in DRAFT status.')
+  }
+  if ('gitHookPolicy' in patch && context.localTicket.status !== 'DRAFT') {
+    throw new Error('Git hook policy can only be changed while the ticket is in DRAFT status.')
   }
   context.projectDb.update(tickets)
     .set({ ...patch, updatedAt: new Date().toISOString() })
@@ -537,8 +561,16 @@ export function patchTicket(
   ) {
     throw new Error('Manual QA override can only be changed while the ticket is in DRAFT status.')
   }
+  if (
+    'gitHookPolicy' in patch
+    && context.localTicket.status !== 'DRAFT'
+    && patch.gitHookPolicy !== context.localTicket.gitHookPolicy
+  ) {
+    throw new Error('Git hook policy can only be changed while the ticket is in DRAFT status.')
+  }
   assertLockedModelConfigurationMutable(context.localTicket, patch)
   assertLockedManualQaConfigurationMutable(context.localTicket, patch)
+  assertLockedGitHookConfigurationMutable(context.localTicket, patch)
   const statusChanged = typeof patch.status === 'string' && patch.status !== previousStatus
 
   context.projectDb.update(tickets)
@@ -590,6 +622,8 @@ export function lockTicketStartConfiguration(
     lockedStructuredRetryCount: number
     lockedManualQaEnabled?: boolean
     lockedManualQaSource?: 'profile' | 'project' | 'ticket'
+    lockedGitHookPolicy?: 'validate_explicitly' | 'use_on_internal_commits' | 'ignore_internal_only'
+    lockedGitHookPolicySource?: 'profile' | 'project' | 'ticket'
   },
 ): PublicTicket | undefined {
   const context = getTicketContext(ticketRef)
@@ -619,6 +653,10 @@ export function lockTicketStartConfiguration(
     lockedManualQaEnabled: input.lockedManualQaEnabled ?? false,
     lockedManualQaSource: input.lockedManualQaSource ?? 'profile',
   })
+  assertLockedGitHookConfigurationMutable(context.localTicket, {
+    lockedGitHookPolicy: input.lockedGitHookPolicy ?? 'validate_explicitly',
+    lockedGitHookPolicySource: input.lockedGitHookPolicySource ?? 'profile',
+  })
 
   const meta = lockTicketModelSelection(context.projectRoot, context.externalId, {
     startedAt: input.startedAt,
@@ -641,6 +679,8 @@ export function lockTicketStartConfiguration(
       lockedStructuredRetryCount: input.lockedStructuredRetryCount,
       lockedManualQaEnabled: input.lockedManualQaEnabled ?? false,
       lockedManualQaSource: input.lockedManualQaSource ?? 'profile',
+      lockedGitHookPolicy: input.lockedGitHookPolicy ?? 'validate_explicitly',
+      lockedGitHookPolicySource: input.lockedGitHookPolicySource ?? 'profile',
       startedAt: meta.startedAt ?? input.startedAt,
       updatedAt: new Date().toISOString(),
     })

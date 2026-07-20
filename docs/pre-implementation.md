@@ -154,11 +154,13 @@ Before setup commands run, LoopTroop validates every approved workspace input ag
 
 LoopTroop also audits the worktree after each ready-looking attempt. Committable project changes left behind by setup fail the attempt. Generated noise is kept as a warning and copied into the profile cautions with suggested `.gitignore` entries. The setup agent may not copy any additional ignored or untracked path that the user did not approve.
 
-Hook discovery is evidence, not an ecosystem assumption. LoopTroop inspects Git's resolved hook path, standard hook files, committed hook directories, and recognizable manager configuration. Known managers may supply a hint, but unknown hooks remain visible without an invented command. The approved policy controls LoopTroop-owned Git operations:
+Hook discovery is evidence, not an ecosystem assumption. LoopTroop inspects Git's resolved hook path, standard hook files, committed hook directories, and recognizable manager configuration. Known managers may supply a hint, but unknown hooks remain visible without an invented command. The ticket starts with the inherited ticket → project → profile choice, freezes that choice at Start, and records it in the approved setup plan. The three UI choices control LoopTroop-owned Git operations:
 
-- `validate_explicitly` (default) bypasses hooks for internal commits and pushes, runs the approved commands during setup, and reruns them before integration
-- `use_on_internal_commits` leaves normal Git hook execution enabled
-- `ignore_internal_only` bypasses hooks and records that explicit validation was skipped
+- **Validate** (`validate_explicitly`, recommended) bypasses hooks for internal commits and pushes, runs the approved commands during setup, and reruns them before integration
+- **Ignore** (`ignore_internal_only`) bypasses hooks and records that explicit validation was skipped
+- **Run** (`use_on_internal_commits`) leaves normal Git hook execution enabled
+
+Validate and Run are deliberately different: Validate makes the checks explicit and auditable outside the internal Git command, while Run allows a repository hook to execute inside and potentially block that command.
 
 ### 3.3 Setup-scoped web tools, retries, and reset behavior
 

@@ -73,6 +73,7 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       percent_complete REAL,
       error_message TEXT,
       manual_qa_override INTEGER,
+      git_hook_policy TEXT,
       locked_main_implementer TEXT,
       locked_main_implementer_variant TEXT,
       locked_council_members TEXT,
@@ -85,6 +86,8 @@ function initializeProjectSqlite(sqlite: Database.Database) {
       locked_structured_retry_count INTEGER,
       locked_manual_qa_enabled INTEGER,
       locked_manual_qa_source TEXT,
+      locked_git_hook_policy TEXT,
+      locked_git_hook_policy_source TEXT,
       workflow_revision INTEGER NOT NULL DEFAULT 0,
       started_at TEXT,
       planned_date TEXT,
@@ -218,6 +221,9 @@ function initializeProjectSqlite(sqlite: Database.Database) {
   ensureColumn(sqlite, 'tickets', 'manual_qa_override', 'INTEGER')
   ensureColumn(sqlite, 'tickets', 'locked_manual_qa_enabled', 'INTEGER')
   ensureColumn(sqlite, 'tickets', 'locked_manual_qa_source', 'TEXT')
+  ensureColumn(sqlite, 'tickets', 'git_hook_policy', 'TEXT')
+  ensureColumn(sqlite, 'tickets', 'locked_git_hook_policy', 'TEXT')
+  ensureColumn(sqlite, 'tickets', 'locked_git_hook_policy_source', 'TEXT')
   ensureColumn(sqlite, 'tickets', 'workflow_revision', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(sqlite, 'tickets', 'locked_main_implementer_variant', 'TEXT')
   ensureColumn(sqlite, 'tickets', 'locked_council_member_variants', 'TEXT')

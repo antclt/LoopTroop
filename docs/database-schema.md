@@ -117,7 +117,7 @@ Operational notes:
 - `council_members` is a JSON array string when present
 - `profile_id` is **not** a cross-database foreign key; SQLite cannot enforce a foreign key into the separate app DB, so this column is metadata only
 - project-level overrides are read directly from this row at runtime; they do not require joining back into the app DB
-- `git_hook_policy` resolves project → profile and is then locked into the approved ticket setup plan; it never rewrites the target repository's Git configuration
+- project `git_hook_policy` overrides the profile baseline when a Draft ticket has no local choice; the final ticket → project → profile result is frozen at Start and never rewrites the target repository's Git configuration
 
 ### Reattaching Existing Project State
 
@@ -140,6 +140,7 @@ Important columns:
 - execution progress: `branch_name`, `current_bead`, `total_beads`, `percent_complete`
 - failure surface: `error_message`
 - Manual QA and reconciliation: nullable Draft-only `manual_qa_override`, frozen `locked_manual_qa_enabled`, frozen `locked_manual_qa_source`, and monotonic `workflow_revision`
+- Git-hook behavior: nullable Draft-only `git_hook_policy`, frozen `locked_git_hook_policy`, and frozen `locked_git_hook_policy_source`
 - frozen-on-start settings: `locked_main_implementer`, `locked_main_implementer_variant`, `locked_council_members`, `locked_council_member_variants`, `locked_interview_questions`, `locked_coverage_follow_up_budget_percent`, `locked_max_coverage_passes`, `locked_max_prd_coverage_passes`, `locked_max_beads_coverage_passes`, `locked_structured_retry_count`
 - lifecycle times: `started_at`, `planned_date`, `created_at`, `updated_at`
 
@@ -149,6 +150,7 @@ Operational notes:
 - `external_id` is the stable human-facing identifier; the API turns it into a public ticket ref by prefixing the public project id
 - locked configuration columns freeze the profile/project settings that were in force when the ticket started
 - `manual_qa_override` uses SQL `NULL` for Inherit and booleans for Enabled/Disabled; resolution order is ticket → project → profile, and missing locked values on older started tickets mean disabled
+- `git_hook_policy` uses SQL `NULL` for Inherit; resolution order is ticket → project → profile, and Start freezes both the effective policy and its source for execution-setup planning
 - `workflow_revision` increases on status transitions and lets polling/SSE consumers reject stale state even when the workflow moves backward from Manual QA to Coding
 - `branch_name = '__looptroop_display_only_mock__'` is reserved for board-only mock/demo tickets; these rows are returned for display, projected through the API with `isDisplayOnlyMock: true`, excluded from startup hydration and runnable workflow actions, and expose only Cancel while non-terminal
 - runtime details shown in the UI are enriched from **both** this row and ticket-owned files under `.ticket/**`

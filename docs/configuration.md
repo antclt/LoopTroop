@@ -12,11 +12,11 @@ LoopTroop applies configuration in three layers:
 | Layer | What it controls | When it applies |
 | --- | --- | --- |
 | Profile | App-wide baseline values | Used whenever no project override exists |
-| Project override | Optional overrides for a small execution/planning subset, including Manual QA | Applied when the value is resolved |
-| Ticket override | Optional Draft-only Manual QA choice | Wins over project and profile when the ticket starts |
+| Project override | Optional overrides for a small execution/planning subset, including Manual QA and Git hooks | Applied when the value is resolved |
+| Ticket override | Optional Draft-only Manual QA and Git-hook choices | Wins over project and profile when the ticket starts |
 | Ticket start lock | Frozen planning-critical values captured on **Start** | Stays fixed for that ticket run |
 
-The Configuration dialog edits the singleton profile. Project-level overrides are stored by the project API/local project state; the Project form provides the focused Manual QA `Enabled / Disabled` editor, while the other project overrides do not have a general editor in the Configuration dialog. The overrideable fields are:
+The Configuration dialog edits the singleton profile. Project-level overrides are stored by the project API/local project state; the Project form provides focused Manual QA and Git-hook editors, while the other project overrides do not have a general editor in the Configuration dialog. The overrideable fields are:
 
 - `councilMembers`
 - `maxIterations` (`Max Bead Retries`)
@@ -26,6 +26,7 @@ The Configuration dialog edits the singleton profile. Project-level overrides ar
 - `minCouncilQuorum`
 - `interviewQuestions`
 - `manualQaOverride`
+- `gitHookPolicy`
 
 If a project override is set, it wins over the profile for that field. Fields without project-override support always come from the profile.
 
@@ -42,6 +43,7 @@ These values are captured before the ticket enters `SCANNING_RELEVANT_FILES` and
 | Interview / PRD / Beads Coverage Passes | Coverage-loop budgets must stay stable for that ticket |
 | Structured Output Retries | Repair behavior must stay stable across the ticket's structured phases |
 | Manual QA effective value + source | The post-test route must not change after work starts; missing locks on older/in-progress tickets mean disabled |
+| Git-hook policy effective value + source | Repository-hook behavior must stay stable throughout setup, internal commits, and integration |
 
 ### What is read later instead of locked
 
@@ -105,6 +107,7 @@ This is meant to answer two quick questions without opening logs or artifacts:
 | [PRD Coverage Passes](#prd-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
 | [Beads Coverage Passes](#beads-coverage-passes) | 5 | 2–20 | Coverage | ticket start lock |
 | [Manual QA](#manual-qa) | disabled | enabled / disabled | Post-Implementation | ticket start lock |
+| [Git Hook Policy](#git-hook-policy) | Validate | Validate / Ignore / Run | Pre-Implementation | ticket start lock |
 | [Per-Iteration Timeout](#per-iteration-timeout) | 1200 s | 0–3600 s | Execution Phase | next coding/final-test attempt |
 | [Execution Setup Timeout](#execution-setup-timeout) | 1200 s | 0–3600 s | Execution Phase | next execution-setup attempt |
 | [Max Bead Retries](#max-bead-retries) | 5 | 0–20 | Execution Phase | next execution/final-test attempt |
@@ -516,27 +519,38 @@ Once coverage is clean or this cap is reached, LoopTroop advances to `EXPANDING_
 
 ---
 
-## Execution Phase
+## Pre-Implementation
 
 ### Git Hook Policy
 
-**Type:** enum
-**Default:** `validate_explicitly`
-**Values:** `validate_explicitly`, `use_on_internal_commits`, `ignore_internal_only`
+**Type:** three-choice policy
+**Default:** **Validate** (recommended)
 
-Controls how LoopTroop-owned commits and pushes interact with hooks from the target repository. The profile supplies the default and each project may override it; the approved execution setup plan locks the value used for that ticket.
+Choose how LoopTroop handles repository hooks. The same linked buttons appear in Configuration, Project settings, and the new-ticket **Advanced** settings; Draft tickets can also change their choice before Start. The active inherited choice is highlighted, so there is no separate or duplicate **Inherit** option.
 
-| Policy | Internal Git behavior | Explicit validation |
+| Choice | Stored value | What LoopTroop does |
 | --- | --- | --- |
-| `validate_explicitly` | Bypass hooks | Run the approved ordered hook commands during setup and again before integration |
-| `use_on_internal_commits` | Let Git run hooks normally | No additional automatic hook-equivalent command is required |
-| `ignore_internal_only` | Bypass hooks | Record that validation was skipped |
+| **Validate** (recommended) | `validate_explicitly` | Bypasses hooks on LoopTroop-owned Git operations, then runs the visible approved validation commands during setup and again before integration |
+| **Ignore** | `ignore_internal_only` | Bypasses hooks on LoopTroop-owned Git operations and records that hook validation was skipped |
+| **Run** | `use_on_internal_commits` | Lets Git run repository hooks normally on LoopTroop-owned commits and pushes; it does not add separate hook-equivalent commands |
 
-Execution setup shows detected hooks as read-only evidence and lets you freely add, edit, reorder, or remove validation commands. An unknown hook never causes LoopTroop to invent an ecosystem-specific command. Removing all validation commands is allowed and the approval receipt records that exact decision.
+**Validate and Run are not the same.** Validate turns off hooks for internal Git commands and performs the approved checks explicitly, where they are visible and auditable. Run leaves the repository hooks active inside those Git commands, so a hook can directly block an internal commit or push.
 
-This policy affects only LoopTroop's internal Git operations. It does not alter the repository's hook configuration for your own Git commands.
+Resolution is deterministic:
+
+1. a non-null ticket `gitHookPolicy` wins;
+2. otherwise a non-null project `gitHookPolicy` wins;
+3. otherwise the profile `gitHookPolicy` is used.
+
+LoopTroop freezes the effective choice and its source when the ticket starts. Only Draft tickets may change the ticket override, and later profile or project edits do not change a started ticket. The approved execution setup plan records the ticket-specific policy alongside detected hooks and editable validation commands.
+
+Execution setup shows detected hooks as read-only evidence and lets you add, edit, reorder, or remove validation commands. An unknown hook never causes LoopTroop to invent an ecosystem-specific command. Removing all validation commands is allowed and the approval receipt records that exact decision.
+
+This policy affects only LoopTroop's internal Git operations. It does not alter the repository's hook configuration for your own Git commands. The `?` beside each control opens this section.
 
 ---
+
+## Execution Phase
 
 ### Per-Iteration Timeout
 

@@ -11,6 +11,7 @@ import {
   getTicketUiStateRevision,
   rememberTicketUiStateRevision,
 } from '@/lib/ticketUiStateRevision'
+import type { GitHookPolicy } from '@/lib/executionSetupPlan'
 
 async function parseErrorBody(res: Response, fallback: string): Promise<string> {
   let message = fallback
@@ -153,6 +154,11 @@ export interface Ticket {
     errors?: string[]
   }
   manualQaOverride?: boolean | null
+  gitHookPolicy?: GitHookPolicy | null
+  effectiveGitHookPolicy?: GitHookPolicy
+  effectiveGitHookPolicySource?: 'ticket' | 'project' | 'profile'
+  lockedGitHookPolicy?: GitHookPolicy | null
+  lockedGitHookPolicySource?: 'ticket' | 'project' | 'profile' | null
   effectiveManualQaEnabled?: boolean
   effectiveManualQaSource?: 'ticket' | 'project' | 'profile'
   lockedManualQaEnabled?: boolean | null
@@ -197,6 +203,7 @@ interface CreateTicketInput {
   description?: string
   priority?: number
   manualQaOverride?: boolean | null
+  gitHookPolicy?: GitHookPolicy | null
 }
 
 interface TicketActionResponse {
@@ -255,7 +262,7 @@ async function createTicket(input: CreateTicketInput): Promise<Ticket> {
   return res.json()
 }
 
-async function updateTicket(id: string, input: Partial<Pick<Ticket, 'title' | 'description' | 'priority' | 'manualQaOverride'>>): Promise<Ticket> {
+async function updateTicket(id: string, input: Partial<Pick<Ticket, 'title' | 'description' | 'priority' | 'manualQaOverride' | 'gitHookPolicy'>>): Promise<Ticket> {
   const res = await fetch(`/api/tickets/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -456,7 +463,7 @@ export function useCreateTicket() {
 export function useUpdateTicket() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string } & Partial<Pick<Ticket, 'title' | 'description' | 'priority' | 'manualQaOverride'>>) =>
+    mutationFn: ({ id, ...input }: { id: string } & Partial<Pick<Ticket, 'title' | 'description' | 'priority' | 'manualQaOverride' | 'gitHookPolicy'>>) =>
       updateTicket(id, input),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] })

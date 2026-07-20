@@ -140,7 +140,8 @@ describe('ProfileSetup', () => {
     expect(screen.getByLabelText('OpenCode Retry Limit')).toHaveValue(7)
     expect(screen.getByLabelText('OpenCode Retry Grace Window')).toHaveValue(45)
     expect(screen.getByText('Execution Setup Timeout (s)')).toBeInTheDocument()
-    expect(screen.getByLabelText('Git hook policy')).toHaveValue('use_on_internal_commits')
+    expect(screen.getByText('Pre-Implementation')).toBeInTheDocument()
+    expect(screen.getByRole('radio', { name: 'Run' })).toHaveAttribute('aria-checked', 'true')
     expect(screen.queryByText('Profile')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Username')).not.toBeInTheDocument()
     expect(screen.queryByText('Icon')).not.toBeInTheDocument()
@@ -172,11 +173,15 @@ describe('ProfileSetup', () => {
     await renderProfileSetup()
 
     const docsLinks = screen.getAllByRole('link', { name: /Open documentation for / })
-    expect(docsLinks).toHaveLength(20)
+    expect(docsLinks).toHaveLength(21)
 
     expect(screen.getByRole('link', { name: 'Open documentation for Manual QA checkpoint' })).toHaveAttribute(
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
+    expect(screen.getByRole('link', { name: 'Open documentation for Git hook policy' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#git-hook-policy`,
     )
 
     const mainImplementerLink = screen.getByRole('link', { name: 'Open documentation for Main Implementer Model' })

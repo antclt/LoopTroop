@@ -51,6 +51,7 @@ import { NumericField } from './profileNumericUtils'
 import { ConfigurationDocsLink } from './ConfigurationDocsLink'
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip'
 import { ManualQaSetting } from '@/components/manual-qa/ManualQaSetting'
+import { GitHookPolicySetting } from '@/components/git-hooks/GitHookPolicySetting'
 
 interface ProfileSetupProps {
   onClose: () => void
@@ -505,6 +506,31 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
 
           <Separator />
 
+          {/* ── Pre-Implementation ── */}
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Pre-Implementation</div>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <label className="text-sm font-medium">Git hook policy</label>
+                <ConfigurationDocsLink
+                  docsPath="/configuration#git-hook-policy"
+                  label="Git hook policy"
+                  description="Choose how LoopTroop handles repository hooks before implementation. Open the Git hook policy documentation."
+                />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Choose how LoopTroop handles repository hooks.
+              </p>
+            </div>
+            <GitHookPolicySetting
+              value={formData.gitHookPolicy ?? 'validate_explicitly'}
+              onChange={(value) => updateField('gitHookPolicy', value)}
+              compact
+            />
+          </div>
+
+          <Separator />
+
           {/* ── Execution Phase ── */}
           <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">Execution Phase</div>
           <div className="grid grid-cols-2 gap-3">
@@ -519,22 +545,6 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
               hint="Timeout for the one-time execution setup phase before coding starts (0–3600s)."
               tooltip="Runs a one-time setup step after pre-flight and before coding. It can install toolchains, warm caches, and prepare repository-local runtime artifacts when the approved setup plan requires them."
             />
-          </div>
-          <div className="mt-3 space-y-1.5">
-            <label htmlFor="profile-git-hook-policy" className="text-sm font-medium">Git hook policy</label>
-            <select
-              id="profile-git-hook-policy"
-              value={formData.gitHookPolicy ?? 'validate_explicitly'}
-              onChange={(event) => updateField('gitHookPolicy', event.target.value as NonNullable<CreateProfileInput['gitHookPolicy']>)}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            >
-              <option value="validate_explicitly">Validate explicitly (recommended)</option>
-              <option value="use_on_internal_commits">Run on internal commits</option>
-              <option value="ignore_internal_only">Ignore for internal commits</option>
-            </select>
-            <p className="text-xs text-muted-foreground">
-              Explicit validation discovers hooks during workspace setup and runs the approved validation commands as visible checks.
-            </p>
           </div>
 
           <Separator />

@@ -73,6 +73,7 @@ const projectData = {
   councilResponseTimeout: null,
   minCouncilQuorum: null,
   interviewQuestions: null,
+  gitHookPolicy: 'ignore_internal_only',
   ticketCounter: 1,
   createdAt: '2026-03-13T15:47:26.973Z',
   updatedAt: '2026-03-13T15:47:26.973Z',
@@ -91,6 +92,7 @@ const profileData = {
   councilResponseTimeout: 300000,
   interviewQuestions: 50,
   maxIterations: 5,
+  gitHookPolicy: 'validate_explicitly',
   createdAt: '2026-03-13T15:47:26.973Z',
   updatedAt: '2026-03-13T15:47:26.973Z',
 }
@@ -126,6 +128,11 @@ describe('DraftView', () => {
     expect(screen.getByRole('link', { name: 'Open documentation for ticket Manual QA checkpoint' })).toHaveAttribute(
       'href',
       `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#manual-qa`,
+    )
+    expect(screen.getByRole('radio', { name: 'Validate' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('link', { name: 'Open documentation for ticket Git hook policy' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#git-hook-policy`,
     )
   })
 

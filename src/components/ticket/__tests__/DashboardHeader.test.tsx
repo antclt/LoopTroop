@@ -172,11 +172,12 @@ describe('DashboardHeader', () => {
     expect(within(projectSection as HTMLElement).getByText('🧭')).toBeInTheDocument()
   })
 
-  it('shows the effective Manual QA state in the Details advanced settings section', () => {
+  it('shows effective Manual QA and Git hook settings in Details', () => {
     const ticket = makeTicket({
       status: 'DRAFTING_PRD',
       availableActions: ['cancel'],
       effectiveManualQaEnabled: true,
+      effectiveGitHookPolicy: 'ignore_internal_only',
       lockedMainImplementer: 'openai/gpt-5.4',
     })
 
@@ -192,6 +193,12 @@ describe('DashboardHeader', () => {
     expect(advancedSettings).not.toBeNull()
     expect(within(advancedSettings as HTMLElement).getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(within(advancedSettings as HTMLElement).getByText('Enabled')).toBeInTheDocument()
+    expect(within(advancedSettings as HTMLElement).getByText('Git hook policy')).toBeInTheDocument()
+    expect(within(advancedSettings as HTMLElement).getByText('Ignore')).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Open documentation for ticket Git hook policy' })).toHaveAttribute(
+      'href',
+      `${__LOOPTROOP_DOCS_ORIGIN__}/configuration#git-hook-policy`,
+    )
     expect(screen.queryByRole('link', { name: /Manual QA checkpoint/ })).not.toBeInTheDocument()
     const modelsSelected = screen.getByText('Models Selected')
     expect(modelsSelected.compareDocumentPosition(advancedSettings as HTMLElement) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
