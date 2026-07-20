@@ -108,7 +108,9 @@ describe('TicketForm', () => {
       </UIContext.Provider>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /Advanced/ }))
+    const advancedButton = screen.getByRole('button', { name: /Advanced/ })
+    expect(advancedButton.parentElement).toHaveClass('border-2')
+    fireEvent.click(advancedButton)
     expect(screen.getByText('Manual QA checkpoint')).toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'Enabled' })).toHaveAttribute('aria-checked', 'true')

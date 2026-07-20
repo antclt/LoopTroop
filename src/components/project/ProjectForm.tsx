@@ -319,7 +319,7 @@ export function ProjectForm({ onClose, onBack, project }: ProjectFormProps) {
               </div>
             </div>
           </div>
-          <div className="rounded-md border border-border">
+          <div className="rounded-md border-2 border-border">
             <button
               type="button"
               className="flex w-full items-center justify-between gap-2 px-3 py-2 text-sm font-medium"

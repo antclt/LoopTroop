@@ -106,6 +106,7 @@ describe('ProjectForm', () => {
 
     expect(screen.queryByRole('radio', { name: 'Inherit' })).not.toBeInTheDocument()
     const advancedButton = screen.getByRole('button', { name: /Advanced/ })
+    expect(advancedButton.parentElement).toHaveClass('border-2')
     expect(advancedButton).toHaveAttribute('aria-expanded', 'false')
     expect(screen.queryByRole('radio', { name: 'Disabled' })).not.toBeInTheDocument()
     fireEvent.click(advancedButton)
