@@ -2205,3 +2205,9 @@ search: false
     *   Persist reflection outcomes (`applied`, `not_applied`, `regressed`) so harvest/review phases can measure whether the correction helped.
 *   **Global rankings:** Maestro has a global ranking for people who run the longest sessions, with badges and different levels of achievements. E.g., the best level is for those who run for 10 years (which can be achieved faster by running parallel sessions). Rankings are also done by cost. Users should be able to opt into these rankings and see their position in a leaderboard. [I1](https://runmaestro.ai/)
 *   **Actual data research:** Integrate with last 30 days, which will research a specific topic on Twitter and Reddit in the last month to give accurate data. [I1](https://github.com/mvanhorn/last30days-skill)
+*   **OpenCode v2 Persistent Session Continuation (true resume across restarts):** When OpenCode v2 reaches stable, make the bead "Continue" action a real session continuation instead of a fresh iteration restart.
+    *   Persist full OpenCode session state (conversation history, tool-call context, in-progress work) so that a "Continue" resumes the exact session where it left off.
+    *   Session continuity must survive PC restarts, app restarts, and backend restarts — the session is picked up from where it remained without restarting the current iteration.
+    *   Resuming a persisted session must not consume bead iteration budget; only genuinely new attempts count as iterations.
+    *   If the persisted session is corrupted or unrecoverable, fall back to a fresh iteration with explicit `session_unrecoverable` diagnostics and preserve all prior iteration notes/evidence.
+    *   Gate behind OpenCode v2 stable release; do not attempt on earlier versions where session persistence APIs are unavailable or unstable.
