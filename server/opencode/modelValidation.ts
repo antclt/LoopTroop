@@ -1,7 +1,7 @@
 import { fetchConnectedModelIds } from './providerCatalog'
 import { parseCouncilMembers } from '../council/members'
 
-export const MAX_COUNCIL_MEMBERS = 6
+export const MAX_COUNCIL_MEMBERS = 10
 
 export interface ValidatedModelSelection {
   mainImplementer: string

@@ -73,7 +73,7 @@ For non-mutating startup, forced maintenance, and manual maintenance commands, s
 
 LoopTroop works best with multiple AI models — they draft, vote on, and refine plans together before any code is written. You can configure your council models inside the app via the **Configuration** button on the dashboard.
 
-You need at least a **Main Implementer Model** (which writes and validates code) and **1–5 additional Council Members** (which challenge and improve the plan), for a maximum council size of six. See [Configuration](configuration.md) for all settings and trade-offs.
+You need at least a **Main Implementer Model** (which writes and validates code) and **1–9 additional Council Members** (which challenge and improve the plan), for a maximum council size of ten. See [Configuration](configuration.md) for all settings and trade-offs.
 
 ### Choosing Your Main Implementer
 

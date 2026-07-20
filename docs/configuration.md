@@ -191,7 +191,7 @@ The minimum viable council is the main implementer plus one additional member. T
 The UI prevents duplicate picks across council slots, so if you cannot select a model twice that is intentional rather than a catalog bug.
 
 ::: tip
-Up to 5 council slots are available in addition to the main implementer, for a maximum council size of 6.
+Up to 9 council slots are available in addition to the main implementer, for a maximum council size of 10.
 :::
 
 **See also:** [LLM Council → Council Members](/llm-council#council-members)

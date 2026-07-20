@@ -360,7 +360,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
             <label className="text-sm font-medium block mb-1">Council Members</label>
             <div className="mb-2 flex items-start gap-1.5 text-xs text-muted-foreground">
               <p className="min-w-0 flex-1">
-                Choose up to 6 models to form the review council. The main implementer is automatically included.
+                Choose up to 10 models to form the review council. The main implementer is automatically included.
               </p>
               <ConfigurationDocsLink docsPath={descriptionDocs.councilMembers} label="Council Members" />
             </div>
@@ -443,7 +443,7 @@ export function ProfileSetup({ onClose, onOpenAbout = () => undefined }: Profile
                   </button>
                 </div>
               ))}
-              {councilSlots.length < 5 && (
+              {councilSlots.length < 9 && (
                 <Button
                   type="button"
                   variant="outline"

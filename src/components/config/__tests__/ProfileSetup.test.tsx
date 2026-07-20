@@ -158,7 +158,7 @@ describe('ProfileSetup', () => {
     })
   })
 
-  it('allows a council of six models including the main implementer', async () => {
+  it('allows a council of ten models including the main implementer', async () => {
     await renderProfileSetup()
 
     const addButton = screen.getByRole('button', { name: 'Add Council Member' })
@@ -166,8 +166,12 @@ describe('ProfileSetup', () => {
     fireEvent.click(addButton)
     fireEvent.click(addButton)
     fireEvent.click(addButton)
+    fireEvent.click(addButton)
+    fireEvent.click(addButton)
+    fireEvent.click(addButton)
+    fireEvent.click(addButton)
 
-    expect(screen.getByText('Council member 6…')).toBeInTheDocument()
+    expect(screen.getByText('Council member 10…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add Council Member' })).not.toBeInTheDocument()
   })
 
