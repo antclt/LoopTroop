@@ -38,6 +38,9 @@ export interface BlockedErrorDiagnostics {
   summary: string
   modelId?: string
   sessionId?: string
+  operation?: string
+  transportCode?: string
+  causeMessage?: string
   providerId?: string
   providerModelId?: string
   statusCode?: number
@@ -56,34 +59,60 @@ export interface BlockedErrorDiagnostics {
 }
 
 import { isRecord } from './typeGuards'
+import { stripTerminalFormatting } from './errorDisplay'
 
 const REDACTED = '[redacted]'
-const CREDENTIAL_WORD_KEY_PATTERN = String.raw`(?:x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret)`
-const CREDENTIAL_VALUE_PATTERN = /(["']?(?:authorization|x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret)["']?\s*[:=]\s*)(["']?)(?:Bearer\s+)?([^"',\s}&]+)(\2)/gi
-const BEARER_TOKEN_PATTERN = /\b(Bearer\s+)([A-Za-z0-9._~+/-]+=*)/gi
-const CREDENTIAL_WORD_PATTERN = new RegExp(
-  String.raw`\b(${CREDENTIAL_WORD_KEY_PATTERN})\s+(?:is\s+)?(["']?)([^"',\s}&]+)(\2)`,
-  'gi',
-)
+const DIAGNOSTIC_URL_PATTERN = /(?<![a-z0-9+.-])[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/gi
+const URL_USERINFO_PATTERN = /^([a-z][a-z0-9+.-]*:\/\/)[^/]*@/i
+const CREDENTIAL_VALUE_PATTERN = /((?<![a-z0-9_-])[a-z0-9_-]*?(?:authorization|x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret|cookie|set[-_\s]?cookie|token|client[-_\s]?secret|private[-_\s]?key|access[-_\s]?key|secret[-_\s]?key)\b["']?\s*(?:headers?(?:[ \t]+value)?\s*)?[:=]\s*)("(?:\\.|[^"\\])*(?:"|\\?$)|'(?:\\.|[^'\\])*(?:'|\\?$)|(?:(?:Bearer|Basic)\s+)?[^"',\s}&]+)/gi
+const AUTHORIZATION_VALUE_PATTERN = /((?<![a-z0-9_-])[a-z0-9_-]*?authorization\b["']?\s*(?:headers?(?:[ \t]+value)?\s*)?[:=]\s*)("(?:\\.|[^"\\])*(?:"|\\?$)|'(?:\\.|[^'\\])*(?:'|\\?$)|(?:[A-Za-z][\w.-]*\s+)?[^"',\s}&]+)/gi
+const COOKIE_VALUE_PATTERN = /((?<![a-z0-9_-])[a-z0-9_-]*?(?:set[-_\s]?cookie|cookie)\b["']?\s*(?:headers?(?:[ \t]+value)?\s*)?[:=]\s*)("(?:\\.|[^"\\])*(?:"|\\?$)|'(?:\\.|[^'\\])*(?:'|\\?$)|[^\n]+)/gi
+const CREDENTIAL_WORD_PATTERN = /(\b(?:x[-_\s]?api[-_\s]?key|api[-_\s]?key|access[-_\s]?token|refresh[-_\s]?token|password|secret)\b[ \t]+(?:(?:headers?(?:[ \t]+value)?|provided|code)(?:[ \t]*[:=]\s*|[ \t]+(?:(?:is|was|has)[ \t]+(?:not[ \t]+)?)?)|(?:is|was|has)[ \t]+(?:not[ \t]+)?)?)("(?:\\.|[^"\\])*(?:"|\\?$)|'(?:\\.|[^'\\])*(?:'|\\?$)|(?:(?:Bearer|Basic)\s+)?[^"',\s}&]+)/gi
+const AUTHORIZATION_WORD_PATTERN = /(\bauthorization\b[ \t]+(?:(?:headers?(?:[ \t]+value)?|provided|code)(?:[ \t]*[:=]\s*|[ \t]+(?:(?:is|was|has)[ \t]+(?:not[ \t]+)?)?)|(?:is|was|has)[ \t]+(?:not[ \t]+)?)?)("(?:\\.|[^"\\])*(?:"|\\?$)|'(?:\\.|[^'\\])*(?:'|\\?$)|(?:(?:Bearer|Basic)\s+|[A-Za-z][\w.-]*[ \t]+)?[^"',\s}&]+)/gi
+const COOKIE_WORD_PATTERN = /(\b(?:set[-_\s]?cookie|cookie)\b[ \t]+(?:(?:headers?(?:[ \t]+value)?|provided)(?:[ \t]*[:=]\s*|[ \t]+(?:(?:is|was|has)[ \t]+(?:not[ \t]+)?)?)|(?:is|was|has)[ \t]+(?:not[ \t]+)?)?)("(?:\\.|[^"\\])*(?:"|\\?$)|'(?:\\.|[^'\\])*(?:'|\\?$)|[^"',\s};]+(?:[ \t]*;[^\n]*)?)/gi
+const AUTHORIZATION_TOKEN_PATTERN = /\b((?:Bearer|Basic)\s+)([A-Za-z0-9._~+/-]+=*)/gi
+const CREDENTIAL_PROSE_PATTERN = /^(?:headers?|banner|required|missing|invalid|expired|denied|failed|unavailable|available|not|is|are|was|has|been|stale|rotated|valid|limit)\b/i
+const PREFIXED_CREDENTIAL_PATTERN = /\b(?:sk-[A-Za-z0-9_-]{8,}|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|xox[abprs]-[A-Za-z0-9-]+|(?:AKIA|ASIA)[A-Z0-9]{16}|AIza[A-Za-z0-9_-]{20,})\b/g
 
-function redactSensitive(value: string): string {
-  CREDENTIAL_VALUE_PATTERN.lastIndex = 0
-  BEARER_TOKEN_PATTERN.lastIndex = 0
-  CREDENTIAL_WORD_PATTERN.lastIndex = 0
-  return value
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, REDACTED)
-    .replace(CREDENTIAL_VALUE_PATTERN, (_match, prefix: string, quote: string, _secret: string, closingQuote: string) =>
-      `${prefix}${quote}${REDACTED}${closingQuote}`,
-    )
-    .replace(CREDENTIAL_WORD_PATTERN, (_match, key: string, quote: string, _secret: string, closingQuote: string) =>
-      `${key} ${quote}${REDACTED}${closingQuote}`,
-    )
-    .replace(BEARER_TOKEN_PATTERN, `$1${REDACTED}`)
+function redactCredentialValue(_match: string, prefix: string, value: string): string {
+  const quote = value.startsWith('"') || value.startsWith("'") ? value[0] : ''
+  const closingQuote = quote && value.length > 1 && value.endsWith(quote) ? quote : ''
+  return `${prefix}${quote}${REDACTED}${closingQuote}`
+}
+
+function redactCredentialWord(match: string, prefix: string, value: string): string {
+  if (!/[:=]\s*$/.test(prefix) && CREDENTIAL_PROSE_PATTERN.test(value)) return match
+  return redactCredentialValue(match, prefix, value)
+}
+
+function sanitizeDiagnosticUrl(url: string): string {
+  try {
+    const parsed = new URL(url)
+    const withoutParameters = url.split(/[?#]/, 1)[0] ?? ''
+    return parsed.username || parsed.password ? withoutParameters.replace(URL_USERINFO_PATTERN, '$1') : withoutParameters
+  } catch {
+    // Malformed userinfo can contain raw query/hash markers before the @.
+    return url.replace(URL_USERINFO_PATTERN, '$1').split(/[?#]/, 1)[0] ?? ''
+  }
+}
+
+/** Clean and redact complete diagnostic text before any preview is shortened. */
+export function sanitizeDiagnosticText(value: string): string {
+  return stripTerminalFormatting(value)
+    .replace(DIAGNOSTIC_URL_PATTERN, sanitizeDiagnosticUrl)
+    .replace(PREFIXED_CREDENTIAL_PATTERN, REDACTED)
+    .replace(AUTHORIZATION_VALUE_PATTERN, redactCredentialValue)
+    .replace(COOKIE_VALUE_PATTERN, redactCredentialValue)
+    .replace(CREDENTIAL_VALUE_PATTERN, redactCredentialValue)
+    .replace(AUTHORIZATION_WORD_PATTERN, redactCredentialWord)
+    .replace(COOKIE_WORD_PATTERN, redactCredentialWord)
+    .replace(CREDENTIAL_WORD_PATTERN, redactCredentialWord)
+    .replace(AUTHORIZATION_TOKEN_PATTERN, `$1${REDACTED}`)
 }
 
 function cleanString(value: unknown, maxLength = 1000): string | undefined {
   if (typeof value !== 'string') return undefined
-  const trimmed = redactSensitive(value.trim())
+  const trimmed = sanitizeDiagnosticText(value).trim()
   if (!trimmed) return undefined
   return trimmed.length > maxLength ? `${trimmed.slice(0, maxLength - 3)}...` : trimmed
 }
@@ -115,6 +144,9 @@ export function normalizeBlockedErrorDiagnostics(value: unknown): BlockedErrorDi
 
   const modelId = cleanString(value.modelId, 240)
   const sessionId = cleanString(value.sessionId, 240)
+  const operation = cleanString(value.operation, 240)
+  const transportCode = cleanString(value.transportCode, 240)
+  const causeMessage = cleanString(value.causeMessage)
   const providerId = cleanString(value.providerId, 240)
   const providerModelId = cleanString(value.providerModelId, 240)
   const requestModel = cleanString(value.requestModel, 240)
@@ -130,6 +162,9 @@ export function normalizeBlockedErrorDiagnostics(value: unknown): BlockedErrorDi
     summary,
     ...(modelId ? { modelId } : {}),
     ...(sessionId ? { sessionId } : {}),
+    ...(operation ? { operation } : {}),
+    ...(transportCode ? { transportCode } : {}),
+    ...(causeMessage ? { causeMessage } : {}),
     ...(providerId ? { providerId } : {}),
     ...(providerModelId ? { providerModelId } : {}),
     ...(cleanNumber(value.statusCode) !== undefined ? { statusCode: cleanNumber(value.statusCode) } : {}),

@@ -43,7 +43,7 @@ import { phaseMayAskQuestions } from '@shared/aiQuestions'
 import { ticketAllowsAiQuestions } from './aiQuestionSettings'
 
 export interface OpenCodeRunCallbacks {
-  onSessionCreated?: (session: Session) => void
+  onSessionCreated?: (session: Session, context?: { reconnected: boolean }) => void
   onPromptDispatched?: (event: OpenCodePromptDispatchEvent) => void
   onStreamEvent?: (event: StreamEvent) => void
   onStreamError?: (error: unknown) => void
@@ -423,58 +423,63 @@ export async function runOpenCodePrompt({
   onStreamEvent,
   onPromptCompleted,
 }: OpenCodeRunOptions & { projectPath: string }): Promise<OpenCodeRunResult> {
-  const sessionManager = sessionOwnership ? new SessionManager(adapter) : null
+  let sessionManager: SessionManager | null = null
   const sessionCreateOptions = resolveSessionCreateOptions()
   const resolvedTimeoutDeadline = workBudget
     ? workBudget.deadlineAt()
     : timeoutDeadline ?? getTimeoutDeadline(timeoutMs)
   const acquisitionDeadline = createTimeoutSignal(signal, getRemainingTimeoutMs(resolvedTimeoutDeadline))
   let session: Session | undefined
+  let reconnected = false
   let preservedForContinuation = false
   try {
-    if (sessionOwnership?.forceFresh) {
-      const existing = sessionManager!.getOwnedActiveSession(
-        sessionOwnership.ticketId,
-        sessionOwnership.phase,
-        sessionOwnership,
-      )
-      if (existing) {
-        const stopped = await adapter.abortSession(existing.sessionId).catch(() => false)
-        if (!stopped) {
-          throw new Error(`Could not confirm abort of existing OpenCode session ${existing.sessionId}`)
+    if (sessionOwnership) {
+      sessionManager = new SessionManager(adapter)
+      if (sessionOwnership.forceFresh) {
+        const existing = sessionManager.getOwnedActiveSession(
+          sessionOwnership.ticketId,
+          sessionOwnership.phase,
+          sessionOwnership,
+        )
+        if (existing) {
+          const stopped = await adapter.abortSession(existing.sessionId).catch(() => false)
+          if (!stopped) {
+            throw new Error(`Could not confirm abort of existing OpenCode session ${existing.sessionId}`)
+          }
+          await sessionManager.abandonSession(existing.sessionId)
+          clearSessionContinuation(existing.sessionId)
+          clearOpenCodePromptDispatchCount(existing.sessionId)
         }
-        await sessionManager!.abandonSession(existing.sessionId)
-        clearSessionContinuation(existing.sessionId)
-        clearOpenCodePromptDispatchCount(existing.sessionId)
       }
-    }
-    session = sessionOwnership
-      ? (!sessionOwnership.forceFresh
-          ? await sessionManager!.validateAndReconnect(
+      const existing = !sessionOwnership.forceFresh
+        ? await sessionManager.validateAndReconnect(
             sessionOwnership.ticketId,
             sessionOwnership.phase,
             sessionOwnership,
             acquisitionDeadline.signal,
           )
-          : null
-        ) ?? await sessionManager!.createSessionForPhase(
-          sessionOwnership.ticketId,
-          sessionOwnership.phase,
-          sessionOwnership.phaseAttempt ?? 1,
-          sessionOwnership.memberId ?? undefined,
-          sessionOwnership.beadId ?? undefined,
-          sessionOwnership.iteration ?? undefined,
-          sessionOwnership.step ?? undefined,
-          projectPath,
-          sessionCreateOptions,
-          acquisitionDeadline.signal,
-        )
-      : await createOpenCodeSessionWithRetry(
+        : null
+      reconnected = existing !== null
+      session = existing ?? await sessionManager.createSessionForPhase(
+        sessionOwnership.ticketId,
+        sessionOwnership.phase,
+        sessionOwnership.phaseAttempt ?? 1,
+        sessionOwnership.memberId ?? undefined,
+        sessionOwnership.beadId ?? undefined,
+        sessionOwnership.iteration ?? undefined,
+        sessionOwnership.step ?? undefined,
+        projectPath,
+        sessionCreateOptions,
+        acquisitionDeadline.signal,
+      )
+    } else {
+      session = await createOpenCodeSessionWithRetry(
         adapter,
         projectPath,
         acquisitionDeadline.signal,
         sessionCreateOptions,
       )
+    }
   } catch (error) {
     if (acquisitionDeadline.timedOut()) {
       throw buildDeadlineTimeoutError(deadlineScope, timeoutMs, sessionOwnership)
@@ -484,7 +489,7 @@ export async function runOpenCodePrompt({
     acquisitionDeadline.cleanup()
   }
   try {
-    onSessionCreated?.(session)
+    onSessionCreated?.(session, { reconnected })
   } catch (error) {
     // Session creation callbacks may persist workflow state. If that callback
     // fails, the remote session still needs a confirmed stop before its local

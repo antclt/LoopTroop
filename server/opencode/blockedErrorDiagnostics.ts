@@ -173,7 +173,14 @@ function isTimeoutLike(message: string): boolean {
 }
 
 function isTransportLike(message: string): boolean {
-  return /\b(connection reset|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network|fetch failed|failed to prompt|unreachable)\b/i.test(message)
+  return /\b(connection (?:error|reset)|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network|fetch failed|failed to (?:prompt|fetch|connect)|could not (?:reach|connect)|unreachable)\b/i.test(message)
+}
+
+function buildCommunicationSummary(summaryMessage: string, operation: string | undefined, info: ModelErrorInfo | undefined): string {
+  const context = operation ? ` while ${operation}` : ''
+  const hasCause = info?.transportCode || (info?.causeMessage && !/^fetch failed$/i.test(info.causeMessage))
+  const punctuation = /[.!?]$/.test(summaryMessage) ? '' : '.'
+  return `LoopTroop could not communicate with OpenCode${context}. Reported error: ${summaryMessage}${punctuation} ${hasCause ? 'Captured connection details are available in Technical details.' : 'The exact connection cause was not reported.'}`
 }
 
 function resolveKind(input: {
@@ -218,7 +225,17 @@ export function buildOpenCodeBlockedErrorDiagnostics(
   const attachedDiagnostics = normalizeBlockedErrorDiagnostics(readErrorProperty(input.error, 'blockedErrorDiagnostics'))
   if (attachedDiagnostics) {
     return {
-      diagnostics: attachedDiagnostics,
+      diagnostics: normalizeBlockedErrorDiagnostics({
+        ...attachedDiagnostics,
+        modelId: attachedDiagnostics.modelId ?? input.modelId,
+        sessionId: attachedDiagnostics.sessionId ?? input.sessionId,
+        finishReason: attachedDiagnostics.finishReason ?? input.responseMeta?.latestStepFinishReason,
+        inputTokens: attachedDiagnostics.inputTokens ?? input.responseMeta?.latestStepFinishTokens?.input,
+        outputTokens: attachedDiagnostics.outputTokens ?? input.responseMeta?.latestStepFinishTokens?.output,
+        reasoningTokens: attachedDiagnostics.reasoningTokens ?? input.responseMeta?.latestStepFinishTokens?.reasoning,
+        cacheReadTokens: attachedDiagnostics.cacheReadTokens ?? input.responseMeta?.latestStepFinishTokens?.cache?.read,
+        cacheWriteTokens: attachedDiagnostics.cacheWriteTokens ?? input.responseMeta?.latestStepFinishTokens?.cache?.write,
+      }),
       errorCodes: normalizeErrorCodes(readErrorProperty(input.error, 'blockedErrorCodes')),
     }
   }
@@ -261,6 +278,11 @@ export function buildOpenCodeBlockedErrorDiagnostics(
   }
 
   const info = summary.details ?? extractModelErrorInfo(details)
+  const errorCauseInfo = details === input.error ? info : extractModelErrorInfo(input.error)
+  const causeDetails = {
+    transportCode: info?.transportCode ?? errorCauseInfo?.transportCode,
+    causeMessage: info?.causeMessage ?? errorCauseInfo?.causeMessage,
+  }
   const statusCode = info?.statusCode ?? parseHttpStatus(summaryMessage)
   const infoWithStatus = statusCode === info?.statusCode
     ? info
@@ -271,10 +293,17 @@ export function buildOpenCodeBlockedErrorDiagnostics(
     responseMeta: input.responseMeta,
     attemptMeta: input.attemptMeta,
   })
+  const operationValue = readErrorProperty(input.error, 'openCodeOperation')
+  const operation = cleanOptionalMessage(typeof operationValue === 'string' ? operationValue : undefined)
+  const connectionFailure = kind === 'transport'
+    && (causeDetails.transportCode !== undefined
+      || /\b(connection (?:error|reset)|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network (?:error|failure|failed)|fetch failed|failed to (?:fetch|connect)|could not (?:reach|connect)|(?:network|opencode)(?: is)? unreachable)\b/i.test(summaryMessage))
   const diagnostics = normalizeBlockedErrorDiagnostics({
     kind,
     source: kind === 'opencode_provider' ? 'provider' : 'opencode',
-    summary: summaryMessage,
+    summary: connectionFailure ? buildCommunicationSummary(summaryMessage, operation, causeDetails) : summaryMessage,
+    operation,
+    ...causeDetails,
     modelId: input.modelId,
     sessionId: input.sessionId,
     providerId: info?.providerId,
@@ -286,6 +315,12 @@ export function buildOpenCodeBlockedErrorDiagnostics(
     providerErrorTitle: info?.responseErrorTitle,
     providerErrorMessage: info?.responseErrorMessage,
     responseBodyPreview: info?.responseBodyPreview,
+    finishReason: input.responseMeta?.latestStepFinishReason,
+    inputTokens: input.responseMeta?.latestStepFinishTokens?.input,
+    outputTokens: input.responseMeta?.latestStepFinishTokens?.output,
+    reasoningTokens: input.responseMeta?.latestStepFinishTokens?.reasoning,
+    cacheReadTokens: input.responseMeta?.latestStepFinishTokens?.cache?.read,
+    cacheWriteTokens: input.responseMeta?.latestStepFinishTokens?.cache?.write,
   })
 
   return {

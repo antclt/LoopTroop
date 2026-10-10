@@ -2,6 +2,114 @@ import { describe, expect, it } from 'vitest'
 import { extractModelErrorInfo, summarizeModelErrorForLog } from '../errorDetails'
 
 describe('OpenCode model error details', () => {
+  it('keeps only sanitized messages and error codes from nested causes', () => {
+    const error = new Error('wrapper', { cause: new TypeError('fetch failed', {
+      cause: Object.assign(new Error('Authorization: Bearer abc.def.ghi failed for https://private-user:private-password@example.com/path?token=secret#fragment'), {
+        code: 'ECONNRESET',
+        headers: { authorization: 'private-header' },
+        requestBody: 'private-prompt',
+      }),
+    }) })
+    const info = extractModelErrorInfo(error)
+
+    expect(info).toMatchObject({
+      transportCode: 'ECONNRESET',
+      causeMessage: 'Authorization: [redacted] failed for https://example.com/path',
+    })
+    const serialized = JSON.stringify(info)
+    expect(serialized).not.toContain('abc.def.ghi')
+    expect(serialized).not.toContain('?token')
+    expect(serialized).not.toContain('private-header')
+    expect(serialized).not.toContain('private-prompt')
+    expect(serialized).not.toContain('private-user')
+    expect(serialized).not.toContain('private-password')
+  })
+
+  it('bounds cyclic and long cause chains', () => {
+    const cyclic = Object.assign(new Error('socket closed'), { code: 'ECONNRESET', cause: undefined as unknown })
+    cyclic.cause = cyclic
+    expect(extractModelErrorInfo(new TypeError('fetch failed', { cause: cyclic }))).toMatchObject({
+      transportCode: 'ECONNRESET',
+      causeMessage: 'socket closed',
+    })
+
+    let chain = new Error('outside the inspection bound')
+    for (let index = 0; index < 20; index += 1) chain = new Error(`cause ${index}`, { cause: chain })
+    expect(extractModelErrorInfo(chain)?.causeMessage).not.toBe('outside the inspection bound')
+    const aggregate = new AggregateError([], 'socket failures')
+    aggregate.errors.push(aggregate)
+    expect(extractModelErrorInfo(aggregate)?.message).toBe('socket failures')
+  })
+
+  it('extracts reported socket errors from a bounded aggregate cause', () => {
+    const error = new TypeError('fetch failed', { cause: new AggregateError([
+      Object.assign(new Error('first address refused'), { code: 'ECONNREFUSED' }),
+      Object.assign(new Error('second address unreachable'), { code: 'ENETUNREACH' }),
+    ], 'multiple addresses failed') })
+
+    expect(extractModelErrorInfo(error)).toMatchObject({
+      transportCode: 'ENETUNREACH',
+      causeMessage: 'second address unreachable',
+    })
+  })
+
+  it('extracts the selected retry record cause without using earlier retry failures', () => {
+    const info = extractModelErrorInfo({
+      name: 'AI_RetryError',
+      errors: [
+        { message: 'earlier failure', cause: { message: 'earlier socket', code: 'ECONNREFUSED' } },
+        { message: 'fetch failed', statusCode: 502, cause: { message: 'socket closed', code: 'ECONNRESET' } },
+      ],
+    })
+
+    expect(info).toMatchObject({
+      message: 'fetch failed', statusCode: 502,
+      transportCode: 'ECONNRESET', causeMessage: 'socket closed',
+    })
+    expect(JSON.stringify(info)).not.toContain('earlier socket')
+  })
+
+  it('preserves normalized cause fields from serialized transport wrappers', () => {
+    expect(extractModelErrorInfo(new Error('fetch failed', { cause: {
+      message: 'transport wrapper', transportCode: 'ECONNRESET', causeMessage: 'socket closed',
+    } }))).toMatchObject({ transportCode: 'ECONNRESET', causeMessage: 'socket closed' })
+  })
+
+  it.each(['BASE_BRANCH_MISSING', 'ENOENT', 'EACCES'])('does not label %s as a connection code', (code) => {
+    expect(extractModelErrorInfo(Object.assign(new Error('validation failed'), { code }))?.transportCode).toBeUndefined()
+    expect(extractModelErrorInfo(new Error('fetch failed', { cause: { message: 'file missing', code } }))?.transportCode).toBeUndefined()
+  })
+
+  it.each(['ECONNRESET', 'ENETUNREACH', 'ENOTFOUND', 'UND_ERR_SOCKET'])('retains a directly reported %s connection code', (code) => {
+    expect(extractModelErrorInfo(Object.assign(new Error('Connection error.'), { code }))?.transportCode).toBe(code)
+  })
+
+  it.each([
+    'https://private-user:private-password@example.com:99999/path?secret=value#fragment',
+    'https://private-user:private-password@',
+    'wss://private-user:private-password@example.com:99999/path?secret=value#fragment',
+    'https://private-user:private-password?value@example.com/path',
+    'https://private-user:private-password#value@example.com/path',
+  ])('redacts credentials in malformed URLs: %s', (url) => {
+    const info = extractModelErrorInfo({ message: `fetch failed for ${url}`, url })
+    const serialized = JSON.stringify(info)
+
+    expect(serialized).not.toContain('private-user')
+    expect(serialized).not.toContain('private-password')
+    expect(serialized).not.toContain('secret=value')
+    expect(serialized).not.toContain('#fragment')
+    expect(info?.url).toMatch(/^(?:https|wss):\/\//)
+  })
+
+  it('redacts a complete cause message before clipping it', () => {
+    const credential = ['ghp', '1234567890abcdefghijklmnopqrstuvwxyz'].join('_')
+    const error = new TypeError('fetch failed', { cause: new Error(`${'x'.repeat(270)} ${credential}`) })
+    const info = extractModelErrorInfo(error)
+
+    expect(info?.causeMessage).toHaveLength(280)
+    expect(info?.causeMessage).not.toContain(credential.slice(0, 6))
+  })
+
   it('extracts top-level provider error_type with nested title and message', () => {
     const info = extractModelErrorInfo({
       name: 'AI_APICallError',
@@ -91,5 +199,29 @@ describe('OpenCode model error details', () => {
     expect(serialized).not.toContain('sk-query-secret')
     expect(serialized).toContain('[redacted]')
     expect(serialized).toContain('https://example.com/path')
+  })
+
+  it.each([
+    ['ghp', '1234567890abcdefghijklmnopqrstuvwxyz'].join('_'),
+    ['AKIA', '1234567890ABCDEF'].join(''),
+    'AIzaSyA1234567890abcdefghijklmnopqrstu',
+  ])('redacts credentials crossing the preview boundary before shortening: %s', (credential) => {
+    const responseBody = `${'x'.repeat(270)} ${credential}`
+    const info = extractModelErrorInfo({ name: 'AI_APICallError', responseBody })
+
+    expect(info?.responseBodyPreview).toHaveLength(280)
+    expect(info?.responseBodyPreview).not.toContain(credential.slice(0, 6))
+  })
+
+  it('cleans obfuscated credential fields at source and keeps provider prose readable', () => {
+    const message = 'Your authentication token has been invalidated. Authorization is required.'
+    const info = extractModelErrorInfo({
+      name: 'AI_APICallError',
+      message,
+      responseBody: '{"api_\u001b[31mkey":"privatevalue123","token":"privatevalue456","cookie":"session123"}',
+    })
+
+    expect(info?.message).toBe(message)
+    expect(info?.responseBodyPreview).toBe('{"api_key":"[redacted]","token":"[redacted]","cookie":"[redacted]"}')
   })
 })
