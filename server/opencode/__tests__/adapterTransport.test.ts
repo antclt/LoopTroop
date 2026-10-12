@@ -3,9 +3,11 @@ import { OpenCodeSDKAdapter } from '../adapter'
 import type { OpenCodePromptRequest, OpenCodeTransport, OpenCodeTransportEventEnvelope, PromptDispatch } from '../transport'
 import type { Message, StreamEvent } from '../types'
 import { OpenCodeV1Transport, type OpenCodeV1Client } from '../v1Transport'
-import { V2OpenCodeTransport } from '../v2Transport'
+import { V2OpenCodeHttpError, V2OpenCodeTransport } from '../v2Transport'
 import { OpenCodePromptReceiptUnavailableError } from '../transport'
 import { buildOpenCodeBlockedErrorDiagnostics } from '../blockedErrorDiagnostics'
+import { isContinuableBlockedError } from '../sessionContinuation'
+import { OPENCODE_PROVIDER_AUTH_FAILED, OPENCODE_PROVIDER_ERROR } from '@shared/errorCodes'
 
 const realSetTimeout = globalThis.setTimeout.bind(globalThis)
 const realClearTimeout = globalThis.clearTimeout.bind(globalThis)
@@ -248,6 +250,93 @@ describe('OpenCode adapter transport orchestration', () => {
     const outerDiagnostics = buildOpenCodeBlockedErrorDiagnostics({ error, modelId: 'winner/model' })
     expect(outerDiagnostics.diagnostics?.modelId).toBe('winner/model')
     expect(outerDiagnostics.diagnostics?.sessionId).toBeUndefined()
+  })
+
+  it.each([401, 403])('keeps a real session-create HTTP %s failure attributed to the OpenCode server', async (status) => {
+    const transport = new V2OpenCodeTransport('http://127.0.0.1:4096', {
+      fetch: vi.fn(async () => new Response(JSON.stringify({ message: 'Configured server password rejected' }), {
+        status, headers: { 'content-type': 'application/json' },
+      })),
+    })
+
+    const error = await createAdapter(transport).createSession('/workspace').catch((failure: unknown) => failure)
+    const result = buildOpenCodeBlockedErrorDiagnostics({ error: new Error('Coding could not start', { cause: error }), modelId: 'openai/model-a' })
+
+    expect(result.errorCodes).toEqual([])
+    expect(result.diagnostics).toMatchObject({ kind: 'opencode_session', source: 'opencode', statusCode: status, operation: 'creating an OpenCode session', modelId: 'openai/model-a' })
+    expect(result.diagnostics?.providerId).toBeUndefined()
+    expect(result.diagnostics?.providerModelId).toBeUndefined()
+  })
+
+  it('keeps HTTP failures during prompt dispatch attributed to the OpenCode server', async () => {
+    const failure = new V2OpenCodeHttpError(401, { message: 'Configured server password rejected' }, 'opencode_server')
+    const { transport } = createV2Transport({ dispatchPrompt: vi.fn(async () => { throw failure }) })
+
+    const error = await createAdapter(transport).promptSession('session-1', [{ type: 'text', content: 'prompt' }], undefined, { modelRef: 'openai/model-a' })
+      .catch((failure: unknown) => failure)
+    const result = buildOpenCodeBlockedErrorDiagnostics({ error })
+
+    expect(result.errorCodes).toEqual([])
+    expect(result.diagnostics).toMatchObject({ kind: 'opencode_session', source: 'opencode', statusCode: 401, sessionId: 'session-1', modelId: 'openai/model-a' })
+    expect(result.diagnostics?.providerId).toBeUndefined()
+  })
+
+  it.each([
+    { status: 401, body: { error: { name: 'ProviderAuthError', message: 'Invalid API key provided for provider anthropic' } }, code: OPENCODE_PROVIDER_AUTH_FAILED, continuable: false },
+    { status: 403, body: { error: { type: 'authentication_error', message: 'Provider credentials rejected' } }, code: OPENCODE_PROVIDER_AUTH_FAILED, continuable: false },
+    { status: 402, body: { error: { type: 'billing_error', message: 'Payment required' } }, code: OPENCODE_PROVIDER_ERROR, continuable: true },
+    { status: 429, body: { error: { type: 'rate_limit_error', message: 'Rate limit exceeded' } }, code: OPENCODE_PROVIDER_ERROR, continuable: true },
+  ])('retains provider classification through the actual v2 prompt HTTP $status response and adapter wrapper', async ({ status, body, code, continuable }) => {
+    const httpTransport = new V2OpenCodeTransport('http://127.0.0.1:4096', {
+      fetch: vi.fn(async (input) => {
+        const url = input instanceof Request ? new URL(input.url) : new URL(String(input))
+        return url.pathname.endsWith('/prompt')
+          ? new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+          : new Response(null, { status: 204 })
+      }),
+    })
+    const { transport } = createV2Transport({ dispatchPrompt: (request, signal) => httpTransport.dispatchPrompt(request, signal) })
+    const error = await createAdapter(transport).promptSession('session-1', [{ type: 'text', content: 'prompt' }], undefined, { modelRef: 'anthropic/model-a' })
+      .catch((failure: unknown) => failure)
+    const result = buildOpenCodeBlockedErrorDiagnostics({ error })
+
+    expect(result.errorCodes).toEqual([code])
+    expect(result.diagnostics).toMatchObject({ kind: 'opencode_provider', source: 'provider', statusCode: status, providerId: 'anthropic', modelId: 'anthropic/model-a', sessionId: 'session-1' })
+    expect(result.diagnostics?.responseBodyPreview).toBeDefined()
+    expect(isContinuableBlockedError(result)).toBe(continuable)
+  })
+
+  it.each([401, 403])('keeps an ambiguous prompt HTTP %s rejection neutral and Retry-only', async (status) => {
+    const httpTransport = new V2OpenCodeTransport('http://127.0.0.1:4096', {
+      fetch: vi.fn(async (input) => {
+        const url = input instanceof Request ? new URL(input.url) : new URL(String(input))
+        return url.pathname.endsWith('/prompt')
+          ? new Response(status === 401 ? 'Unauthorized' : 'Forbidden', { status })
+          : new Response(null, { status: 204 })
+      }),
+    })
+    const { transport } = createV2Transport({ dispatchPrompt: (request, signal) => httpTransport.dispatchPrompt(request, signal) })
+    const error = await createAdapter(transport).promptSession('session-1', [{ type: 'text', content: 'prompt' }], undefined, { modelRef: 'openai/model-a' })
+      .catch((failure: unknown) => failure)
+    const result = buildOpenCodeBlockedErrorDiagnostics({ error })
+
+    expect(result.errorCodes).toEqual([])
+    expect(result.diagnostics).toMatchObject({ kind: 'runtime', statusCode: status, modelId: 'openai/model-a', sessionId: 'session-1', responseBodyPreview: status === 401 ? 'Unauthorized' : 'Forbidden' })
+    expect(result.diagnostics?.providerId).toBeUndefined()
+    expect(result.diagnostics?.providerModelId).toBeUndefined()
+    expect(isContinuableBlockedError(result)).toBe(false)
+  })
+
+  it('keeps pre-prompt HTTP idle-wait failures attributed to the server without a transport marker', async () => {
+    const { transport } = createV2Transport({ waitForIdle: vi.fn(async () => { throw Object.assign(new Error('OpenCode idle check failed with HTTP 401'), { statusCode: 401 }) }) })
+
+    const error = await createAdapter(transport).promptSession('session-1', [{ type: 'text', content: 'prompt' }], undefined, { modelRef: 'openai/model-a' })
+      .catch((failure: unknown) => failure)
+    const result = buildOpenCodeBlockedErrorDiagnostics({ error })
+
+    expect(result.errorCodes).toEqual([])
+    expect(result.diagnostics).toMatchObject({ kind: 'opencode_session', source: 'opencode', operation: 'waiting for the session to become idle before sending the prompt', statusCode: 401 })
+    expect(result.diagnostics?.providerId).toBeUndefined()
   })
 
   it('accepts a stock v2 live turn through the HTTP transport when post-snapshot history is empty', async () => {

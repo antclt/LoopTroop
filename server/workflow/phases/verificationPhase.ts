@@ -63,6 +63,7 @@ import { isMockOpenCodeMode } from "../../opencode/factory";
 import { existsSync } from "fs";
 import { resolve } from "path";
 import { runPreFlightChecks } from "../../phases/preflight/doctor";
+import type { PreFlightReport } from "../../phases/preflight/types";
 import type { FinalTestGenerationResult } from "../../phases/finalTest/generator";
 import { executeFinalTestWithRetries } from "../../phases/finalTest/executor";
 import { parseFinalTestCommands } from "../../phases/finalTest/parser";
@@ -179,7 +180,7 @@ import {
   mergeErrorCodes,
 } from "../../opencode/blockedErrorDiagnostics";
 import { getErrorMessage } from "@shared/typeGuards";
-import { sanitizeDiagnosticText } from "@shared/errorDiagnostics";
+import { normalizeBlockedErrorDiagnostics, sanitizeDiagnosticText, sanitizeDiagnosticValue } from "@shared/errorDiagnostics";
 import {
   resolveStoredWorkflowPhase,
   type WorkflowPhaseId,
@@ -5205,7 +5206,7 @@ export async function handlePreFlight(
         maxIterations: context.maxIterations,
       };
       const preFlightStreamState = createOpenCodeStreamState();
-      const report = await runPreFlightChecks(
+      const report = sanitizeDiagnosticValue(await runPreFlightChecks(
         adapter,
         ticketId,
         beads,
@@ -5214,19 +5215,20 @@ export async function handlePreFlight(
         undefined,
         {
           onOpenCodeStreamEvent: ({ session, modelId, event }) => {
-            if (event.type !== "session_error") return;
             emitOpenCodeStreamEvent(
               ticketId,
               context.externalId,
               "PRE_FLIGHT_CHECK",
               modelId,
               session.id,
-              event,
+              event.type === "debug_event" || event.type === "permission"
+                ? event
+                : sanitizeDiagnosticValue(event) as typeof event,
               preFlightStreamState,
             );
           },
         },
-      );
+      )) as PreFlightReport;
       throwIfAborted(signal, ticketId);
 
       // Emit individual per-check SYS log entries so each diagnostic result
@@ -5246,6 +5248,7 @@ export async function handlePreFlight(
           isFail ? "error" : "info",
           `${icon} ${check.name}: ${check.message}`,
           {
+            check,
             source: "system",
             audience: "all",
             kind: isFail ? "error" : "milestone",
@@ -5260,6 +5263,23 @@ export async function handlePreFlight(
       });
 
       if (!report.passed) {
+        const errors = report.criticalFailures.map(
+          (check) => `${check.name}: ${check.message}`,
+        );
+        const failedChecks = report.criticalFailures.map((check) => ({
+          name: check.name,
+          category: check.category,
+          message: check.message,
+        }));
+        const underlyingDiagnostics = report.criticalFailures.find(
+          (check) => check.name === "OpenCode Execution Capability" && check.diagnostics,
+        )?.diagnostics ?? report.criticalFailures.find(
+          (check) => check.diagnostics?.kind === "opencode_provider",
+        )?.diagnostics ?? report.criticalFailures.find((check) => check.diagnostics)?.diagnostics;
+        const diagnostics = normalizeBlockedErrorDiagnostics({
+          ...(underlyingDiagnostics ?? { kind: "runtime", source: "system", summary: errors.join("\n") }),
+          failedChecks,
+        });
         emitPhaseLog(
           ticketId,
           context.externalId,
@@ -5267,7 +5287,9 @@ export async function handlePreFlight(
           "error",
           "Pre-flight checks failed.",
           {
-            failures: report.criticalFailures.map((check) => check.message),
+            failures: errors,
+            checks: report.checks,
+            diagnostics,
             source: "system",
             audience: "all",
             kind: "error",
@@ -5275,7 +5297,12 @@ export async function handlePreFlight(
         );
         sendEvent({
           type: "CHECKS_FAILED",
-          errors: report.criticalFailures.map((check) => check.message),
+          errors,
+          codes: report.criticalFailures.reduce(
+            (codes, check) => mergeErrorCodes(codes, check.codes ?? []),
+            [] as string[],
+          ),
+          diagnostics,
         });
         return;
       }

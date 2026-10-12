@@ -397,9 +397,12 @@ export interface LogPageQuery {
   before?: string
   limit: number
   includeTotals?: boolean
+  startedAt?: string
+  endedAt?: string
 }
 
 interface LogCursor {
+  scopeKey: string
   ordinal: number
   timestamp: string
   mirrorKey: string
@@ -428,7 +431,8 @@ function decodeCursor(cursor?: string): LogCursor | null {
   if (!cursor) return null
   try {
     const value = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<LogCursor>
-    return typeof value.ordinal === 'number' && Number.isSafeInteger(value.ordinal) && value.ordinal >= 0
+    return typeof value.scopeKey === 'string'
+      && typeof value.ordinal === 'number' && Number.isSafeInteger(value.ordinal) && value.ordinal >= 0
       && typeof value.timestamp === 'string' && typeof value.mirrorKey === 'string'
       && typeof value.mirrorOccurrence === 'number' && Number.isSafeInteger(value.mirrorOccurrence) && value.mirrorOccurrence >= 0
       && (value.nativeSnapshot === undefined || typeof value.nativeSnapshot === 'string')
@@ -481,7 +485,8 @@ interface DebugProjectionRow {
 }
 
 const DEBUG_TIMESTAMP_RANK_SQL = `(CASE WHEN p.timestamp = '' THEN 1 ELSE 0 END)`
-const DEBUG_SORT_KEY_SQL = `(CASE p.channel WHEN 'normal' THEN '0:' WHEN 'debug' THEN '1:' ELSE '2:' END || p.mirror_key)`
+const DEBUG_SORT_KEY_SQL = `(CASE p.channel WHEN 'normal' THEN '0:' WHEN 'debug' THEN '1:' ELSE '2:' END ||
+  CASE WHEN p.identity LIKE 'offset:%' THEN 'offset:' || printf('%020d', p.ordinal) ELSE p.mirror_key END)`
 const NATIVE_SNAPSHOT_RETENTION = 4
 
 function compareStrings(a: string, b: string): number {
@@ -911,7 +916,7 @@ async function ingestNativeFilesOnce(
         identity,
         timestamp === '' ? 1 : 0,
         timestamp,
-        '3:native:' + raw.sessionId + ':' + identity,
+        '3:native:' + identity.replace(/:\d+$/, suffix => ':' + suffix.slice(1).padStart(20, '0')) + ':' + raw.sessionId,
         typeof entry.modelId === 'string' ? entry.modelId : null,
         JSON.stringify(entry),
         String(entry.content ?? entry.message ?? '').split('\n').length,
@@ -1320,6 +1325,14 @@ function nativeRowsForPage(
     clauses.push('e.model_id = ?')
     params.push(query.modelId)
   }
+  if (query.startedAt) {
+    clauses.push('e.timestamp >= ?')
+    params.push(query.startedAt)
+  }
+  if (query.endedAt) {
+    clauses.push('e.timestamp <= ?')
+    params.push(query.endedAt)
+  }
   if (before) {
     const rank = before.timestamp === '' ? 1 : 0
     // Native identity is part of sort_key, so this row-value predicate is the
@@ -1363,7 +1376,7 @@ function nativeRowsForPage(
 function nativeCountsForSnapshot(
   storage: ProjectionStorage,
   snapshotKey: string,
-  modelId?: string,
+  query: LogPageQuery,
 ): { total_entries: number; total_text_lines: number } {
   let totalEntries = 0
   let totalTextLines = 0
@@ -1384,9 +1397,17 @@ function nativeCountsForSnapshot(
           clauses.push('line_number < ?')
           params.push(slice.maxLineExclusive)
         }
-        if (modelId) {
+        if (query.modelId) {
           clauses.push('model_id = ?')
-          params.push(modelId)
+          params.push(query.modelId)
+        }
+        if (query.startedAt) {
+          clauses.push('timestamp >= ?')
+          params.push(query.startedAt)
+        }
+        if (query.endedAt) {
+          clauses.push('timestamp <= ?')
+          params.push(query.endedAt)
         }
         const row = storage.sqlite.prepare(`
           SELECT COUNT(*) AS total_entries, COALESCE(SUM(text_lines), 0) AS total_text_lines
@@ -1407,23 +1428,20 @@ async function queryDebugPage(
   before: LogCursor | null,
   clauses: string[],
   params: SQLInputValue[],
+  scopeKey: string,
 ) {
   const { sqlite, statements } = storage
-  const scopeClauses = [...clauses]
-  const scopeParams = [...params]
-  if (query.modelId) {
-    scopeClauses.push('model_id = ?')
-    scopeParams.push(query.modelId)
-  }
   // Session ownership is a small indexed projection lookup. The page query
   // below still asks SQLite for only limit+1 rows; it never parses the archive
   // merely to discover native rows for a later page. Do not apply modelId here:
   // the persisted row owns the session, while the native row owns its model.
-  const sessionSql = `SELECT DISTINCT json_extract(p.entry_json, '$.sessionId') AS session_id
+  // Ownership may have been recorded before this failure window began.
+  const sessionIdSql = "COALESCE(NULLIF(json_extract(p.entry_json, '$.sessionId'), ''), json_extract(p.entry_json, '$.data.sessionId'))"
+  const sessionSql = `SELECT DISTINCT ${sessionIdSql} AS session_id
     FROM execution_log_projection AS p
     WHERE ${clauses.join(' AND ')}
-      AND json_extract(p.entry_json, '$.sessionId') IS NOT NULL
-      AND json_extract(p.entry_json, '$.sessionId') != ''
+      AND ${sessionIdSql} IS NOT NULL
+      AND ${sessionIdSql} != ''
     ORDER BY session_id`
   let sessionStatement = statements.queryPages.get(sessionSql)
   if (!sessionStatement) {
@@ -1446,6 +1464,14 @@ async function queryDebugPage(
     nativeSnapshotKey = await ensureNativeSnapshot(storage, sessionIds)
   }
 
+  if (query.startedAt) { clauses.push('timestamp >= ?'); params.push(query.startedAt) }
+  if (query.endedAt) { clauses.push('timestamp <= ?'); params.push(query.endedAt) }
+  const scopeClauses = [...clauses]
+  const scopeParams = [...params]
+  if (query.modelId) {
+    scopeClauses.push('model_id = ?')
+    scopeParams.push(query.modelId)
+  }
   const pageClauses = [...scopeClauses]
   const pageParams = [...scopeParams]
   if (before) {
@@ -1465,7 +1491,7 @@ async function queryDebugPage(
       rank, before.timestamp, before.mirrorKey, before.mirrorOccurrence, before.ordinal,
     )
   }
-  const sql = `SELECT ordinal, timestamp AS sort_timestamp, channel, mirror_key, mirror_occurrence, model_id, entry_json
+  const sql = `SELECT identity, ordinal, timestamp AS sort_timestamp, channel, mirror_key, mirror_occurrence, model_id, entry_json
     FROM execution_log_projection AS p
     WHERE ${pageClauses.join(' AND ')} AND ${DEBUG_VISIBLE_ROWS}
     ORDER BY ${DEBUG_TIMESTAMP_RANK_SQL} DESC, p.timestamp DESC, ${DEBUG_SORT_KEY_SQL} DESC,
@@ -1477,6 +1503,7 @@ async function queryDebugPage(
     statements.queryPages.set(sql, statement)
   }
   const persistedRows = statement.all(...pageParams, query.limit + 1) as Array<{
+    identity: string
     ordinal: number
     sort_timestamp: string
     channel: string
@@ -1485,17 +1512,30 @@ async function queryDebugPage(
     model_id: string | null
     entry_json: string
   }>
-  const rows: DebugProjectionRow[] = persistedRows.map(row => ({
-    entry: JSON.parse(row.entry_json) as Record<string, unknown>,
-    timestamp: row.sort_timestamp,
-    // The route historically concatenated normal, debug, AI, then native rows.
-    // Keep that source order for equal timestamps, with the mirror key providing
-    // the same deterministic tie-break within one channel.
-    sortKey: `${row.channel === 'normal' ? '0' : row.channel === 'debug' ? '1' : '2'}:${row.mirror_key}`,
-    occurrence: row.mirror_occurrence,
-    ordinal: row.ordinal,
-    modelId: row.model_id,
-  }))
+  const rows: DebugProjectionRow[] = persistedRows.map(row => {
+    const entry = JSON.parse(row.entry_json) as Record<string, unknown>
+    if (typeof entry.entryId !== 'string' || !entry.entryId) {
+      entry.entryId = `persisted:${row.channel}:${row.mirror_key}:${row.mirror_occurrence}`
+    }
+    if (query.startedAt || query.endedAt) {
+      // Pair AI mirrors, while keeping repeated appends separately addressable.
+      entry._logMirrorKey = createHash('sha256').update(
+        isAiLogEntry(entry) ? row.mirror_key : `${row.channel}:${row.identity}`,
+      ).digest('hex')
+      entry._logMirrorOccurrence = row.mirror_occurrence
+    }
+    return {
+      entry,
+      timestamp: row.sort_timestamp,
+      // The route historically concatenated normal, debug, AI, then native rows.
+      // Keep that source order for equal timestamps, with the mirror key providing
+      // the same deterministic tie-break within one channel.
+      sortKey: `${row.channel === 'normal' ? '0' : row.channel === 'debug' ? '1' : '2'}:${row.identity.startsWith('offset:') ? `offset:${String(row.ordinal).padStart(20, '0')}` : row.mirror_key}`,
+      occurrence: row.mirror_occurrence,
+      ordinal: row.ordinal,
+      modelId: row.model_id,
+    }
+  })
 
   const nativePage = nativeRowsForPage(storage, nativeSnapshotKey, query, before, query.limit + 1)
   let modelIds: string[] = []
@@ -1526,7 +1566,7 @@ async function queryDebugPage(
   }
   let nativeCounts: { total_entries: number; total_text_lines: number } | null = null
   if (shouldIncludeTotals) {
-    nativeCounts = nativeCountsForSnapshot(storage, nativeSnapshotKey, query.modelId)
+    nativeCounts = nativeCountsForSnapshot(storage, nativeSnapshotKey, query)
   }
   const page = mergeDebugRows(rows, nativePage, query.limit + 1)
   const hasOlder = page.length > query.limit
@@ -1535,6 +1575,7 @@ async function queryDebugPage(
   return {
     entries: visiblePage.toReversed().map(row => row.entry),
     olderCursor: hasOlder && oldest ? Buffer.from(JSON.stringify({
+      scopeKey,
       ordinal: oldest.ordinal,
       timestamp: oldest.timestamp,
       mirrorKey: oldest.sortKey,
@@ -1556,13 +1597,20 @@ export async function queryLogPage(ticketId: string, query: LogPageQuery) {
   if (!storage) return null
   const { context, sqlite } = storage
   const before = decodeCursor(query.before)
+  const scopeKey = createHash('sha256').update(JSON.stringify([
+    ticketId, query.scope, query.view, query.phase, query.phaseAttempt,
+    query.modelId, query.beadId, query.startedAt, query.endedAt,
+  ])).digest('hex')
+  if (before && before.scopeKey !== scopeKey) throw new HistoricalLogCursorExpiredError()
   const shouldIncludeTotals = query.includeTotals !== false && before === null
   const clauses = ['ticket_id = ?']
   const params: SQLInputValue[] = [context.localTicketId]
   if (query.scope === 'phase' && query.phase) { clauses.push('phase = ?'); params.push(query.phase) }
   if (typeof query.phaseAttempt === 'number') { clauses.push('phase_attempt = ?'); params.push(query.phaseAttempt) }
   if (query.beadId) { clauses.push('bead_id = ?'); params.push(query.beadId) }
-  if (query.view === 'debug') return queryDebugPage(storage, query, before, clauses, params)
+  if (query.view === 'debug') return queryDebugPage(storage, query, before, clauses, params, scopeKey)
+  if (query.startedAt) { clauses.push('timestamp >= ?'); params.push(query.startedAt) }
+  if (query.endedAt) { clauses.push('timestamp <= ?'); params.push(query.endedAt) }
   let modelIds: string[] | undefined
   if (shouldIncludeTotals) {
     // Tabs describe the whole scope, even when the selected view or model has
@@ -1677,6 +1725,7 @@ export async function queryLogPage(ticketId: string, query: LogPageQuery) {
       return entry
     }),
     olderCursor: hasOlder && oldest ? Buffer.from(JSON.stringify({
+      scopeKey,
       ordinal: oldest.ordinal, timestamp: oldest.sort_timestamp,
       mirrorKey: oldest.mirror_key, mirrorOccurrence: oldest.mirror_occurrence,
     })).toString('base64url') : null,

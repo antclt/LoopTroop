@@ -1,10 +1,10 @@
 import { StrictMode, type ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { CancelledError, QueryClientProvider } from '@tanstack/react-query'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, assert, describe, expect, it, vi } from 'vitest'
 import { createJsonResponse, createTestQueryClient } from '@/test/renderHelpers'
 import { foldHistoricalLogPages, useTicketHistoricalLogs, type HistoricalLogPage, type HistoricalLogScope } from '../useTicketHistoricalLogs'
-import { SERVER_LOG_REFRESH_EVENT } from '@/context/logUtils'
+import { getLogEntryIdentity, SERVER_LOG_REFRESH_EVENT } from '@/context/logUtils'
 
 /** Mounts the hook against a fresh query client — every test needs the same scaffolding. */
 function renderHistoricalLogs(scope: HistoricalLogScope, strictMode = false) {
@@ -30,6 +30,140 @@ function historyRequestUrl(input: RequestInfo | URL): URL {
 
 describe('useTicketHistoricalLogs', () => {
   afterEach(() => vi.restoreAllMocks())
+
+  it('isolates occurrence caches and keeps full structured DEBUG records across older pages', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+      const url = historyRequestUrl(input)
+      const occurrence = url.searchParams.get('errorOccurrenceId')
+      if (url.pathname.endsWith('/export')) return Promise.resolve(new Response(`export-${occurrence}`))
+      const older = url.searchParams.has('before')
+      return createJsonResponse({
+        entries: [{ phase: 'CODING', entryId: `${occurrence}-${older ? 'old' : 'new'}`, content: `${occurrence}-${older ? 'old' : 'new'}`, data: { nested: { statusCode: 401, message: 'complete provider response' } } }],
+        modelIds: [`provider/model-${occurrence}`],
+        olderCursor: older ? null : `cursor-${occurrence}`,
+        hasOlder: !older,
+      })
+    })
+    const client = createTestQueryClient()
+    const { result, rerender } = renderHook(
+      ({ scope }: { scope: HistoricalLogScope }) => useTicketHistoricalLogs('ticket-1', scope),
+      {
+        initialProps: { scope: { scope: 'phase', view: 'debug', errorOccurrenceId: '1', limit: 3 } },
+        wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>,
+      },
+    )
+    await waitFor(() => expect(result.current.entries.map(entry => entry.entryId)).toEqual(['1-new']))
+    expect(fetchSpy).toHaveBeenNthCalledWith(1, '/api/tickets/ticket-1/logs?scope=phase&view=debug&limit=3&errorOccurrenceId=1', expect.any(Object))
+    expect(result.current.entries[0]?.record).toMatchObject({ data: { nested: { statusCode: 401, message: 'complete provider response' } } })
+    await act(async () => { await result.current.fetchOlder() })
+    await waitFor(() => expect(result.current.entries.map(entry => entry.entryId)).toEqual(['1-old', '1-new']))
+    expect(fetchSpy).toHaveBeenNthCalledWith(2, '/api/tickets/ticket-1/logs?scope=phase&view=debug&limit=250&errorOccurrenceId=1&before=cursor-1', expect.any(Object))
+
+    rerender({ scope: { scope: 'phase', view: 'debug', errorOccurrenceId: '2' } })
+    await waitFor(() => expect(result.current.entries.map(entry => entry.entryId)).toEqual(['2-new']))
+    expect(result.current.modelIds).toEqual(['provider/model-2'])
+    expect(fetchSpy).toHaveBeenNthCalledWith(3, '/api/tickets/ticket-1/logs?scope=phase&view=debug&limit=20&errorOccurrenceId=2', expect.any(Object))
+    expect(await result.current.exportLogs()).toBe('export-2')
+    expect(fetchSpy).toHaveBeenNthCalledWith(4, '/api/tickets/ticket-1/logs/export?scope=phase&view=debug&errorOccurrenceId=2', expect.any(Object))
+  })
+
+  it('keeps three original same-time debug records with distinct persisted identities', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => createJsonResponse({
+      entries: [1, 2, 3].map(attempt => ({
+        timestamp: '2026-01-01T00:00:00.000Z', phase: 'CODING', type: 'debug', source: 'debug',
+        entryId: `persisted:debug:offset:${attempt}:0`, content: 'request failed', data: { attempt },
+      })),
+      hasOlder: false,
+    }))
+    const { result } = renderHistoricalLogs({ scope: 'phase', view: 'debug', errorOccurrenceId: '1', limit: 3 })
+
+    await waitFor(() => expect(result.current.entries).toHaveLength(3))
+    expect(result.current.entries.map(entry => (entry.record?.data as { attempt: number }).attempt)).toEqual([1, 2, 3])
+  })
+
+  it('preserves repeated append evidence across overlapping pages and refreshes without folding display IDs', async () => {
+    let revision = 0
+    const record = (attempt: number) => ({
+      timestamp: '2026-01-01T00:00:00.000Z', phase: 'CODING', phaseAttempt: 1,
+      type: 'error', source: 'model:provider/model', kind: 'error', op: 'append',
+      entryId: 'shared-session:error', fingerprint: 'shared-display-fingerprint',
+      content: 'request failed', data: { attempt, revision },
+      _logMirrorKey: `physical-${attempt}`, _logMirrorOccurrence: 0,
+    })
+    vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+      const older = historyRequestUrl(input).searchParams.has('before')
+      return createJsonResponse({
+        entries: (older ? [1, 2, 3] : [3, 4, 5]).map(record),
+        olderCursor: older ? null : 'older-records', hasOlder: !older, totalEntries: 5,
+      })
+    })
+    const { result } = renderHistoricalLogs({ scope: 'phase', view: 'debug', errorOccurrenceId: '1', limit: 3 })
+
+    await waitFor(() => expect(result.current.entries).toHaveLength(3))
+    await act(async () => { await result.current.fetchOlder() })
+    await waitFor(() => expect(result.current.entries).toHaveLength(5))
+    expect(result.current.entries.map(entry => entry.record?.data)).toEqual([1, 2, 3, 4, 5].map(attempt => ({ attempt, revision: 0 })))
+    expect(result.current.entries.map(entry => entry.record?.entryId)).toEqual(Array(5).fill('shared-session:error'))
+    const keys = result.current.entries.map(getLogEntryIdentity)
+    expect(new Set(keys).size).toBe(5)
+
+    revision = 1
+    await act(async () => { await result.current.refetch() })
+    await waitFor(() => expect(result.current.entries.map(entry => entry.record?.data)).toEqual([1, 2, 3, 4, 5].map(attempt => ({ attempt, revision: 1 }))))
+    expect(result.current.entries.map(getLogEntryIdentity)).toEqual(keys)
+  })
+
+  it('requests the fallback failure window before limiting records and isolates its cache and export', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(input => {
+      const url = historyRequestUrl(input)
+      const endedAt = url.searchParams.get('endedAt')
+      if (url.pathname.endsWith('/export')) return Promise.resolve(new Response(`export-${endedAt}`))
+      return createJsonResponse({
+        entries: [{ phase: 'CODING', entryId: `failure-${endedAt}`, content: 'in-window failure', data: { detail: endedAt } }],
+        modelIds: [`model-${endedAt}`], hasOlder: false,
+      })
+    })
+    const client = createTestQueryClient()
+    const startedAt = '2026-01-01T00:00:00.000Z'
+    const endedAt = '2026-01-01T00:01:00.000Z'
+    const scope: HistoricalLogScope = { scope: 'phase', phase: 'CODING', view: 'debug', startedAt, endedAt, limit: 5 }
+    const { result, rerender } = renderHook(
+      ({ currentScope }: { currentScope: HistoricalLogScope }) => useTicketHistoricalLogs('ticket-1', currentScope),
+      { initialProps: { currentScope: scope }, wrapper: ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider> },
+    )
+
+    await waitFor(() => expect(result.current.entries).toHaveLength(1))
+    const firstRequest = fetchSpy.mock.calls[0]
+    assert(firstRequest)
+    const requested = historyRequestUrl(firstRequest[0])
+    expect(requested.searchParams.get('startedAt')).toBe(startedAt)
+    expect(requested.searchParams.get('endedAt')).toBe(endedAt)
+    expect(requested.searchParams.get('limit')).toBe('5')
+    expect(result.current.entries[0]?.record).toMatchObject({ data: { detail: endedAt } })
+    const secondEnd = '2026-01-01T00:02:00.000Z'
+    rerender({ currentScope: { ...scope, endedAt: secondEnd } })
+    await waitFor(() => expect(result.current.entries[0]?.entryId).toBe(`failure-${secondEnd}`))
+    expect(result.current.modelIds).toEqual([`model-${secondEnd}`])
+    expect(await result.current.exportLogs()).toBe(`export-${secondEnd}`)
+    const exportRequest = fetchSpy.mock.calls.at(-1)
+    assert(exportRequest)
+    const exportUrl = historyRequestUrl(exportRequest[0])
+    expect(exportUrl.searchParams.get('startedAt')).toBe(startedAt)
+    expect(exportUrl.searchParams.get('endedAt')).toBe(secondEnd)
+  })
+
+  it('does not retain a second raw record for the ordinary Debug view', async () => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(() => createJsonResponse({
+      entries: [1, 2, 3].map(attempt => ({
+        phase: 'CODING', entryId: 'debug-line', content: `ordinary debug line ${attempt}`, data: { full: 'raw payload' },
+      })), hasOlder: false,
+    }))
+    const { result } = renderHistoricalLogs({ scope: 'phase', phase: 'CODING', view: 'debug' })
+
+    await waitFor(() => expect(result.current.entries).toHaveLength(1))
+    expect(result.current.entries[0]?.line).toContain('ordinary debug line 3')
+    expect(result.current.entries[0]).not.toHaveProperty('record')
+  })
 
   it('publishes a completed automatic drain after StrictMode replays the mount effect', async () => {
     let page = 0

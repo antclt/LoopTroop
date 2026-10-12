@@ -78,15 +78,19 @@ function isOtherClientError(statusCode: number | undefined): boolean {
     && !NON_CONTINUABLE_STATUS_CODES.has(statusCode)
 }
 
-function hasNonContinuableSignal(input: ContinuableBlockedErrorInput): boolean {
+function hasNonContinuableSignal(input: ContinuableBlockedErrorInput, serverAccessFailure = false): boolean {
   const diagnostics = input.diagnostics ?? null
   const errorCodes = input.errorCodes ?? []
   const haystack = buildDiagnosticHaystack(diagnostics)
   const statusCode = diagnostics?.statusCode
+  const permanentFailureText = serverAccessFailure
+    ? haystack.replace(/\b(permission|auth|authentication|authenticated|unauthorized|forbidden|credential|api key|token)\b/g, '')
+    : haystack
 
   return errorCodes.includes(OPENCODE_PROVIDER_AUTH_FAILED)
-    || (typeof statusCode === 'number' && NON_CONTINUABLE_STATUS_CODES.has(statusCode))
-    || looksPermanentFailure(haystack)
+    || (!serverAccessFailure && typeof statusCode === 'number' && NON_CONTINUABLE_STATUS_CODES.has(statusCode))
+    || looksPermanentFailure(permanentFailureText)
+    || (serverAccessFailure && /\b(quota|credits?|payment|policy|content[-_. ]?filter)\b/.test(haystack))
     // A 402 is a billing problem this path can still resume from once it is
     // paid; every other billing failure is fatal here as it is for retry.
     || (statusCode !== 402 && looksBillingFailure(haystack))
@@ -105,6 +109,11 @@ function hasContinuableSignal(diagnostics: BlockedErrorDiagnostics): boolean {
 export function isContinuableBlockedError(input: ContinuableBlockedErrorInput): boolean {
   const diagnostics = input.diagnostics ?? null
   if (!diagnostics?.sessionId) return false
+  if (diagnostics.kind === 'opencode_session'
+    && diagnostics.source === 'opencode'
+    && (diagnostics.statusCode === 401 || diagnostics.statusCode === 403)) {
+    return !hasNonContinuableSignal(input, true)
+  }
   if (hasNonContinuableSignal(input)) return false
   return hasContinuableSignal(diagnostics)
 }

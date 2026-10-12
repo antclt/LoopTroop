@@ -1,5 +1,6 @@
-import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterAll, assert, beforeEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readFileSync, writeFileSync } from 'fs'
+import { readFileNoFollowSync } from '../../io/readFile'
 import { parseUiArtifactCompanionArtifact } from '@shared/artifactCompanions'
 import { makePrdYaml, TEST } from '../../test/factories'
 import { createInitializedTestTicket, createTestRepoManager, resetTestDb } from '../../test/integration'
@@ -17,7 +18,8 @@ import type { DiagnosticCheck, PreFlightReport } from '../../phases/preflight/ty
 import type { executeFinalTestWithRetries } from '../../phases/finalTest/executor'
 import type { FinalTestGenerationResult } from '../../phases/finalTest/generator'
 import type { FinalTestCommandResult, FinalTestExecutionReport } from '../../phases/finalTest/runner'
-import type { PromptPart } from '../../opencode/types'
+import type { PromptPart, StreamEvent } from '../../opencode/types'
+import { broadcaster } from '../../sse/broadcaster'
 import { CancelledError } from '../../council/types'
 import { isContinuableBlockedError } from '../../opencode/sessionContinuation'
 import type { BlockedErrorDiagnostics } from '@shared/errorDiagnostics'
@@ -92,7 +94,7 @@ afterAll(() => {
 
 describe('handlePreFlight', () => {
   it('persists passing diagnostics and streams probe errors', async () => {
-    const { ticket, context } = await createInitializedTestTicket(repoManager)
+    const { ticket, context, paths } = await createInitializedTestTicket(repoManager)
     const warning: DiagnosticCheck = {
       name: 'Optional configuration',
       category: 'config',
@@ -125,6 +127,15 @@ describe('handlePreFlight', () => {
       options.onOpenCodeStreamEvent?.({
         session: { id: 'preflight-session' },
         modelId: TEST.implementer,
+        event: {
+          type: 'debug_event', sessionId: 'preflight-session', eventName: 'provider.request.failed',
+          summary: 'Authentication token expired during readiness probe.', severity: 'error',
+          details: { code: 'token_expired', statusCode: 401 },
+        },
+      })
+      options.onOpenCodeStreamEvent?.({
+        session: { id: 'preflight-session' },
+        modelId: TEST.implementer,
         event: { type: 'session_error', sessionId: 'preflight-session', error: 'Probe failed.' },
       })
       return report
@@ -135,6 +146,13 @@ describe('handlePreFlight', () => {
 
     expect(JSON.parse(getLatestPhaseArtifact(ticket.id, 'preflight_report', 'PRE_FLIGHT_CHECK')!.content)).toEqual(report)
     expect(sendEvent).toHaveBeenCalledWith({ type: 'CHECKS_PASSED' })
+    const entries = readFileNoFollowSync(paths.debugLogPath).trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        message: expect.stringContaining('opencode.provider.request.failed'),
+        data: expect.objectContaining({ code: 'token_expired', statusCode: 401 }),
+      }),
+    ]))
   })
 
   it('emits critical failures without advancing bead progress', async () => {
@@ -157,7 +175,202 @@ describe('handlePreFlight', () => {
     await handlePreFlight(ticket.id, context, sendEvent, new AbortController().signal)
 
     expect(getLatestPhaseArtifact(ticket.id, 'preflight_report', 'PRE_FLIGHT_CHECK')?.content).toBe(JSON.stringify(report))
-    expect(sendEvent).toHaveBeenCalledWith({ type: 'CHECKS_FAILED', errors: ['OpenCode is unreachable.'] })
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'CHECKS_FAILED',
+      errors: ['OpenCode: OpenCode is unreachable.'],
+      codes: [],
+      diagnostics: {
+        kind: 'runtime',
+        source: 'system',
+        summary: 'OpenCode: OpenCode is unreachable.',
+        failedChecks: [{ name: 'OpenCode', category: 'connectivity', message: 'OpenCode is unreachable.' }],
+      },
+    })
+  })
+
+  it('redacts live and persisted probe events before the doctor report completes', async () => {
+    const { ticket, context, paths } = await createInitializedTestTicket(repoManager)
+    const sessionId = 'ses-probe-redaction'
+    const retry: StreamEvent = {
+      type: 'debug_event', sessionId, messageId: 'msg-probe-retry',
+      eventName: 'session.retry.scheduled', severity: 'error',
+      summary: 'Retrying probe: Authorization: Bearer probe-summary-secret',
+      details: {
+        attempt: 2, at: 123, sessionId, modelId: TEST.implementer,
+        phaseAttempt: 3, inputToken: 12, cacheReadToken: 4,
+        nextPageToken: 'pagination-cursor', startToken: 'process-identity', hasCredentials: true,
+        error: {
+          type: 'provider.internal', status: 502,
+          message: 'Authorization: Bearer probe-auth-secret',
+          headers: { authorization: 'probe-header-secret', cookie: 'first=probe-cookie-secret; other=probe-other-cookie-secret' },
+          response: { body: '{"apiKey":"probe-body-secret","message":"Keep the provider cause."}' },
+          url: 'https://user:probe-userinfo-secret@provider.example/probe?key=probe-url-secret#probe-fragment-secret',
+        },
+      },
+    }
+    const events: StreamEvent[] = [
+      retry,
+      { type: 'session_status', sessionId, status: 'retry', attempt: 2, message: 'refresh_token=probe-retry-secret' },
+      { type: 'text', sessionId, messageId: 'msg-probe-text', partId: 'part-probe-text', text: `Probe response: password=${JSON.stringify('probe-text-secret')}`, streaming: false, complete: true },
+    ]
+    const original = JSON.stringify(events)
+    const livePayloads: string[] = []
+    const clientId = 'probe-redaction-client'
+    assert(broadcaster.addClient(ticket.id, {
+      id: clientId,
+      send: (event, payload) => { if (event === 'log') livePayloads.push(payload) },
+      close: () => {},
+    }))
+    runPreFlightChecksMock.mockImplementationOnce(async (...args: Parameters<typeof import('../../phases/preflight/doctor').runPreFlightChecks>) => {
+      const options = args[6] as PreFlightRunOptions
+      for (const event of events) options.onOpenCodeStreamEvent?.({ session: { id: sessionId }, modelId: TEST.implementer, event })
+
+      const debugLog = readFileNoFollowSync(paths.debugLogPath)
+      const normalLog = readFileNoFollowSync(paths.executionLogPath)
+      const aiLog = readFileNoFollowSync(paths.aiLogPath)
+      for (const evidence of [livePayloads.join('\n'), debugLog, normalLog, aiLog]) {
+        expect(evidence).toContain('[redacted]')
+        expect(evidence).not.toMatch(/probe-(?:summary|auth|header|cookie|other-cookie|body|userinfo|url|fragment|retry|text)-secret/)
+      }
+      const entries = debugLog.trim().split('\n').map((line) => JSON.parse(line))
+      const persistedRetry = entries.find((entry) => entry.message.includes('opencode.session.retry.scheduled'))
+      expect(persistedRetry?.data).toMatchObject({
+        attempt: 2, at: 123, sessionId, modelId: TEST.implementer,
+        phaseAttempt: 3, inputToken: 12, cacheReadToken: 4,
+        nextPageToken: 'pagination-cursor', startToken: 'process-identity', hasCredentials: true,
+        error: {
+          type: 'provider.internal', status: 502, message: 'Authorization: [redacted]',
+          headers: { authorization: '[redacted]', cookie: '[redacted]' },
+          response: { body: '{"apiKey":"[redacted]","message":"Keep the provider cause."}' },
+          url: 'https://provider.example/probe',
+        },
+      })
+      const liveRetry = livePayloads.map((payload) => JSON.parse(payload)).find((entry) => entry.message.includes('opencode.session.retry.scheduled'))
+      expect(liveRetry?.data).toMatchObject(persistedRetry.data)
+      expect(JSON.stringify(events)).toBe(original)
+      expect(getLatestPhaseArtifact(ticket.id, 'preflight_report', 'PRE_FLIGHT_CHECK')).toBeUndefined()
+      return { passed: true, checks: [], criticalFailures: [], warnings: [] } satisfies PreFlightReport
+    })
+
+    try {
+      const sendEvent = vi.fn()
+      await handlePreFlight(ticket.id, context, sendEvent, new AbortController().signal)
+      expect(sendEvent).toHaveBeenCalledWith({ type: 'CHECKS_PASSED' })
+    } finally {
+      broadcaster.removeClient(ticket.id, clientId)
+    }
+  })
+
+  it('retains every failed check and the provider cause when readiness has several failures', async () => {
+    const { ticket, context } = await createInitializedTestTicket(repoManager)
+    const diagnostics: BlockedErrorDiagnostics = {
+      kind: 'opencode_provider',
+      source: 'provider',
+      summary: 'Your authentication token has expired. Please try refreshing it. (HTTP 401)',
+      modelId: 'openai/gpt-5.4',
+      sessionId: 'ses-readiness',
+      providerId: 'openai',
+      statusCode: 401,
+      providerErrorType: 'authentication_error',
+      responseBodyPreview: '{"error":{"code":"token_expired"}}',
+      stackTrace: 'Error: provider login expired\n    at executionProbe',
+    }
+    const failures: [DiagnosticCheck, DiagnosticCheck] = [
+      { name: 'GitHub Auth', category: 'connectivity', result: 'fail', message: 'GitHub auth failed: gh login is missing.' },
+      {
+        name: 'OpenCode Execution Capability', category: 'connectivity', result: 'fail',
+        message: 'Execution-mode probe failed: Your authentication token has expired. Please try refreshing it. (HTTP 401)',
+        codes: ['OPENCODE_PROVIDER_AUTH_FAILED'], diagnostics,
+      },
+    ]
+    runPreFlightChecksMock.mockResolvedValueOnce({ passed: false, checks: failures, criticalFailures: failures, warnings: [] } satisfies PreFlightReport)
+
+    const sendEvent = vi.fn()
+    await handlePreFlight(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'CHECKS_FAILED',
+      errors: failures.map((check) => `${check.name}: ${check.message}`),
+      codes: ['OPENCODE_PROVIDER_AUTH_FAILED'],
+      diagnostics: {
+        ...diagnostics,
+        failedChecks: [
+          { name: 'GitHub Auth', category: 'connectivity', message: failures[0].message },
+          { name: 'OpenCode Execution Capability', category: 'connectivity', message: failures[1].message },
+        ],
+      },
+    })
+  })
+
+  it('keeps the failed execution probe context when an earlier server health check also fails', async () => {
+    const { ticket, context } = await createInitializedTestTicket(repoManager)
+    const probeDiagnostics: BlockedErrorDiagnostics = {
+      kind: 'transport', source: 'opencode', summary: 'Socket closed while sending the probe.',
+      modelId: TEST.implementer, sessionId: 'ses-failed-probe',
+      operation: 'sending the execution capability probe prompt', transportCode: 'ECONNRESET',
+    }
+    const failures: DiagnosticCheck[] = [
+      {
+        name: 'OpenCode Connectivity', category: 'connectivity', result: 'fail',
+        message: 'OpenCode unreachable: HTTP 500',
+        diagnostics: {
+          kind: 'opencode_session', source: 'opencode', summary: 'OpenCode server returned HTTP 500.',
+          statusCode: 500, operation: 'checking OpenCode server health',
+        },
+      },
+      {
+        name: 'OpenCode Execution Capability', category: 'connectivity', result: 'fail',
+        message: 'Execution-mode probe failed: Socket closed while sending the probe.',
+        diagnostics: probeDiagnostics,
+      },
+    ]
+    runPreFlightChecksMock.mockResolvedValueOnce({ passed: false, checks: failures, criticalFailures: failures, warnings: [] } satisfies PreFlightReport)
+
+    const sendEvent = vi.fn()
+    await handlePreFlight(ticket.id, context, sendEvent, new AbortController().signal)
+
+    expect(sendEvent).toHaveBeenCalledWith({
+      type: 'CHECKS_FAILED',
+      errors: failures.map((check) => `${check.name}: ${check.message}`),
+      codes: [],
+      diagnostics: {
+        ...probeDiagnostics,
+        failedChecks: failures.map(({ name, category, message }) => ({ name, category, message })),
+      },
+    })
+  })
+
+  it('redacts the complete readiness report before persisting or emitting failure evidence', async () => {
+    const { ticket, context, paths } = await createInitializedTestTicket(repoManager)
+    const failure: DiagnosticCheck = {
+      name: 'OpenCode Connectivity', category: 'connectivity', result: 'fail',
+      message: 'OpenCode unreachable: Authorization: Bearer readiness-auth-secret',
+      details: 'Cookie: session=readiness-cookie-secret\nFailure URL: https://doctor.example/check?signature=readiness-url-secret#readiness-fragment-secret',
+      diagnostics: {
+        kind: 'opencode_session', source: 'opencode', summary: 'HTTP 401: Authorization: Bearer readiness-auth-secret',
+        stackTrace: 'Error: password="readiness-password-secret"\n    at serverHealth',
+        responseBodyPreview: '{"apiKey":"readiness-key-secret","reason":"Server password rejected"}',
+      },
+    }
+    runPreFlightChecksMock.mockResolvedValueOnce({ passed: false, checks: [failure], criticalFailures: [failure], warnings: [] } satisfies PreFlightReport)
+
+    const sendEvent = vi.fn()
+    await handlePreFlight(ticket.id, context, sendEvent, new AbortController().signal)
+
+    const artifact = getLatestPhaseArtifact(ticket.id, 'preflight_report', 'PRE_FLIGHT_CHECK')
+    assert(artifact)
+    const persistedLog = readFileNoFollowSync(paths.executionLogPath)
+    const emittedFailure = JSON.stringify(sendEvent.mock.calls)
+    for (const evidence of [artifact.content, persistedLog, emittedFailure]) {
+      expect(evidence).toContain('[redacted]')
+      for (const secret of ['auth', 'cookie', 'url', 'fragment', 'password', 'key']) {
+        expect(evidence).not.toContain(`readiness-${secret}-secret`)
+      }
+    }
+    const savedReport = JSON.parse(artifact.content) as PreFlightReport
+    expect(savedReport.checks[0]?.name).toBe('OpenCode Connectivity')
+    expect(savedReport.checks[0]?.diagnostics?.responseBodyPreview).toContain('Server password rejected')
+    expect(failure.message).toContain('readiness-auth-secret')
   })
 })
 

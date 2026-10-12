@@ -2,6 +2,7 @@ import { createReadStream, existsSync, readdirSync, readFileSync, statSync } fro
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
+import { sanitizeDiagnosticText } from '../../shared/errorDiagnostics'
 import {
   extractModelErrorInfo,
   hasRichModelErrorInfo,
@@ -116,8 +117,10 @@ function readCandidateLogFiles(options: OpenCodeLogDiagnosticOptions): OpenCodeN
 }
 
 function readField(line: string, key: string): string | undefined {
-  const match = line.match(new RegExp(`(?:^|\\s)${key}=([^\\s]+)`))
-  return match?.[1]
+  for (const match of line.matchAll(/(?:^|\s)([^\s=]+)=("(?:[^"\\]|\\.)*"|[^\s]+)/g)) {
+    if (match[1] === key) return match[2]
+  }
+  return undefined
 }
 
 function extractBalancedJsonAfter(line: string, marker: string): string | undefined {
@@ -156,7 +159,7 @@ function extractBalancedJsonAfter(line: string, marker: string): string | undefi
 }
 
 function parseLogLineError(line: string, sessionId: string): ModelErrorInfo | undefined {
-  if (!line.includes('service=llm') || !line.includes(`session.id=${sessionId}`)) return undefined
+  if (readField(line, 'service') !== 'llm' || readField(line, 'session.id') !== sessionId) return undefined
 
   const errorJson = extractBalancedJsonAfter(line, ' error=')
   if (!errorJson) return undefined
@@ -187,9 +190,10 @@ function parseLogLineError(line: string, sessionId: string): ModelErrorInfo | un
 }
 
 function readLogfmtValue(line: string, key: string): string | undefined {
-  const quotedMatch = line.match(new RegExp(`(?:^|\\s)${key}="((?:[^"\\\\]|\\\\.)*)"`) )
-  if (quotedMatch) return (quotedMatch[1] ?? '').replace(/\\"/g, '"').replace(/\\\\/g, '\\')
-  return readField(line, key)
+  const value = readField(line, key)
+  return value?.startsWith('"') && value.endsWith('"')
+    ? value.slice(1, -1).replace(/\\"/g, '"').replace(/\\\\/g, '\\')
+    : value
 }
 
 /** An ISO timestamp, or null when the value is missing or not a date. */
@@ -301,7 +305,7 @@ function parseNativeLogLine(
 
   // Read like every other field: a quoted timestamp read raw came back with its
   // quotes and threw on `new Date(...).toISOString()`.
-  const time = readLogfmtValue(line, 'time')
+  const time = readLogfmtValue(line, 'time') ?? readLogfmtValue(line, 'timestamp')
   const level = readLogfmtValue(line, 'level') ?? 'INFO'
   const service = readField(line, 'service')
   const msg = readLogfmtValue(line, 'msg') ?? readLogfmtValue(line, 'message') ?? line.trim()
@@ -325,7 +329,7 @@ function parseNativeLogLine(
       message: content,
       content,
       sessionId: rawSessionId,
-      data: { level, service: service ?? null, ocNativeLog: true },
+      data: { level, service: service ?? null, ocNativeLog: true, rawLine: sanitizeDiagnosticText(line) },
     },
   }
 }

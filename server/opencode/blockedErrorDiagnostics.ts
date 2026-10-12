@@ -9,7 +9,7 @@ import {
   type BlockedErrorDiagnosticKind,
 } from '@shared/errorDiagnostics'
 import type { OpenCodeResponseMeta } from './assistantMessageAnalysis'
-import type { StepFinishMessagePart } from './types'
+import { parseModelRef, type StepFinishMessagePart } from './types'
 import type { ModelErrorInfo } from './errorDetails'
 import { extractModelErrorInfo, summarizeModelErrorForLog } from './errorDetails'
 import { isRecord } from '@shared/typeGuards'
@@ -29,6 +29,7 @@ export interface BuildOpenCodeBlockedErrorDiagnosticsInput {
   modelId?: string
   sessionId?: string
   fallbackMessage?: string
+  errorSource?: 'opencode_server'
 }
 
 export interface OpenCodeBlockedErrorDiagnosticsResult {
@@ -45,6 +46,17 @@ function readErrorProperty(error: unknown, key: string): unknown {
   return isRecord(error) ? error[key] : undefined
 }
 
+function getErrorChain(error: unknown): unknown[] {
+  const chain: unknown[] = []
+  const seen = new Set<unknown>()
+  while (error !== undefined && !seen.has(error) && chain.length < 8) {
+    chain.push(error)
+    seen.add(error)
+    error = readErrorProperty(error, 'cause')
+  }
+  return chain
+}
+
 function normalizeErrorCodes(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return Array.from(new Set(
@@ -56,6 +68,7 @@ function normalizeErrorCodes(value: unknown): string[] {
 }
 
 function hasProviderSignal(info: ModelErrorInfo | undefined): boolean {
+  if (isNonProviderStructuredError(info)) return false
   return Boolean(
     info?.statusCode !== undefined
     || info?.requestModel
@@ -64,6 +77,10 @@ function hasProviderSignal(info: ModelErrorInfo | undefined): boolean {
     || info?.responseErrorMessage
     || info?.responseBodyPreview,
   )
+}
+
+function isNonProviderStructuredError(info: ModelErrorInfo | undefined): boolean {
+  return /^(?:tool\.|permission\.|unknown$)/.test(info?.name ?? '')
 }
 
 function normalizeMessage(value: string | undefined): string {
@@ -76,6 +93,7 @@ function cleanOptionalMessage(value: string | undefined): string | undefined {
 }
 
 function isAuthLikeFailure(info: ModelErrorInfo | undefined, message: string): boolean {
+  if (isNonProviderStructuredError(info)) return false
   const haystack = [
     message,
     info?.message,
@@ -87,13 +105,17 @@ function isAuthLikeFailure(info: ModelErrorInfo | undefined, message: string): b
     .filter(Boolean)
     .join('\n')
     .toLowerCase()
+    .replace(/_/g, ' ')
+
+  if (/\b(?:credits?error|billing[ .-]?error|payment[ .-]?required|(?:no|missing)[ .-]payment[ .-]method|(?:no|insufficient|exhausted)[ .-]credits?|credits?[ .-](?:exhausted|required|insufficient|unavailable))\b/.test(haystack)) return false
 
   return info?.statusCode === 401
-    || info?.statusCode === 403
-    || /\b(auth|authentication|authenticated|unauthorized|forbidden|credential|api key|token|signing in|sign in)\b/.test(haystack)
+    || /\b(auth|authentication|authenticated|unauthenticated|authorization|unauthorized|credentials?|api[ -]?key|signing in|sign in)\b/.test(haystack)
+    || /\btoken\s+(?:(?:has|have)\s+(?:been\s+)?|(?:is|was)\s+)?(?:expired|invalidated|revoked|invalid)\b|\b(?:expired|invalidated|revoked|invalid)\s+token\b(?!\s+(?:count|limit|capacity|usage|length|budget)\b)/.test(haystack)
 }
 
 function isProviderLikeFailure(info: ModelErrorInfo | undefined, message: string): boolean {
+  if (isNonProviderStructuredError(info)) return false
   const haystack = [
     message,
     info?.message,
@@ -107,7 +129,7 @@ function isProviderLikeFailure(info: ModelErrorInfo | undefined, message: string
 
   return hasProviderSignal(info)
     || isAuthLikeFailure(info, message)
-    || /\b(rate[_ -]?(?:limit|limited)|too many requests|usage limit|limit (?:has been )?reached|resource exhausted|overloaded|overload|capacity|service unavailable|temporarily unavailable|quota|credits?|modelerror|model error|invalid_request_error|provider)\b/.test(haystack)
+    || /\b(rate[_ -]?(?:limit|limited)|too many requests|usage limit|limit (?:has been )?reached|resource exhausted|overloaded|overload|capacity|service unavailable|temporarily unavailable|quota|credits?|modelerror|model error|invalid_request_error|provider|forbidden)\b/.test(haystack)
 }
 
 function parseHttpStatus(message: string): number | undefined {
@@ -147,11 +169,14 @@ export function buildOutputTruncatedBlockedErrorDiagnostics(input: {
 }): OpenCodeBlockedErrorDiagnosticsResult {
   const finishReason = input.finishReason?.trim() || 'length'
   const tokens = input.tokens
+  const model = parseModelRef(input.modelId)
   const diagnostics = normalizeBlockedErrorDiagnostics({
     kind: 'model_output_truncated',
     source: 'opencode',
     summary: buildOutputTruncatedSummary(finishReason, tokens),
     modelId: input.modelId,
+    providerId: model?.providerID,
+    providerModelId: model?.modelID,
     sessionId: input.sessionId,
     finishReason,
     isRetryable: false,
@@ -188,8 +213,12 @@ function resolveKind(input: {
   summaryMessage: string
   responseMeta?: OpenCodeResponseMeta
   attemptMeta?: OpenCodeAttemptDiagnosticMeta
+  serverError: boolean
 }): BlockedErrorDiagnosticKind {
+  if (input.serverError && input.info?.statusCode !== undefined) return 'opencode_session'
   if (isTimeoutLike(input.summaryMessage)) return 'timeout'
+  if (input.serverError) return isTransportLike(input.summaryMessage) ? 'transport' : 'opencode_session'
+  if (isNonProviderStructuredError(input.info)) return 'runtime'
   if (isProviderLikeFailure(input.info, input.summaryMessage)) return 'opencode_provider'
   if (input.responseMeta?.sessionErrored || input.attemptMeta?.errorSource === 'session_error') return 'opencode_session'
   if (isTransportLike(input.summaryMessage)) return 'transport'
@@ -202,12 +231,18 @@ function resolveErrorCodes(info: ModelErrorInfo | undefined, summaryMessage: str
   return []
 }
 
-function resolveDetails(input: BuildOpenCodeBlockedErrorDiagnosticsInput): unknown {
-  return input.responseMeta?.sessionErrorDetails
+function resolveDetails(input: BuildOpenCodeBlockedErrorDiagnosticsInput, errorChain: unknown[]): unknown {
+  const preferred = input.responseMeta?.sessionErrorDetails
     ?? input.responseMeta?.latestAssistantErrorInfo
     ?? input.attemptMeta?.errorDetails
-    ?? readErrorProperty(input.error, 'modelErrorDetails')
-    ?? readErrorProperty(input.error, 'details')
+  const explicitDetails = errorChain.map((error) => readErrorProperty(error, 'modelErrorDetails') ?? readErrorProperty(error, 'details'))
+    .filter((details) => details !== undefined && details !== null)
+  const candidates = [preferred, ...errorChain.toReversed().flatMap((error) => [
+    readErrorProperty(error, 'modelErrorDetails') ?? readErrorProperty(error, 'details'), error,
+  ])]
+  return candidates.find((details) => hasProviderSignal(extractModelErrorInfo(details)))
+    ?? preferred
+    ?? explicitDetails[0]
     ?? input.error
 }
 
@@ -222,12 +257,39 @@ function resolveFallbackMessage(input: BuildOpenCodeBlockedErrorDiagnosticsInput
 export function buildOpenCodeBlockedErrorDiagnostics(
   input: BuildOpenCodeBlockedErrorDiagnosticsInput,
 ): OpenCodeBlockedErrorDiagnosticsResult {
-  const attachedDiagnostics = normalizeBlockedErrorDiagnostics(readErrorProperty(input.error, 'blockedErrorDiagnostics'))
+  const errorChain = getErrorChain(input.error)
+  const attachedDiagnostics = errorChain.map((error) => normalizeBlockedErrorDiagnostics(readErrorProperty(error, 'blockedErrorDiagnostics')))
+    .find((diagnostics) => diagnostics !== null)
+  const carriedErrorCodes = normalizeErrorCodes(errorChain.flatMap((error) => normalizeErrorCodes(readErrorProperty(error, 'blockedErrorCodes'))))
+  const serverError = input.errorSource === 'opencode_server'
+    || errorChain.some((error) => readErrorProperty(error, 'openCodeErrorSource') === 'opencode_server'
+      || readErrorProperty(error, 'name') === 'OpenCodeConnectionError')
+  const promptHttpError = errorChain.some((error) => readErrorProperty(error, 'openCodeErrorSource') === 'opencode_prompt'
+    || readErrorProperty(error, 'name') === 'V2OpenCodeHttpError')
+  const withoutProviderCodes = (codes: string[]) => codes.filter((code) => code !== OPENCODE_PROVIDER_AUTH_FAILED && code !== OPENCODE_PROVIDER_ERROR)
+  const actualErrors = errorChain.filter((error): error is Error => error instanceof Error)
+  const errorName = actualErrors[0]?.name
+  const stackTrace = actualErrors.map((error, index) => error.stack ? `${index > 0 ? 'Caused by: ' : ''}${error.stack}` : '')
+    .filter(Boolean).join('\n')
+  const operation = errorChain.map((error) => readErrorProperty(error, 'openCodeOperation'))
+    .find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim()
+  const model = parseModelRef(attachedDiagnostics?.modelId ?? input.modelId)
   if (attachedDiagnostics) {
+    const kind = serverError && attachedDiagnostics.kind === 'opencode_provider' ? 'opencode_session' : attachedDiagnostics.kind
+    const serverDiagnostic = serverError || kind === 'opencode_session'
+    const inferredModel = kind === 'opencode_provider' || kind === 'model_output_truncated' ? model : undefined
     return {
       diagnostics: normalizeBlockedErrorDiagnostics({
         ...attachedDiagnostics,
+        kind,
+        source: serverError ? 'opencode' : attachedDiagnostics.source,
+        errorName: attachedDiagnostics.errorName ?? errorName,
+        stackTrace: attachedDiagnostics.stackTrace ?? stackTrace,
+        operation: attachedDiagnostics.operation ?? operation,
         modelId: attachedDiagnostics.modelId ?? input.modelId,
+        providerId: serverDiagnostic ? undefined : attachedDiagnostics.providerId ?? inferredModel?.providerID,
+        providerModelId: serverDiagnostic ? undefined : attachedDiagnostics.providerModelId
+          ?? (!attachedDiagnostics.providerId || attachedDiagnostics.providerId === inferredModel?.providerID ? inferredModel?.modelID : undefined),
         sessionId: attachedDiagnostics.sessionId ?? input.sessionId,
         finishReason: attachedDiagnostics.finishReason ?? input.responseMeta?.latestStepFinishReason,
         inputTokens: attachedDiagnostics.inputTokens ?? input.responseMeta?.latestStepFinishTokens?.input,
@@ -236,7 +298,7 @@ export function buildOpenCodeBlockedErrorDiagnostics(
         cacheReadTokens: attachedDiagnostics.cacheReadTokens ?? input.responseMeta?.latestStepFinishTokens?.cache?.read,
         cacheWriteTokens: attachedDiagnostics.cacheWriteTokens ?? input.responseMeta?.latestStepFinishTokens?.cache?.write,
       }),
-      errorCodes: normalizeErrorCodes(readErrorProperty(input.error, 'blockedErrorCodes')),
+      errorCodes: serverDiagnostic ? withoutProviderCodes(carriedErrorCodes) : carriedErrorCodes,
     }
   }
 
@@ -269,7 +331,7 @@ export function buildOpenCodeBlockedErrorDiagnostics(
     })
   }
 
-  const details = resolveDetails(input)
+  const details = resolveDetails(input, errorChain)
   const fallbackMessage = resolveFallbackMessage(input)
   const summary = summarizeModelErrorForLog(details, fallbackMessage)
   const summaryMessage = normalizeMessage(summary.message)
@@ -287,14 +349,18 @@ export function buildOpenCodeBlockedErrorDiagnostics(
   const infoWithStatus = statusCode === info?.statusCode
     ? info
     : { ...(info ?? {}), ...(statusCode !== undefined ? { statusCode } : {}) }
-  const kind = resolveKind({
+  const providerResponseType = info?.responseErrorType
+    && !/^(?:error|(?:unauthorized|forbidden)(?:error)?)$/i.test(info.responseErrorType)
+  const ambiguousPromptAccess = !serverError && promptHttpError
+    && (statusCode === 401 || statusCode === 403)
+    && !providerResponseType && !info?.providerId && !info?.requestModel
+  const kind = ambiguousPromptAccess ? 'runtime' : resolveKind({
     info: infoWithStatus,
     summaryMessage,
     responseMeta: input.responseMeta,
     attemptMeta: input.attemptMeta,
+    serverError,
   })
-  const operationValue = readErrorProperty(input.error, 'openCodeOperation')
-  const operation = cleanOptionalMessage(typeof operationValue === 'string' ? operationValue : undefined)
   const connectionFailure = kind === 'transport'
     && (causeDetails.transportCode !== undefined
       || /\b(connection (?:error|reset)|socket reset|econnreset|etimedout|eai_again|enotfound|econnrefused|socket hang up|network (?:error|failure|failed)|fetch failed|failed to (?:fetch|connect)|could not (?:reach|connect)|(?:network|opencode)(?: is)? unreachable)\b/i.test(summaryMessage))
@@ -302,12 +368,15 @@ export function buildOpenCodeBlockedErrorDiagnostics(
     kind,
     source: kind === 'opencode_provider' ? 'provider' : 'opencode',
     summary: connectionFailure ? buildCommunicationSummary(summaryMessage, operation, causeDetails) : summaryMessage,
+    errorName: errorName ?? info?.name,
+    stackTrace,
     operation,
     ...causeDetails,
     modelId: input.modelId,
     sessionId: input.sessionId,
-    providerId: info?.providerId,
-    providerModelId: info?.providerModelId,
+    providerId: serverError || ambiguousPromptAccess ? undefined : info?.providerId ?? (kind === 'opencode_provider' ? model?.providerID : undefined),
+    providerModelId: serverError || ambiguousPromptAccess ? undefined : info?.providerModelId
+      ?? (kind === 'opencode_provider' && (!info?.providerId || info.providerId === model?.providerID) ? model?.modelID : undefined),
     statusCode,
     requestModel: info?.requestModel,
     isRetryable: info?.isRetryable,
@@ -325,7 +394,7 @@ export function buildOpenCodeBlockedErrorDiagnostics(
 
   return {
     diagnostics,
-    errorCodes: resolveErrorCodes(info, summaryMessage),
+    errorCodes: serverError || ambiguousPromptAccess ? withoutProviderCodes(carriedErrorCodes) : mergeErrorCodes(carriedErrorCodes, resolveErrorCodes(infoWithStatus, summaryMessage)),
   }
 }
 
@@ -342,9 +411,9 @@ export function attachOpenCodeBlockedErrorDiagnostics<T extends Error>(
   error: T,
   diagnosticResult: OpenCodeBlockedErrorDiagnosticsResult | null | undefined,
 ): T {
-  if (!diagnosticResult?.diagnostics) return error
+  if (!diagnosticResult) return error
   const enriched = error as T & BlockedErrorDiagnosticsCarrier
-  enriched.blockedErrorDiagnostics = diagnosticResult.diagnostics
+  if (diagnosticResult.diagnostics) enriched.blockedErrorDiagnostics = diagnosticResult.diagnostics
   enriched.blockedErrorCodes = normalizeErrorCodes(diagnosticResult.errorCodes)
   return enriched
 }
