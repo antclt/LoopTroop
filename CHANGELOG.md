@@ -28,6 +28,8 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - LoopTroop starts OpenCode from `~/.opencode/bin` again on Ubuntu, Fedora and other Linux desktops, where the OpenCode installer creates that folder group-writable.
 - When another server already holds OpenCode's default port, LoopTroop starts its own OpenCode on the next free port and tells you where it went.
 - `looptroop doctor` compares your Node with the newest release of your own Node line, says what `gh` is still needed for, and names the checks that actually stop LoopTroop from running.
+- `looptroop` commands such as `status` and `--help` answer in about a third of a second instead of several seconds, and LoopTroop installs about 30 MB less.
+- Token counts shown in the interface are now a quick estimate of four characters per token.
 
 ### Added
 
@@ -52,6 +54,13 @@ Unreleased changes appear first and represent commits that have not yet been inc
 - OpenCode resolution searches `LOOPTROOP_TRUSTED_EXECUTABLE_DIRS` first, then the first absolute directory from `OPENCODE_INSTALL_DIR` or `OPENCODE_DIR`, then `~/.opencode/bin`, then Windows system directories and ordinary `PATH`. Canonical PATH aliases keep their invocation spelling within that order. These directory settings come from LoopTroop's environment; project PATH additions cannot override them. Missing executables fall through to the next directory, while a trust refusal stops resolution. Use the operator override to choose another installation deliberately.
 - `looptroop doctor` keeps marking a missing `gh` with `✗`, but adds that LoopTroop starts without it and that a ticket needs it before coding starts, when its pre-flight check runs. Its last line names the checks that stop LoopTroop from running, for example `LoopTroop cannot run until this is fixed: opencode.`, instead of pointing at every `✗` above it.
 - When OpenCode's default address (`127.0.0.1:4096`) is held by a server LoopTroop cannot use, because it rejects LoopTroop's password or is not OpenCode, LoopTroop leaves that server alone and starts its own OpenCode on the next free port. OpenCode v2 makes up a new password for every `opencode serve` started by hand, and other tools built on OpenCode take 4096 too, so a server left running there used to stop LoopTroop from starting at all. A server that answers with a 5xx error still counts as an OpenCode that is starting up: LoopTroop waits for it, then judges it by what it answers once it is up. An address you set with `LOOPTROOP_OPENCODE_BASE_URL` or `opencodeBaseUrl` is never moved, and the move never takes LoopTroop's own web port. When LoopTroop's own address is the one OpenCode would use, as with `looptroop start --port 4096`, the default address moves too and `doctor` names the port it would take; an address you set on that port and host stops the start, even when a server already answers there, with a message that names both settings. `looptroop start`, `looptroop open`, `looptroop status`, `looptroop doctor` and the daemon log say where OpenCode went and why. Before the first start, `doctor` reports a held default port as a warning that names the port a start would take, and as a failure when no port is free.
+- Token counts are now estimated at four characters per token, shown as `~N Tokens (estimate)` in artifact Raw panes and bead Input and Output, and as `~N tokens` on the relevant-files scan card. The prompt context budget uses the same estimate. The old count was exact only for GPT-5's tokenizer, so it was already an estimate for every other model. The estimate is close for English prose and code, and counts only a third to a half of the real tokens for Chinese, Japanese, and Korean text. Because trimming uses it, mostly Chinese, Japanese, or Korean context can reach the 100,000-token budget while holding more than 100,000 real tokens.
+
+### Performance
+
+- `looptroop` commands load only the code they run. The CLI is now built as a small entry plus shared files under `dist/server/chunks/`, so `looptroop --version`, `status`, and `--help` no longer load the database layer and every other dependency before doing anything. On the machine this was measured on they went from about 5 seconds to about 0.35 seconds. The daemon and the package entry stay single self-contained files, so a daemon still running during an upgrade keeps working until you restart it.
+- The npm package shrank from 4.4 MB to 2.8 MB (16.6 MB to 11.3 MB unpacked). The CLI no longer carries its own full copy of the server, and the web interface no longer ships a tokenizer.
+- Removed the `gpt-tokenizer` dependency: 27 MB and 1,537 files on every install, a 2 MB download in the web interface, and almost a second of load time for every command.
 
 ### Security
 
@@ -64,6 +73,7 @@ Unreleased changes appear first and represent commits that have not yet been inc
 
 ### Fixed
 
+- Running the CLI file directly (`node dist/server/cli/cli.js start` rather than the installed `looptroop` command) no longer starts the daemon twice in one process. The second start failed against the first one's lock and wrote `LoopTroop is already running` with the daemon's own pid to the log.
 - An AI question could be closed twice when its session ended while its own wait was running out. That wrote two skip records and let every model's clock run again while another question was still waiting.
 - Answering or skipping an AI question that was closed in the meantime (its session ended, or its model was stopped) answers `409` instead of reporting success and logging an answer that was never recorded.
 - When a session with several open AI questions ends, every skip record names the same related questions; the last one used to name none.
